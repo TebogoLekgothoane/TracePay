@@ -1,0 +1,141 @@
+{
+    "transactions": [
+        {
+            "id": "tx-0001",
+            "timestamp": "2026-01-07T08:15:00Z",
+            "amount": -15.0,
+            "currency": "ZAR",
+            "description": "Airtime purchase MTN prepaid",
+            "merchant": "MTN",
+            "category": "Airtime",
+            "counterparty": "",
+            "direction": "debit",
+            "channel": "momo",
+            "meta": {
+                "reference": "momo-111"
+            }
+        },
+        {
+            "id": "tx-0002",
+            "timestamp": "2026-01-07T18:22:00Z",
+            "amount": -20.0,
+            "currency": "ZAR",
+            "description": "Data bundle purchase",
+            "merchant": "MTN",
+            "category": "Data",
+            "direction": "debit",
+            "channel": "momo"
+        },
+        {
+            "id": "tx-0003",
+            "timestamp": "2026-01-08T07:40:00Z",
+            "amount": -12.0,
+            "currency": "ZAR",
+            "description": "Airtime top-up",
+            "merchant": "MTN",
+            "category": "Airtime",
+            "direction": "debit",
+            "channel": "momo"
+        },
+        {
+            "id": "tx-0004",
+            "timestamp": "2026-01-09T13:10:00Z",
+            "amount": -25.0,
+            "currency": "ZAR",
+            "description": "Airtime purchase",
+            "merchant": "Vodacom",
+            "category": "Airtime",
+            "direction": "debit",
+            "channel": "momo"
+        },
+        {
+            "id": "tx-0005",
+            "timestamp": "2026-01-10T16:05:00Z",
+            "amount": -8.0,
+            "currency": "ZAR",
+            "description": "Service fee",
+            "merchant": "MoMo",
+            "category": "Fee",
+            "direction": "debit",
+            "channel": "momo"
+        },
+        {
+            "id": "tx-0006",
+            "timestamp": "2026-01-10T16:06:00Z",
+            "amount": -15.0,
+            "currency": "ZAR",
+            "description": "Cash-out fee",
+            "merchant": "MoMo",
+            "category": "Fee",
+            "direction": "debit",
+            "channel": "momo"
+        },
+        {
+            "id": "tx-0007",
+            "timestamp": "2026-01-11T09:00:00Z",
+            "amount": 1200.0,
+            "currency": "ZAR",
+            "description": "Salary / income",
+            "merchant": "Employer",
+            "category": "Income",
+            "direction": "credit",
+            "channel": "bank"
+        },
+        {
+            "id": "tx-0008",
+            "timestamp": "2026-01-12T11:35:00Z",
+            "amount": -300.0,
+            "currency": "ZAR",
+            "description": "Send money (P2P) - repayment for loan",
+            "merchant": "",
+            "category": "Transfer",
+            "counterparty": "MASHONISA",
+            "direction": "debit",
+            "channel": "momo"
+        },
+        {
+            "id": "tx-0009",
+            "timestamp": "2026-01-15T15:20:00Z",
+            "amount": -220.0,
+            "currency": "ZAR",
+            "description": "P2P send money - repay loan",
+            "category": "Transfer",
+            "counterparty": "Neighbour",
+            "direction": "debit",
+            "channel": "momo"
+        },
+        {
+            "id": "tx-0010",
+            "timestamp": "2026-01-17T10:45:00Z",
+            "amount": -18.0,
+            "currency": "ZAR",
+            "description": "Airtime purchase MTN prepaid",
+            "merchant": "MTN",
+            "category": "Airtime",
+            "direction": "debit",
+            "channel": "momo"
+        },
+        {
+            "id": "tx-0011",
+            "timestamp": "2026-01-19T20:05:00Z",
+            "amount": -20.0,
+            "currency": "ZAR",
+            "description": "Data bundle",
+            "merchant": "MTN",
+            "category": "Data",
+            "direction": "debit",
+            "channel": "momo"
+        },
+        {
+            "id": "tx-0012",
+            "timestamp": "2026-01-22T07:50:00Z",
+            "amount": -10.0,
+            "currency": "ZAR",
+            "description": "Service fee charged",
+            "merchant": "MoMo",
+            "category": "Fee",
+            "direction": "debit",
+            "channel": "momo"
+        }
+    ]
+}

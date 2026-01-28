@@ -1,0 +1,86 @@
+from __future__ import annotations
+
+import os
+from typing import Any, Dict, List
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
+from .forensic_engine import ForensicEngine
+from .models import (
+    AnalyzeRequest,
+    AnalyzeResponse,
+    FreezeRequest,
+    FreezeResponse,
+    MoneyLeak,
+    TransactionIn,
+)
+
+
+app = FastAPI(title="Money Autopsy – Forensic Engine", version="0.1.0")
+
+# Dashboard runs separately (Next.js dev server), so enable permissive CORS for hackathon.
+cors_origins = os.getenv("CORS_ORIGINS", "*").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in cors_origins if o.strip()] or ["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+engine = ForensicEngine()
+
+# In-memory "revocations" to simulate freezing / revoking consent.
+FROZEN: List[Dict[str, Any]] = []
+
+
+@app.get("/health")
+def health() -> Dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.post("/analyze", response_model=AnalyzeResponse)
+def analyze(payload: Any) -> AnalyzeResponse:
+    """
+    Accepts either:
+    - { "transactions": [...] }
+    - or a raw list of transactions [...]
+    """
+    if isinstance(payload, list):
+        req = AnalyzeRequest(transactions=[TransactionIn(**t) for t in payload])
+    elif isinstance(payload, dict) and "transactions" in payload:
+        req = AnalyzeRequest(**payload)
+    else:
+        raise HTTPException(status_code=400, detail="Invalid payload. Send {transactions:[...]} or a raw list.")
+
+    result = engine.analyze([t.model_dump() for t in req.transactions])
+    # Cast money_leaks into pydantic model for stable API output
+    leaks = [MoneyLeak(**l) for l in result["money_leaks"]]
+    return AnalyzeResponse(
+        financial_health_score=result["financial_health_score"],
+        health_band=result["health_band"],
+        money_leaks=leaks,
+        summary_plain_language=result["summary_plain_language"],
+    )
+
+
+@app.post("/freeze", response_model=FreezeResponse)
+def freeze(req: FreezeRequest) -> FreezeResponse:
+    """
+    Simulates "revoking consent" / stopping a leak.
+    In the real OB flow this would map to revoking a consent or blocking a payment action.
+    """
+    if not (req.leak_id or req.transaction_id or req.consent_id):
+        raise HTTPException(status_code=400, detail="Provide at least one of leak_id, transaction_id, consent_id.")
+
+    item = req.model_dump()
+    FROZEN.append(item)
+    return FreezeResponse(status="ok", message="Freeze recorded. (Simulation: consent revoked / leak blocked)")
+
+
+@app.get("/frozen")
+def frozen() -> Dict[str, Any]:
+    return {"count": len(FROZEN), "items": FROZEN[-50:]}
+
+
