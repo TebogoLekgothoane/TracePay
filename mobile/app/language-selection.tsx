@@ -1,8 +1,17 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, StyleSheet, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  useSharedValue,
+  useAnimatedStyle,
+  withSequence,
+  withTiming,
+  withRepeat,
+  Easing,
+} from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 
 import { ThemedView } from "@/components/themed-view";
@@ -13,11 +22,45 @@ import { useApp } from "@/context/app-context";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { Language } from "@/types/navigation";
 
+const AnimatedImage = Animated.createAnimatedComponent(Image);
+
 export default function LanguageSelectionScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { setLanguage } = useApp();
   const [selectedLang, setSelectedLang] = useState<Language>("en");
+
+  const logoScale = useSharedValue(0.7);
+  const logoRotate = useSharedValue(0);
+
+  useEffect(() => {
+    // Continuous, gentle pulse + sway until user navigates away
+    logoScale.value = withRepeat(
+      withSequence(
+        withTiming(1.08, { duration: 700, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0.92, { duration: 700, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      true
+    );
+
+    logoRotate.value = withRepeat(
+      withSequence(
+        withTiming(-4, { duration: 500, easing: Easing.inOut(Easing.ease) }),
+        withTiming(4, { duration: 500, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 500, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      false
+    );
+  }, []);
+
+  const logoAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: logoScale.value },
+      { rotateZ: `${logoRotate.value}deg` },
+    ],
+  }));
 
   const handleSelectLanguage = async (lang: Language) => {
     setSelectedLang(lang);
@@ -41,9 +84,9 @@ export default function LanguageSelectionScreen() {
         ]}
       >
         <Animated.View entering={FadeIn.delay(100)} style={styles.logoContainer}>
-          <Image
-            source={require("../assets/images/icon.png")}
-            style={styles.logo}
+          <AnimatedImage
+            source={require("../assets/trace-pay logo.png")}
+            style={[styles.logo, logoAnimatedStyle]}
             resizeMode="contain"
           />
         </Animated.View>
@@ -93,9 +136,8 @@ const styles = StyleSheet.create({
     marginBottom: Spacing["4xl"],
   },
   logo: {
-    width: 80,
-    height: 80,
-    borderRadius: BorderRadius.lg,
+    width: 200,
+    height: 200 ,
   },
   title: {
     textAlign: "center",

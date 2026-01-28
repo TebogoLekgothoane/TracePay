@@ -76,7 +76,7 @@ export default function AnalysisLoadingScreen() {
       const data = includeMomoData ? mockAnalysisDataWithMomo : mockAnalysisData;
       setAnalysisData(data);
       setIsAnalysisComplete(true);
-      router.replace("/autopsy-dashboard" as any);
+      router.replace("/(tabs)/home" as any);
     }, 3000);
 
     return () => clearTimeout(timer);
@@ -109,13 +109,10 @@ export default function AnalysisLoadingScreen() {
           },
         ]}
       >
-        <Animated.View
-          entering={FadeIn.delay(100)}
-          style={styles.imageContainer}
-        >
+        <Animated.View entering={FadeIn.delay(100)} style={styles.imageContainer}>
           <Animated.View style={pulseStyle}>
             <Image
-              source={require("../assets/images/loading-animation.png")}
+              source={require("../assets/trace-pay logo.png")}
               style={styles.loadingImage}
               resizeMode="contain"
             />

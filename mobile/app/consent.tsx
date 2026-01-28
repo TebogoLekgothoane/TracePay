@@ -28,13 +28,11 @@ function RoadmapStep({
   index,
   filledSteps,
   icon,
-  filled,
 }: {
   index: number;
   total: number;
   filledSteps: SharedValue<number>;
   icon: keyof typeof Feather.glyphMap;
-  filled: boolean;
 }) {
   const animatedStyle = useAnimatedStyle(() => {
     const isFilled = filledSteps.value > index;
@@ -44,14 +42,17 @@ function RoadmapStep({
       borderColor: isFilled ? "#0B1B3A" : "#C0C0C0",
     };
   });
+  const iconColorStyle = useAnimatedStyle(() => {
+    const isFilled = filledSteps.value > index;
+    return {
+      color: isFilled ? "#FFFFFF" : "#6B7280",
+    } as any;
+  });
   return (
     <Animated.View style={[styles.roadmapStepCircle, animatedStyle]}>
-      <Feather
-        name={icon}
-        size={18}
-        color={filled ? "#FFFFFF" : "#6B7280"}
-        style={styles.roadmapStepIcon}
-      />
+      <Animated.Text style={iconColorStyle}>
+        <Feather name={icon} size={18} />
+      </Animated.Text>
     </Animated.View>
   );
 }
@@ -98,8 +99,6 @@ export default function ConsentScreen() {
   const roadmapHeight = useSharedValue(0);
   const [cardsSectionY, setCardsSectionY] = useState(0);
   const [cardsSectionHeight, setCardsSectionHeight] = useState(0);
-  const [viewportHeight, setViewportHeight] = useState(0);
-  const [currentStep, setCurrentStep] = useState(0);
 
   const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, layoutMeasurement } = e.nativeEvent;
@@ -130,7 +129,6 @@ export default function ConsentScreen() {
     }
     const newStep = step + 1;
     filledSteps.value = withTiming(newStep, { duration: 150 });
-    setCurrentStep((prev) => (prev !== newStep ? newStep : prev));
   };
 
   const handleCardsSectionLayout = (e: { nativeEvent: { layout: { height: number; y: number } } }) => {
@@ -140,9 +138,7 @@ export default function ConsentScreen() {
     roadmapHeight.value = height;
   };
 
-  const handleScrollViewLayout = (e: { nativeEvent: { layout: { height: number } } }) => {
-    setViewportHeight(e.nativeEvent.layout.height);
-  };
+  const handleScrollViewLayout = () => {};
 
   const roadmapFillStyle = useAnimatedStyle(() => ({
     height: scrollProgress.value * roadmapHeight.value,
@@ -213,7 +209,6 @@ export default function ConsentScreen() {
                   total={ROADMAP_STEPS}
                   filledSteps={filledSteps}
                   icon={ROADMAP_ICONS[i]}
-                  filled={currentStep > i}
                 />
               </View>
             ))}
