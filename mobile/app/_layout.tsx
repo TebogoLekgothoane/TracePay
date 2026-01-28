@@ -1,24 +1,51 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DarkTheme, ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
+import '../global.css';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { ThemeProvider } from '@/context/theme-context';
+import { AppProvider } from '@/context/app-context';
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  initialRouteName: 'index',
 };
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
-      <StatusBar style="auto" />
+    <ThemeProvider>
+      <AppProvider>
+        <NavigationThemeProvider value={DarkTheme}>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+            }}
+          >
+            <Stack.Screen name="index" />
+            <Stack.Screen name="language-selection" />
+            <Stack.Screen name="consent" />
+            <Stack.Screen name="analysis-loading" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="autopsy-dashboard" />
+            <Stack.Screen name="loss-detail" />
+            <Stack.Screen name="freeze-control" />
+            <Stack.Screen 
+              name="voicemodal" 
+              options={{ 
+                presentation: 'modal' 
+              }} 
+            />
+            <Stack.Screen 
+              name="modal" 
+              options={{ 
+                presentation: 'modal',
+                title: 'Modal' 
+              }} 
+            />
+          </Stack>
+          <StatusBar style="auto" />
+        </NavigationThemeProvider>
+      </AppProvider>
     </ThemeProvider>
   );
 }

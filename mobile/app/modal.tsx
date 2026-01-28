@@ -1,29 +1,24 @@
-import { Link } from 'expo-router';
-import { StyleSheet } from 'react-native';
+import { ScrollView } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useHeaderHeight } from "@react-navigation/elements";
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { useTheme } from "@/hooks/use-theme-color";
+import { Spacing } from "@/constants/theme";
 
 export default function ModalScreen() {
+  const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
+  const { theme } = useTheme();
+
   return (
-    <ThemedView style={styles.container}>
-      <ThemedText type="title">This is a modal</ThemedText>
-      <Link href="/" dismissTo style={styles.link}>
-        <ThemedText type="link">Go to home screen</ThemedText>
-      </Link>
-    </ThemedView>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
+      contentContainerStyle={{
+        paddingTop: headerHeight + Spacing.xl,
+        paddingBottom: insets.bottom + Spacing.xl,
+        paddingHorizontal: Spacing.lg,
+      }}
+      scrollIndicatorInsets={{ bottom: insets.bottom }}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  link: {
-    marginTop: 15,
-    paddingVertical: 15,
-  },
-});
