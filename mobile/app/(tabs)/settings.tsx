@@ -1,6 +1,2 @@
-import { Redirect } from "expo-router";
-
-export default function SettingsTab() {
-  return <Redirect href="/settings" />;
-}
+export { default } from "../settings";
 

@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { View, StyleSheet, Switch, Modal, Pressable, FlatList } from "react-native";
+import { View, StyleSheet, Switch, Modal, Pressable, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import Animated, { FadeInDown, FadeIn } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 
@@ -12,16 +13,16 @@ import { Button } from "@/components/ui/button";
 import { useTheme } from "@/hooks/use-theme-color";
 import { useApp } from "@/context/app-context";
 import { Spacing, BorderRadius, Colors } from "@/constants/theme";
-import { Subscription } from "@/types/app";
 
 interface FreezeToggleProps {
   label: string;
+  description?: string;
   value: boolean;
   onValueChange: (value: boolean) => void;
   delay: number;
 }
 
-function FreezeToggle({ label, value, onValueChange, delay }: FreezeToggleProps) {
+function FreezeToggle({ label, description, value, onValueChange, delay }: FreezeToggleProps) {
   const { theme, isDark } = useTheme();
 
   const handleToggle = async (newValue: boolean) => {
@@ -34,9 +35,19 @@ function FreezeToggle({ label, value, onValueChange, delay }: FreezeToggleProps)
       entering={FadeInDown.delay(delay).springify()}
       style={[styles.toggleContainer, { backgroundColor: theme.backgroundDefault }]}
     >
-      <ThemedText type="body" style={styles.toggleLabel}>
-        {label}
-      </ThemedText>
+      <View style={styles.toggleTextContainer}>
+        <ThemedText type="body" style={styles.toggleLabel}>
+          {label}
+        </ThemedText>
+        {description ? (
+          <ThemedText
+            type="small"
+            style={[styles.toggleDescription, { color: theme.textSecondary }]}
+          >
+            {description}
+          </ThemedText>
+        ) : null}
+      </View>
       <Switch
         value={value}
         onValueChange={handleToggle}
@@ -51,70 +62,37 @@ function FreezeToggle({ label, value, onValueChange, delay }: FreezeToggleProps)
   );
 }
 
-interface SubscriptionItemProps {
-  subscription: Subscription;
-  onOptOut: () => void;
-  index: number;
-}
+type BankAccount = {
+  id: string;
+  bank: string;
+  name: string;
+  type: "current" | "savings" | "wallet";
+};
 
-function SubscriptionItem({ subscription, onOptOut, index }: SubscriptionItemProps) {
-  const { theme, isDark } = useTheme();
-  const { t } = useApp();
-
-  const handleOptOut = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    onOptOut();
-  };
-
-  return (
-    <Animated.View
-      entering={FadeInDown.delay(350 + index * 50).springify()}
-      style={[styles.subscriptionItem, { backgroundColor: theme.backgroundDefault }]}
-    >
-      <View style={styles.subscriptionInfo}>
-        <ThemedText type="body">{subscription.name}</ThemedText>
-        <ThemedText type="small" style={{ color: theme.textSecondary }}>
-          R{subscription.amount.toFixed(2)}/month
-        </ThemedText>
-      </View>
-      <Pressable
-        onPress={handleOptOut}
-        style={({ pressed }) => [
-          styles.optOutButton,
-          {
-            backgroundColor: subscription.isOptedOut
-              ? isDark
-                ? Colors.dark.hopeGreen
-                : Colors.light.hopeGreen
-              : isDark
-                ? Colors.dark.alarmRed
-                : Colors.light.alarmRed,
-            opacity: pressed ? 0.8 : 1,
-          },
-        ]}
-        testID={`button-optout-${subscription.id}`}
-      >
-        <Feather
-          name={subscription.isOptedOut ? "check" : "x"}
-          size={16}
-          color="#FFFFFF"
-        />
-        <ThemedText type="small" style={styles.optOutText}>
-          {subscription.isOptedOut ? t("subscriptionOptedOut") : t("optOutSubscription")}
-        </ThemedText>
-      </Pressable>
-    </Animated.View>
-  );
-}
+const BANK_ACCOUNTS: BankAccount[] = [
+  { id: "capitec-main", bank: "Capitec", name: "Everyday Account", type: "current" },
+  { id: "capitec-save", bank: "Capitec", name: "Savings Pocket", type: "savings" },
+  { id: "standard-main", bank: "Standard Bank", name: "Cheque Account", type: "current" },
+  { id: "absa-fee", bank: "Absa", name: "High-fee Account", type: "current" },
+  { id: "mtn-momo", bank: "MTN MoMo", name: "MoMo Wallet", type: "wallet" },
+];
 
 export default function FreezeControlScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme, isDark } = useTheme();
-  const { t, freezeSettings, setFreezeSettings, subscriptions, toggleSubscriptionOptOut } = useApp();
+  const { t, freezeSettings, setFreezeSettings, airtimeLimit } = useApp();
+  const router = useRouter();
 
   const [localSettings, setLocalSettings] = useState(freezeSettings);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [frozenAccounts, setFrozenAccounts] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    BANK_ACCOUNTS.forEach((acc) => {
+      initial[acc.id] = false;
+    });
+    return initial;
+  });
 
   const hasChanges =
     localSettings.pauseDebitOrders !== freezeSettings.pauseDebitOrders ||
@@ -138,8 +116,30 @@ export default function FreezeControlScreen() {
     setShowConfirmModal(false);
   };
 
-  const ListHeader = () => (
+  const HeaderContent = () => (
     <View>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          marginBottom: Spacing["2xl"],
+        }}
+      >
+        <Pressable
+          onPress={() => router.back()}
+          style={{ padding: Spacing.xs, marginRight: Spacing.sm }}
+          hitSlop={10}
+        >
+          <Feather name="arrow-left" size={20} color={theme.text} />
+        </Pressable>
+        <View>
+          <ThemedText type="h2" className="text-text">
+            Freeze all
+          </ThemedText>
+       
+        </View>
+      </View>
+
       {activeCount > 0 ? (
         <Animated.View
           entering={FadeInDown.delay(50).springify()}
@@ -171,77 +171,104 @@ export default function FreezeControlScreen() {
         </Animated.View>
       ) : null}
 
-      <View style={styles.togglesList}>
-        <FreezeToggle
-          label={t("pauseDebitOrders")}
-          value={localSettings.pauseDebitOrders}
-          onValueChange={(value) =>
-            setLocalSettings({ ...localSettings, pauseDebitOrders: value })
-          }
-          delay={100}
-        />
-        <FreezeToggle
-          label={t("blockFeeAccounts")}
-          value={localSettings.blockFeeAccounts}
-          onValueChange={(value) =>
-            setLocalSettings({ ...localSettings, blockFeeAccounts: value })
-          }
-          delay={150}
-        />
-        <FreezeToggle
-          label={t("setAirtimeLimit")}
-          value={localSettings.setAirtimeLimit}
-          onValueChange={(value) =>
-            setLocalSettings({ ...localSettings, setAirtimeLimit: value })
-          }
-          delay={200}
-        />
-        <FreezeToggle
-          label={t("cancelSubscriptions")}
-          value={localSettings.cancelSubscriptions}
-          onValueChange={(value) =>
-            setLocalSettings({ ...localSettings, cancelSubscriptions: value })
-          }
-          delay={250}
-        />
+      <View style={{ marginTop: Spacing["3xl"] }}>
+        <View style={styles.togglesList}>
+          <FreezeToggle
+            label={t("pauseDebitOrders")}
+            description="We’ll pause debit orders we detect as risky or unnecessary so they stop draining your account."
+            value={localSettings.pauseDebitOrders}
+            onValueChange={(value) =>
+              setLocalSettings({ ...localSettings, pauseDebitOrders: value })
+            }
+            delay={100}
+          />
+          <FreezeToggle
+            label={t("blockFeeAccounts")}
+            description="We’ll block high-fee accounts and products so future transactions don’t keep charging you hidden costs."
+            value={localSettings.blockFeeAccounts}
+            onValueChange={(value) =>
+              setLocalSettings({ ...localSettings, blockFeeAccounts: value })
+            }
+            delay={150}
+          />
+          <FreezeToggle
+            label={t("setAirtimeLimit")}
+            description={
+              airtimeLimit > 0
+                ? `We’ll cap airtime & data at about R${airtimeLimit.toFixed(
+                    0,
+                  )} a month so small top-ups don’t quietly eat your salary.`
+                : "We’ll cap how much airtime and data you can buy so small top-ups don’t quietly eat your salary."
+            }
+            value={localSettings.setAirtimeLimit}
+            onValueChange={(value) =>
+              setLocalSettings({ ...localSettings, setAirtimeLimit: value })
+            }
+            delay={200}
+          />
+          <FreezeToggle
+            label={t("cancelSubscriptions")}
+            description="We’ll cancel subscriptions you rarely use so those month‑end debits stop surprising you."
+            value={localSettings.cancelSubscriptions}
+            onValueChange={(value) =>
+              setLocalSettings({ ...localSettings, cancelSubscriptions: value })
+            }
+            delay={250}
+          />
+        </View>
       </View>
 
-      <Animated.View entering={FadeInDown.delay(300).springify()}>
-        <ThemedText type="h3" style={styles.subscriptionsTitle}>
-          {t("manageSubscriptions")}
+      <View style={{ marginTop: Spacing["3xl"] }}>
+        <ThemedText type="body" className="text-text mb-2">
+          Freeze specific accounts
         </ThemedText>
-      </Animated.View>
-    </View>
-  );
+        <ThemedText type="small" className="text-text-muted mb-3">
+          Choose which bank and wallet accounts TracePay should treat as frozen for new debit orders
+          and fees.
+        </ThemedText>
 
-  const ListFooter = () => (
-    <View style={{ height: Spacing["4xl"] }} />
+        {BANK_ACCOUNTS.map((account, index) => {
+          const isFrozen = frozenAccounts[account.id];
+          const typeLabel =
+            account.type === "current"
+              ? "Current account"
+              : account.type === "savings"
+              ? "Savings"
+              : "Wallet";
+
+          return (
+            <FreezeToggle
+              key={account.id}
+              label={account.name}
+              description={`${account.bank} • ${typeLabel}`}
+              value={isFrozen}
+              onValueChange={async (value) => {
+                await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setFrozenAccounts((prev) => ({ ...prev, [account.id]: value }));
+              }}
+              delay={300 + index * 40}
+            />
+          );
+        })}
+      </View>
+    </View>
   );
 
   return (
     <ThemedView style={styles.container}>
-      <FlatList
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: headerHeight + Spacing.xl,
+            paddingTop: insets.top + Spacing.xl,
             paddingBottom: insets.bottom + Spacing["4xl"],
           },
         ]}
-        data={subscriptions}
-        keyExtractor={(item) => item.id}
-        ListHeaderComponent={<ListHeader />}
-        ListFooterComponent={<ListFooter />}
-        renderItem={({ item, index }) => (
-          <SubscriptionItem
-            subscription={item}
-            onOptOut={() => toggleSubscriptionOptOut(item.id)}
-            index={index}
-          />
-        )}
-        ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
-      />
+        showsVerticalScrollIndicator={false}
+      >
+        <HeaderContent />
+      </ScrollView>
 
       {hasChanges ? (
         <Animated.View
@@ -374,6 +401,13 @@ const styles = StyleSheet.create({
   toggleLabel: {
     flex: 1,
     marginRight: Spacing.lg,
+  },
+  toggleTextContainer: {
+    flex: 1,
+    marginRight: Spacing.lg,
+  },
+  toggleDescription: {
+    marginTop: Spacing.xs,
   },
   subscriptionsTitle: {
     marginBottom: Spacing.lg,

@@ -2,7 +2,7 @@ import { NavigatorScreenParams } from "@react-navigation/native";
 
 export type MainTabParamList = {
   Dashboard: undefined;
-  Freeze: undefined;
+  Leaks: undefined;
   Settings: undefined;
 };
 

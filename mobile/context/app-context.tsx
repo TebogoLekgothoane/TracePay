@@ -19,6 +19,8 @@ interface AppContextType {
   setIncludeMomoData: (include: boolean) => void;
   subscriptions: Subscription[];
   toggleSubscriptionOptOut: (id: string) => void;
+  airtimeLimit: number;
+  setAirtimeLimitValue: (limit: number) => Promise<void>;
 }
 
 interface FreezeSettings {
@@ -49,6 +51,7 @@ const LANGUAGE_KEY = "@tracepay_language";
 const FREEZE_KEY = "@tracepay_freeze";
 const MOMO_KEY = "@tracepay_momo";
 const SUBSCRIPTIONS_KEY = "@tracepay_subscriptions";
+const AIRTIME_LIMIT_KEY = "@tracepay_airtime_limit";
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>("en");
@@ -57,6 +60,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isAnalysisComplete, setIsAnalysisComplete] = useState(false);
   const [includeMomoData, setIncludeMomoDataState] = useState(true);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>(defaultSubscriptions);
+  const [airtimeLimit, setAirtimeLimitState] = useState<number>(300);
 
   useEffect(() => {
     loadSettings();
@@ -79,6 +83,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const savedSubscriptions = await AsyncStorage.getItem(SUBSCRIPTIONS_KEY);
       if (savedSubscriptions) {
         setSubscriptions(JSON.parse(savedSubscriptions));
+      }
+      const savedAirtimeLimit = await AsyncStorage.getItem(AIRTIME_LIMIT_KEY);
+      if (savedAirtimeLimit) {
+        const parsed = parseFloat(savedAirtimeLimit);
+        if (!Number.isNaN(parsed) && parsed > 0) {
+          setAirtimeLimitState(parsed);
+        }
       }
     } catch (error) {
       console.error("Error loading settings:", error);
@@ -109,6 +120,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setIncludeMomoDataState(include);
     } catch (error) {
       console.error("Error saving momo setting:", error);
+    }
+  };
+
+  const setAirtimeLimitValue = async (limit: number) => {
+    try {
+      const safe = Number.isNaN(limit) || limit <= 0 ? 0 : Math.round(limit);
+      await AsyncStorage.setItem(AIRTIME_LIMIT_KEY, String(safe));
+      setAirtimeLimitState(safe);
+    } catch (error) {
+      console.error("Error saving airtime limit:", error);
     }
   };
 
@@ -148,6 +169,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setIncludeMomoData,
         subscriptions,
         toggleSubscriptionOptOut,
+        airtimeLimit,
+        setAirtimeLimitValue,
       }}
     >
       {children}

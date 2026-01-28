@@ -29,16 +29,16 @@ export default function RootLayout() {
             <Stack.Screen name="dashboard" />
             <Stack.Screen name="bank-autopsy" />
             <Stack.Screen name="autopsy-dashboard" />
+          <Stack.Screen name="change-password" />
+          <Stack.Screen name="device-settings" />
+          <Stack.Screen name="policy" />
             <Stack.Screen name="loss-detail" />
             <Stack.Screen name="freeze-control" />
+            <Stack.Screen name="pause-control" />
+            <Stack.Screen name="opt-out-control" />
+            <Stack.Screen name="reroute-control" />
             <Stack.Screen 
               name="voicemodal" 
-              options={{ 
-                presentation: 'modal' 
-              }} 
-            />
-            <Stack.Screen 
-              name="voice-modal" 
               options={{ 
                 presentation: 'modal' 
               }} 
