@@ -12,7 +12,7 @@ import {
 import { apiClient } from "./api";
 
 interface User {
-  id: number;
+  id: string;
   email: string;
   role: string;
   created_at: string;
@@ -66,7 +66,7 @@ export function AuthProvider({
   async function login(email: string, password: string) {
     const response = await apiClient.login(email, password);
     setUser({
-      id: response.user_id,
+      id: response.user_id.toString(),
       email: response.email,
       role: response.role,
       created_at: new Date().toISOString(),
@@ -75,14 +75,20 @@ export function AuthProvider({
   }
 
   async function register(email: string, password: string) {
-    const response = await apiClient.register(email, password);
-    setUser({
-      id: response.user_id,
-      email: response.email,
-      role: response.role,
-      created_at: new Date().toISOString(),
-    });
-    router.push("/dashboard");
+    try {
+      const response = await apiClient.register(email, password);
+      console.log("Register response:", response); // Debug log
+      setUser({
+        id: response.user_id,  // This is already a string
+        email: response.email,
+        role: response.role,
+        created_at: new Date().toISOString(),
+      });
+      router.push("/dashboard");
+    } catch (error) {
+      console.error("Registration error:", error); // Debug log
+      throw error; // Re-throw so the page can show the error
+    }
   }
 
   function logout() {

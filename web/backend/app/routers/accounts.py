@@ -53,7 +53,7 @@ def link_account(req: LinkAccountRequest, current_user: User = Depends(get_curre
         account_id=req.account_id or f"{req.bank_name}_{current_user.id}_{datetime.utcnow().timestamp()}",
         open_banking_consent_id=req.open_banking_consent_id,
         status="active",
-        metadata=req.metadata,
+        account_metadata=req.metadata,
     )
     db.add(account)
     db.commit()
@@ -66,7 +66,7 @@ def link_account(req: LinkAccountRequest, current_user: User = Depends(get_curre
         status=account.status,
         last_synced_at=account.last_synced_at.isoformat() if account.last_synced_at else None,
         created_at=account.created_at.isoformat(),
-        metadata=account.metadata or {},
+        metadata=account.account_metadata or {},
     )
 
 
@@ -82,7 +82,7 @@ def list_accounts(current_user: User = Depends(get_current_user), db: Session = 
             status=acc.status,
             last_synced_at=acc.last_synced_at.isoformat() if acc.last_synced_at else None,
             created_at=acc.created_at.isoformat(),
-            metadata=acc.metadata or {},
+            metadata=acc.account_metadata or {},
         )
         for acc in accounts
     ]

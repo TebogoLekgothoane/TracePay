@@ -18,7 +18,7 @@ class Leak:
     evidence: Dict[str, Any] | None = None
 
 
-def detect_weekend_spending_spikes(df: pd.DataFrame) -> List[Leak]:
+def detect_weekend_spending(df: pd.DataFrame) -> List[Leak]:
     """
     Weekend Spending Spikes:
     Detect if spending is significantly higher on weekends, which might indicate

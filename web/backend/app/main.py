@@ -39,9 +39,13 @@ engine = ForensicEngine()
 FROZEN: List[Dict[str, Any]] = []
 
 
-@app.get("/health")
-def health() -> Dict[str, str]:
-    return {"status": "ok"}
+@app.get("/")
+def root() -> Dict[str, str]:
+    return {
+        "message": "TracePay Forensic Engine API",
+        "docs": "/docs",
+        "health": "/health"
+    }
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)

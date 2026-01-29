@@ -15,9 +15,11 @@ from ..open_banking_client import OpenBankingSandboxClient, SandboxConfig
 router = APIRouter(prefix="/open-banking", tags=["open banking"])
 
 # Initialize Open Banking client
+import os
+
 sandbox_config = SandboxConfig(
-    client_id="",  # Set via environment variable
-    client_secret="",  # Set via environment variable
+  client_id=os.getenv("OPEN_BANKING_CLIENT_ID", ""),
+  client_secret=os.getenv("OPEN_BANKING_CLIENT_SECRET", ""),
 )
 ob_client = OpenBankingSandboxClient(sandbox_config)
 

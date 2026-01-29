@@ -41,7 +41,7 @@ class LinkedAccount(Base):
     status = Column(String(50), default="active", nullable=False)
     last_synced_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    metadata = Column(JSON, default=dict)
+    account_metadata = Column("metadata", JSON, default=dict)  
 
     user = relationship("User", back_populates="linked_accounts")
     transactions = relationship("Transaction", back_populates="account", cascade="all, delete-orphan")
