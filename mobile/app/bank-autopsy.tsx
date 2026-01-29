@@ -16,6 +16,7 @@ import { Spacing } from "@/constants/theme";
 import { AppHeader } from "@/components/app-header";
 import { useTheme } from "@/hooks/use-theme-color";
 import { fetchBanks, fetchBankAutopsyCauses, fetchBankAutopsyLeaksByCause } from "@/lib/api";
+import { getBankLogo } from "@/lib/bank-logos";
 
 export default function BankAutopsyScreen() {
   const insets = useSafeAreaInsets();
@@ -104,11 +105,12 @@ export default function BankAutopsyScreen() {
           <AppHeader
             title={bank.name}
             subtitle={`You lost R ${bank.totalLost.toFixed(1)} this month`}
+            titleLogo={getBankLogo(bank.name)}
             showBackButton
             onBackPress={() => router.back()}
           />
 
-          <BankSummaryCard bank={bank} />
+          <BankSummaryCard bank={bank} logo={getBankLogo(bank.name)} />
 
           {bank.type === "momo" ? (
             <SavingsOpportunityCard momoSpent={496} bundleCost={350} savings={146} />

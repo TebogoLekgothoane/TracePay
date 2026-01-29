@@ -38,7 +38,18 @@ async function request<T>(
     (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
   }
 
-  const response = await fetch(url, { ...options, headers });
+  let response: Response;
+  try {
+    response = await fetch(url, { ...options, headers });
+  } catch (e) {
+    const msg =
+      e instanceof TypeError && e.message === "Network request failed"
+        ? "Can't reach the backend. If you're on a phone or Android emulator, set EXPO_PUBLIC_BACKEND_URL in mobile/.env to your PC's IP (e.g. http://192.168.1.x:8001) or use http://10.0.2.2:8001 for the emulator, then restart Expo."
+        : e instanceof Error
+          ? e.message
+          : "Network request failed";
+    throw new Error(msg);
+  }
 
   if (!response.ok) {
     const err: BackendApiError = await response.json().catch(() => ({
@@ -176,5 +187,35 @@ export async function analyzeTransactions(
   return request("/analyze", {
     method: "POST",
     body: JSON.stringify({ transactions }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Interactive voice chat (Groq via backend – API key stays on server)
+// ---------------------------------------------------------------------------
+
+export interface VoiceChatMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
+export interface VoiceChatRequest {
+  messages: VoiceChatMessage[];
+  language?: string;
+  summary_context?: string;
+}
+
+export interface VoiceChatResponse {
+  message: string;
+}
+
+export async function voiceChat(body: VoiceChatRequest): Promise<VoiceChatResponse> {
+  return request("/voice/chat", {
+    method: "POST",
+    body: JSON.stringify({
+      messages: body.messages,
+      language: body.language ?? "en",
+      summary_context: body.summary_context ?? undefined,
+    }),
   });
 }

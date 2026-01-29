@@ -360,6 +360,36 @@ export async function fetchBanks(): Promise<
   }));
 }
 
+/** Slug for bank id: lowercase, spaces to hyphens (e.g. "Standard Bank" -> "standard-bank"). */
+function bankIdSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "");
+}
+
+export async function addBank(params: {
+  name: string;
+  type: "bank" | "momo";
+}): Promise<{ id: string } | null> {
+  const id = bankIdSlug(params.name);
+  if (!id) return null;
+  const { error } = await supabase
+    .from("banks")
+    .upsert(
+      {
+        id,
+        name: params.name.trim(),
+        type: params.type,
+        total_lost: 0,
+      },
+      { onConflict: "id", ignoreDuplicates: true }
+    );
+  if (error) return null;
+  return { id };
+}
+
 // ---------------------------------------------------------------------------
 // Bank autopsy causes & leaks
 // ---------------------------------------------------------------------------

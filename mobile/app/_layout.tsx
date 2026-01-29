@@ -13,8 +13,8 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <AppProvider>
+    <AppProvider>
+      <ThemeProvider>
         <NavigationThemeProvider value={DarkTheme}>
           <Stack
             screenOptions={{
@@ -27,6 +27,7 @@ export default function RootLayout() {
             <Stack.Screen name="analysis-loading" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="bank-autopsy" />
+            <Stack.Screen name="add-account" />
             <Stack.Screen name="autopsy-dashboard" />
           <Stack.Screen name="change-password" />
           <Stack.Screen name="device-settings" />
@@ -45,7 +46,7 @@ export default function RootLayout() {
           </Stack>
           <StatusBar style="auto" />
         </NavigationThemeProvider>
-      </AppProvider>
-    </ThemeProvider>
+      </ThemeProvider>
+    </AppProvider>
   );
 }

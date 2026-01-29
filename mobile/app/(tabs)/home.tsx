@@ -1,8 +1,8 @@
-import React, { useMemo, useEffect, useState } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import { ScrollView, View, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import * as Speech from "expo-speech";
+import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 
 import { ThemedView } from "@/components/themed-view";
@@ -13,70 +13,37 @@ import { AppHeader } from "@/components/app-header";
 import { IconLabelButton } from "@/components/icon-label-button";
 import { useApp } from "@/context/app-context";
 import { fetchBanks } from "@/lib/api";
+import { getBankLogo } from "@/lib/bank-logos";
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { language, analysisData, t } = useApp();
-  const [isPlayingVoice, setIsPlayingVoice] = useState(false);
+  const { language, t } = useApp();
   const [banks, setBanks] = useState<Bank[]>([]);
   const [banksLoading, setBanksLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadBanks = useCallback(() => {
     setBanksLoading(true);
     fetchBanks()
-      .then((data) => {
-        if (!cancelled) setBanks(data ?? []);
-      })
-      .catch(() => {
-        if (!cancelled) setBanks([]);
-      })
-      .finally(() => {
-        if (!cancelled) setBanksLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+      .then((data) => setBanks(data ?? []))
+      .catch(() => setBanks([]))
+      .finally(() => setBanksLoading(false));
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadBanks();
+    }, [loadBanks])
+  );
 
   const totalLost = useMemo(
     () => banks.reduce((sum, bank) => sum + bank.totalLost, 0),
     [banks]
   );
 
-  const summaryText =
-    analysisData?.summary[(language as "en" | "xh") ?? "en"] || analysisData?.summary.en || "";
-
-  useEffect(() => {
-    return () => {
-      Speech.stop();
-    };
-  }, []);
-
-  const handleVoicePlay = async () => {
+  const handleVoicePress = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    if (isPlayingVoice) {
-      Speech.stop();
-      setIsPlayingVoice(false);
-      return;
-    }
-
-    if (!summaryText) {
-      return;
-    }
-
-    const langCode = language === "xh" ? "xh-ZA" : "en-ZA";
-
-    Speech.speak(summaryText, {
-      language: langCode,
-      rate: 0.9,
-      onStart: () => setIsPlayingVoice(true),
-      onDone: () => setIsPlayingVoice(false),
-      onStopped: () => setIsPlayingVoice(false),
-      onError: () => setIsPlayingVoice(false),
-    });
+    router.push("/voicemodal" as any);
   };
 
   return (
@@ -96,8 +63,8 @@ export default function HomeScreen() {
             rightAccessory={
               <IconLabelButton
                 icon="mic"
-                label={isPlayingVoice ? t("stopAudio") : t("playAudio")}
-                onPress={handleVoicePlay}
+                label={t("playAudio")}
+                onPress={handleVoicePress}
                 iconSize={16}
                 className="px-4 py-2"
               />
@@ -134,7 +101,7 @@ export default function HomeScreen() {
                   router.push({ pathname: "/bank-autopsy" as any, params: { bankId: bank.id } } as any)
                 }
               >
-                <BankSummaryCard bank={bank} />
+                <BankSummaryCard bank={bank} logo={getBankLogo(bank.name)} />
               </Pressable>
             ))}
 
@@ -142,7 +109,8 @@ export default function HomeScreen() {
             <Pressable
               className="mt-1 rounded-full border border-border bg-bg-card py-3 items-center"
               onPress={() => {
-                // Placeholder for future "add account" flow
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/add-account" as any);
               }}
             >
               <ThemedText type="button" className="text-primary">

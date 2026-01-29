@@ -13,6 +13,7 @@ import { formatZar } from "@/components/utils/money";
 import { useApp } from "@/context/app-context";
 import { fetchCategoryAccounts } from "@/lib/api";
 import { useTheme } from "@/hooks/use-theme-color";
+import { getBankLogo } from "@/lib/bank-logos";
 
 const CATEGORY_TITLES: Record<CategoryId, string> = {
   banks: "Banks",
@@ -104,6 +105,7 @@ export default function CategoryScreen() {
           >
             <AccountCard
               account={account}
+              logo={getBankLogo(account.name)}
               onPressPrimary={() =>
                 router.push({ pathname: "/bank-autopsy" as any, params: { bankId: account.id } } as any)
               }

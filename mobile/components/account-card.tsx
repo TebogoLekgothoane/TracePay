@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { View, Pressable } from "react-native";
+import { View, Pressable, Image, ImageSourcePropType } from "react-native";
 import { ThemedText } from "@/components/themed-text";
 import { formatZar, getLossStatus } from "@/components/utils/money";
 
@@ -24,11 +24,13 @@ function statusDotClass(spent: number) {
 
 export function AccountCard({
   account,
+  logo,
   onPressPrimary,
   onPressSecondary,
   onPressTertiary,
 }: {
   account: AccountAutopsy;
+  logo?: ImageSourcePropType;
   onPressPrimary?: () => void;
   onPressSecondary?: () => void;
   onPressTertiary?: () => void;
@@ -46,7 +48,14 @@ export function AccountCard({
   return (
     <View className="w-full rounded-3xl bg-white px-5 py-5 mb-5 shadow-sm">
       <View className="flex-row items-center justify-between">
-        <View className="flex-row items-center">
+        <View className="flex-row items-center flex-1">
+          {logo ? (
+            <Image
+              source={logo}
+              className="w-10 h-10 rounded-lg mr-3"
+              resizeMode="contain"
+            />
+          ) : null}
           <ThemedText type="h2" className="text-text">
             {account.name}
           </ThemedText>

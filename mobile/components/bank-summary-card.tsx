@@ -1,5 +1,5 @@
 import React from "react";
-import { View } from "react-native";
+import { View, Image, ImageSourcePropType } from "react-native";
 import { ThemedText } from "@/components/themed-text";
 import { Bank } from "@/components/bank-card";
 import { formatZar, getLossStatus } from "@/components/utils/money";
@@ -18,13 +18,22 @@ function statusTextClass(totalLost: number) {
   return "text-green-700";
 }
 
-export function BankSummaryCard({ bank }: { bank: Bank }) {
+export function BankSummaryCard({ bank, logo }: { bank: Bank; logo?: ImageSourcePropType }) {
   return (
     <View className="w-full rounded-2xl bg-bg-card px-5 py-5">
       <View className="flex-row items-center justify-between">
-        <ThemedText type="h2" className="text-text">
-          {bank.name}
-        </ThemedText>
+        <View className="flex-row items-center flex-1">
+          {logo ? (
+            <Image
+              source={logo}
+              className="w-10 h-10 rounded-lg mr-3"
+              resizeMode="contain"
+            />
+          ) : null}
+          <ThemedText type="h2" className="text-text flex-1">
+            {bank.name}
+          </ThemedText>
+        </View>
         <View className={["px-3 py-1 rounded-full", statusPillClass(bank.totalLost)].join(" ")}>
           <ThemedText type="small" className={statusTextClass(bank.totalLost)}>
             {getLossStatus(bank.totalLost).toUpperCase()}
