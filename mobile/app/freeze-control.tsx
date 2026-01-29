@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { useTheme } from "@/hooks/use-theme-color";
 import { useApp } from "@/context/app-context";
 import { Spacing, Colors } from "@/constants/theme";
+import { fetchUserBankAccounts, updateUserBankAccountFrozen } from "@/lib/api";
 
 interface FreezeToggleProps {
   label: string;
@@ -67,30 +68,38 @@ type BankAccount = {
   type: "current" | "savings" | "wallet";
 };
 
-const BANK_ACCOUNTS: BankAccount[] = [
-  { id: "capitec-main", bank: "Capitec", name: "Everyday Account", type: "current" },
-  { id: "capitec-save", bank: "Capitec", name: "Savings Pocket", type: "savings" },
-  { id: "standard-main", bank: "Standard Bank", name: "Cheque Account", type: "current" },
-  { id: "absa-fee", bank: "Absa", name: "High-fee Account", type: "current" },
-  { id: "mtn-momo", bank: "MTN MoMo", name: "MoMo Wallet", type: "wallet" },
-];
-
 export default function FreezeControlScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme, isDark } = useTheme();
-  const { t, freezeSettings, setFreezeSettings, airtimeLimit } = useApp();
+  const { t, freezeSettings, setFreezeSettings, airtimeLimit, userId } = useApp();
   const router = useRouter();
 
   const [localSettings, setLocalSettings] = useState(freezeSettings);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [frozenAccounts, setFrozenAccounts] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {};
-    BANK_ACCOUNTS.forEach((acc) => {
-      initial[acc.id] = false;
-    });
-    return initial;
-  });
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [frozenAccounts, setFrozenAccounts] = useState<Record<string, boolean>>({});
+  const [accountsLoading, setAccountsLoading] = useState(true);
+
+  React.useEffect(() => {
+    setAccountsLoading(true);
+    fetchUserBankAccounts(userId).then((accounts) => {
+      setBankAccounts(
+        accounts.map((a) => ({
+          id: a.id,
+          bank: a.bank,
+          name: a.name,
+          type: a.type,
+        }))
+      );
+      const initial: Record<string, boolean> = {};
+      accounts.forEach((a) => {
+        initial[a.id] = a.isFrozen;
+      });
+      setFrozenAccounts(initial);
+      setAccountsLoading(false);
+    }).catch(() => setAccountsLoading(false));
+  }, [userId]);
 
   const hasChanges =
     localSettings.pauseDebitOrders !== freezeSettings.pauseDebitOrders ||
@@ -213,8 +222,17 @@ export default function FreezeControlScreen() {
           and fees.
         </ThemedText>
 
-        {BANK_ACCOUNTS.map((account, index) => {
-          const isFrozen = frozenAccounts[account.id];
+        {accountsLoading ? (
+          <ThemedText type="body" className="text-text-muted py-4">
+            Loading accounts…
+          </ThemedText>
+        ) : bankAccounts.length === 0 ? (
+          <ThemedText type="body" className="text-text-muted py-4">
+            No bank accounts linked yet.
+          </ThemedText>
+        ) : null}
+        {!accountsLoading && bankAccounts.map((account, index) => {
+          const isFrozen = frozenAccounts[account.id] ?? false;
           const typeLabel =
             account.type === "current"
               ? "Current account"
@@ -231,6 +249,7 @@ export default function FreezeControlScreen() {
               onValueChange={async (value) => {
                 await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 setFrozenAccounts((prev) => ({ ...prev, [account.id]: value }));
+                updateUserBankAccountFrozen(userId, account.id, value).catch(() => {});
               }}
               delay={300 + index * 40}
             />

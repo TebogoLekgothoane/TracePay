@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { FlatList, View, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
@@ -7,7 +7,9 @@ import { useRouter } from "expo-router";
 import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
 import { useTheme } from "@/hooks/use-theme-color";
+import { useApp } from "@/context/app-context";
 import { Spacing, Colors } from "@/constants/theme";
+import { fetchDebitOrders, updateDebitOrderPaused } from "@/lib/api";
 
 type DebitOrder = {
   id: string;
@@ -18,53 +20,31 @@ type DebitOrder = {
   isPaused: boolean;
 };
 
-const MOCK_DEBIT_ORDERS: DebitOrder[] = [
-  {
-    id: "1",
-    date: "2026-01-03",
-    description: "MTN SP DEBIT ORDER",
-    reference: "MTNSP/1234567890",
-    amount: 499.0,
-    isPaused: false,
-  },
-  {
-    id: "2",
-    date: "2026-01-05",
-    description: "INSURANCE PREMIUM DEBIT",
-    reference: "INSURECO/987654321",
-    amount: 320.5,
-    isPaused: false,
-  },
-  {
-    id: "3",
-    date: "2026-01-09",
-    description: "GYM MEMBERSHIP",
-    reference: "FITGYM/135792468",
-    amount: 299.0,
-    isPaused: false,
-  },
-  {
-    id: "4",
-    date: "2026-01-12",
-    description: "STREAMING SERVICE",
-    reference: "STREAMCO/246813579",
-    amount: 189.99,
-    isPaused: false,
-  },
-];
-
 export default function PauseControlScreen() {
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
   const router = useRouter();
-  const [debitOrders, setDebitOrders] = useState<DebitOrder[]>(MOCK_DEBIT_ORDERS);
+  const { userId } = useApp();
+  const [debitOrders, setDebitOrders] = useState<DebitOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchDebitOrders(userId)
+      .then((data) => setDebitOrders(data ?? []))
+      .catch(() => setDebitOrders([]))
+      .finally(() => setLoading(false));
+  }, [userId]);
 
   const togglePause = (id: string) => {
-    setDebitOrders((current) =>
-      current.map((order) =>
+    setDebitOrders((current) => {
+      const next = current.map((order) =>
         order.id === id ? { ...order, isPaused: !order.isPaused } : order
-      )
-    );
+      );
+      const order = next.find((o) => o.id === id);
+      if (order) updateDebitOrderPaused(userId, id, order.isPaused).catch(() => {});
+      return next;
+    });
   };
 
   const renderItem = ({ item }: { item: DebitOrder }) => {
@@ -152,6 +132,17 @@ export default function PauseControlScreen() {
         data={debitOrders}
         keyExtractor={(item) => item.id}
         ItemSeparatorComponent={() => <View className="h-3" />}
+        ListEmptyComponent={
+          !loading ? (
+            <ThemedText type="body" className="text-text-muted py-6 text-center">
+              No debit orders found.
+            </ThemedText>
+          ) : (
+            <ThemedText type="body" className="text-text-muted py-6 text-center">
+              Loading debit orders…
+            </ThemedText>
+          )
+        }
         ListHeaderComponent={
           <View className="mb-6">
             <View className="flex-row items-center mb-3">

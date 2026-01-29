@@ -1,5 +1,5 @@
-import React, { useEffect } from "react";
-import { View, Image } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Image, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import Animated, {
@@ -18,13 +18,14 @@ import { ThemedText } from "@/components/themed-text";
 import { useTheme } from "@/hooks/use-theme-color";
 import { useApp } from "@/context/app-context";
 import { Spacing } from "@/constants/theme";
-import { mockAnalysisData, mockAnalysisDataWithMomo } from "@/data/mock-analysis";
+import { Button } from "@/components/ui/button";
+import { fetchAnalysis } from "@/lib/api";
 
 export default function AnalysisLoadingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { theme } = useTheme();
   const { t, setAnalysisData, setIsAnalysisComplete, includeMomoData } = useApp();
+  const [analysisError, setAnalysisError] = useState(false);
 
   const pulseScale = useSharedValue(1);
   const dotOpacity1 = useSharedValue(0.3);
@@ -72,11 +73,20 @@ export default function AnalysisLoadingScreen() {
       );
     }, 400);
 
-    const timer = setTimeout(() => {
-      const data = includeMomoData ? mockAnalysisDataWithMomo : mockAnalysisData;
-      setAnalysisData(data);
-      setIsAnalysisComplete(true);
-      router.replace("/(tabs)/home" as any);
+    const timer = setTimeout(async () => {
+      try {
+        const data = await fetchAnalysis(undefined, includeMomoData);
+        if (data) {
+          setAnalysisData(data);
+          setIsAnalysisComplete(true);
+          router.replace("/(tabs)/home" as any);
+        } else {
+          setAnalysisError(true);
+        }
+      } catch (e) {
+        console.warn("Failed to fetch analysis from DB:", e);
+        setAnalysisError(true);
+      }
     }, 3000);
 
     return () => clearTimeout(timer);
@@ -146,6 +156,32 @@ export default function AnalysisLoadingScreen() {
           >
             {t("analyzingDetail")}
           </ThemedText>
+          {analysisError ? (
+            <View className="mt-6 items-center">
+              <ThemedText type="body" className="text-text-muted text-center mb-3">
+                Could not load analysis. Check your connection and try again.
+              </ThemedText>
+              <Button
+                onPress={async () => {
+                  setAnalysisError(false);
+                  try {
+                    const data = await fetchAnalysis(undefined, includeMomoData);
+                    if (data) {
+                      setAnalysisData(data);
+                      setIsAnalysisComplete(true);
+                      router.replace("/(tabs)/home" as any);
+                    } else setAnalysisError(true);
+                  } catch {
+                    setAnalysisError(true);
+                  }
+                }}
+                className="bg-accent"
+                textClassName="text-white"
+              >
+                Retry
+              </Button>
+            </View>
+          ) : null}
         </Animated.View>
       </View>
     </ThemedView>

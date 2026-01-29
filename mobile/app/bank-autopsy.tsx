@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { View, ScrollView } from "react-native";
+import React, { useMemo, useState, useEffect } from "react";
+import { View, ScrollView, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
@@ -15,118 +15,80 @@ import { LeakTransactionRow, type LeakTransaction } from "@/components/leak-tran
 import { Spacing } from "@/constants/theme";
 import { AppHeader } from "@/components/app-header";
 import { useTheme } from "@/hooks/use-theme-color";
-
-const MOCK_BANKS: Bank[] = [
-  { id: "capitec", name: "Capitec", type: "bank", totalLost: 1193.5 },
-  { id: "standard-bank", name: "Standard Bank", type: "bank", totalLost: 530.2 },
-  { id: "mtn-momo", name: "MTN MoMo", type: "momo", totalLost: 496.0 },
-];
-
-const MOCK_CAUSES: AutopsyCause[] = [
-  { id: "hidden-fees", title: "Hidden Fees", amount: 320, percentOfIncome: 4.2 },
-  { id: "mashonisa", title: "Mashonisa Interest", amount: 780, percentOfIncome: 10.3 },
-  { id: "airtime", title: "Airtime Drains", amount: 210, percentOfIncome: 2.8 },
-];
-
-type LeakDataset = Record<string, LeakTransaction[]>;
-
-const LEAKS_BY_CAUSE: LeakDataset = {
-  "hidden-fees": [
-    {
-      id: "hf-1",
-      date: "2026-01-12",
-      merchant: "Bank A",
-      description: "Withdrawal Fee",
-      channel: "bank_fee",
-      tag: "hidden_fee",
-      amount: 2.5,
-    },
-    {
-      id: "hf-2",
-      date: "2026-01-07",
-      merchant: "Bank A",
-      description: "SMS Notification Fee",
-      channel: "bank_fee",
-      tag: "hidden_fee",
-      amount: 1.2,
-    },
-    {
-      id: "hf-3",
-      date: "2026-01-02",
-      merchant: "Bank A",
-      description: "Monthly Service Fee",
-      channel: "bank_fee",
-      tag: "hidden_fee",
-      amount: 5.5,
-    },
-  ],
-  mashonisa: [
-    {
-      id: "ms-1",
-      date: "2025-12-30",
-      merchant: "Informal",
-      description: "Mr Dlamini Repayment",
-      channel: "loan",
-      tag: "loan_shark",
-      amount: 1500,
-    },
-  ],
-  airtime: [
-    {
-      id: "at-1",
-      date: "2026-01-26",
-      merchant: "Telco B",
-      description: "Airtime Bundle",
-      channel: "airtime",
-      tag: "airtime_drain",
-      amount: 29,
-    },
-    {
-      id: "at-2",
-      date: "2026-01-25",
-      merchant: "Telco B",
-      description: "Data Bundle",
-      channel: "airtime",
-      tag: "airtime_drain",
-      amount: 5,
-    },
-    {
-      id: "at-3",
-      date: "2026-01-24",
-      merchant: "Telco B",
-      description: "WASP Subscription - Games",
-      channel: "airtime",
-      tag: "airtime_drain",
-      amount: 12,
-    },
-    {
-      id: "at-4",
-      date: "2026-01-17",
-      merchant: "Telco B",
-      description: "Airtime Advance Repayment",
-      channel: "airtime",
-      tag: "airtime_drain",
-      amount: 50,
-    },
-  ],
-};
+import { fetchBanks, fetchBankAutopsyCauses, fetchBankAutopsyLeaksByCause } from "@/lib/api";
 
 export default function BankAutopsyScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { theme } = useTheme();
   const { bankId } = useLocalSearchParams<{ bankId?: string }>();
+  const [banks, setBanks] = useState<Bank[]>([]);
+  const [banksLoading, setBanksLoading] = useState(true);
+  const [causes, setCauses] = useState<AutopsyCause[]>([]);
+  const [leaksByCause, setLeaksByCause] = useState<Record<string, LeakTransaction[]>>({});
   const [expandedCauseId, setExpandedCauseId] = useState<string | null>(null);
 
+  const resolvedBankId = bankId ?? banks[0]?.id;
+
+  useEffect(() => {
+    setBanksLoading(true);
+    fetchBanks()
+      .then((data) => setBanks(data ?? []))
+      .catch(() => setBanks([]))
+      .finally(() => setBanksLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!resolvedBankId) return;
+    fetchBankAutopsyCauses(resolvedBankId).then((data) => {
+      setCauses(data);
+    });
+  }, [resolvedBankId]);
+
+  useEffect(() => {
+    if (!expandedCauseId) return;
+    if (leaksByCause[expandedCauseId]) return;
+    fetchBankAutopsyLeaksByCause(expandedCauseId).then((data) => {
+      const leaks: LeakTransaction[] = data.map((row) => ({
+        ...row,
+        tag: row.tag as LeakTransaction["tag"],
+      }));
+      setLeaksByCause((prev) => ({ ...prev, [expandedCauseId]: leaks }));
+    });
+  }, [expandedCauseId]);
+
   const bank = useMemo(() => {
-    const found = MOCK_BANKS.find((b) => b.id === bankId);
-    return found ?? MOCK_BANKS[0];
-  }, [bankId]);
+    const found = banks.find((b) => b.id === resolvedBankId);
+    return found ?? (banks[0] ?? null);
+  }, [banks, resolvedBankId]);
 
   const expandedLeaks = useMemo<LeakTransaction[]>(() => {
     if (!expandedCauseId) return [];
-    return LEAKS_BY_CAUSE[expandedCauseId] ?? [];
-  }, [expandedCauseId]);
+    return leaksByCause[expandedCauseId] ?? [];
+  }, [expandedCauseId, leaksByCause]);
+
+  if (banksLoading || (!bank && banks.length === 0)) {
+    return (
+      <ThemedView className="bg-bg flex-1 flex-1 justify-center items-center px-6">
+        <ThemedText type="body" className="text-text-muted text-center">
+          {banksLoading ? "Loading bank…" : "No banks linked yet."}
+        </ThemedText>
+      </ThemedView>
+    );
+  }
+
+  if (!bank) {
+    return (
+      <ThemedView className="bg-bg flex-1 flex-1 justify-center items-center px-6">
+        <ThemedText type="body" className="text-text-muted text-center">
+          Bank not found.
+        </ThemedText>
+        <Pressable onPress={() => router.back()} className="mt-4">
+          <ThemedText type="button" className="text-primary">Go back</ThemedText>
+        </Pressable>
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView className="bg-bg flex-1">
@@ -153,7 +115,7 @@ export default function BankAutopsyScreen() {
           ) : null}
 
           <AutopsyCauseList
-            causes={MOCK_CAUSES}
+            causes={causes}
             onSelect={(cause) => {
               setExpandedCauseId((current) => (current === cause.id ? null : cause.id));
             }}
@@ -166,7 +128,7 @@ export default function BankAutopsyScreen() {
               }}
             >
               <ThemedText type="h3" className="text-text mb-2">
-                Raw leaks for {MOCK_CAUSES.find((c) => c.id === expandedCauseId)?.title}
+                Raw leaks for {causes.find((c) => c.id === expandedCauseId)?.title}
               </ThemedText>
               <ThemedText type="small" className="text-text-muted mb-3">
                 Raw transaction data with forensic flags for {bank.name}.

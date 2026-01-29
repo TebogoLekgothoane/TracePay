@@ -12,37 +12,37 @@ import type { Bank } from "@/components/bank-card";
 import { AppHeader } from "@/components/app-header";
 import { IconLabelButton } from "@/components/icon-label-button";
 import { useApp } from "@/context/app-context";
-
-const BANKS: Bank[] = [
-  {
-    id: "capitec",
-    name: "Capitec",
-    type: "bank",
-    totalLost: 1193.5,
-  },
-  {
-    id: "standard-bank",
-    name: "Standard Bank",
-    type: "bank",
-    totalLost: 530.2,
-  },
-  {
-    id: "mtn-momo",
-    name: "MTN MoMo",
-    type: "momo",
-    totalLost: 496.0,
-  },
-];
+import { fetchBanks } from "@/lib/api";
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { language, analysisData, t } = useApp();
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
+  const [banks, setBanks] = useState<Bank[]>([]);
+  const [banksLoading, setBanksLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setBanksLoading(true);
+    fetchBanks()
+      .then((data) => {
+        if (!cancelled) setBanks(data ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setBanks([]);
+      })
+      .finally(() => {
+        if (!cancelled) setBanksLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const totalLost = useMemo(
-    () => BANKS.reduce((sum, bank) => sum + bank.totalLost, 0),
-    []
+    () => banks.reduce((sum, bank) => sum + bank.totalLost, 0),
+    [banks]
   );
 
   const summaryText =
@@ -115,9 +115,19 @@ export default function HomeScreen() {
           </View>
           
 
-          {/* Banks list */}
+          {/* Banks list (from DB) */}
           <View className="mb-4 space-y-3">
-            {BANKS.map((bank) => (
+            {banksLoading ? (
+              <ThemedText type="body" className="text-text-muted py-4">
+                Loading banks…
+              </ThemedText>
+            ) : banks.length === 0 ? (
+              <ThemedText type="body" className="text-text-muted py-4">
+                No banks linked yet.
+              </ThemedText>
+            ) : null}
+            {!banksLoading &&
+              banks.map((bank) => (
               <Pressable
                 key={bank.id}
                 onPress={() =>
@@ -128,6 +138,7 @@ export default function HomeScreen() {
               </Pressable>
             ))}
 
+            {!banksLoading ? (
             <Pressable
               className="mt-1 rounded-full border border-border bg-bg-card py-3 items-center"
               onPress={() => {
@@ -138,6 +149,7 @@ export default function HomeScreen() {
                 + Add Account
               </ThemedText>
             </Pressable>
+            ) : null}
           </View>
         </View>
       </ScrollView>

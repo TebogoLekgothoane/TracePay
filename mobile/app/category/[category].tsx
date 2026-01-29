@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
-import { ScrollView, View, Pressable } from "react-native";
+import React, { useEffect, useState } from "react";
+import { ScrollView, View, Pressable, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
@@ -7,59 +7,74 @@ import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
 import { AccountCard, type AccountAutopsy } from "@/components/account-card";
 import type { CategoryId } from "@/components/category-card";
-import { Spacing } from "@/constants/theme";
+import { EmptyState } from "@/components/empty-state";
+import { Spacing, Colors } from "@/constants/theme";
 import { formatZar } from "@/components/utils/money";
+import { useApp } from "@/context/app-context";
+import { fetchCategoryAccounts } from "@/lib/api";
+import { useTheme } from "@/hooks/use-theme-color";
 
-const BANK_ACCOUNTS: AccountAutopsy[] = [
-  { id: "absa", name: "Absa Account", spent: 8250, fees: 225, debits: 3000, other: 5025 },
-  { id: "standard", name: "Standard Bank", spent: 3650, fees: 180, debits: 2100, other: 1370 },
-  { id: "capitec", name: "Capitec", spent: 1450, fees: 95, debits: 830, other: 525 },
-];
-
-const TELCO_ACCOUNTS: AccountAutopsy[] = [
-  { id: "vodacom", name: "Vodacom Wallet", spent: 1590, fees: 130, debits: 875, other: 585 },
-  { id: "mtn-momo", name: "MTN MoMo", spent: 496, fees: 90, debits: 280, other: 126 },
-];
-
-const LOAN_ACCOUNTS: AccountAutopsy[] = [
-  { id: "mashonisa", name: "Mashonisa Loan", spent: 1600, fees: 0, debits: 1600, other: 0 },
-];
-
-const INSURANCE_ACCOUNTS: AccountAutopsy[] = [
-  { id: "funeral", name: "Funeral Cover", spent: 320, fees: 0, debits: 320, other: 0 },
-  { id: "device", name: "Device Insurance", spent: 200, fees: 0, debits: 200, other: 0 },
-];
-
-const SUBS_ACCOUNTS: AccountAutopsy[] = [
-  { id: "streaming", name: "Streaming Services", spent: 210, fees: 0, debits: 210, other: 0 },
-  { id: "gym", name: "Gym Membership", spent: 100, fees: 0, debits: 100, other: 0 },
-];
-
-function getCategoryData(category: CategoryId): { title: string; accounts: AccountAutopsy[] } {
-  switch (category) {
-    case "banks":
-      return { title: "Banks", accounts: BANK_ACCOUNTS };
-    case "telcos":
-      return { title: "Telcos / Mobile Wallets", accounts: TELCO_ACCOUNTS };
-    case "loans":
-      return { title: "Loans & Credit", accounts: LOAN_ACCOUNTS };
-    case "insurance":
-      return { title: "Insurance", accounts: INSURANCE_ACCOUNTS };
-    case "subscriptions":
-    default:
-      return { title: "Subscriptions / Other", accounts: SUBS_ACCOUNTS };
-  }
-}
+const CATEGORY_TITLES: Record<CategoryId, string> = {
+  banks: "Banks",
+  telcos: "Telcos / Mobile Wallets",
+  loans: "Loans & Credit",
+  insurance: "Insurance",
+  subscriptions: "Subscriptions / Other",
+};
 
 export default function CategoryScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams<{ category?: CategoryId }>();
   const categoryId: CategoryId = (params.category as CategoryId) ?? "banks";
+  const { userId } = useApp();
+  const { isDark } = useTheme();
+  const [accounts, setAccounts] = useState<AccountAutopsy[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const { title, accounts } = useMemo(() => getCategoryData(categoryId), [categoryId]);
+  useEffect(() => {
+    setLoading(true);
+    fetchCategoryAccounts(userId, categoryId)
+      .then(setAccounts)
+      .catch(() => setAccounts([]))
+      .finally(() => setLoading(false));
+  }, [userId, categoryId]);
 
+  const title = CATEGORY_TITLES[categoryId];
   const totalLost = accounts.reduce((sum, a) => sum + a.spent, 0);
+
+  if (loading) {
+    return (
+      <ThemedView className="flex-1 bg-bg items-center justify-center">
+        <ActivityIndicator size="large" color={isDark ? Colors.dark.info : Colors.light.info} />
+        <ThemedText type="body" className="text-text-muted mt-3">
+          Loading {title}…
+        </ThemedText>
+      </ThemedView>
+    );
+  }
+
+  if (accounts.length === 0) {
+    return (
+      <ThemedView className="flex-1 bg-bg">
+        <View
+          className="px-4 pt-4 pb-2"
+          style={{ paddingTop: insets.top + Spacing.lg }}
+        >
+          <ThemedText type="h1" className="text-text">
+            {title}
+          </ThemedText>
+          <ThemedText type="body" className="text-text-muted mt-1">
+            No accounts in this category yet.
+          </ThemedText>
+        </View>
+        <EmptyState
+          title="No accounts"
+          description="Accounts will appear here once they’re linked and categorised."
+        />
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView className="flex-1 bg-bg">
@@ -105,4 +120,3 @@ export default function CategoryScreen() {
     </ThemedView>
   );
 }
-

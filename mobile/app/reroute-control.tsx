@@ -1,13 +1,16 @@
-import React, { useMemo, useState } from "react";
-import { View, FlatList, Pressable, Modal } from "react-native";
+import React, { useMemo, useState, useEffect } from "react";
+import { View, FlatList, Pressable, Modal, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
 import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
+import { EmptyState } from "@/components/empty-state";
 import { useTheme } from "@/hooks/use-theme-color";
+import { useApp } from "@/context/app-context";
 import { Spacing, Colors } from "@/constants/theme";
+import { fetchIncomeAccounts, fetchReroutePlan, updateReroutePlan } from "@/lib/api";
 
 type Account = {
   id: string;
@@ -18,54 +21,44 @@ type Account = {
   suggestedIncome: number;
 };
 
-const ACCOUNTS: Account[] = [
-  {
-    id: "1",
-    bank: "Absa",
-    nickname: "High‑fee current account",
-    type: "highFee",
-    currentIncome: 100,
-    suggestedIncome: 10,
-  },
-  {
-    id: "2",
-    bank: "Capitec",
-    nickname: "Everyday account",
-    type: "salary",
-    currentIncome: 0,
-    suggestedIncome: 40,
-  },
-  {
-    id: "3",
-    bank: "Nedbank",
-    nickname: "Low‑fee savings pocket",
-    type: "savings",
-    currentIncome: 0,
-    suggestedIncome: 50,
-  },
-];
-
 export default function RerouteControlScreen() {
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
   const router = useRouter();
-  // plan[id] = true means "use suggestedIncome for this account" (part of the new route)
-  // false means "keep currentIncome share"
-  // Start in the "original" state: all income flows to the high‑fee account.
-  const [plan, setPlan] = useState<Record<string, boolean>>({
-    "1": false,
-    "2": false,
-    "3": false,
-  });
+  const { userId } = useApp();
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [planId, setPlanId] = useState<string>("");
+  const [plan, setPlan] = useState<Record<string, boolean>>({});
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [isApplied, setIsApplied] = useState(false);
-   const [showSuccess, setShowSuccess] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([fetchIncomeAccounts(userId), fetchReroutePlan(userId)])
+      .then(([accs, { planId: pid, plan: p, isApplied: applied }]) => {
+        setAccounts(
+          accs.map((a) => ({
+            id: a.id,
+            bank: a.bank,
+            nickname: a.nickname,
+            type: a.type,
+            currentIncome: a.currentIncome,
+            suggestedIncome: a.suggestedIncome,
+          }))
+        );
+        if (pid) setPlanId(pid);
+        if (p && Object.keys(p).length) setPlan(p);
+        setIsApplied(applied);
+      })
+      .finally(() => setLoading(false));
+  }, [userId]);
 
   const projectedLossCut = useMemo(() => {
-    // Rough example: moving away from high-fee accounts cuts 60% of their losses
-    const highFeeShare = ACCOUNTS.find((a) => a.type === "highFee")?.currentIncome ?? 0;
+    const highFeeShare = accounts.find((a) => a.type === "highFee")?.currentIncome ?? 0;
     return Math.round(highFeeShare * 0.6);
-  }, []);
+  }, [accounts]);
 
   const summaryCardColor = isDark ? Colors.dark.info : Colors.light.info;
 
@@ -75,15 +68,17 @@ export default function RerouteControlScreen() {
       savings: 0,
       highFee: 0,
     };
-
-    ACCOUNTS.forEach((account) => {
+    accounts.forEach((account) => {
       const enabled = plan[account.id];
       const share = enabled ? account.suggestedIncome : account.currentIncome;
       result[account.type] += share;
     });
-
     return result;
-  }, [plan]);
+  }, [accounts, plan]);
+
+  const handleToggle = (item: Account) => {
+    setPlan((prev) => ({ ...prev, [item.id]: !prev[item.id] }));
+  };
 
   const renderAccount = ({ item }: { item: Account }) => {
     const enabled = plan[item.id];
@@ -106,16 +101,9 @@ export default function RerouteControlScreen() {
       ? "Account activated"
       : "Tap to move income here";
 
-    const handleToggle = () => {
-      setPlan((prev) => ({
-        ...prev,
-        [item.id]: !prev[item.id],
-      }));
-    };
-
     return (
       <Pressable
-        onPress={handleToggle}
+        onPress={() => handleToggle(item)}
         className="rounded-xl p-4 active:scale-[0.99]"
         style={({ pressed }) => ({
           backgroundColor: theme.backgroundDefault,
@@ -224,15 +212,16 @@ export default function RerouteControlScreen() {
   };
 
   const handleApply = () => {
-    if (!isApplied) {
-      setConfirmVisible(true);
-    }
+    if (!isApplied) setConfirmVisible(true);
   };
 
-  const handleConfirmPlan = () => {
+  const handleConfirmPlan = async () => {
     setConfirmVisible(false);
     setIsApplied(true);
     setShowSuccess(true);
+    if (planId) {
+      updateReroutePlan(userId, planId, plan, true).catch(() => {});
+    }
   };
 
   const handleCancelConfirm = () => {
@@ -240,15 +229,42 @@ export default function RerouteControlScreen() {
   };
 
   const handleResetToOriginal = () => {
-    // Go back to a state where only the original high‑fee account receives income
-    setPlan({
-      "1": false, // use currentIncome (100%) on the original account
-      "2": false,
-      "3": false,
-    });
+    const resetPlan = accounts.reduce((acc, a) => ({ ...acc, [a.id]: false }), {} as Record<string, boolean>);
+    setPlan(resetPlan);
     setIsApplied(false);
     setShowSuccess(false);
+    if (planId) {
+      updateReroutePlan(userId, planId, resetPlan, false).catch(() => {});
+    }
   };
+
+  if (loading) {
+    return (
+      <ThemedView className="flex-1 bg-bg items-center justify-center">
+        <ActivityIndicator size="large" color={isDark ? Colors.dark.info : Colors.light.info} />
+        <ThemedText type="body" className="text-text-muted mt-3">
+          Loading income accounts…
+        </ThemedText>
+      </ThemedView>
+    );
+  }
+
+  if (accounts.length === 0) {
+    return (
+      <ThemedView className="flex-1 bg-bg">
+        <View className="flex-row items-center pt-4 pb-2 px-4" style={{ paddingTop: insets.top + Spacing.lg }}>
+          <Pressable onPress={() => router.back()} className="p-1 mr-2" hitSlop={10}>
+            <Feather name="arrow-left" size={20} color={theme.text} />
+          </Pressable>
+          <ThemedText type="h2" className="text-text">Route income differently</ThemedText>
+        </View>
+        <EmptyState
+          title="No income accounts"
+          description="Income accounts will appear here once they’re linked. Connect your accounts from the home screen."
+        />
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView className="flex-1 bg-bg">
@@ -258,7 +274,7 @@ export default function RerouteControlScreen() {
           paddingBottom: insets.bottom + Spacing["4xl"] + Spacing.buttonHeight,
           paddingHorizontal: Spacing.lg,
         }}
-        data={ACCOUNTS}
+        data={accounts}
         keyExtractor={(item) => item.id}
         renderItem={renderAccount}
         ItemSeparatorComponent={() => <View className="h-3" />}

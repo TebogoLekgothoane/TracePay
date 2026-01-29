@@ -1,5 +1,7 @@
 # Money Autopsy – Forensic Engine (FastAPI)
 
+**Hackathon / teams:** Integration with the **Open Banking API** (consent, accounts, transactions) is expected from another team member. This backend is the single point that talks to that API; mobile and dashboard call this backend, not the Open Banking API directly. See [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) for frontend–backend linkage.
+
 ## Run locally
 
 ```bash
