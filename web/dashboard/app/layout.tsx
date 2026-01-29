@@ -2,6 +2,7 @@ import "./globals.css";
 
 import type { Metadata } from "next";
 import { ReactNode } from "react";
+import { AuthProvider } from "@/lib/auth";
 
 export const metadata: Metadata = {
     title: "TracePay",
@@ -18,7 +19,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     return (
         <html lang="en">
             <body className="min-h-screen bg-background text-foreground antialiased">
-                {children}
+                <AuthProvider>{children}</AuthProvider>
             </body>
         </html>
     );

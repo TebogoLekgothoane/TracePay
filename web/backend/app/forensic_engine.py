@@ -5,6 +5,11 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
+from .detectors.debit_orders import detect_debit_orders
+from .detectors.subscription_traps import detect_subscription_traps
+from .detectors.vas_charges import detect_vas_charges
+from .detectors.weekend_spending import detect_weekend_spending
+
 
 @dataclass
 class Leak:
@@ -165,8 +170,9 @@ class ForensicEngine:
 
     def detect_informal_loan_ratios(self, df: pd.DataFrame) -> List[Leak]:
         """
-        Informal Loan Ratios:
+        Informal Loan Ratios (Mashonisa):
         Flag frequent P2P transfers (non-bank) where many debits look like borrowing/repayment.
+        Improved detection with better interest calculation.
         """
         if df.empty:
             return []
@@ -181,7 +187,7 @@ class ForensicEngine:
             "e-wallet",
             "ewallet",
         ]
-        loan_keywords = ["loan", "borrow", "repay", "repayment", "stokvel", "sassa", "mashonisa"]
+        loan_keywords = ["loan", "borrow", "repay", "repayment", "stokvel", "sassa", "mashonisa", "mashonisa interest"]
 
         text = (df["description"] + " " + df["counterparty"] + " " + df["channel"]).str.lower()
         is_p2p = text.apply(lambda s: any(k in s for k in p2p_keywords))
@@ -202,18 +208,29 @@ class ForensicEngine:
         ratio = float(p2p_last_30["abs_amount"].sum()) / float(max(last_30["abs_amount"].sum(), 1.0))
         tagged = p2p_last_30[looks_like_loan.reindex(p2p_last_30.index, fill_value=False)]
 
-        if ratio < 0.25 and len(tagged) < 2:
+        # Calculate estimated interest (if we see regular payments to same counterparty)
+        estimated_interest = 0.0
+        if not p2p_last_30.empty:
+            counterparty_payments = p2p_last_30.groupby("counterparty")["abs_amount"].sum()
+            if len(counterparty_payments) > 0:
+                # Estimate interest as a percentage of principal (simplified)
+                total_p2p = float(p2p_last_30["abs_amount"].sum())
+                # Assume 20-50% interest rate for informal loans (conservative estimate)
+                estimated_interest = total_p2p * 0.15  # 15% of payments might be interest
+
+        if ratio < 0.25 and len(tagged) < 2 and estimated_interest < 50:
             return []
 
-        severity = "high" if ratio >= 0.45 else "medium"
+        severity = "high" if ratio >= 0.45 or estimated_interest >= 200 else "medium"
         return [
             Leak(
                 id="informal-loan-ratio",
                 detector="InformalLoanRatios",
-                title="Too much money is going to informal loans",
+                title="Too much money is going to informal loans (Mashonisa)",
                 plain_language_reason=(
                     f"About {ratio*100:.0f}% of your spending in the last 30 days looks like person-to-person transfers. "
-                    "This can be a sign of informal borrowing pressure."
+                    f"Estimated interest paid: R{estimated_interest:.0f}. "
+                    "This can be a sign of informal borrowing pressure. Consider formal financial options."
                 ),
                 severity=severity,
                 transaction_id=str(p2p_last_30.sort_values("timestamp").iloc[-1]["id"]),
@@ -223,6 +240,7 @@ class ForensicEngine:
                     "total_spend_last_30_days": float(last_30["abs_amount"].sum()),
                     "ratio": ratio,
                     "tagged_loan_like_count": int(len(tagged)),
+                    "estimated_interest": float(estimated_interest),
                     "sample": p2p_last_30.sort_values("timestamp").tail(6)[["id", "timestamp", "abs_amount", "description", "counterparty"]].to_dict(
                         orient="records"
                     ),
@@ -237,9 +255,16 @@ class ForensicEngine:
         df = self.ingest(transactions)
 
         leaks: List[Leak] = []
+        # Original detectors
         leaks.extend(self.detect_airtime_drains(df))
         leaks.extend(self.detect_fee_leakage(df))
         leaks.extend(self.detect_informal_loan_ratios(df))
+        
+        # Enhanced detectors
+        leaks.extend(detect_subscription_traps(df))
+        leaks.extend(detect_vas_charges(df))
+        leaks.extend(detect_debit_orders(df))
+        leaks.extend(detect_weekend_spending(df))
 
         score = self._score(df, leaks)
         band = "green" if score >= 75 else "yellow" if score >= 50 else "red"

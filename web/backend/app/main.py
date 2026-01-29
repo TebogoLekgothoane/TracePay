@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from .database import Base, engine, get_db
 from .forensic_engine import ForensicEngine
 from .models import (
     AnalyzeRequest,
@@ -15,9 +16,12 @@ from .models import (
     MoneyLeak,
     TransactionIn,
 )
+from .routers import accounts, admin, auth, mobile, ml, mtn_momo, open_banking, voice
 
+app = FastAPI(title="TracePay – Forensic Engine", version="1.0.0")
 
-app = FastAPI(title="Money Autopsy – Forensic Engine", version="0.1.0")
+# Initialize database tables
+Base.metadata.create_all(bind=engine)
 
 # Dashboard runs separately (Next.js dev server), so enable permissive CORS for hackathon.
 cors_origins = os.getenv("CORS_ORIGINS", "*").split(",")
@@ -82,5 +86,16 @@ def freeze(req: FreezeRequest) -> FreezeResponse:
 @app.get("/frozen")
 def frozen() -> Dict[str, Any]:
     return {"count": len(FROZEN), "items": FROZEN[-50:]}
+
+
+# Include routers
+app.include_router(auth.router)
+app.include_router(accounts.router)
+app.include_router(admin.router)
+app.include_router(mobile.router)
+app.include_router(voice.router)
+app.include_router(ml.router)
+app.include_router(open_banking.router)
+app.include_router(mtn_momo.router)
 
 
