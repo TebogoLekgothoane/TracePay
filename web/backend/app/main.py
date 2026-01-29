@@ -28,10 +28,9 @@ app = FastAPI(title="TracePay – Forensic Engine", version="1.0.0")
 Base.metadata.create_all(bind=engine)
 
 # Dashboard runs separately (Next.js dev server), so enable permissive CORS for hackathon.
-cors_origins = os.getenv("CORS_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in cors_origins if o.strip()] or ["*"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

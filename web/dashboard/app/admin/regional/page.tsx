@@ -15,13 +15,28 @@ export default function RegionalInsightsPage() {
   const { user } = useAuth();
   const [regionalData, setRegionalData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     // Relaxed for demo: allow access regardless of role
     if (user) {
-      loadRegionalData();
+      void loadRegionalData();
+      // Stakeholder Portal: Automate global data ingestion on load
+      void handleGlobalSync();
     }
   }, [user]);
+
+  async function handleGlobalSync() {
+    setRefreshing(true);
+    try {
+      await apiClient.syncAllData();
+      await loadRegionalData();
+    } catch (e) {
+      console.error("Sync error:", e);
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function loadRegionalData() {
     try {

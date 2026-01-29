@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import get_db
-from ..models_db import LinkedAccount, Transaction, User
+from ..models_db import AnalysisResult, LinkedAccount, Transaction, User
 from ..open_banking_client import OpenBankingSandboxClient, SandboxConfig
+from ..forensic_engine import ForensicEngine
 from dotenv import load_dotenv
 
 load_dotenv() # Load environment variables from .env file
@@ -28,6 +29,7 @@ sandbox_config = SandboxConfig(
     client_secret=client_secret,
 )
 ob_client = OpenBankingSandboxClient(sandbox_config)
+forensic_engine = ForensicEngine()
 
 
 class ConsentRequest(BaseModel):
@@ -117,7 +119,7 @@ async def fetch_transactions(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    """Fetch transactions from Open Banking API"""
+    """Fetch transactions from Open Banking API and run forensics"""
     account = (
         db.query(LinkedAccount)
         .filter(LinkedAccount.id == account_id, LinkedAccount.user_id == current_user.id)
@@ -130,21 +132,90 @@ async def fetch_transactions(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Account not linked via Open Banking")
 
     try:
-        # Get access token
+        # 1. Get data access token
         token_response = await ob_client.token_client_credentials(consent_id=account.open_banking_consent_id)
         access_token = token_response.get("access_token")
 
-        # List accounts
-        accounts_response = await ob_client.list_accounts(access_token=access_token)
+        # 2. Fetch raw transactions from Sandbox
+        # In a real OB API, we'd use account.account_id (the bank's ID)
+        # For the sandbox, we'll try to use the linked account_id
+        bank_account_id = account.account_id.replace("ob_", "")
+        tx_response = await ob_client.list_transactions(access_token=access_token, account_id=bank_account_id)
+        
+        raw_txs = tx_response.get("Data", {}).get("Transaction", [])
+        
+        # 3. Map and save transactions to DB
+        new_tx_count = 0
+        tx_dicts_for_analysis = []
+        
+        for rt in raw_txs:
+            ext_id = rt.get("TransactionId")
+            if not ext_id: continue
+            
+            # Deduplicate
+            existing = db.query(Transaction).filter(Transaction.transaction_id == ext_id).first()
+            if not existing:
+                amount_data = rt.get("Amount", {})
+                
+                # Create DB model
+                tx = Transaction(
+                    user_id=current_user.id,
+                    account_id=account.id,
+                    transaction_id=ext_id,
+                    timestamp=datetime.fromisoformat(rt.get("BookingDateTime").replace("Z", "+00:00")),
+                    amount=float(amount_data.get("Amount", 0)),
+                    currency=amount_data.get("Currency", "ZAR"),
+                    description=rt.get("ProprietaryBankTransactionCode", {}).get("Description", "Bank Transaction"),
+                    merchant=rt.get("MerchantDetails", {}).get("MerchantName"),
+                    transaction_data=rt,
+                    direction="debit" if float(amount_data.get("Amount", 0)) < 0 else "credit"
+                )
+                db.add(tx)
+                new_tx_count += 1
+            
+            # Add to list for forensic analysis
+            tx_dicts_for_analysis.append({
+                "id": ext_id,
+                "timestamp": rt.get("BookingDateTime"),
+                "amount": float(rt.get("Amount", {}).get("Amount", 0)),
+                "description": rt.get("ProprietaryBankTransactionCode", {}).get("Description", ""),
+                "merchant": rt.get("MerchantDetails", {}).get("MerchantName", ""),
+                "direction": "debit" if float(rt.get("Amount", {}).get("Amount", 0)) < 0 else "credit"
+            })
 
-        # In production, you'd fetch transactions here
-        # For now, return mock response
+        db.commit()
+        
+        # 4. Run Forensic Analysis
+        if tx_dicts_for_analysis:
+            analysis = forensic_engine.analyze(tx_dicts_for_analysis)
+            
+            # Save Analysis Result
+            result = AnalysisResult(
+                user_id=current_user.id,
+                financial_health_score=analysis["financial_health_score"],
+                health_band=analysis["health_band"],
+                money_leaks=analysis["money_leaks"],
+                summary_plain_language=analysis["summary_plain_language"],
+                transaction_count=len(tx_dicts_for_analysis)
+            )
+            db.add(result)
+            db.commit()
+
+        # Update last synced
+        account.last_synced_at = datetime.utcnow()
+        account.status = "active"
+        db.commit()
+
         return {
-            "message": "Transactions fetched (simulated)",
+            "status": "success",
+            "message": f"Successfully ingested {new_tx_count} new transactions and updated forensics.",
             "account_id": account_id,
-            "transactions_count": 0,
+            "new_transactions": new_tx_count,
+            "total_monitored": len(tx_dicts_for_analysis),
+            "health_score": analysis["financial_health_score"] if tx_dicts_for_analysis else None
         }
     except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch transactions: {str(e)}")
 
 

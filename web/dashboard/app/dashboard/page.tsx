@@ -20,6 +20,7 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { apiClient } from "@/lib/api";
 import {
     Card,
     CardContent,
@@ -72,7 +73,7 @@ type TemporalData = {
     count: number;
 };
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8001";
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
 
 export default function DashboardPage() {
     const [stats, setStats] = useState<OverviewStats | null>(null);
@@ -81,7 +82,21 @@ export default function DashboardPage() {
     const [mlFindings, setMlFindings] = useState<MLFindings | null>(null);
     const [ingestion, setIngestion] = useState<IngestionStats | null>(null);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    async function handleGlobalSync() {
+        setRefreshing(true);
+        try {
+            await apiClient.syncAllData();
+            await fetchStats();
+        } catch (e) {
+            console.error("Sync error:", e);
+            setError("Global data ingestion failed. Please check the backend connection.");
+        } finally {
+            setRefreshing(false);
+        }
+    }
 
     async function fetchStats() {
         setLoading(true);
@@ -111,6 +126,8 @@ export default function DashboardPage() {
 
     useEffect(() => {
         void fetchStats();
+        // Stakeholder Portal: Automate global data ingestion on load
+        void handleGlobalSync();
     }, []);
 
     const impactValue = useMemo(() => {
@@ -131,9 +148,14 @@ export default function DashboardPage() {
                             Platform-wide forensic view of TracePay's economic impact in the Eastern Cape.
                         </p>
                     </div>
-                    <Button size="sm" variant="outline" onClick={() => void fetchStats()} disabled={loading}>
-                        <Activity className="mr-2 h-4 w-4" />
-                        {loading ? "Refreshing..." : "Refresh Analytics"}
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void handleGlobalSync()}
+                        disabled={loading || refreshing}
+                    >
+                        <Activity className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                        {refreshing ? "Ingesting Data..." : "Refresh Analytics"}
                     </Button>
                 </header>
 

@@ -66,8 +66,8 @@ export function DashboardSidebar() {
                                     className="data-[active=true]:bg-primary/25 data-[active=true]:border-l-2 data-[active=true]:border-primary data-[active=true]:shadow-sm !hover:bg-primary/10 !hover:text-foreground"
                                 >
                                     <Link href="/dashboard">
-                                        <LayoutDashboard className="h-4 w-4" />
-                                        <span>Overview</span>
+                                    <LayoutDashboard className="h-4 w-4" />
+                                    <span>Overview</span>
                                     </Link>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
@@ -78,7 +78,7 @@ export function DashboardSidebar() {
                                     className="data-[active=true]:bg-primary/25 data-[active=true]:border-l-2 data-[active=true]:border-primary data-[active=true]:shadow-sm !hover:bg-primary/10 !hover:text-foreground"
                                 >
                                     <Link href="/analysis/history">
-                                        <Flame className="h-4 w-4" />
+                                    <Flame className="h-4 w-4" />
                                         <span>Leak Analytics</span>
                                     </Link>
                                 </SidebarMenuButton>

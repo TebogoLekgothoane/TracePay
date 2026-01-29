@@ -17,13 +17,28 @@ export default function AdminDashboardPage() {
   const { user } = useAuth();
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     // Relaxed for demo: allow access regardless of role
     if (user) {
-      loadStats();
+      void loadStats();
+      // Stakeholder Portal: Automate global data ingestion on load
+      void handleGlobalSync();
     }
   }, [user]);
+
+  async function handleGlobalSync() {
+    setRefreshing(true);
+    try {
+      await apiClient.syncAllData();
+      await loadStats();
+    } catch (e) {
+      console.error("Sync error:", e);
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function loadStats() {
     try {
