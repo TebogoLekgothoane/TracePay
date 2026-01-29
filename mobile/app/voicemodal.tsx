@@ -139,7 +139,14 @@ export default function VoiceModalScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <View style={styles.header}>
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: insets.top + Spacing.sm,
+          },
+        ]}
+      >
         <ThemedText type="h3">{t("voiceExplanation")}</ThemedText>
         <Pressable
           onPress={handleClose}
@@ -171,74 +178,58 @@ export default function VoiceModalScreen() {
           />
         </Animated.View>
 
-        <Animated.View
-          entering={FadeInUp.delay(200).springify()}
-          style={styles.waveformContainer}
-        >
-          <View style={styles.waveform}>
-            <Animated.View
-              style={[
-                styles.waveBar,
-                { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
-                wave1Style,
-              ]}
-            />
-            <Animated.View
-              style={[
-                styles.waveBar,
-                styles.waveBarTall,
-                { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
-                wave2Style,
-              ]}
-            />
-            <Animated.View
-              style={[
-                styles.waveBar,
-                { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
-                wave3Style,
-              ]}
-            />
-            <Animated.View
-              style={[
-                styles.waveBar,
-                styles.waveBarTall,
-                { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
-                wave1Style,
-              ]}
-            />
-            <Animated.View
-              style={[
-                styles.waveBar,
-                { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
-                wave2Style,
-              ]}
-            />
-          </View>
-        </Animated.View>
-
-        <Animated.View entering={FadeInUp.delay(300).springify()}>
+        <Animated.View entering={FadeInUp.delay(200).springify()}>
           <Pressable
             onPress={handlePlayPause}
             disabled={isLoading}
             style={({ pressed }) => [
-              styles.playButton,
+              styles.waveformContainer,
               {
-                backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed,
-                transform: [{ scale: pressed ? 0.95 : 1 }],
+                transform: [{ scale: pressed ? 0.97 : 1 }],
                 opacity: isLoading ? 0.7 : 1,
               },
             ]}
             testID="button-play-audio"
           >
-            {isLoading ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Feather
-                name={isPlaying ? "pause" : "play"}
-                size={32}
-                color="#FFFFFF"
+            <View style={styles.waveform}>
+              <Animated.View
+                style={[
+                  styles.waveBar,
+                  { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
+                  wave1Style,
+                ]}
               />
-            )}
+              <Animated.View
+                style={[
+                  styles.waveBar,
+                  styles.waveBarTall,
+                  { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
+                  wave2Style,
+                ]}
+              />
+              <Animated.View
+                style={[
+                  styles.waveBar,
+                  { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
+                  wave3Style,
+                ]}
+              />
+              <Animated.View
+                style={[
+                  styles.waveBar,
+                  styles.waveBarTall,
+                  { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
+                  wave1Style,
+                ]}
+              />
+              <Animated.View
+                style={[
+                  styles.waveBar,
+                  { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
+                  wave2Style,
+                ]}
+              />
+            </View>
           </Pressable>
         </Animated.View>
 
@@ -247,11 +238,11 @@ export default function VoiceModalScreen() {
           style={styles.transcriptContainer}
         >
           <ThemedText
-            type="small"
-            style={[styles.transcriptLabel, { color: theme.textSecondary }]}
-          >
-            Transcript
-          </ThemedText>
+  type="small"
+  style={[styles.transcriptLabel, { color: theme.textSecondary }]}
+>
+  Transcript (with PLAY button)
+</ThemedText>
           <ThemedText type="body" style={styles.transcriptText}>
             {summaryText}
           </ThemedText>

@@ -1,315 +1,295 @@
-import React from "react";
-import { View, StyleSheet, Pressable, ScrollView } from "react-native";
+import React, { useState } from "react";
+import { ScrollView, View, Switch, Pressable, Alert, TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { Feather } from "@expo/vector-icons";
-import Animated, { FadeInDown } from "react-native-reanimated";
-import * as Haptics from "expo-haptics";
+import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-    import { ThemedView } from "@/components/themed-view";
+import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
-import { useTheme } from "@/hooks/use-theme-color";
+import { Spacing } from "@/constants/theme";
 import { useApp } from "@/context/app-context";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
-
-type ThemeMode = "light" | "dark" | "system";
-
-interface SettingsRowProps {
-  icon: keyof typeof Feather.glyphMap;
-  label: string;
-  value?: string;
-  onPress?: () => void;
-  isSelected?: boolean;
-  delay: number;
-}
-
-function SettingsRow({ icon, label, value, onPress, isSelected, delay }: SettingsRowProps) {
-  const { theme, isDark } = useTheme();
-
-  return (
-    <Animated.View entering={FadeInDown.delay(delay).springify()}>
-      <Pressable
-        onPress={onPress}
-        style={({ pressed }) => [
-          styles.settingsRow,
-          {
-            backgroundColor: theme.backgroundDefault,
-            opacity: pressed ? 0.8 : 1,
-          },
-        ]}
-      >
-        <View style={[styles.iconContainer, { backgroundColor: (isDark ? Colors.dark.alarmRed : Colors.light.alarmRed) + "20" }]}>
-          <Feather name={icon} size={20} color={isDark ? Colors.dark.alarmRed : Colors.light.alarmRed} />
-        </View>
-        <ThemedText type="body" style={styles.rowLabel}>
-          {label}
-        </ThemedText>
-        {value ? (
-          <ThemedText type="small" style={{ color: theme.textSecondary }}>
-            {value}
-          </ThemedText>
-        ) : null}
-        {isSelected ? (
-          <Feather name="check" size={20} color={isDark ? Colors.dark.hopeGreen : Colors.light.hopeGreen} />
-        ) : null}
-        {onPress && !isSelected ? (
-          <Feather name="chevron-right" size={20} color={theme.textSecondary} />
-        ) : null}
-      </Pressable>
-    </Animated.View>
-  );
-}
-
-interface ThemeOptionProps {
-  mode: ThemeMode;
-  label: string;
-  icon: keyof typeof Feather.glyphMap;
-  isSelected: boolean;
-  onPress: () => void;
-  delay: number;
-}
-
-function ThemeOption({ mode, label, icon, isSelected, onPress, delay }: ThemeOptionProps) {
-  const { theme, isDark } = useTheme();
-
-  const handlePress = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onPress();
-  };
-
-  return (
-    <Animated.View entering={FadeInDown.delay(delay).springify()}>
-      <Pressable
-        onPress={handlePress}
-        style={({ pressed }) => [
-          styles.themeOption,
-          {
-            backgroundColor: isSelected
-              ? (isDark ? Colors.dark.alarmRed : Colors.light.alarmRed) + "15"
-              : theme.backgroundDefault,
-            borderColor: isSelected
-              ? isDark ? Colors.dark.alarmRed : Colors.light.alarmRed
-              : "transparent",
-            opacity: pressed ? 0.8 : 1,
-          },
-        ]}
-        testID={`theme-option-${mode}`}
-      >
-        <View style={[
-          styles.themeIconContainer,
-          {
-            backgroundColor: isSelected
-              ? (isDark ? Colors.dark.alarmRed : Colors.light.alarmRed)
-              : theme.backgroundTertiary,
-          },
-        ]}>
-          <Feather
-            name={icon}
-            size={22}
-            color={isSelected ? "#FFFFFF" : theme.textSecondary}
-          />
-        </View>
-        <ThemedText
-          type="body"
-          style={[
-            styles.themeLabel,
-            isSelected && { color: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
-          ]}
-        >
-          {label}
-        </ThemedText>
-        {isSelected ? (
-          <Feather name="check-circle" size={20} color={isDark ? Colors.dark.hopeGreen : Colors.light.hopeGreen} />
-        ) : null}
-      </Pressable>
-    </Animated.View>
-  );
-}
+import { useTheme } from "@/hooks/use-theme-color";
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
-  const { theme, themeMode, setThemeMode, isDark } = useTheme();
-  const { language, setLanguage, t } = useApp();
+  const {
+    includeMomoData,
+    setIncludeMomoData,
+    setAnalysisData,
+    setIsAnalysisComplete,
+    setFreezeSettings,
+    setLanguage,
+    airtimeLimit,
+    setAirtimeLimitValue,
+  } = useApp();
+  const router = useRouter();
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const { theme } = useTheme();
+  const [airtimeLimitInput, setAirtimeLimitInput] = useState(
+    airtimeLimit > 0 ? String(airtimeLimit) : "",
+  );
 
-  const handleLanguageToggle = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await setLanguage(language === "en" ? "xh" : "en");
+  const handleSignOut = async () => {
+    if (isSigningOut) return;
+
+    const confirm = await new Promise<boolean>((resolve) => {
+      Alert.alert(
+        "Sign out of this device?",
+        "TracePay will forget this phone and clear your local settings. You can reconnect later.",
+        [
+          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+          { text: "Sign out", style: "destructive", onPress: () => resolve(true) },
+        ],
+      );
+    });
+
+    if (!confirm) return;
+
+    setIsSigningOut(true);
+    try {
+      await AsyncStorage.multiRemove([
+        "@tracepay_language",
+        "@tracepay_freeze",
+        "@tracepay_momo",
+        "@tracepay_subscriptions",
+        "@tracepay_passcode",
+        "@tracepay_mobile",
+      ]);
+
+      await setLanguage("en");
+      await setIncludeMomoData(true);
+      await setFreezeSettings({
+        pauseDebitOrders: false,
+        blockFeeAccounts: false,
+        setAirtimeLimit: false,
+        cancelSubscriptions: false,
+      });
+      setAnalysisData(null);
+      setIsAnalysisComplete(false);
+
+      router.replace("/language-selection" as any);
+    } finally {
+      setIsSigningOut(false);
+    }
   };
 
-  const themeModes: { mode: ThemeMode; label: string; icon: keyof typeof Feather.glyphMap }[] = [
-    { mode: "light", label: "Light", icon: "sun" },
-    { mode: "dark", label: "Dark", icon: "moon" },
-    { mode: "system", label: "System", icon: "smartphone" },
-  ];
-
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView
+      style={{
+        flex: 1,
+        paddingTop: insets.top + Spacing.sm,
+        paddingBottom: insets.bottom + Spacing["3xl"],
+        paddingHorizontal: Spacing.lg,
+      }}
+    >
       <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          {
-            paddingTop: insets.top + Spacing["4xl"],
-            paddingBottom: tabBarHeight + Spacing["2xl"],
-          },
-        ]}
+        contentContainerStyle={{
+          paddingBottom: Spacing["5xl"],
+        }}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View entering={FadeInDown.delay(50).springify()}>
-          <ThemedText type="h2" style={styles.screenTitle}>
-            Settings
-          </ThemedText>
-        </Animated.View>
-
-        <Animated.View entering={FadeInDown.delay(100).springify()}>
-          <ThemedText type="h4" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-            Appearance
-          </ThemedText>
-        </Animated.View>
-
-        <View style={styles.themeOptions}>
-          {themeModes.map((item, index) => (
-            <ThemeOption
-              key={item.mode}
-              mode={item.mode}
-              label={item.label}
-              icon={item.icon}
-              isSelected={themeMode === item.mode}
-              onPress={() => setThemeMode(item.mode)}
-              delay={150 + index * 50}
-            />
-          ))}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            marginBottom: Spacing["2xl"],
+          }}
+        >
+          <Pressable
+            onPress={() => router.back()}
+            style={{ padding: Spacing.xs, marginRight: Spacing.sm }}
+            hitSlop={10}
+          >
+            <ThemedText type="h2" className="text-text">
+              {"<"}
+            </ThemedText>
+          </Pressable>
+          <View>
+            <ThemedText type="h2" className="text-text">
+              Settings
+            </ThemedText>
+     
+          </View>
         </View>
 
-        <Animated.View entering={FadeInDown.delay(300).springify()}>
-          <ThemedText type="h4" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-            Language
+        {/* Money analysis */}
+        <View style={{ marginBottom: Spacing["2xl"] }}>
+          <ThemedText type="h3" className="text-text mb-3">
+            Money analysis
           </ThemedText>
-        </Animated.View>
 
-        <SettingsRow
-          icon="globe"
-          label={t("selectLanguage")}
-          value={language === "en" ? "English" : "IsiXhosa"}
-          onPress={handleLanguageToggle}
-          delay={350}
-        />
+          <View
+            style={{
+              backgroundColor: theme.backgroundSecondary,
+              borderRadius: 20,
+              padding: Spacing.lg,
+              gap: Spacing.lg,
+            }}
+          >
+            {/* MoMo toggle */}
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <View style={{ flex: 1 }}>
+                <ThemedText type="body">Include MoMo &amp; airtime data</ThemedText>
+                <ThemedText type="small" className="text-text-muted mt-1">
+                  Lets TracePay detect airtime drains, MoMo fees, and mobile money leaks.
+                </ThemedText>
+              </View>
+              <Switch value={includeMomoData} onValueChange={setIncludeMomoData} />
+            </View>
 
-        <Animated.View entering={FadeInDown.delay(400).springify()}>
-          <ThemedText type="h4" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+            {/* Airtime limit */}
+            <View>
+              <ThemedText type="body">Monthly airtime limit</ThemedText>
+              <ThemedText type="small" className="text-text-muted mt-1">
+                TracePay warns you when you’re overspending.
+              </ThemedText>
+
+              <View
+                style={{
+                  marginTop: Spacing.sm,
+                  flexDirection: "row",
+                  alignItems: "center",
+                }}
+              >
+                <ThemedText type="body" className="mr-2">
+                  R
+                </ThemedText>
+                <TextInput
+                  value={airtimeLimitInput}
+                  keyboardType="numeric"
+                  onChangeText={(t) => setAirtimeLimitInput(t.replace(/[^0-9]/g, ""))}
+                  onBlur={() =>
+                    setAirtimeLimitValue(parseInt(airtimeLimitInput || "0", 10))
+                  }
+                  placeholder="300"
+                  placeholderTextColor={theme.textSecondary}
+                  style={{
+                    flex: 1,
+                    borderRadius: 16,
+                    paddingHorizontal: Spacing.md,
+                    paddingVertical: Spacing.sm,
+                    backgroundColor: theme.backgroundDefault,
+                    color: theme.text,
+                  }}
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Account & security */}
+        <View style={{ marginBottom: Spacing["2xl"] }}>
+          <ThemedText type="h3" className="text-text mb-3">
+            Account &amp; security
+          </ThemedText>
+
+          <View
+            style={{
+              backgroundColor: theme.backgroundSecondary,
+              borderRadius: 20,
+              paddingHorizontal: Spacing.lg,
+            }}
+          >
+            <Pressable
+              onPress={() => router.push("/change-password" as any)}
+              style={{ paddingVertical: Spacing.lg }}
+            >
+              <ThemedText type="body">Change password</ThemedText>
+              <ThemedText type="small" className="text-text-muted">
+                Update your PIN or password.
+              </ThemedText>
+            </Pressable>
+
+            <Pressable
+              onPress={() => router.push("/device-settings" as any)}
+              style={{ paddingVertical: Spacing.lg }}
+            >
+              <ThemedText type="body">Mobile number &amp; device</ThemedText>
+              <ThemedText type="small" className="text-text-muted">
+                See which phone TracePay is linked to.
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* App experience */}
+        <View style={{ marginBottom: Spacing["2xl"] }}>
+          <ThemedText type="h3" className="text-text mb-3">
+            App experience
+          </ThemedText>
+
+          <Pressable
+            style={{
+              paddingVertical: Spacing.md,
+            }}
+            className="border-b border-border/60"
+            onPress={() => router.push("/language-selection" as any)}
+          >
+            <ThemedText type="body" className="text-text">
+              Language
+            </ThemedText>
+            <ThemedText type="small" className="text-text-muted mt-1">
+              Change the language TracePay uses to explain your money.
+            </ThemedText>
+          </Pressable>
+
+          <Pressable
+            style={{
+              paddingVertical: Spacing.md,
+            }}
+            onPress={() => {
+              // Placeholder – wire to native notification settings if needed
+            }}
+          >
+            <ThemedText type="body" className="text-text">
+              Notifications (coming soon)
+            </ThemedText>
+            <ThemedText type="small" className="text-text-muted mt-1">
+              Choose if TracePay should nudge you about new leaks.
+            </ThemedText>
+          </Pressable>
+        </View>
+
+        {/* About & data policy */}
+        <View>
+          <ThemedText type="h3" className="text-text mb-3">
             About
           </ThemedText>
-        </Animated.View>
-
-        <View style={styles.settingsGroup}>
-          <SettingsRow
-            icon="info"
-            label="Version"
-            value="1.0.0"
-            delay={450}
-          />
-          <SettingsRow
-            icon="shield"
-            label={t("privacyPolicy")}
-            onPress={() => {}}
-            delay={500}
-          />
+          <ThemedText type="body" className="text-text-muted">
+            TracePay helps you understand where your money “died” so you can
+            freeze leaks, reroute spend, and take back control.
+          </ThemedText>
+          <Pressable
+            onPress={() => router.push("/policy" as any)}
+            style={{
+              marginTop: Spacing.lg,
+              paddingVertical: Spacing.md,
+            }}
+          >
+            <ThemedText type="body" className="text-primary">
+              Read full data ethics & privacy policy
+            </ThemedText>
+          </Pressable>
         </View>
 
-        <Animated.View
-          entering={FadeInDown.delay(550).springify()}
-          style={[styles.footer, { borderTopColor: theme.backgroundTertiary }]}
+        {/* Sign out button at bottom */}
+        <View
+          style={{
+            marginTop: Spacing["3xl"],
+            paddingVertical: Spacing.md,
+          }}
         >
-          <View style={[styles.logoContainer, { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed }]}>
-            <ThemedText type="h3" style={styles.logoText}>T</ThemedText>
-          </View>
-          <ThemedText type="h4">TracePay</ThemedText>
-          <ThemedText type="small" style={{ color: theme.textSecondary }}>
-            Financial Forensics
-          </ThemedText>
-        </Animated.View>
+          <Pressable
+            onPress={handleSignOut}
+            className="rounded-full bg-red-500/10 py-3 items-center justify-center"
+          >
+            <ThemedText type="button" className="text-red-500">
+              {isSigningOut ? "Signing out..." : "Sign out of this device"}
+            </ThemedText>
+          </Pressable>
+        </View>
       </ScrollView>
     </ThemedView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-  },
-  screenTitle: {
-    marginBottom: Spacing["2xl"],
-  },
-  sectionTitle: {
-    marginBottom: Spacing.md,
-    marginTop: Spacing.lg,
-  },
-  themeOptions: {
-    gap: Spacing.sm,
-  },
-  themeOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: Spacing.lg,
-    borderRadius: BorderRadius.sm,
-    borderWidth: 2,
-    gap: Spacing.lg,
-  },
-  themeIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: BorderRadius.xs,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  themeLabel: {
-    flex: 1,
-  },
-  settingsGroup: {
-    gap: Spacing.sm,
-  },
-  settingsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: Spacing.lg,
-    borderRadius: BorderRadius.sm,
-    gap: Spacing.lg,
-    marginBottom: Spacing.sm,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: BorderRadius.xs,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rowLabel: {
-    flex: 1,
-  },
-  footer: {
-    alignItems: "center",
-    paddingTop: Spacing["3xl"],
-    marginTop: Spacing["3xl"],
-    borderTopWidth: 1,
-    gap: Spacing.xs,
-  },
-  logoContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: BorderRadius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: Spacing.sm,
-  },
-  logoText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-  },
-});

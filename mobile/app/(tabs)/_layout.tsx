@@ -1,47 +1,52 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
+import { Tabs } from "expo-router";
+import React from "react";
+import { Feather } from "@expo/vector-icons";
 
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { AnimatedTabBar } from "@/components/animated-tab-bar";
+import { IconSymbol } from "@/components/ui/icon-symbol";
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <Tabs
+      tabBar={(props) => <AnimatedTabBar {...props} />}
       screenOptions={{
-        // All tab icons use brand purple from theme (no hardcoded hex)
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tabIconSelected,
-        tabBarInactiveTintColor: Colors[colorScheme ?? 'light'].tabIconSelected,
-        tabBarStyle: {
-          backgroundColor: Colors[colorScheme ?? 'light'].backgroundRoot,
-          borderTopColor: Colors[colorScheme ?? 'light'].backgroundTertiary,
-        },
         headerShown: false,
-        tabBarButton: HapticTab,
-      }}>
+      }}
+    >
       <Tabs.Screen
         name="home"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: "Home",
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="house.fill" color={color} />
+          ),
         }}
       />
       <Tabs.Screen
-        name="freeze"
+        name="actions"
         options={{
-          title: 'Freeze',
-          tabBarIcon: ({ color }) => <IconSymbol size={32} name="snowflake" color={color} />,
-          tabBarItemStyle: { marginTop: -6 },
+          title: "Actions",
+          tabBarIcon: ({ color }) => (
+            <Feather name="plus" size={36} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="leaks"
+        options={{
+          title: "Leaks",
+          tabBarIcon: ({ color }) => (
+            <Feather name="alert-triangle" size={20} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Settings',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
+          title: "Settings",
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="gearshape.fill" color={color} />
+          ),
         }}
       />
     </Tabs>

@@ -144,6 +144,19 @@ export default function LossDetailScreen() {
 
   const ListHeader = () => (
     <View style={styles.headerContent}>
+      <View style={styles.titleRow}>
+        <Pressable
+          onPress={() => router.back()}
+          style={{ padding: Spacing.xs, marginRight: Spacing.sm }}
+          hitSlop={10}
+        >
+          <Feather name="arrow-left" size={20} color={theme.text} />
+        </Pressable>
+        <ThemedText type="h2" className="text-text">
+          {category}
+        </ThemedText>
+      </View>
+
       <Animated.View
         entering={FadeInDown.delay(50).springify()}
         style={[
@@ -229,6 +242,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
   },
   headerContent: {
+    marginBottom: Spacing.lg,
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: Spacing.lg,
   },
   summaryCard: {
