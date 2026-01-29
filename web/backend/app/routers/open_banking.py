@@ -11,15 +11,21 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..models_db import LinkedAccount, Transaction, User
 from ..open_banking_client import OpenBankingSandboxClient, SandboxConfig
+from dotenv import load_dotenv
+
+load_dotenv() # Load environment variables from .env file
 
 router = APIRouter(prefix="/open-banking", tags=["open banking"])
 
 # Initialize Open Banking client
 import os
 
+client_id = os.getenv("OPEN_BANKING_CLIENT_ID", "")
+client_secret = os.getenv("OPEN_BANKING_CLIENT_SECRET", "")
+
 sandbox_config = SandboxConfig(
-  client_id=os.getenv("OPEN_BANKING_CLIENT_ID", ""),
-  client_secret=os.getenv("OPEN_BANKING_CLIENT_SECRET", ""),
+    client_id=client_id,
+    client_secret=client_secret,
 )
 ob_client = OpenBankingSandboxClient(sandbox_config)
 

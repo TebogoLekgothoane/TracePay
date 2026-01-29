@@ -6,21 +6,10 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from .detectors.debit_orders import detect_debit_orders
+from .detectors.models import Leak
 from .detectors.subscription_traps import detect_subscription_traps
 from .detectors.vas_charges import detect_vas_charges
 from .detectors.weekend_spending import detect_weekend_spending
-
-
-@dataclass
-class Leak:
-    id: str
-    detector: str
-    title: str
-    plain_language_reason: str
-    severity: str  # "low" | "medium" | "high"
-    transaction_id: Optional[str] = None
-    estimated_monthly_cost: Optional[float] = None
-    evidence: Optional[Dict[str, Any]] = None
 
 
 class ForensicEngine:
@@ -88,7 +77,7 @@ class ForensicEngine:
         if candidates.empty:
             return []
 
-        last_30 = candidates[candidates["timestamp"] >= (pd.Timestamp.utcnow().tz_localize("UTC") - pd.Timedelta(days=30))]
+        last_30 = candidates[candidates["timestamp"] >= (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=30))]
         freq = int(len(last_30))
         monthly_cost = float(last_30["abs_amount"].sum()) if not last_30.empty else float(candidates["abs_amount"].sum())
 
@@ -140,7 +129,7 @@ class ForensicEngine:
         if fees.empty:
             return []
 
-        last_30 = fees[fees["timestamp"] >= (pd.Timestamp.utcnow().tz_localize("UTC") - pd.Timedelta(days=30))]
+        last_30 = fees[fees["timestamp"] >= (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=30))]
         monthly_cost = float(last_30["abs_amount"].sum()) if not last_30.empty else float(fees["abs_amount"].sum())
         count = int(len(last_30)) if not last_30.empty else int(len(fees))
 
@@ -197,7 +186,7 @@ class ForensicEngine:
         if debits.empty:
             return []
 
-        last_30 = debits[debits["timestamp"] >= (pd.Timestamp.utcnow().tz_localize("UTC") - pd.Timedelta(days=30))]
+        last_30 = debits[debits["timestamp"] >= (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=30))]
         if last_30.empty:
             return []
 
