@@ -1,22 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Dict, List
 
 import pandas as pd
 
-
-@dataclass
-class Leak:
-    id: str
-    detector: str
-    title: str
-    plain_language_reason: str
-    severity: str
-    transaction_id: str | None = None
-    estimated_monthly_cost: float | None = None
-    evidence: Dict[str, Any] | None = None
-
+from .models import Leak
 
 def detect_weekend_spending(df: pd.DataFrame) -> List[Leak]:
     """
@@ -35,7 +23,7 @@ def detect_weekend_spending(df: pd.DataFrame) -> List[Leak]:
     debits["day_of_week"] = debits["timestamp"].dt.dayofweek  # 0=Monday, 6=Sunday
     debits["is_weekend"] = debits["day_of_week"].isin([5, 6])  # Saturday, Sunday
 
-    now = pd.Timestamp.utcnow().tz_localize("UTC") if not df["timestamp"].empty else pd.Timestamp.utcnow()
+    now = pd.Timestamp.now(tz="UTC") if not df["timestamp"].empty else pd.Timestamp.now(tz="UTC")
     last_30 = debits[debits["timestamp"] >= (now - pd.Timedelta(days=30))]
 
     if len(last_30) < 10:  # Need enough data

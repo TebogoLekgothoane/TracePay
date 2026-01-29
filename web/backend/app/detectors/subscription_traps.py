@@ -1,21 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Dict, List
 
 import pandas as pd
 
-
-@dataclass
-class Leak:
-    id: str
-    detector: str
-    title: str
-    plain_language_reason: str
-    severity: str
-    transaction_id: str | None = None
-    estimated_monthly_cost: float | None = None
-    evidence: Dict[str, Any] | None = None
+from .models import Leak
 
 
 def detect_subscription_traps(df: pd.DataFrame) -> List[Leak]:
@@ -41,7 +30,7 @@ def detect_subscription_traps(df: pd.DataFrame) -> List[Leak]:
     )
 
     leaks = []
-    now = pd.Timestamp.utcnow().tz_localize("UTC") if not debits["timestamp"].empty else pd.Timestamp.utcnow()
+    now = pd.Timestamp.now(tz="UTC") if not debits["timestamp"].empty else pd.Timestamp.now(tz="UTC")
 
     # Group by transaction key
     for key, group in debits.groupby("transaction_key"):

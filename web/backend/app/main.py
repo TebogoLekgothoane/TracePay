@@ -3,8 +3,12 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, List
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+# Load environment variables early
+load_dotenv()
 
 from .database import Base, engine, get_db
 from .forensic_engine import ForensicEngine
@@ -24,10 +28,9 @@ app = FastAPI(title="TracePay – Forensic Engine", version="1.0.0")
 Base.metadata.create_all(bind=engine)
 
 # Dashboard runs separately (Next.js dev server), so enable permissive CORS for hackathon.
-cors_origins = os.getenv("CORS_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in cors_origins if o.strip()] or ["*"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,17 +42,13 @@ engine = ForensicEngine()
 FROZEN: List[Dict[str, Any]] = []
 
 
-@app.get("/")
-def root() -> Dict[str, str]:
-    return {
-        "message": "TracePay Forensic Engine API",
-        "docs": "/docs",
-        "health": "/health"
-    }
+@app.get("/health")
+def health() -> Dict[str, str]:
+    return {"status": "ok"}
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)
-def analyze(payload: Any) -> AnalyzeResponse:
+def analyze(payload: Any = Body(...)) -> AnalyzeResponse:
     """
     Accepts either:
     - { "transactions": [...] }

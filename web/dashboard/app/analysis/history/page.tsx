@@ -6,6 +6,8 @@ import dynamic from "next/dynamic";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { DashboardSidebar } from "@/components/dashboard-sidebar";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { apiClient } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -57,7 +59,7 @@ export default function AnalysisHistoryPage() {
     return <div className="p-8">Loading analysis history...</div>;
   }
 
-  const chartOptions = {
+  const chartOptions: any = {
     chart: { type: "line", toolbar: { show: false } },
     dataLabels: { enabled: true },
     stroke: { curve: "smooth" },
@@ -97,65 +99,69 @@ export default function AnalysisHistoryPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">Analysis History</h1>
-        <p className="text-muted-foreground">Track your financial health over time</p>
-      </div>
+    <SidebarProvider defaultOpen={true}>
+      <DashboardSidebar />
+      <SidebarInset>
+        <div className="p-8">
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold">Leak Analytics</h1>
+            <p className="text-muted-foreground">Track aggregate financial health patterns over time</p>
+          </div>
 
-      <div className="grid gap-4 mb-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Health Score Trend</CardTitle>
-            <CardDescription>Your financial health score over time</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Chart options={chartOptions} series={chartSeries} type="line" height={300} />
-          </CardContent>
-        </Card>
+          <div className="grid gap-4 mb-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Health Score Trend</CardTitle>
+                <CardDescription>Aggregate financial health score across all monitored transactions</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Chart options={chartOptions} series={chartSeries} type="line" height={300} />
+              </CardContent>
+            </Card>
 
-        <div className="space-y-4">
-          {analyses.map((analysis, index) => {
-            const previous = index < analyses.length - 1 ? analyses[index + 1].score : analysis.score;
-            const trend = analysis.score - previous;
+            <div className="space-y-4">
+              {analyses.map((analysis, index) => {
+                const previous = index < analyses.length - 1 ? analyses[index + 1].score : analysis.score;
+                const trend = analysis.score - previous;
 
-            return (
-              <Card key={analysis.id}>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">
-                      Analysis #{analysis.id}
-                    </CardTitle>
-                    <div className="flex items-center gap-2">
-                      {getTrendIcon(analysis.score, previous)}
-                      <Badge className={getBandColor(analysis.band)}>
-                        {analysis.band.toUpperCase()}
-                      </Badge>
-                    </div>
-                  </div>
-                  <CardDescription>
-                    {new Date(analysis.created_at).toLocaleDateString()} • {analysis.transaction_count} transactions
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-3xl font-bold">{analysis.score}</div>
-                      <div className="text-sm text-muted-foreground">Health Score</div>
-                    </div>
-                    <div className="text-right">
-                      <div className={`text-sm font-medium ${trend >= 0 ? "text-green-400" : "text-red-400"}`}>
-                        {trend >= 0 ? "+" : ""}{trend} from previous
+                return (
+                  <Card key={analysis.id}>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-lg">
+                          Forensic Case #{analysis.id}
+                        </CardTitle>
+                        <div className="flex items-center gap-2">
+                          {getTrendIcon(analysis.score, previous)}
+                          <Badge className={getBandColor(analysis.band)}>
+                            {analysis.band.toUpperCase()}
+                          </Badge>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+                      <CardDescription>
+                        {new Date(analysis.created_at).toLocaleDateString()} • {analysis.transaction_count} transactions monitored
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-3xl font-bold">{analysis.score}</div>
+                          <div className="text-sm text-muted-foreground">Platform Health Score</div>
+                        </div>
+                        <div className="text-right">
+                          <div className={`text-sm font-medium ${trend >= 0 ? "text-green-400" : "text-red-400"}`}>
+                            {trend >= 0 ? "+" : ""}{trend} from previous analysis
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
-

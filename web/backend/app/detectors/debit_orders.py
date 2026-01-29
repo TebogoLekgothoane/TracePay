@@ -1,21 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Dict, List
 
 import pandas as pd
 
-
-@dataclass
-class Leak:
-    id: str
-    detector: str
-    title: str
-    plain_language_reason: str
-    severity: str
-    transaction_id: str | None = None
-    estimated_monthly_cost: float | None = None
-    evidence: Dict[str, Any] | None = None
+from .models import Leak
 
 
 def detect_debit_orders(df: pd.DataFrame) -> List[Leak]:
@@ -43,7 +32,7 @@ def detect_debit_orders(df: pd.DataFrame) -> List[Leak]:
     if debit_orders.empty:
         return []
 
-    now = pd.Timestamp.utcnow().tz_localize("UTC") if not df["timestamp"].empty else pd.Timestamp.utcnow()
+    now = pd.Timestamp.now(tz="UTC") if not df["timestamp"].empty else pd.Timestamp.now(tz="UTC")
     last_30 = debit_orders[debit_orders["timestamp"] >= (now - pd.Timedelta(days=30))]
 
     if last_30.empty:

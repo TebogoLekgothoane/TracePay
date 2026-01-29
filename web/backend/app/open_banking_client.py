@@ -80,4 +80,15 @@ class OpenBankingSandboxClient:
             r.raise_for_status()
             return r.json()
 
+    async def list_transactions(self, access_token: str, account_id: str, limit: int = 100) -> Dict[str, Any]:
+        """Fetch transactions for a specific account from the OB Sandbox"""
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.get(
+                f"{self.cfg.base_url}/accounts/{account_id}/transactions",
+                params={"limit": limit},
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            r.raise_for_status()
+            return r.json()
+
 

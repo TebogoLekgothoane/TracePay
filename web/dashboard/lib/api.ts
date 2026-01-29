@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8001";
 
 export interface ApiError {
   detail: string;
@@ -228,6 +228,12 @@ async refreshToken() {
       skip: number;
       limit: number;
     }>(`/admin/users?skip=${skip}&limit=${limit}`);
+  }
+
+  async syncAllData() {
+    return this.request<{ status: string, message: string }>("/admin/sync-all", {
+      method: "POST"
+    });
   }
 
   // Mobile endpoints

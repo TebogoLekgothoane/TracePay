@@ -1,17 +1,20 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
+    BarChart3,
+    Brain,
     Flame,
     LayoutDashboard,
     LogOut,
     Moon,
-    Settings2,
-    Shield,
     User2,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/lib/auth";
 import {
     Sidebar,
     SidebarContent,
@@ -26,6 +29,9 @@ import {
 } from "@/components/ui/sidebar";
 
 export function DashboardSidebar() {
+    const pathname = usePathname();
+    const { logout } = useAuth();
+
     return (
         <Sidebar
             variant="floating"
@@ -55,29 +61,50 @@ export function DashboardSidebar() {
                         <SidebarMenu>
                             <SidebarMenuItem>
                                 <SidebarMenuButton
-                                    isActive
+                                    asChild
+                                    isActive={pathname === "/dashboard"}
                                     className="data-[active=true]:bg-primary/25 data-[active=true]:border-l-2 data-[active=true]:border-primary data-[active=true]:shadow-sm !hover:bg-primary/10 !hover:text-foreground"
                                 >
+                                    <Link href="/dashboard">
                                     <LayoutDashboard className="h-4 w-4" />
                                     <span>Overview</span>
+                                    </Link>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
                             <SidebarMenuItem>
-                                <SidebarMenuButton className="!hover:bg-primary/10 !hover:text-foreground">
+                                <SidebarMenuButton 
+                                    asChild
+                                    isActive={pathname === "/analysis/history"}
+                                    className="data-[active=true]:bg-primary/25 data-[active=true]:border-l-2 data-[active=true]:border-primary data-[active=true]:shadow-sm !hover:bg-primary/10 !hover:text-foreground"
+                                >
+                                    <Link href="/analysis/history">
                                     <Flame className="h-4 w-4" />
-                                    <span>Money Leaks</span>
+                                        <span>Leak Analytics</span>
+                                    </Link>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
                             <SidebarMenuItem>
-                                <SidebarMenuButton className="!hover:bg-primary/10 !hover:text-foreground">
-                                    <Shield className="h-4 w-4" />
-                                    <span>Freeze Centre</span>
+                                <SidebarMenuButton 
+                                    asChild
+                                    isActive={pathname === "/admin"}
+                                    className="data-[active=true]:bg-primary/25 data-[active=true]:border-l-2 data-[active=true]:border-primary data-[active=true]:shadow-sm !hover:bg-primary/10 !hover:text-foreground"
+                                >
+                                    <Link href="/admin">
+                                        <Brain className="h-4 w-4" />
+                                        <span>ML Reports</span>
+                                    </Link>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
                             <SidebarMenuItem>
-                                <SidebarMenuButton className="!hover:bg-primary/10 !hover:text-foreground">
-                                    <Settings2 className="h-4 w-4" />
-                                    <span>Settings</span>
+                                <SidebarMenuButton 
+                                    asChild
+                                    isActive={pathname === "/admin/regional"}
+                                    className="data-[active=true]:bg-primary/25 data-[active=true]:border-l-2 data-[active=true]:border-primary data-[active=true]:shadow-sm !hover:bg-primary/10 !hover:text-foreground"
+                                >
+                                    <Link href="/admin/regional">
+                                        <BarChart3 className="h-4 w-4" />
+                                        <span>Regional Trends</span>
+                                    </Link>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
                         </SidebarMenu>
@@ -97,7 +124,10 @@ export function DashboardSidebar() {
                         </SidebarMenuButton>
                     </SidebarMenuItem>
                     <SidebarMenuItem>
-                        <SidebarMenuButton className="w-full text-red-300 !hover:bg-red-500/10 !hover:text-red-300">
+                        <SidebarMenuButton 
+                            className="w-full text-red-300 !hover:bg-red-500/10 !hover:text-red-300"
+                            onClick={() => logout()}
+                        >
                             <LogOut className="h-4 w-4" />
                             <span>Log out</span>
                         </SidebarMenuButton>
