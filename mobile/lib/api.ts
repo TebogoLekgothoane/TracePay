@@ -288,6 +288,19 @@ export async function updateUserBankAccountFrozen(
   return !error;
 }
 
+/** Remove (unlink) a user bank account. Returns true if deleted. */
+export async function removeUserBankAccount(
+  userId: string,
+  accountId: string
+): Promise<boolean> {
+  const { error } = await supabase
+    .from("user_bank_accounts")
+    .delete()
+    .eq("id", accountId)
+    .eq("user_id", userId);
+  return !error;
+}
+
 // ---------------------------------------------------------------------------
 // Debit orders (pause control)
 // ---------------------------------------------------------------------------
@@ -388,6 +401,65 @@ export async function addBank(params: {
     );
   if (error) return null;
   return { id };
+}
+
+/** Remove a bank (and cascade: autopsy causes/leaks). Returns true if deleted. */
+export async function removeBank(bankId: string): Promise<boolean> {
+  const { error } = await supabase.from("banks").delete().eq("id", bankId);
+  return !error;
+}
+
+// ---------------------------------------------------------------------------
+// Discounts / rewards (retailer offers – from DB)
+// ---------------------------------------------------------------------------
+
+export interface DiscountRow {
+  id: string;
+  retailer: string;
+  title: string;
+  description: string;
+  discount_value: string;
+  code: string | null;
+  tier: string;
+  earned_from: string;
+  expires_days: number;
+  display_order: number;
+}
+
+export async function fetchDiscounts(): Promise<DiscountRow[]> {
+  const { data, error } = await supabase
+    .from("discounts")
+    .select("id, retailer, title, description, discount_value, code, tier, earned_from, expires_days, display_order")
+    .order("display_order", { ascending: true });
+  if (error || !data) return [];
+  return data.map((row) => ({
+    id: row.id,
+    retailer: row.retailer,
+    title: row.title,
+    description: row.description,
+    discount_value: row.discount_value,
+    code: row.code ?? null,
+    tier: row.tier,
+    earned_from: row.earned_from,
+    expires_days: Number(row.expires_days) || 30,
+    display_order: Number(row.display_order) || 0,
+  }));
+}
+
+/** User's unlocked discounts (for future: show only unlocked by usage). */
+export async function fetchUserDiscounts(
+  userId: string = DEMO_USER_ID
+): Promise<{ discount_id: string; unlocked_at: string; expires_at: string | null }[]> {
+  const { data, error } = await supabase
+    .from("user_discounts")
+    .select("discount_id, unlocked_at, expires_at")
+    .eq("user_id", userId);
+  if (error || !data) return [];
+  return data.map((row) => ({
+    discount_id: row.discount_id,
+    unlocked_at: row.unlocked_at,
+    expires_at: row.expires_at ?? null,
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -590,4 +662,86 @@ export async function fetchCategoryAccounts(
     debits: Number(row.debits),
     other: Number(row.other),
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Partner recommendations (rerouting – better savings based on user data)
+// ---------------------------------------------------------------------------
+
+const CATEGORY_LABELS: Record<string, string> = {
+  banks: "Bank fees & accounts",
+  telcos: "Airtime & data",
+  loans: "Loans & mashonisa",
+  insurance: "Insurance",
+  subscriptions: "Subscriptions & recurring",
+};
+
+export interface PartnerRecommendationRow {
+  id: string;
+  partner_type: string;
+  partner_name: string;
+  title: string;
+  description: string;
+  savings_estimate: string;
+  category: string;
+  discount_id: string | null;
+  cta_label: string;
+  display_order: number;
+}
+
+export async function fetchPartnerRecommendations(
+  category?: string
+): Promise<PartnerRecommendationRow[]> {
+  let query = supabase
+    .from("partner_recommendations")
+    .select("id, partner_type, partner_name, title, description, savings_estimate, category, discount_id, cta_label, display_order")
+    .order("display_order", { ascending: true });
+  if (category) {
+    query = query.eq("category", category);
+  }
+  const { data, error } = await query;
+  if (error || !data) return [];
+  return data.map((row) => ({
+    id: row.id,
+    partner_type: row.partner_type,
+    partner_name: row.partner_name,
+    title: row.title,
+    description: row.description,
+    savings_estimate: row.savings_estimate,
+    category: row.category,
+    discount_id: row.discount_id ?? null,
+    cta_label: row.cta_label ?? "See offer",
+    display_order: Number(row.display_order) || 0,
+  }));
+}
+
+/** Spending by category for reroute – to show "You spend RXXX on [category]" and match partner recommendations. */
+export interface SpendingByCategory {
+  category: string;
+  label: string;
+  totalSpent: number;
+}
+
+export async function fetchSpendingSummaryForReroute(
+  userId: string = DEMO_USER_ID
+): Promise<SpendingByCategory[]> {
+  const { data, error } = await supabase
+    .from("category_accounts")
+    .select("category, spent, fees, debits, other")
+    .eq("user_id", userId);
+  if (error || !data) return [];
+  const byCategory = new Map<string, number>();
+  data.forEach((row) => {
+    const total = Number(row.spent) + Number(row.fees) + Number(row.debits) + Number(row.other);
+    const current = byCategory.get(row.category) ?? 0;
+    byCategory.set(row.category, current + total);
+  });
+  return Array.from(byCategory.entries())
+    .map(([category, totalSpent]) => ({
+      category,
+      label: CATEGORY_LABELS[category] ?? category,
+      totalSpent,
+    }))
+    .filter((s) => s.totalSpent > 0)
+    .sort((a, b) => b.totalSpent - a.totalSpent);
 }

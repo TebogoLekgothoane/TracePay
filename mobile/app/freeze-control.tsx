@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { View, Switch, Modal, Pressable, ScrollView } from "react-native";
+import React, { useState, useCallback, useEffect } from "react";
+import { View, Switch, Modal, Pressable, ScrollView, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { Feather } from "@expo/vector-icons";
@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/button";
 import { useTheme } from "@/hooks/use-theme-color";
 import { useApp } from "@/context/app-context";
 import { Spacing, Colors } from "@/constants/theme";
-import { fetchUserBankAccounts, updateUserBankAccountFrozen } from "@/lib/api";
+import { fetchUserBankAccounts, updateUserBankAccountFrozen, removeUserBankAccount } from "@/lib/api";
+import { mobileFreeze, mobileUnfreeze, listFrozen } from "@/lib/backend-client";
 
 interface FreezeToggleProps {
   label: string;
@@ -80,12 +81,33 @@ export default function FreezeControlScreen() {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [frozenAccounts, setFrozenAccounts] = useState<Record<string, boolean>>({});
   const [accountsLoading, setAccountsLoading] = useState(true);
+  const [frozenItemIdsByAccountId, setFrozenItemIdsByAccountId] = useState<Record<string, number>>({});
 
-  React.useEffect(() => {
+  const refreshBackendFrozen = useCallback(async () => {
+    try {
+      const items = await listFrozen();
+      const byAccount: Record<string, number> = {};
+      items.forEach((item) => {
+        if (item.transaction_id && item.status === "frozen") {
+          byAccount[item.transaction_id] = item.id;
+        }
+      });
+      setFrozenItemIdsByAccountId(byAccount);
+      return byAccount;
+    } catch {
+      setFrozenItemIdsByAccountId({});
+      return {};
+    }
+  }, []);
+
+  const loadAccounts = useCallback(() => {
     setAccountsLoading(true);
-    fetchUserBankAccounts(userId).then((accounts) => {
+    Promise.all([
+      fetchUserBankAccounts(userId),
+      refreshBackendFrozen(),
+    ]).then(([accounts, backendByAccount]) => {
       setBankAccounts(
-        accounts.map((a) => ({
+        (accounts ?? []).map((a) => ({
           id: a.id,
           bank: a.bank,
           name: a.name,
@@ -93,13 +115,53 @@ export default function FreezeControlScreen() {
         }))
       );
       const initial: Record<string, boolean> = {};
-      accounts.forEach((a) => {
-        initial[a.id] = a.isFrozen;
+      (accounts ?? []).forEach((a) => {
+        initial[a.id] = backendByAccount[a.id] != null ? true : a.isFrozen;
       });
       setFrozenAccounts(initial);
       setAccountsLoading(false);
     }).catch(() => setAccountsLoading(false));
-  }, [userId]);
+  }, [userId, refreshBackendFrozen]);
+
+  useEffect(() => {
+    loadAccounts();
+  }, [loadAccounts]);
+
+  const handleUnlinkAccount = useCallback(
+    (account: BankAccount) => {
+      Alert.alert(
+        "Unlink account",
+        `Remove ${account.name} (${account.bank}) from your list?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Unlink",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                const frozenId = frozenItemIdsByAccountId[account.id];
+                if (frozenId != null) {
+                  try {
+                    await mobileUnfreeze(frozenId);
+                  } catch {
+                    // Continue to remove from Supabase
+                  }
+                }
+                const ok = await removeUserBankAccount(userId, account.id);
+                if (ok) {
+                  await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  loadAccounts();
+                }
+              } catch {
+                Alert.alert("Could not unlink", "Please try again.");
+              }
+            },
+          },
+        ]
+      );
+    },
+    [userId, frozenItemIdsByAccountId, loadAccounts]
+  );
 
   const hasChanges =
     localSettings.pauseDebitOrders !== freezeSettings.pauseDebitOrders ||
@@ -241,18 +303,78 @@ export default function FreezeControlScreen() {
               : "Wallet";
 
           return (
-            <FreezeToggle
-              key={account.id}
-              label={account.name}
-              description={`${account.bank} • ${typeLabel}`}
-              value={isFrozen}
-              onValueChange={async (value) => {
+            <View key={account.id} className="mb-2">
+              <FreezeToggle
+                label={account.name}
+                description={`${account.bank} • ${typeLabel}`}
+                value={isFrozen}
+                onValueChange={async (value) => {
                 await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setFrozenAccounts((prev) => ({ ...prev, [account.id]: value }));
-                updateUserBankAccountFrozen(userId, account.id, value).catch(() => {});
+                const prev = frozenAccounts[account.id] ?? false;
+
+                const confirmed = await new Promise<boolean>((resolve) => {
+                  if (value) {
+                    Alert.alert(
+                      "Freeze this account?",
+                      `TracePay will treat ${account.name} (${account.bank}) as frozen. New debit orders and fees won't be applied to it until you unfreeze.`,
+                      [
+                        { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+                        { text: "Freeze", onPress: () => resolve(true) },
+                      ]
+                    );
+                  } else {
+                    Alert.alert(
+                      "Unfreeze this account?",
+                      `${account.name} (${account.bank}) will receive new debit orders and fees again. Are you sure?`,
+                      [
+                        { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+                        { text: "Unfreeze", style: "destructive", onPress: () => resolve(true) },
+                      ]
+                    );
+                  }
+                });
+
+                if (!confirmed) return;
+
+                setFrozenAccounts((p) => ({ ...p, [account.id]: value }));
+                try {
+                  if (value) {
+                    await mobileFreeze({
+                      transaction_id: account.id,
+                      reason: "Froze account from Freeze Control",
+                    });
+                    await refreshBackendFrozen();
+                  } else {
+                    const frozenId = frozenItemIdsByAccountId[account.id];
+                    if (frozenId != null) {
+                      await mobileUnfreeze(frozenId);
+                      await refreshBackendFrozen();
+                    }
+                  }
+                  updateUserBankAccountFrozen(userId, account.id, value).catch(() => {});
+                } catch (e) {
+                  setFrozenAccounts((p) => ({ ...p, [account.id]: prev }));
+                  const msg = e instanceof Error ? e.message : "Could not update";
+                  const isUnauth = msg.includes("401") || msg.toLowerCase().includes("credentials");
+                  Alert.alert(
+                    isUnauth ? "Sign in to freeze accounts" : "Update failed",
+                    isUnauth
+                      ? "Sign in or create an account so we can save your frozen accounts."
+                      : msg
+                  );
+                }
               }}
-              delay={300 + index * 40}
-            />
+                delay={300 + index * 40}
+              />
+              <Pressable
+                onPress={() => handleUnlinkAccount(account)}
+                className="py-2 px-1"
+              >
+                <ThemedText type="small" className="text-primary">
+                  Unlink this account
+                </ThemedText>
+              </Pressable>
+            </View>
           );
         })}
       </View>

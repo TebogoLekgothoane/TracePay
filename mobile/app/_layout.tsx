@@ -16,6 +16,7 @@ export default function RootLayout() {
     <AppProvider>
       <ThemeProvider>
         <NavigationThemeProvider value={DarkTheme}>
+          {/* All screens (index, auth, tabs, modals) must render inside this Stack so they have AppProvider. */}
           <Stack
             screenOptions={{
               headerShown: false,
@@ -25,6 +26,7 @@ export default function RootLayout() {
             <Stack.Screen name="language-selection" />
             <Stack.Screen name="consent" />
             <Stack.Screen name="analysis-loading" />
+            <Stack.Screen name="(auth)" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="bank-autopsy" />
             <Stack.Screen name="add-account" />
