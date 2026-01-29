@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { FlatList, View, Pressable, StyleSheet } from "react-native";
+import { FlatList, View, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -7,7 +7,7 @@ import { useRouter } from "expo-router";
 import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
 import { useTheme } from "@/hooks/use-theme-color";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, Colors } from "@/constants/theme";
 
 type DebitOrder = {
   id: string;
@@ -73,14 +73,10 @@ export default function PauseControlScreen() {
 
     return (
       <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: theme.backgroundDefault,
-          },
-        ]}
+        className="rounded-xl p-4"
+        style={{ backgroundColor: theme.backgroundDefault }}
       >
-        <View style={styles.cardHeader}>
+        <View className="flex-row justify-between items-center">
           <ThemedText type="small" className="text-text-muted">
             {item.date}
           </ThemedText>
@@ -96,20 +92,16 @@ export default function PauseControlScreen() {
           {item.reference}
         </ThemedText>
 
-        <View style={styles.cardFooter}>
+        <View className="mt-3 flex-row justify-between items-center">
           <View
-            style={[
-              styles.statusPill,
-              {
-                backgroundColor: (item.isPaused ? pausedColor : activeColor) + "20",
-              },
-            ]}
+            className="flex-row items-center rounded-full py-1 px-2"
+            style={{
+              backgroundColor: (item.isPaused ? pausedColor : activeColor) + "20",
+            }}
           >
             <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: item.isPaused ? pausedColor : activeColor },
-              ]}
+              className="w-2 h-2 rounded-full mr-1"
+              style={{ backgroundColor: item.isPaused ? pausedColor : activeColor }}
             />
             <ThemedText
               type="small"
@@ -123,13 +115,11 @@ export default function PauseControlScreen() {
 
           <Pressable
             onPress={() => togglePause(item.id)}
-            style={({ pressed }) => [
-              styles.pauseButton,
-              {
-                backgroundColor: item.isPaused ? theme.backgroundTertiary : activeColor,
-                opacity: pressed ? 0.85 : 1,
-              },
-            ]}
+            className="flex-row items-center rounded py-2 px-3 active:opacity-85"
+            style={({ pressed }) => ({
+              backgroundColor: item.isPaused ? theme.backgroundTertiary : activeColor,
+              opacity: pressed ? 0.85 : 1,
+            })}
           >
             <Feather
               name={item.isPaused ? "play-circle" : "pause-circle"}
@@ -138,8 +128,8 @@ export default function PauseControlScreen() {
             />
             <ThemedText
               type="button"
+              className="ml-1"
               style={{
-                marginLeft: Spacing.xs,
                 color: item.isPaused ? theme.text : "#FFFFFF",
               }}
             >
@@ -161,13 +151,13 @@ export default function PauseControlScreen() {
         }}
         data={debitOrders}
         keyExtractor={(item) => item.id}
-        ItemSeparatorComponent={() => <View style={{ height: Spacing.md }} />}
+        ItemSeparatorComponent={() => <View className="h-3" />}
         ListHeaderComponent={
-          <View style={{ marginBottom: Spacing["2xl"] }}>
-            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: Spacing.md }}>
+          <View className="mb-6">
+            <View className="flex-row items-center mb-3">
               <Pressable
                 onPress={() => router.back()}
-                style={{ padding: Spacing.xs, marginRight: Spacing.sm }}
+                className="p-1 mr-2"
                 hitSlop={10}
               >
                 <Feather name="arrow-left" size={20} color={theme.text} />
@@ -187,41 +177,3 @@ export default function PauseControlScreen() {
     </ThemedView>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    borderRadius: BorderRadius.sm,
-    padding: Spacing.lg,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  cardFooter: {
-    marginTop: Spacing.md,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  statusPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 999,
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.sm,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: Spacing.xs,
-  },
-  pauseButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: BorderRadius.xs,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-  },
-});

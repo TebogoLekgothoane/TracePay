@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { FlatList, View, Pressable, StyleSheet, Modal } from "react-native";
+import { FlatList, View, Pressable, Modal } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -8,7 +8,7 @@ import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
 import { useApp } from "@/context/app-context";
 import { useTheme } from "@/hooks/use-theme-color";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, Colors } from "@/constants/theme";
 import type { Subscription } from "@/types/app";
 
 function SubscriptionRow({
@@ -28,16 +28,11 @@ function SubscriptionRow({
 
   return (
     <View
-      style={[
-        styles.card,
-        {
-          backgroundColor: theme.backgroundDefault,
-          marginTop: index === 0 ? 0 : Spacing.sm,
-        },
-      ]}
+      className={`rounded-xl p-4 ${index === 0 ? "" : "mt-2"}`}
+      style={{ backgroundColor: theme.backgroundDefault }}
     >
-      <View style={styles.cardMain}>
-        <View style={{ flex: 1 }}>
+      <View className="flex-row items-center justify-between">
+        <View className="flex-1">
           <ThemedText type="body" className="text-text">
             {subscription.name}
           </ThemedText>
@@ -47,18 +42,14 @@ function SubscriptionRow({
         </View>
 
         <View
-          style={[
-            styles.statusPill,
-            {
-              backgroundColor: (subscription.isOptedOut ? optedOutColor : activeColor) + "20",
-            },
-          ]}
+          className="flex-row items-center rounded-full py-1 px-2"
+          style={{
+            backgroundColor: (subscription.isOptedOut ? optedOutColor : activeColor) + "20",
+          }}
         >
           <View
-            style={[
-              styles.statusDot,
-              { backgroundColor: subscription.isOptedOut ? optedOutColor : activeColor },
-            ]}
+            className="w-2 h-2 rounded-full mr-1"
+            style={{ backgroundColor: subscription.isOptedOut ? optedOutColor : activeColor }}
           />
           <ThemedText
             type="small"
@@ -73,13 +64,11 @@ function SubscriptionRow({
 
       <Pressable
         onPress={onPress}
-        style={({ pressed }) => [
-          styles.actionButton,
-          {
-            backgroundColor: subscription.isOptedOut ? theme.backgroundTertiary : activeColor,
-            opacity: pressed ? 0.9 : 1,
-          },
-        ]}
+        className="flex-row items-center mt-3 rounded py-2 px-3 self-start active:opacity-90"
+        style={({ pressed }) => ({
+          backgroundColor: subscription.isOptedOut ? theme.backgroundTertiary : activeColor,
+          opacity: pressed ? 0.9 : 1,
+        })}
       >
         <Feather
           name={subscription.isOptedOut ? "rotate-ccw" : "x-circle"}
@@ -88,8 +77,8 @@ function SubscriptionRow({
         />
         <ThemedText
           type="button"
+          className="ml-1"
           style={{
-            marginLeft: Spacing.xs,
             color: subscription.isOptedOut ? theme.text : "#FFFFFF",
           }}
         >
@@ -149,11 +138,11 @@ export default function OptOutControlScreen() {
         data={subscriptions}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={
-          <View style={{ marginBottom: Spacing["2xl"] }}>
-            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: Spacing.md }}>
+          <View className="mb-6">
+            <View className="flex-row items-center mb-3">
               <Pressable
                 onPress={() => router.back()}
-                style={{ padding: Spacing.xs, marginRight: Spacing.sm }}
+                className="p-1 mr-2"
                 hitSlop={10}
               >
                 <Feather name="arrow-left" size={20} color={theme.text} />
@@ -167,21 +156,16 @@ export default function OptOutControlScreen() {
               insurance and more – shows up here. Tap any row to unsubscribe right from this app.
             </ThemedText>
             <View
-              style={[
-                styles.summaryPill,
-                {
-                  backgroundColor:
-                    (isDark ? Colors.dark.info : Colors.light.info) + "15",
-                },
-              ]}
+              className="flex-row items-center self-start rounded-full px-2 py-1"
+              style={{
+                backgroundColor: (isDark ? Colors.dark.info : Colors.light.info) + "15",
+              }}
             >
               <View
-                style={[
-                  styles.statusDot,
-                  {
-                    backgroundColor: isDark ? Colors.dark.info : Colors.light.info,
-                  },
-                ]}
+                className="w-2 h-2 rounded-full mr-1"
+                style={{
+                  backgroundColor: isDark ? Colors.dark.info : Colors.light.info,
+                }}
               />
               <ThemedText
                 type="small"
@@ -201,7 +185,7 @@ export default function OptOutControlScreen() {
             onPress={() => handlePressSubscription(item)}
           />
         )}
-        ItemSeparatorComponent={() => <View style={{ height: Spacing.xs }} />}
+        ItemSeparatorComponent={() => <View className="h-1" />}
       />
 
       <Modal
@@ -210,55 +194,44 @@ export default function OptOutControlScreen() {
         animationType="fade"
         onRequestClose={handleCancel}
       >
-        <View style={styles.modalOverlay}>
+        <View className="flex-1 bg-black/50 justify-center items-center p-6">
           <View
-            style={[
-              styles.modalContent,
-              {
-                backgroundColor: theme.backgroundRoot,
-              },
-            ]}
+            className="w-full rounded-3xl p-6 items-center"
+            style={{ backgroundColor: theme.backgroundRoot }}
           >
             <Feather
               name="alert-circle"
               size={40}
               color={isDark ? Colors.dark.warningYellow : Colors.light.warningYellow}
             />
-            <ThemedText type="h2" style={{ marginTop: Spacing.lg, marginBottom: Spacing.sm }}>
+            <ThemedText type="h2" className="mt-4 mb-2 text-text">
               {t("confirm")}
             </ThemedText>
             <ThemedText
               type="body"
-              className="text-text-secondary"
-              style={{ textAlign: "center", marginBottom: Spacing["2xl"] }}
+              className="text-text-secondary text-center mb-6"
             >
               {`Do you want to automatically unsubscribe from ${pendingName ?? "this subscription"} using TracePay?`}
             </ThemedText>
 
-            <View style={styles.modalButtons}>
+            <View className="flex-row gap-3 w-full">
               <Pressable
                 onPress={handleCancel}
-                style={[
-                  styles.modalButton,
-                  {
-                    backgroundColor: theme.backgroundDefault,
-                  },
-                ]}
+                className="flex-1 h-[52px] rounded-xl items-center justify-center"
+                style={{ backgroundColor: theme.backgroundDefault }}
               >
                 <ThemedText type="button">{t("cancel")}</ThemedText>
               </Pressable>
               <Pressable
                 onPress={handleConfirmOptOut}
-                style={[
-                  styles.modalButton,
-                  {
-                    backgroundColor: isDark
-                      ? Colors.dark.alarmRed
-                      : Colors.light.alarmRed,
-                  },
-                ]}
+                className="flex-1 h-[52px] rounded-xl items-center justify-center"
+                style={{
+                  backgroundColor: isDark
+                    ? Colors.dark.alarmRed
+                    : Colors.light.alarmRed,
+                }}
               >
-                <ThemedText type="button" style={{ color: "#FFFFFF" }}>
+                <ThemedText type="button" className="text-white">
                   {t("confirm")}
                 </ThemedText>
               </Pressable>
@@ -269,70 +242,3 @@ export default function OptOutControlScreen() {
     </ThemedView>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    borderRadius: BorderRadius.sm,
-    padding: Spacing.lg,
-  },
-  cardMain: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  statusPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 999,
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.sm,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: Spacing.xs,
-  },
-  actionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: Spacing.md,
-    borderRadius: BorderRadius.xs,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    alignSelf: "flex-start",
-  },
-  summaryPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    borderRadius: 999,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: Spacing["2xl"],
-  },
-  modalContent: {
-    width: "100%",
-    borderRadius: BorderRadius.lg,
-    padding: Spacing["2xl"],
-    alignItems: "center",
-  },
-  modalButtons: {
-    flexDirection: "row",
-    gap: Spacing.md,
-    width: "100%",
-  },
-  modalButton: {
-    flex: 1,
-    height: Spacing.buttonHeight,
-    borderRadius: BorderRadius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});

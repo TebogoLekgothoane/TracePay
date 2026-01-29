@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { View, StyleSheet, Image } from "react-native";
+import { View, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import Animated, {
@@ -99,21 +99,19 @@ export default function AnalysisLoadingScreen() {
   }));
 
   return (
-    <ThemedView className="bg-bg" style={styles.container}>
+    <ThemedView className="flex-1 bg-bg">
       <View
-        style={[
-          styles.content,
-          {
-            paddingTop: insets.top + Spacing["6xl"],
-            paddingBottom: insets.bottom + Spacing["6xl"],
-          },
-        ]}
+        className="flex-1 items-center justify-center px-6"
+        style={{
+          paddingTop: insets.top + Spacing["6xl"],
+          paddingBottom: insets.bottom + Spacing["6xl"],
+        }}
       >
-        <Animated.View entering={FadeIn.delay(100)} style={styles.imageContainer}>
+        <Animated.View entering={FadeIn.delay(100)} className="mb-10">
           <Animated.View style={pulseStyle}>
             <Image
               source={require("../assets/trace-pay logo.png")}
-              style={styles.loadingImage}
+              className="w-[180px] h-[180px]"
               resizeMode="contain"
             />
           </Animated.View>
@@ -121,40 +119,30 @@ export default function AnalysisLoadingScreen() {
 
         <Animated.View
           entering={FadeInUp.delay(300).springify()}
-          style={styles.textContainer}
+          className="items-center"
         >
-          <View style={styles.loadingTextContainer}>
-            <ThemedText type="h1" className="text-text" style={styles.loadingText}>
+          <View className="flex-row items-center mb-3">
+            <ThemedText type="h1" className="text-text text-center text-[32px] leading-10 font-bold">
               {t("analyzing")}
             </ThemedText>
-            <View style={styles.dotsContainer}>
+            <View className="flex-row ml-1 gap-1">
               <Animated.View
-                style={[
-                  styles.dot,
-                  dot1Style,
-                ]}
-                className="bg-accent"
+                style={[dot1Style]}
+                className="w-1.5 h-1.5 rounded-full bg-accent"
               />
               <Animated.View
-                style={[
-                  styles.dot,
-                  dot2Style,
-                ]}
-                className="bg-accent"
+                style={[dot2Style]}
+                className="w-1.5 h-1.5 rounded-full bg-accent"
               />
               <Animated.View
-                style={[
-                  styles.dot,
-                  dot3Style,
-                ]}
-                className="bg-accent"
+                style={[dot3Style]}
+                className="w-1.5 h-1.5 rounded-full bg-accent"
               />
             </View>
           </View>
           <ThemedText
             type="body"
-            className="text-text-muted"
-            style={styles.detailText}
+            className="text-text-muted text-center"
           >
             {t("analyzingDetail")}
           </ThemedText>
@@ -163,49 +151,3 @@ export default function AnalysisLoadingScreen() {
     </ThemedView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: Spacing["2xl"],
-  },
-  imageContainer: {
-    marginBottom: Spacing["4xl"],
-  },
-  loadingImage: {
-    width: 180,
-    height: 180,
-  },
-  textContainer: {
-    alignItems: "center",
-  },
-  loadingTextContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: Spacing.md,
-  },
-  loadingText: {
-    textAlign: "center",
-    fontSize: 32,
-    lineHeight: 40,
-    fontWeight: "700",
-  },
-  dotsContainer: {
-    flexDirection: "row",
-    marginLeft: Spacing.xs,
-    gap: 4,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  detailText: {
-    textAlign: "center",
-  },
-});

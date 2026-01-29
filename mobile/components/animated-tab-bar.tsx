@@ -3,7 +3,6 @@ import {
   Animated,
   LayoutChangeEvent,
   Pressable,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
@@ -60,31 +59,28 @@ export function AnimatedTabBar({
   return (
     <>
       <View
-        style={[
-          styles.wrapper,
-          {
-            backgroundColor: theme.backgroundRoot,
-            borderTopColor: theme.backgroundTertiary,
-          },
-        ]}
+        className="flex-row items-center justify-between px-4 pt-2 pb-[13px] border-t relative"
+        style={{
+          backgroundColor: theme.backgroundRoot,
+          borderTopColor: theme.backgroundTertiary,
+          borderTopWidth: 1,
+        }}
         onLayout={handleLayout}
       >
         {/* Sliding overlay behind the active tab */}
         {tabWidth > 0 && (
           <Animated.View
             pointerEvents="none"
-            style={[
-              styles.overlay,
-              {
-                width: tabWidth - 16, // leave a small gutter between pills
-                backgroundColor: theme.tabIconSelected,
-                transform: [
-                  {
-                    translateX: Animated.multiply(translateIndex, tabWidth),
-                  },
-                ],
-              },
-            ]}
+            className="absolute left-2 top-[7px] bottom-[13px] rounded-full"
+            style={{
+              width: tabWidth - 16,
+              backgroundColor: theme.tabIconSelected,
+              transform: [
+                {
+                  translateX: Animated.multiply(translateIndex, tabWidth),
+                },
+              ],
+            }}
           />
         )}
 
@@ -153,16 +149,12 @@ export function AnimatedTabBar({
                 onPress();
               }}
               onLongPress={onLongPress}
-              style={styles.tab}
+              className="flex-1 items-center justify-center py-1 gap-[7px]"
             >
               {Icon}
               <Text
-                style={[
-                  styles.label,
-                  {
-                    color: tintColor,
-                  },
-                ]}
+                className="text-[11px] font-semibold"
+                style={{ color: tintColor }}
               >
                 {label}
               </Text>
@@ -173,18 +165,16 @@ export function AnimatedTabBar({
 
       {/* Radial-style action icons around the Freeze tab */}
       {isMenuOpen && tabWidth > 0 && actionIndex !== -1 && (
-        <View style={styles.menuOverlay} pointerEvents="box-none">
+        <View className="absolute inset-0" pointerEvents="box-none">
           <Pressable
-            style={styles.menuBackdrop}
+            className="absolute inset-0"
             onPress={() => setIsMenuOpen(false)}
           />
           <View
-            style={[
-              styles.radialContainer,
-              {
-                left: actionIndex * tabWidth + tabWidth / 2 - 110, // center the cluster
-              },
-            ]}
+            className="absolute bottom-[72px] w-[220px] flex-row justify-between items-end"
+            style={{
+              left: actionIndex * tabWidth + tabWidth / 2 - 110,
+            }}
           >
             {[
               {
@@ -214,7 +204,8 @@ export function AnimatedTabBar({
             ].map((item) => (
               <Pressable
                 key={item.key}
-                style={[styles.radialItem, { backgroundColor: theme.backgroundRoot }]}
+                className="items-center justify-center px-2.5 py-2 rounded-full"
+                style={{ backgroundColor: theme.backgroundRoot }}
                 onPress={() => {
                   router.push(item.href as any);
                   setIsMenuOpen(false);
@@ -225,7 +216,7 @@ export function AnimatedTabBar({
                   size={20}
                   color={theme.tabIconSelected}
                 />
-                <Text style={[styles.radialLabel, { color: theme.text }]}>
+                <Text className="mt-1 text-[11px] font-medium" style={{ color: theme.text }}>
                   {item.label}
                 </Text>
               </Pressable>
@@ -236,63 +227,3 @@ export function AnimatedTabBar({
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  wrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 13,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    position: "relative",
-  },
-  overlay: {
-    position: "absolute",
-    left: 8,
-    top: 7,
-    bottom: 13,
-    borderRadius: 999,
-  },
-  tab: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 4,
-    gap: 7,
-  },
-  label: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  menuOverlay: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  menuBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    // Keep this transparent so the main content doesn't get dimmed
-    backgroundColor: "transparent",
-  },
-  radialContainer: {
-    position: "absolute",
-    bottom: 72,
-    width: 220,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-  },
-  radialItem: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  radialLabel: {
-    marginTop: 4,
-    fontSize: 11,
-    fontWeight: "500",
-  },
-});
-

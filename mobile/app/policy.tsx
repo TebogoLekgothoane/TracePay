@@ -1,46 +1,21 @@
 import React from "react";
-import { ScrollView, View, Pressable } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Feather } from "@expo/vector-icons";
+import { View } from "react-native";
 import { useRouter } from "expo-router";
 
-import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
+import { ScreenContainer } from "@/components/screen-container";
+import { ScreenHeader } from "@/components/screen-header";
 import { Spacing } from "@/constants/theme";
-import { useTheme } from "@/hooks/use-theme-color";
 
 export default function PolicyScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { theme } = useTheme();
 
   return (
-    <ThemedView
-      style={{
-        flex: 1,
-        paddingTop: insets.top + Spacing.sm,
-        paddingBottom: insets.bottom + Spacing["3xl"],
-        paddingHorizontal: Spacing.lg,
-      }}
-    >
-      <ScrollView
-        contentContainerStyle={{
-          paddingBottom: Spacing["3xl"],
-        }}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: Spacing.md }}>
-          <Pressable
-            onPress={() => router.back()}
-            style={{ padding: Spacing.xs, marginRight: Spacing.sm }}
-            hitSlop={10}
-          >
-            <Feather name="arrow-left" size={20} color={theme.text} />
-          </Pressable>
-          <ThemedText type="h1" className="text-text">
-            Data Ethics &amp; Privacy Framework
-          </ThemedText>
-        </View>
+    <ScreenContainer scroll>
+      <ScreenHeader
+        title="Data Ethics & Privacy Framework"
+        onBack={() => router.back()}
+      />
         <ThemedText type="small" className="text-text-muted mb-4">
           Last updated: Jan 2026
         </ThemedText>
@@ -334,8 +309,7 @@ export default function PolicyScreen() {
             • We follow South African financial regulations and fair-treatment rules
           </ThemedText>
         </View>
-      </ScrollView>
-    </ThemedView>
+    </ScreenContainer>
   );
 }
 

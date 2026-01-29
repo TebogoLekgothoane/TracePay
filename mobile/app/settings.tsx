@@ -1,11 +1,14 @@
 import React, { useState } from "react";
-import { ScrollView, View, Switch, Pressable, Alert, TextInput } from "react-native";
+import { View, Switch, Pressable, Alert, TextInput, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
+import { ScreenContainer } from "@/components/screen-container";
+import { ScreenHeader } from "@/components/screen-header";
+import { SettingsSection, SettingsRow } from "@/components/settings-section";
 import { Spacing } from "@/constants/theme";
 import { useApp } from "@/context/app-context";
 import { useTheme } from "@/hooks/use-theme-color";
@@ -25,6 +28,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const { theme } = useTheme();
+  const handleBack = () => router.back();
   const [airtimeLimitInput, setAirtimeLimitInput] = useState(
     airtimeLimit > 0 ? String(airtimeLimit) : "",
   );

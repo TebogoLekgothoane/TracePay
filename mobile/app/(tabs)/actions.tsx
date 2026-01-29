@@ -1,12 +1,11 @@
 import React from "react";
-import { ScrollView, View, Pressable } from "react-native";
+import { ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Feather } from "@expo/vector-icons";
 
 import { ThemedView } from "@/components/themed-view";
-import { ThemedText } from "@/components/themed-text";
 import { AppHeader } from "@/components/app-header";
+import { ActionCard } from "@/components/action-card";
 
 export default function ActionsScreen() {
   const insets = useSafeAreaInsets();
@@ -28,75 +27,31 @@ export default function ActionsScreen() {
             style={{ marginBottom: 24 }}
           />
 
-          {/* Actions grid */}
           <View className="flex-row flex-wrap justify-between">
-            <Pressable
-              className="w-[48%] mb-3 rounded-2xl bg-bg-card px-4 py-3 flex-row items-center"
+            <ActionCard
+              icon="cloud-snow"
+              title="Freeze All"
+              subtitle="Stop money leaks across banks"
               onPress={() => router.push("/freeze-control")}
-            >
-              <View className="h-9 w-9 rounded-full items-center justify-center bg-primary/10 mr-3">
-                <Feather name="cloud-snow" size={18} />
-              </View>
-              <View className="flex-1">
-                <ThemedText type="body" className="text-text">
-                  Freeze All
-                </ThemedText>
-                <ThemedText type="small" className="text-text-muted mt-0.5">
-                  Stop money leaks across banks
-                </ThemedText>
-              </View>
-            </Pressable>
-
-            <Pressable
-              className="w-[48%] mb-3 rounded-2xl bg-bg-card px-4 py-3 flex-row items-center"
+            />
+            <ActionCard
+              icon="pause-circle"
+              title="Pause Debit Orders"
+              subtitle="Temporarily stop risky debits"
               onPress={() => router.push("/pause-control")}
-            >
-              <View className="h-9 w-9 rounded-full items-center justify-center bg-primary/10 mr-3">
-                <Feather name="pause-circle" size={18} />
-              </View>
-              <View className="flex-1">
-                <ThemedText type="body" className="text-text">
-                  Pause Debit Orders
-                </ThemedText>
-                <ThemedText type="small" className="text-text-muted mt-0.5">
-                  Temporarily stop risky debits
-                </ThemedText>
-              </View>
-            </Pressable>
-
-            <Pressable
-              className="w-[48%] mb-3 rounded-2xl bg-bg-card px-4 py-3 flex-row items-center"
+            />
+            <ActionCard
+              icon="shuffle"
+              title="Route Income Differently"
+              subtitle="Send income to safer accounts"
               onPress={() => router.push("/reroute-control")}
-            >
-              <View className="h-9 w-9 rounded-full items-center justify-center bg-primary/10 mr-3">
-                <Feather name="shuffle" size={18} />
-              </View>
-              <View className="flex-1">
-                <ThemedText type="body" className="text-text">
-                  Route Income Differently
-                </ThemedText>
-                <ThemedText type="small" className="text-text-muted mt-0.5">
-                  Send income to safer accounts
-                </ThemedText>
-              </View>
-            </Pressable>
-
-            <Pressable
-              className="w-[48%] mb-3 rounded-2xl bg-bg-card px-4 py-3 flex-row items-center"
+            />
+            <ActionCard
+              icon="x-circle"
+              title="Auto-Unsubscribe"
+              subtitle="Cancel useless subscriptions"
               onPress={() => router.push("/opt-out-control")}
-            >
-              <View className="h-9 w-9 rounded-full items-center justify-center bg-primary/10 mr-3">
-                <Feather name="x-circle" size={18} />
-              </View>
-              <View className="flex-1">
-                <ThemedText type="body" className="text-text">
-                  Auto-Unsubscribe
-                </ThemedText>
-                <ThemedText type="small" className="text-text-muted mt-0.5">
-                  Cancel useless subscriptions
-                </ThemedText>
-              </View>
-            </Pressable>
+            />
           </View>
         </View>
       </ScrollView>

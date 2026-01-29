@@ -1,20 +1,17 @@
 import React from "react";
-import { View, Image, StyleSheet, ViewStyle, Pressable } from "react-native";
+import { View, Image, Pressable, StyleProp, ViewStyle } from "react-native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/themed-text";
-import { Spacing, Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { Colors } from "@/constants/theme";
 
 type AppHeaderProps = {
   title: string;
   subtitle?: string;
-  /**
-   * Optional element rendered on the right side (e.g. settings icon) or
-   * below the subtitle (e.g. a CTA button).
-   */
   children?: React.ReactNode;
-  style?: ViewStyle;
+  className?: string;
+  style?: StyleProp<ViewStyle>;
   showBackButton?: boolean;
   onBackPress?: () => void;
   rightAccessory?: React.ReactNode;
@@ -24,6 +21,7 @@ export function AppHeader({
   title,
   subtitle,
   children,
+  className = "",
   style,
   showBackButton,
   onBackPress,
@@ -33,21 +31,21 @@ export function AppHeader({
   const theme = Colors[colorScheme ?? "light"];
 
   return (
-    <View style={[styles.container, style]}>
-      <View style={styles.row}>
-        <View style={styles.brandRow}>
+    <View className={`mb-8 ${className}`} style={style}>
+      <View className="flex-row items-center justify-between mb-4">
+        <View className="flex-row items-center">
           {showBackButton ? (
             <Pressable
               onPress={onBackPress}
               hitSlop={10}
-              style={{ marginRight: Spacing.sm, padding: 4 }}
+              className="mr-2 p-1 active:opacity-70"
             >
               <Feather name="arrow-left" size={20} color={theme.text} />
             </Pressable>
           ) : null}
           <Image
             source={require("../assets/trace-pay logo.png")}
-            style={styles.logo}
+            className="w-14 h-14 mr-2"
             resizeMode="contain"
           />
           <ThemedText type="h1" className="text-text">
@@ -55,10 +53,10 @@ export function AppHeader({
           </ThemedText>
         </View>
 
-        {rightAccessory ? <View style={styles.right}>{rightAccessory}</View> : null}
+        {rightAccessory ? <View className="ml-4">{rightAccessory}</View> : null}
       </View>
 
-      <View style={styles.copy}>
+      <View className="mb-4">
         <ThemedText type="h2" className="text-text mb-1">
           {title}
         </ThemedText>
@@ -73,31 +71,3 @@ export function AppHeader({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: Spacing["3xl"],
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: Spacing.lg,
-  },
-  brandRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  logo: {
-    width: 56,
-    height: 56,
-    marginRight: Spacing.sm,
-  },
-  copy: {
-    marginBottom: Spacing.md,
-  },
-  right: {
-    marginLeft: Spacing.lg,
-  },
-});
-

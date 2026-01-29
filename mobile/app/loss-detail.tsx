@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, FlatList, Pressable } from "react-native";
+import { View, FlatList, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -12,7 +12,7 @@ import { ThemedText } from "@/components/themed-text";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/hooks/use-theme-color";
 import { useApp } from "@/context/app-context";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, Colors, getSeverityColor } from "@/constants/theme";
 import { Transaction } from "@/types/navigation";
 
 interface TransactionItemProps {
@@ -35,23 +35,18 @@ function TransactionItem({ transaction, index, severityColor }: TransactionItemP
   return (
     <Animated.View
       entering={FadeInDown.delay(150 + index * 50).springify()}
-      style={[styles.transactionItem, { backgroundColor: theme.backgroundDefault }]}
+      className="flex-row justify-between items-center p-4 rounded-lg"
+      style={{ backgroundColor: theme.backgroundDefault }}
     >
-      <View style={styles.transactionLeft}>
-        <ThemedText type="body" style={styles.merchantName}>
+      <View className="flex-1">
+        <ThemedText type="body" className="mb-1">
           {transaction.merchant}
         </ThemedText>
-        <ThemedText
-          type="small"
-          style={[styles.transactionDate, { color: theme.textSecondary }]}
-        >
+        <ThemedText type="small" style={{ color: theme.textSecondary }}>
           {formatDate(transaction.date)}
         </ThemedText>
       </View>
-      <ThemedText
-        type="h4"
-        style={[styles.transactionAmount, { color: severityColor }]}
-      >
+      <ThemedText type="h4" className="font-semibold" style={{ color: severityColor }}>
         -R{transaction.amount.toFixed(2)}
       </ThemedText>
     </Animated.View>
@@ -78,26 +73,20 @@ function InsightCard({ severity }: { severity: string }) {
   };
 
   const insight = insights[severity] || insights.info;
+  const bgColor = isDark ? Colors.dark.warningYellow + "20" : Colors.light.warningYellow + "20";
+  const iconColor = isDark ? Colors.dark.warningYellow : Colors.light.warningYellow;
 
   return (
     <Animated.View
       entering={FadeInDown.delay(100).springify()}
-      style={[
-        styles.insightCard,
-        { backgroundColor: isDark ? Colors.dark.warningYellow + "20" : Colors.light.warningYellow + "20" },
-      ]}
+      className="rounded-xl p-4 mb-8"
+      style={{ backgroundColor: bgColor }}
     >
-      <View style={styles.insightHeader}>
-        <Feather
-          name="alert-circle"
-          size={20}
-          color={isDark ? Colors.dark.warningYellow : Colors.light.warningYellow}
-        />
-        <ThemedText type="h4" style={styles.insightTitle}>
-          {t("whyThisHurts")}
-        </ThemedText>
+      <View className="flex-row items-center gap-2 mb-2">
+        <Feather name="alert-circle" size={20} color={iconColor} />
+        <ThemedText type="h4">{t("whyThisHurts")}</ThemedText>
       </View>
-      <ThemedText type="body" style={[styles.insightText, { color: theme.textSecondary }]}>
+      <ThemedText type="body" style={{ color: theme.textSecondary }}>
         {language === "xh" ? insight.xh : insight.en}
       </ThemedText>
     </Animated.View>
@@ -124,18 +113,10 @@ export default function LossDetailScreen() {
   const severity = params.severity || "info";
   const transactions: Transaction[] = params.transactions ? JSON.parse(params.transactions) : [];
 
-  const getSeverityColor = () => {
-    switch (severity) {
-      case "critical":
-        return isDark ? Colors.dark.alarmRed : Colors.light.alarmRed;
-      case "warning":
-        return isDark ? Colors.dark.warningYellow : Colors.light.warningYellow;
-      default:
-        return isDark ? Colors.dark.info : Colors.light.info;
-    }
-  };
-
-  const severityColor = getSeverityColor();
+  const severityColor = getSeverityColor(
+    severity,
+    isDark ? "dark" : "light"
+  );
 
   const handleFreezePress = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -143,11 +124,11 @@ export default function LossDetailScreen() {
   };
 
   const ListHeader = () => (
-    <View style={styles.headerContent}>
-      <View style={styles.titleRow}>
+    <View className="mb-4">
+      <View className="flex-row items-center mb-4">
         <Pressable
           onPress={() => router.back()}
-          style={{ padding: Spacing.xs, marginRight: Spacing.sm }}
+          className="mr-2 p-1"
           hitSlop={10}
         >
           <Feather name="arrow-left" size={20} color={theme.text} />
@@ -159,43 +140,34 @@ export default function LossDetailScreen() {
 
       <Animated.View
         entering={FadeInDown.delay(50).springify()}
-        style={[
-          styles.summaryCard,
-          {
-            backgroundColor: severityColor,
-          },
-        ]}
+        className="rounded-2xl p-6 items-center mb-4"
+        style={{ backgroundColor: severityColor }}
       >
-        <ThemedText type="h1" style={styles.summaryAmount}>
+        <ThemedText type="h1" className="text-white mb-1">
           R{amount.toLocaleString()}
         </ThemedText>
-        <ThemedText type="body" style={styles.summaryPercentage}>
+        <ThemedText type="body" className="text-white/80">
           {percentage}% {t("ofIncome")}
         </ThemedText>
       </Animated.View>
 
       <InsightCard severity={severity} />
 
-      <ThemedText
-        type="h4"
-        style={[styles.sectionTitle, { color: theme.textSecondary }]}
-      >
+      <ThemedText type="h4" className="mb-3" style={{ color: theme.textSecondary }}>
         {t("details")}
       </ThemedText>
     </View>
   );
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView className="flex-1">
       <FlatList
-        style={styles.list}
-        contentContainerStyle={[
-          styles.listContent,
-          {
-            paddingTop: headerHeight + Spacing.xl,
-            paddingBottom: insets.bottom + Spacing["7xl"],
-          },
-        ]}
+        className="flex-1"
+        contentContainerStyle={{
+          paddingTop: headerHeight + Spacing.xl,
+          paddingBottom: insets.bottom + Spacing["7xl"],
+          paddingHorizontal: Spacing.lg,
+        }}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
         data={transactions}
         keyExtractor={(item) => item.id}
@@ -207,21 +179,20 @@ export default function LossDetailScreen() {
             severityColor={severityColor}
           />
         )}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ItemSeparatorComponent={() => <View className="h-2" />}
       />
 
       <View
-        style={[
-          styles.bottomContainer,
-          {
-            paddingBottom: insets.bottom + Spacing["2xl"],
-            backgroundColor: theme.backgroundRoot,
-          },
-        ]}
+        className="absolute bottom-0 left-0 right-0 px-4 pt-4"
+        style={{
+          paddingBottom: insets.bottom + Spacing["2xl"],
+          backgroundColor: theme.backgroundRoot,
+        }}
       >
         <Button
           onPress={handleFreezePress}
-          style={[styles.freezeButton, { backgroundColor: severityColor }]}
+          className="w-full"
+          style={{ backgroundColor: severityColor }}
           testID="button-freeze-category"
         >
           {t("freezeThis")}
@@ -230,83 +201,3 @@ export default function LossDetailScreen() {
     </ThemedView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  list: {
-    flex: 1,
-  },
-  listContent: {
-    paddingHorizontal: Spacing.lg,
-  },
-  headerContent: {
-    marginBottom: Spacing.lg,
-  },
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-  },
-  summaryCard: {
-    borderRadius: BorderRadius.lg,
-    padding: Spacing["2xl"],
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-  },
-  summaryAmount: {
-    color: "#FFFFFF",
-    marginBottom: Spacing.xs,
-  },
-  summaryPercentage: {
-    color: "rgba(255, 255, 255, 0.8)",
-  },
-  insightCard: {
-    borderRadius: BorderRadius.sm,
-    padding: Spacing.lg,
-    marginBottom: Spacing["2xl"],
-  },
-  insightHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-    marginBottom: Spacing.sm,
-  },
-  insightTitle: {},
-  insightText: {},
-  sectionTitle: {
-    marginBottom: Spacing.md,
-  },
-  transactionItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: Spacing.lg,
-    borderRadius: BorderRadius.xs,
-  },
-  transactionLeft: {
-    flex: 1,
-  },
-  merchantName: {
-    marginBottom: Spacing.xs,
-  },
-  transactionDate: {},
-  transactionAmount: {
-    fontWeight: "600",
-  },
-  separator: {
-    height: Spacing.sm,
-  },
-  bottomContainer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.lg,
-  },
-  freezeButton: {
-    width: "100%",
-  },
-});

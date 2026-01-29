@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from "react";
-import { View, Pressable, ScrollView } from "react-native";
+import { View, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Feather } from "@expo/vector-icons";
 
 import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
@@ -10,7 +9,10 @@ import { BankSummaryCard } from "@/components/bank-summary-card";
 import { SavingsOpportunityCard } from "@/components/savings-opportunity-card";
 import { AutopsyCauseList, type AutopsyCause } from "@/components/autopsy-cause-list";
 import type { Bank } from "@/components/bank-card";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { IconLabelButton } from "@/components/icon-label-button";
+import { FloatingButton } from "@/components/floating-button";
+import { LeakTransactionRow, type LeakTransaction } from "@/components/leak-transaction-row";
+import { Spacing } from "@/constants/theme";
 import { AppHeader } from "@/components/app-header";
 import { useTheme } from "@/hooks/use-theme-color";
 
@@ -25,18 +27,6 @@ const MOCK_CAUSES: AutopsyCause[] = [
   { id: "mashonisa", title: "Mashonisa Interest", amount: 780, percentOfIncome: 10.3 },
   { id: "airtime", title: "Airtime Drains", amount: 210, percentOfIncome: 2.8 },
 ];
-
-type LeakTag = "airtime_drain" | "hidden_fee" | "loan_shark";
-
-type LeakTransaction = {
-  id: string;
-  date: string;
-  merchant: string;
-  description: string;
-  channel: string;
-  tag: LeakTag;
-  amount: number;
-};
 
 type LeakDataset = Record<string, LeakTransaction[]>;
 
@@ -121,111 +111,6 @@ const LEAKS_BY_CAUSE: LeakDataset = {
   ],
 };
 
-function formatDisplayDate(value: string) {
-  const date = new Date(value);
-  const day = date.getDate().toString().padStart(2, "0");
-  const month = date.toLocaleString("en-US", { month: "short" }).toUpperCase();
-  return { day, month };
-}
-
-function formatAmount(amount: number) {
-  return `+R ${amount.toFixed(2)}`;
-}
-
-function TagPill({ tag }: { tag: LeakTag }) {
-  const { isDark } = useTheme();
-
-  let bgBase: string;
-  let textColor: string;
-  let label: string;
-
-  if (tag === "airtime_drain") {
-    bgBase = isDark ? Colors.dark.warningYellow : Colors.light.warningYellow;
-    textColor = bgBase;
-    label = "AIRTIME DRAIN";
-  } else if (tag === "hidden_fee") {
-    bgBase = isDark ? Colors.dark.alarmRed : Colors.light.alarmRed;
-    textColor = bgBase;
-    label = "HIDDEN FEE";
-  } else {
-    bgBase = isDark ? Colors.dark.text : Colors.light.text;
-    textColor = "#FFFFFF";
-    label = "LOAN SHARK";
-  }
-
-  const backgroundColor = tag === "loan_shark" ? bgBase : bgBase + "20";
-
-  return (
-    <View
-      style={{
-        borderRadius: 999,
-        paddingHorizontal: Spacing.sm,
-        paddingVertical: 4,
-        backgroundColor,
-      }}
-    >
-      <ThemedText type="small" className="text-xs" style={{ color: textColor }}>
-        {label}
-      </ThemedText>
-    </View>
-  );
-}
-
-function LeakRow({ tx }: { tx: LeakTransaction }) {
-  const { theme } = useTheme();
-  const { day, month } = formatDisplayDate(tx.date);
-
-  return (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        borderRadius: BorderRadius.sm,
-        borderWidth: 1,
-        borderColor: theme.backgroundTertiary,
-        paddingHorizontal: Spacing.lg,
-        paddingVertical: Spacing.md,
-        marginBottom: Spacing.xs,
-        backgroundColor: theme.backgroundDefault,
-      }}
-    >
-      <View style={{ width: 52, alignItems: "flex-start" }}>
-        <ThemedText type="small" style={{ color: theme.textSecondary, fontSize: 11 }}>
-          {month}
-        </ThemedText>
-        <ThemedText type="h3" style={{ marginTop: 2 }}>
-          {day}
-        </ThemedText>
-      </View>
-
-      <View style={{ flex: 1, paddingHorizontal: Spacing.md }}>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <ThemedText type="body" style={{ flex: 1, marginRight: Spacing.sm }}>
-            {tx.description}
-          </ThemedText>
-          <TagPill tag={tx.tag} />
-        </View>
-
-        <ThemedText type="small" style={{ marginTop: 4, color: theme.textSecondary }}>
-          {tx.merchant} • {tx.channel}
-        </ThemedText>
-      </View>
-
-      <View style={{ alignItems: "flex-end" }}>
-        <ThemedText type="body" style={{ fontWeight: "600", color: Colors.light.hopeGreen }}>
-          {formatAmount(tx.amount)}
-        </ThemedText>
-      </View>
-    </View>
-  );
-}
-
 export default function BankAutopsyScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -288,26 +173,22 @@ export default function BankAutopsyScreen() {
               </ThemedText>
 
               {expandedLeaks.map((tx) => (
-                <LeakRow key={tx.id} tx={tx} />
+                <LeakTransactionRow key={tx.id} transaction={tx} />
               ))}
             </View>
           ) : null}
         </View>
       </ScrollView>
 
-      <Pressable
-        onPress={() =>
-          router.push({ pathname: "/voicemodal" as any, params: { bankId: bank.id } } as any)
-        }
-        className="absolute right-5 bg-accent rounded-full px-5 py-3 flex-row items-center"
-        style={{ bottom: insets.bottom + 18 }}
-      >
-        <Feather name="mic" size={18} color="#FFFFFF" />
-        <View style={{ width: 10 }} />
-        <ThemedText type="button" className="text-white">
-          Mamela imali yam
-        </ThemedText>
-      </Pressable>
+      <FloatingButton bottomOffset={18} rightOffset={Spacing.lg}>
+        <IconLabelButton
+          icon="mic"
+          label="Mamela imali yam"
+          onPress={() =>
+            router.push({ pathname: "/voicemodal" as any, params: { bankId: bank.id } } as any)
+          }
+        />
+      </FloatingButton>
     </ThemedView>
   );
 }

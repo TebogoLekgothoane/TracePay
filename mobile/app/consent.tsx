@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Switch, NativeSyntheticEvent, NativeScrollEvent } from "react-native";
+import { View, ScrollView, Pressable, Switch, NativeSyntheticEvent, NativeScrollEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useRouter } from "expo-router";
@@ -49,7 +49,10 @@ function RoadmapStep({
     } as any;
   });
   return (
-    <Animated.View style={[styles.roadmapStepCircle, animatedStyle]}>
+    <Animated.View
+      className="w-11 h-11 rounded-full items-center justify-center"
+      style={animatedStyle}
+    >
       <Animated.Text style={iconColorStyle}>
         <Feather name={icon} size={18} />
       </Animated.Text>
@@ -163,20 +166,18 @@ export default function ConsentScreen() {
     <ThemedView className="bg-bg flex-1">
       <ScrollView
         ref={scrollViewRef}
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          {
-            paddingTop: headerHeight + Spacing["6xl"],
-            paddingBottom: insets.bottom + Spacing["4xl"],
-          },
-        ]}
+        className="flex-1"
+        contentContainerStyle={{
+          paddingHorizontal: Spacing.lg,
+          paddingTop: headerHeight + Spacing["6xl"],
+          paddingBottom: insets.bottom + Spacing["4xl"],
+        }}
         onScroll={handleScroll}
         onLayout={handleScrollViewLayout}
         scrollEventThrottle={24}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View entering={FadeInDown.delay(50).springify()} style={styles.titleBlock}>
+        <Animated.View entering={FadeInDown.delay(50).springify()} className="pb-4">
           <ThemedText type="h1" className="text-text mb-2">
             {t("consentTitle")}
           </ThemedText>
@@ -189,20 +190,21 @@ export default function ConsentScreen() {
         </Animated.View>
 
         <View
-          style={styles.cardsRow}
+          className="flex-row items-stretch mb-10"
           onLayout={handleCardsSectionLayout}
         >
-          <View style={styles.roadmapColumn}>
-            <View style={styles.roadmapTrack}>
-              <Animated.View style={[styles.roadmapFill, roadmapFillStyle]} />
+          <View className="w-14 mr-1 relative min-h-[200px]">
+            <View className="absolute left-5 top-0 bottom-0 w-1.5 rounded overflow-hidden bg-gray-300">
+              <Animated.View
+                className="absolute top-0 left-0 right-0 rounded bg-navy"
+                style={roadmapFillStyle}
+              />
             </View>
             {Array.from({ length: ROADMAP_STEPS }).map((_, i) => (
               <View
                 key={i}
-                style={[
-                  styles.roadmapStepWrapper,
-                  { top: `${(i / (ROADMAP_STEPS - 1)) * 100}%` },
-                ]}
+                className="absolute left-0 -mt-[22px]"
+                style={{ top: `${(i / (ROADMAP_STEPS - 1)) * 100}%` }}
               >
                 <RoadmapStep
                   index={i}
@@ -214,7 +216,7 @@ export default function ConsentScreen() {
             ))}
           </View>
 
-          <View style={styles.cardsContent}>
+          <View className="flex-1 min-w-0">
             <ConsentSection
               title={t("dataAccessTitle")}
               items={[t("dataAccess1"), t("dataAccess2")]}
@@ -271,7 +273,10 @@ export default function ConsentScreen() {
           </View>
         </View>
 
-        <View style={[styles.actionsBlock, { paddingBottom: insets.bottom + Spacing["2xl"] }]}>
+        <View
+          className="gap-3"
+          style={{ paddingBottom: insets.bottom + Spacing["2xl"] }}
+        >
           <Button
             onPress={handleAgree}
             className="bg-accent w-full"
@@ -294,66 +299,3 @@ export default function ConsentScreen() {
     </ThemedView>
   );
 }
-
-const styles = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-  },
-  titleBlock: {
-    paddingBottom: Spacing.lg,
-  },
-  cardsRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    marginBottom: Spacing["4xl"],
-  },
-  roadmapColumn: {
-    width: 56,
-    marginRight: Spacing.xs,
-    position: "relative",
-    minHeight: 200,
-  },
-  roadmapTrack: {
-    position: "absolute",
-    left: 19,
-    top: 0,
-    bottom: 0,
-    width: 6,
-    borderRadius: 3,
-    backgroundColor: "#E0E0E0",
-    overflow: "hidden",
-  },
-  roadmapFill: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "#0B1B3A",
-    borderRadius: 3,
-  },
-  roadmapStepWrapper: {
-    position: "absolute",
-    left: 0,
-    marginTop: -22,
-  },
-  roadmapStepCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  roadmapStepIcon: {
-    opacity: 1,
-  },
-  cardsContent: {
-    flex: 1,
-    minWidth: 0,
-  },
-  actionsBlock: {
-    gap: Spacing.md,
-  },
-});

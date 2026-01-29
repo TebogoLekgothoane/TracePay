@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { View, FlatList, Pressable, StyleSheet, Modal } from "react-native";
+import { View, FlatList, Pressable, Modal } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -7,7 +7,7 @@ import { useRouter } from "expo-router";
 import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
 import { useTheme } from "@/hooks/use-theme-color";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, Colors } from "@/constants/theme";
 
 type Account = {
   id: string;
@@ -116,18 +116,19 @@ export default function RerouteControlScreen() {
     return (
       <Pressable
         onPress={handleToggle}
-        style={({ pressed }) => [
-          styles.card,
-          {
-            backgroundColor: theme.backgroundDefault,
-            opacity: isApplied && isHighFee ? 0.7 : 1,
-          },
-          pressed && { transform: [{ scale: 0.99 }] },
-        ]}
+        className="rounded-xl p-4 active:scale-[0.99]"
+        style={({ pressed }) => ({
+          backgroundColor: theme.backgroundDefault,
+          opacity: isApplied && isHighFee ? 0.7 : 1,
+          transform: pressed ? [{ scale: 0.99 }] : undefined,
+        })}
       >
-        <View style={styles.cardHeader}>
-          <View style={styles.bankRow}>
-            <View style={[styles.bankIcon, { backgroundColor: pillColor + "20" }]}>
+        <View className="flex-row justify-between items-center mb-3">
+          <View className="flex-row items-center gap-2">
+            <View
+              className="w-9 h-9 rounded-full items-center justify-center mr-1"
+              style={{ backgroundColor: pillColor + "20" }}
+            >
               <ThemedText type="body" className="text-text">
                 {item.bank[0]}
               </ThemedText>
@@ -143,26 +144,16 @@ export default function RerouteControlScreen() {
           </View>
 
           <View
-            style={[
-              styles.typePill,
-              {
-                backgroundColor: pillColor + "20",
-              },
-            ]}
+            className="flex-row items-center rounded-full px-2 py-1"
+            style={{ backgroundColor: pillColor + "20" }}
           >
             <View
-              style={[
-                styles.statusDot,
-                {
-                  backgroundColor: pillColor,
-                },
-              ]}
+              className="w-2 h-2 rounded-full mr-1"
+              style={{ backgroundColor: pillColor }}
             />
             <ThemedText
               type="small"
-              style={{
-                color: pillColor,
-              }}
+              style={{ color: pillColor }}
             >
               {isApplied
                 ? isHighFee
@@ -177,8 +168,8 @@ export default function RerouteControlScreen() {
           </View>
         </View>
 
-        <View style={styles.splitRow}>
-          <View style={{ flex: 1 }}>
+        <View className="flex-row items-center mt-2">
+          <View className="flex-1">
             <ThemedText type="small" className="text-text-muted">
               {isApplied ? "Before" : "Today"}
             </ThemedText>
@@ -192,7 +183,7 @@ export default function RerouteControlScreen() {
             color={theme.textSecondary}
             style={{ marginHorizontal: Spacing.sm }}
           />
-          <View style={{ flex: 1 }}>
+          <View className="flex-1">
             <ThemedText type="small" className="text-text-muted">
               {isApplied ? "Now" : "With this plan"}
             </ThemedText>
@@ -210,12 +201,8 @@ export default function RerouteControlScreen() {
         ) : null}
 
         <View
-          style={[
-            styles.toggleButton,
-            {
-              backgroundColor: enabled ? pillColor : theme.backgroundTertiary,
-            },
-          ]}
+          className="flex-row items-center mt-4 rounded py-2 px-3 self-stretch justify-center"
+          style={{ backgroundColor: enabled ? pillColor : theme.backgroundTertiary }}
         >
           <Feather
             name={enabled ? "check-circle" : "circle"}
@@ -224,8 +211,8 @@ export default function RerouteControlScreen() {
           />
           <ThemedText
             type="button"
+            className="ml-1"
             style={{
-              marginLeft: Spacing.xs,
               color: enabled ? "#FFFFFF" : theme.text,
             }}
           >
@@ -274,13 +261,13 @@ export default function RerouteControlScreen() {
         data={ACCOUNTS}
         keyExtractor={(item) => item.id}
         renderItem={renderAccount}
-        ItemSeparatorComponent={() => <View style={{ height: Spacing.md }} />}
+        ItemSeparatorComponent={() => <View className="h-3" />}
         ListHeaderComponent={
-          <View style={{ marginBottom: Spacing["2xl"] }}>
-            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: Spacing.md }}>
+          <View className="mb-6">
+            <View className="flex-row items-center mb-3">
               <Pressable
                 onPress={() => router.back()}
-                style={{ padding: Spacing.xs, marginRight: Spacing.sm }}
+                className="p-1 mr-2"
                 hitSlop={10}
               >
                 <Feather name="arrow-left" size={20} color={theme.text} />
@@ -291,21 +278,19 @@ export default function RerouteControlScreen() {
             </View>
             {isApplied && showSuccess ? (
               <View
-                style={[
-                  styles.successBanner,
-                  {
-                    backgroundColor:
-                      (isDark ? Colors.dark.hopeGreen : Colors.light.hopeGreen) + "20",
-                  },
-                ]}
+                className="rounded-xl p-3 mb-4"
+                style={{
+                  backgroundColor:
+                    (isDark ? Colors.dark.hopeGreen : Colors.light.hopeGreen) + "20",
+                }}
               >
-                <View style={styles.successBannerRow}>
+                <View className="flex-row items-center">
                   <Feather
                     name="check-circle"
                     size={18}
                     color={isDark ? Colors.dark.hopeGreen : Colors.light.hopeGreen}
                   />
-                  <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+                  <View className="flex-1 ml-2">
                     <ThemedText type="body" className="text-text">
                       Your safer income route is on.
                     </ThemedText>
@@ -334,23 +319,24 @@ export default function RerouteControlScreen() {
             </ThemedText>
 
             <View
-              style={[
-                styles.summaryCard,
-                {
-                  backgroundColor: summaryCardColor + "16",
-                  borderColor: summaryCardColor + "60",
-                },
-              ]}
+              className="rounded-lg p-4 border"
+              style={{
+                backgroundColor: summaryCardColor + "16",
+                borderColor: summaryCardColor + "60",
+              }}
             >
-              <View style={styles.summaryRow}>
-                <View style={styles.summaryIcon}>
+              <View className="flex-row items-center mb-3 gap-2">
+                <View
+                  className="w-10 h-10 rounded-full items-center justify-center mr-2"
+                  style={{ backgroundColor: summaryCardColor + "20" }}
+                >
                   <Feather
                     name={isApplied ? "check-circle" : "shuffle"}
                     size={20}
                     color={summaryCardColor}
                   />
                 </View>
-                <View style={{ flex: 1 }}>
+                <View className="flex-1">
                   <ThemedText type="small" className="text-text-muted">
                     {isApplied ? "You are now on this plan" : "If you follow this plan"}
                   </ThemedText>
@@ -362,15 +348,13 @@ export default function RerouteControlScreen() {
                 </View>
               </View>
 
-              <View style={styles.progressBar}>
+              <View className="mt-2 h-1.5 rounded overflow-hidden bg-white/10">
                 <View
-                  style={[
-                    styles.progressFill,
-                    {
-                      backgroundColor: summaryCardColor,
-                      width: `${projectedLossCut}%`,
-                    },
-                  ]}
+                  className="h-full rounded"
+                  style={{
+                    backgroundColor: summaryCardColor,
+                    width: `${projectedLossCut}%`,
+                  }}
                 />
               </View>
 
@@ -379,7 +363,7 @@ export default function RerouteControlScreen() {
               </ThemedText>
 
               {isApplied ? (
-                <View style={{ marginTop: Spacing.md }}>
+                <View className="mt-3">
                   <ThemedText type="small" className="text-text mt-3">
                     Next steps
                   </ThemedText>
@@ -398,15 +382,13 @@ export default function RerouteControlScreen() {
       />
 
       <View
-        style={[
-          styles.bottomBar,
-          {
-            paddingBottom: insets.bottom + Spacing.sm,
-            backgroundColor: theme.backgroundRoot,
-          },
-        ]}
+        className="absolute left-0 right-0 bottom-0 px-4 pt-2 flex-row items-center"
+        style={{
+          paddingBottom: insets.bottom + Spacing.sm,
+          backgroundColor: theme.backgroundRoot,
+        }}
       >
-        <View style={{ flex: 1, marginRight: Spacing.md }}>
+        <View className="flex-1 mr-3">
           <ThemedText type="small" className="text-text-muted">
             New plan
           </ThemedText>
@@ -425,7 +407,7 @@ export default function RerouteControlScreen() {
           )}
 
           {isApplied ? (
-            <Pressable onPress={handleResetToOriginal} style={{ marginTop: Spacing.sm }}>
+            <Pressable onPress={handleResetToOriginal} className="mt-2">
               <ThemedText type="small" className="text-text">
                 Go back to original route
               </ThemedText>
@@ -435,23 +417,19 @@ export default function RerouteControlScreen() {
 
         <Pressable
           onPress={handleApply}
-          style={({ pressed }) => [
-            styles.applyButton,
-            {
-              backgroundColor: isApplied
-                ? theme.backgroundTertiary
-                : isDark
-                ? Colors.dark.hopeGreen
-                : Colors.light.hopeGreen,
-              opacity: pressed ? 0.9 : 1,
-            },
-          ]}
+          className="h-[52px] rounded-xl px-4 items-center justify-center active:opacity-90"
+          style={({ pressed }) => ({
+            backgroundColor: isApplied
+              ? theme.backgroundTertiary
+              : isDark
+              ? Colors.dark.hopeGreen
+              : Colors.light.hopeGreen,
+            opacity: pressed ? 0.9 : 1,
+          })}
         >
           <ThemedText
             type="button"
-            style={{
-              color: isApplied ? theme.text : "#FFFFFF",
-            }}
+            className={isApplied ? "text-text" : "text-white"}
           >
             {isApplied ? "Plan applied" : "Confirm plan"}
           </ThemedText>
@@ -464,27 +442,22 @@ export default function RerouteControlScreen() {
         animationType="fade"
         onRequestClose={handleCancelConfirm}
       >
-        <View style={styles.modalOverlay}>
+        <View className="flex-1 bg-black/50 justify-center items-center p-6">
           <View
-            style={[
-              styles.modalContent,
-              {
-                backgroundColor: theme.backgroundRoot,
-              },
-            ]}
+            className="w-full rounded-3xl p-6 items-center"
+            style={{ backgroundColor: theme.backgroundRoot }}
           >
             <Feather
               name="alert-circle"
               size={40}
               color={isDark ? Colors.dark.warningYellow : Colors.light.warningYellow}
             />
-            <ThemedText type="h2" style={{ marginTop: Spacing.lg, marginBottom: Spacing.sm }}>
+            <ThemedText type="h2" className="mt-4 mb-2 text-text">
               Confirm new income route
             </ThemedText>
             <ThemedText
               type="body"
-              className="text-text-secondary"
-              style={{ textAlign: "center", marginBottom: Spacing["2xl"] }}
+              className="text-text-secondary text-center mb-6"
             >
               We&apos;ll recommend that your salary and debit orders move to this new split:
               {"\n\n"}
@@ -492,30 +465,24 @@ export default function RerouteControlScreen() {
               {distribution.savings}% savings.
             </ThemedText>
 
-            <View style={styles.modalButtons}>
+            <View className="flex-row gap-3 w-full">
               <Pressable
                 onPress={handleCancelConfirm}
-                style={[
-                  styles.modalButton,
-                  {
-                    backgroundColor: theme.backgroundDefault,
-                  },
-                ]}
+                className="flex-1 h-[52px] rounded-xl items-center justify-center"
+                style={{ backgroundColor: theme.backgroundDefault }}
               >
                 <ThemedText type="button">Cancel</ThemedText>
               </Pressable>
               <Pressable
                 onPress={handleConfirmPlan}
-                style={[
-                  styles.modalButton,
-                  {
-                    backgroundColor: isDark
-                      ? Colors.dark.hopeGreen
-                      : Colors.light.hopeGreen,
-                  },
-                ]}
+                className="flex-1 h-[52px] rounded-xl items-center justify-center"
+                style={{
+                  backgroundColor: isDark
+                    ? Colors.dark.hopeGreen
+                    : Colors.light.hopeGreen,
+                }}
               >
-                <ThemedText type="button" style={{ color: "#FFFFFF" }}>
+                <ThemedText type="button" className="text-white">
                   Confirm
                 </ThemedText>
               </Pressable>
@@ -526,138 +493,3 @@ export default function RerouteControlScreen() {
     </ThemedView>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    borderRadius: BorderRadius.sm,
-    padding: Spacing.lg,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: Spacing.md,
-  },
-  bankRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-  },
-  bankIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: Spacing.xs,
-  },
-  typePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 999,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: Spacing.xs,
-  },
-  splitRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: Spacing.sm,
-  },
-  toggleButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: Spacing.lg,
-    borderRadius: BorderRadius.xs,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    alignSelf: "stretch",
-    justifyContent: "center",
-  },
-  summaryCard: {
-    borderRadius: BorderRadius.md,
-    padding: Spacing.lg,
-    borderWidth: 1,
-  },
-  summaryRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: Spacing.md,
-    gap: Spacing.sm,
-  },
-  summaryIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: Spacing.sm,
-  },
-  progressBar: {
-    marginTop: Spacing.sm,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#ffffff10",
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    borderRadius: 3,
-  },
-  successBanner: {
-    borderRadius: BorderRadius.sm,
-    padding: Spacing.md,
-    marginBottom: Spacing.lg,
-  },
-  successBannerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  bottomBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  applyButton: {
-    height: Spacing.buttonHeight,
-    borderRadius: BorderRadius.sm,
-    paddingHorizontal: Spacing.lg,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: Spacing["2xl"],
-  },
-  modalContent: {
-    width: "100%",
-    borderRadius: BorderRadius.lg,
-    padding: Spacing["2xl"],
-    alignItems: "center",
-  },
-  modalButtons: {
-    flexDirection: "row",
-    gap: Spacing.md,
-    width: "100%",
-  },
-  modalButton: {
-    flex: 1,
-    height: Spacing.buttonHeight,
-    borderRadius: BorderRadius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});

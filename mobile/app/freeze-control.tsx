@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, Switch, Modal, Pressable, ScrollView } from "react-native";
+import { View, Switch, Modal, Pressable, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { Feather } from "@expo/vector-icons";
@@ -12,7 +12,7 @@ import { ThemedText } from "@/components/themed-text";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/hooks/use-theme-color";
 import { useApp } from "@/context/app-context";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, Colors } from "@/constants/theme";
 
 interface FreezeToggleProps {
   label: string;
@@ -33,17 +33,15 @@ function FreezeToggle({ label, description, value, onValueChange, delay }: Freez
   return (
     <Animated.View
       entering={FadeInDown.delay(delay).springify()}
-      style={[styles.toggleContainer, { backgroundColor: theme.backgroundDefault }]}
+      className="flex-row justify-between items-center p-4 rounded-xl"
+      style={{ backgroundColor: theme.backgroundDefault }}
     >
-      <View style={styles.toggleTextContainer}>
-        <ThemedText type="body" style={styles.toggleLabel}>
+      <View className="flex-1 mr-4">
+        <ThemedText type="body" className="text-text">
           {label}
         </ThemedText>
         {description ? (
-          <ThemedText
-            type="small"
-            style={[styles.toggleDescription, { color: theme.textSecondary }]}
-          >
+          <ThemedText type="small" className="mt-1" style={{ color: theme.textSecondary }}>
             {description}
           </ThemedText>
         ) : null}
@@ -118,16 +116,10 @@ export default function FreezeControlScreen() {
 
   const HeaderContent = () => (
     <View>
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          marginBottom: Spacing["2xl"],
-        }}
-      >
+      <View className="flex-row items-center mb-6">
         <Pressable
           onPress={() => router.back()}
-          style={{ padding: Spacing.xs, marginRight: Spacing.sm }}
+          className="p-1 mr-2"
           hitSlop={10}
         >
           <Feather name="arrow-left" size={20} color={theme.text} />
@@ -136,43 +128,37 @@ export default function FreezeControlScreen() {
           <ThemedText type="h2" className="text-text">
             Freeze all
           </ThemedText>
-       
         </View>
       </View>
 
       {activeCount > 0 ? (
         <Animated.View
           entering={FadeInDown.delay(50).springify()}
-          style={[
-            styles.warningCard,
-            {
-              backgroundColor: isDark
-                ? Colors.dark.warningYellow + "20"
-                : Colors.light.warningYellow + "20",
-            },
-          ]}
+          className="rounded-xl p-4 mb-6"
+          style={{
+            backgroundColor: isDark
+              ? Colors.dark.warningYellow + "20"
+              : Colors.light.warningYellow + "20",
+          }}
         >
-          <View style={styles.warningHeader}>
+          <View className="flex-row items-center gap-2 mb-2">
             <Feather
               name="alert-triangle"
               size={22}
               color={isDark ? Colors.dark.warningYellow : Colors.light.warningYellow}
             />
-            <ThemedText type="h4" style={styles.warningTitle}>
+            <ThemedText type="h4" className="text-text">
               {t("warning")}
             </ThemedText>
           </View>
-          <ThemedText
-            type="body"
-            style={[styles.warningText, { color: theme.textSecondary }]}
-          >
+          <ThemedText type="body" style={{ color: theme.textSecondary }}>
             {t("freezeWarning")}
           </ThemedText>
         </Animated.View>
       ) : null}
 
-      <View style={{ marginTop: Spacing["3xl"] }}>
-        <View style={styles.togglesList}>
+      <View className="mt-8">
+        <View className="gap-3 mb-6">
           <FreezeToggle
             label={t("pauseDebitOrders")}
             description="We’ll pause debit orders we detect as risky or unnecessary so they stop draining your account."
@@ -218,7 +204,7 @@ export default function FreezeControlScreen() {
         </View>
       </View>
 
-      <View style={{ marginTop: Spacing["3xl"] }}>
+      <View className="mt-8">
         <ThemedText type="body" className="text-text mb-2">
           Freeze specific accounts
         </ThemedText>
@@ -255,16 +241,14 @@ export default function FreezeControlScreen() {
   );
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView className="flex-1">
       <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          {
-            paddingTop: insets.top + Spacing.xl,
-            paddingBottom: insets.bottom + Spacing["4xl"],
-          },
-        ]}
+        className="flex-1"
+        contentContainerStyle={{
+          paddingHorizontal: Spacing.lg,
+          paddingTop: insets.top + Spacing.xl,
+          paddingBottom: insets.bottom + Spacing["4xl"],
+        }}
         showsVerticalScrollIndicator={false}
       >
         <HeaderContent />
@@ -273,24 +257,20 @@ export default function FreezeControlScreen() {
       {hasChanges ? (
         <Animated.View
           entering={FadeInDown.springify()}
-          style={[
-            styles.bottomContainer,
-            {
-              paddingBottom: insets.bottom + Spacing.lg,
-              backgroundColor: theme.backgroundRoot,
-            },
-          ]}
+          className="absolute bottom-0 left-0 right-0 px-4 pt-4"
+          style={{
+            paddingBottom: insets.bottom + Spacing.lg,
+            backgroundColor: theme.backgroundRoot,
+          }}
         >
           <Button
             onPress={handleApply}
-            style={[
-              styles.applyButton,
-              {
-                backgroundColor: isDark
-                  ? Colors.dark.alarmRed
-                  : Colors.light.alarmRed,
-              },
-            ]}
+            className="w-full"
+            style={{
+              backgroundColor: isDark
+                ? Colors.dark.alarmRed
+                : Colors.light.alarmRed,
+            }}
             testID="button-apply-freeze"
           >
             {t("apply")}
@@ -304,55 +284,51 @@ export default function FreezeControlScreen() {
         animationType="fade"
         onRequestClose={() => setShowConfirmModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View className="flex-1 bg-black/50 justify-center items-center p-6">
           <Animated.View
             entering={FadeIn}
-            style={[styles.modalContent, { backgroundColor: theme.backgroundRoot }]}
+            className="w-full rounded-3xl p-6 items-center"
+            style={{ backgroundColor: theme.backgroundRoot }}
           >
-            <View style={styles.modalHeader}>
+            <View className="items-center mb-4">
               <Feather
                 name="alert-circle"
                 size={48}
                 color={isDark ? Colors.dark.warningYellow : Colors.light.warningYellow}
               />
-              <ThemedText type="h2" style={styles.modalTitle}>
+              <ThemedText type="h2" className="text-text mt-4">
                 {t("confirm")}
               </ThemedText>
             </View>
 
             <ThemedText
               type="body"
-              style={[styles.modalText, { color: theme.textSecondary }]}
+              className="text-center mb-6"
+              style={{ color: theme.textSecondary }}
             >
               {t("freezeWarning")}
             </ThemedText>
 
-            <View style={styles.modalButtons}>
+            <View className="flex-row gap-3 w-full">
               <Pressable
                 onPress={() => setShowConfirmModal(false)}
-                style={[
-                  styles.modalButton,
-                  styles.modalCancelButton,
-                  { backgroundColor: theme.backgroundDefault },
-                ]}
+                className="flex-1 h-[52px] rounded-xl items-center justify-center"
+                style={{ backgroundColor: theme.backgroundDefault }}
                 testID="button-cancel-confirm"
               >
                 <ThemedText type="button">{t("cancel")}</ThemedText>
               </Pressable>
               <Pressable
                 onPress={confirmApply}
-                style={[
-                  styles.modalButton,
-                  styles.modalConfirmButton,
-                  {
-                    backgroundColor: isDark
-                      ? Colors.dark.alarmRed
-                      : Colors.light.alarmRed,
-                  },
-                ]}
+                className="flex-1 h-[52px] rounded-xl items-center justify-center"
+                style={{
+                  backgroundColor: isDark
+                    ? Colors.dark.alarmRed
+                    : Colors.light.alarmRed,
+                }}
                 testID="button-confirm"
               >
-                <ThemedText type="button" style={{ color: "#FFFFFF" }}>
+                <ThemedText type="button" className="text-white">
                   {t("confirm")}
                 </ThemedText>
               </Pressable>
@@ -363,123 +339,3 @@ export default function FreezeControlScreen() {
     </ThemedView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-  },
-  warningCard: {
-    borderRadius: BorderRadius.sm,
-    padding: Spacing.lg,
-    marginBottom: Spacing["2xl"],
-  },
-  warningHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-    marginBottom: Spacing.sm,
-  },
-  warningTitle: {},
-  warningText: {},
-  togglesList: {
-    gap: Spacing.md,
-    marginBottom: Spacing["2xl"],
-  },
-  toggleContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: Spacing.lg,
-    borderRadius: BorderRadius.sm,
-  },
-  toggleLabel: {
-    flex: 1,
-    marginRight: Spacing.lg,
-  },
-  toggleTextContainer: {
-    flex: 1,
-    marginRight: Spacing.lg,
-  },
-  toggleDescription: {
-    marginTop: Spacing.xs,
-  },
-  subscriptionsTitle: {
-    marginBottom: Spacing.lg,
-  },
-  subscriptionItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: Spacing.lg,
-    borderRadius: BorderRadius.sm,
-  },
-  subscriptionInfo: {
-    flex: 1,
-  },
-  optOutButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    borderRadius: BorderRadius.xs,
-    gap: Spacing.xs,
-  },
-  optOutText: {
-    color: "#FFFFFF",
-  },
-  bottomContainer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.lg,
-  },
-  applyButton: {
-    width: "100%",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: Spacing["2xl"],
-  },
-  modalContent: {
-    width: "100%",
-    borderRadius: BorderRadius.lg,
-    padding: Spacing["2xl"],
-    alignItems: "center",
-  },
-  modalHeader: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-  },
-  modalTitle: {
-    marginTop: Spacing.lg,
-  },
-  modalText: {
-    textAlign: "center",
-    marginBottom: Spacing["2xl"],
-  },
-  modalButtons: {
-    flexDirection: "row",
-    gap: Spacing.md,
-    width: "100%",
-  },
-  modalButton: {
-    flex: 1,
-    height: Spacing.buttonHeight,
-    borderRadius: BorderRadius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalCancelButton: {},
-  modalConfirmButton: {},
-});

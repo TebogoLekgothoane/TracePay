@@ -26,7 +26,6 @@ export default function RootLayout() {
             <Stack.Screen name="consent" />
             <Stack.Screen name="analysis-loading" />
             <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="dashboard" />
             <Stack.Screen name="bank-autopsy" />
             <Stack.Screen name="autopsy-dashboard" />
           <Stack.Screen name="change-password" />
@@ -41,13 +40,6 @@ export default function RootLayout() {
               name="voicemodal" 
               options={{ 
                 presentation: 'modal' 
-              }} 
-            />
-            <Stack.Screen 
-              name="modal" 
-              options={{ 
-                presentation: 'modal',
-                title: 'Modal' 
               }} 
             />
           </Stack>

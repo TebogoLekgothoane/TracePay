@@ -2,7 +2,6 @@ import React, { useMemo, useEffect, useState } from "react";
 import { ScrollView, View, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Feather } from "@expo/vector-icons";
 import * as Speech from "expo-speech";
 import * as Haptics from "expo-haptics";
 
@@ -11,8 +10,8 @@ import { ThemedText } from "@/components/themed-text";
 import { BankSummaryCard } from "@/components/bank-summary-card";
 import type { Bank } from "@/components/bank-card";
 import { AppHeader } from "@/components/app-header";
+import { IconLabelButton } from "@/components/icon-label-button";
 import { useApp } from "@/context/app-context";
-import { useTheme } from "@/hooks/use-theme-color";
 
 const BANKS: Bank[] = [
   {
@@ -38,7 +37,6 @@ const BANKS: Bank[] = [
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { theme } = useTheme();
   const { language, analysisData, t } = useApp();
   const [isPlayingVoice, setIsPlayingVoice] = useState(false);
 
@@ -94,18 +92,15 @@ export default function HomeScreen() {
           <AppHeader
             title="Where your money died"
             subtitle="See all your money leaks per bank. Tap a bank to see the autopsy."
-            style={{ marginBottom: 24 }}
+            className="mb-6"
             rightAccessory={
-              <Pressable
+              <IconLabelButton
+                icon="mic"
+                label={isPlayingVoice ? t("stopAudio") : t("playAudio")}
                 onPress={handleVoicePlay}
-                className="bg-accent rounded-full px-4 py-2 flex-row items-center"
-              >
-                <Feather name="mic" size={16} color="#FFFFFF" />
-                <View style={{ width: 8 }} />
-                <ThemedText type="button" className="text-white">
-                  {isPlayingVoice ? t("stopAudio") : t("playAudio")}
-                </ThemedText>
-              </Pressable>
+                iconSize={16}
+                className="px-4 py-2"
+              />
             }
           />
 

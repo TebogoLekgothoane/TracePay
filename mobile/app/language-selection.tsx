@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, StyleSheet, Image } from "react-native";
+import { View, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import Animated, {
@@ -19,7 +19,7 @@ import { ThemedText } from "@/components/themed-text";
 import { Button } from "@/components/ui/button";
 import { LanguageDropdown } from "@/components/ui/language-dropdown";
 import { useApp } from "@/context/app-context";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing } from "@/constants/theme";
 import { Language } from "@/types/navigation";
 
 const AnimatedImage = Animated.createAnimatedComponent(Image);
@@ -73,41 +73,40 @@ export default function LanguageSelectionScreen() {
   };
 
   return (
-    <ThemedView className="bg-white" style={styles.container}>
+    <ThemedView className="flex-1 bg-white">
       <View
-        style={[
-          styles.content,
-          {
-            paddingTop: insets.top + Spacing["7xl"],
-            paddingBottom: insets.bottom + Spacing["7xl"],
-          },
-        ]}
+        className="flex-1 px-6 items-center justify-center"
+        style={{
+          paddingTop: insets.top + Spacing["7xl"],
+          paddingBottom: insets.bottom + Spacing["7xl"],
+        }}
       >
-        <Animated.View entering={FadeIn.delay(100)} style={styles.logoContainer}>
+        <Animated.View entering={FadeIn.delay(100)} className="mb-10">
           <AnimatedImage
             source={require("../assets/trace-pay logo.png")}
-            style={[styles.logo, logoAnimatedStyle]}
+            className="w-[200px] h-[200px]"
+            style={logoAnimatedStyle}
             resizeMode="contain"
           />
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(200).springify()}>
-          <ThemedText type="h1" className="text-text" style={styles.title}>
+          <ThemedText type="h1" className="text-text text-center mb-2">
             Select Your Language
           </ThemedText>
-          <ThemedText type="body" className="text-text-muted" style={styles.subtitle}>
+          <ThemedText type="body" className="text-text-muted text-center mb-10">
             Khetha Ulwimi Lwakho
           </ThemedText>
         </Animated.View>
 
-        <Animated.View entering={FadeInDown.delay(300).springify()} style={styles.dropdownContainer}>
+        <Animated.View entering={FadeInDown.delay(300).springify()} className="w-full mb-6">
           <LanguageDropdown
             selectedLanguage={selectedLang}
             onSelect={handleSelectLanguage}
           />
         </Animated.View>
 
-        <Animated.View entering={FadeInDown.delay(400).springify()} style={styles.buttonContainer}>
+        <Animated.View entering={FadeInDown.delay(400).springify()} className="w-full">
           <Button
             onPress={handleContinue}
             className="bg-accent"
@@ -121,37 +120,3 @@ export default function LanguageSelectionScreen() {
     </ThemedView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: Spacing["2xl"],
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logoContainer: {
-    marginBottom: Spacing["4xl"],
-  },
-  logo: {
-    width: 200,
-    height: 200 ,
-  },
-  title: {
-    textAlign: "center",
-    marginBottom: Spacing.sm,
-  },
-  subtitle: {
-    textAlign: "center",
-    marginBottom: Spacing["4xl"],
-  },
-  dropdownContainer: {
-    width: "100%",
-    marginBottom: Spacing["2xl"],
-  },
-  buttonContainer: {
-    width: "100%",
-  },
-});

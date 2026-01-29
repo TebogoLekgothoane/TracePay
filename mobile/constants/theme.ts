@@ -116,6 +116,24 @@ export const Typography = {
   },
 };
 
+/** Severity level for loss/insight UI (critical, warning, info). */
+export type Severity = "critical" | "warning" | "info";
+
+/** Returns theme color for a severity level (alarmRed, warningYellow, info). */
+export function getSeverityColor(
+  severity: Severity,
+  scheme: "light" | "dark" = "light"
+): string {
+  switch (severity) {
+    case "critical":
+      return Colors[scheme].alarmRed;
+    case "warning":
+      return Colors[scheme].warningYellow;
+    default:
+      return Colors[scheme].info;
+  }
+}
+
 export const Fonts = Platform.select({
   ios: {
     sans: "system-ui",

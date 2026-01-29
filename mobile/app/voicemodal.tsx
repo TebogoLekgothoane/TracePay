@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, Pressable, ActivityIndicator } from "react-native";
+import { View, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -21,7 +21,7 @@ import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
 import { useTheme } from "@/hooks/use-theme-color";
 import { useApp } from "@/context/app-context";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, Colors } from "@/constants/theme";
 import { KeyboardAwareScrollViewCompat } from "@/components/keyboard-aware-scrollview";
 
 export default function VoiceModalScreen() {
@@ -138,22 +138,15 @@ export default function VoiceModalScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView className="flex-1">
       <View
-        style={[
-          styles.header,
-          {
-            paddingTop: insets.top + Spacing.sm,
-          },
-        ]}
+        className="flex-row justify-between items-center px-4 py-4 border-b border-gray-200/10"
+        style={{ paddingTop: insets.top + Spacing.sm }}
       >
-        <ThemedText type="h3">{t("voiceExplanation")}</ThemedText>
+        <ThemedText type="h3" className="text-text">{t("voiceExplanation")}</ThemedText>
         <Pressable
           onPress={handleClose}
-          style={({ pressed }) => [
-            styles.closeButton,
-            { opacity: pressed ? 0.6 : 1 },
-          ]}
+          className="p-1 active:opacity-60"
           testID="button-close-voice"
         >
           <Feather name="x" size={24} color={theme.text} />
@@ -161,19 +154,21 @@ export default function VoiceModalScreen() {
       </View>
 
       <KeyboardAwareScrollViewCompat
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: insets.bottom + Spacing["6xl"] },
-        ]}
+        className="flex-1"
+        contentContainerStyle={{
+          paddingHorizontal: Spacing.lg,
+          paddingTop: Spacing["3xl"],
+          paddingBottom: insets.bottom + Spacing["6xl"],
+          alignItems: "center",
+        }}
       >
         <Animated.View
           entering={FadeIn.delay(100)}
-          style={styles.avatarContainer}
+          className="mb-6"
         >
           <Image
             source={require("../assets/images/voice-avatar.png")}
-            style={styles.avatarImage}
+            className="w-[120px] h-[120px]"
             contentFit="contain"
           />
         </Animated.View>
@@ -182,49 +177,45 @@ export default function VoiceModalScreen() {
           <Pressable
             onPress={handlePlayPause}
             disabled={isLoading}
-            style={({ pressed }) => [
-              styles.waveformContainer,
-              {
-                transform: [{ scale: pressed ? 0.97 : 1 }],
-                opacity: isLoading ? 0.7 : 1,
-              },
-            ]}
+            className="mb-8 active:scale-[0.97]"
+            style={({ pressed }) => ({
+              transform: [{ scale: pressed ? 0.97 : 1 }],
+              opacity: isLoading ? 0.7 : 1,
+            })}
             testID="button-play-audio"
           >
-            <View style={styles.waveform}>
+            <View className="flex-row items-center gap-2 h-[60px]">
               <Animated.View
+                className="w-1.5 h-6 rounded"
                 style={[
-                  styles.waveBar,
                   { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
                   wave1Style,
                 ]}
               />
               <Animated.View
+                className="w-1.5 h-10 rounded"
                 style={[
-                  styles.waveBar,
-                  styles.waveBarTall,
                   { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
                   wave2Style,
                 ]}
               />
               <Animated.View
+                className="w-1.5 h-6 rounded"
                 style={[
-                  styles.waveBar,
                   { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
                   wave3Style,
                 ]}
               />
               <Animated.View
+                className="w-1.5 h-10 rounded"
                 style={[
-                  styles.waveBar,
-                  styles.waveBarTall,
                   { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
                   wave1Style,
                 ]}
               />
               <Animated.View
+                className="w-1.5 h-6 rounded"
                 style={[
-                  styles.waveBar,
                   { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
                   wave2Style,
                 ]}
@@ -235,15 +226,16 @@ export default function VoiceModalScreen() {
 
         <Animated.View
           entering={FadeInUp.delay(400).springify()}
-          style={styles.transcriptContainer}
+          className="w-full"
         >
           <ThemedText
-  type="small"
-  style={[styles.transcriptLabel, { color: theme.textSecondary }]}
->
-  Transcript (with PLAY button)
-</ThemedText>
-          <ThemedText type="body" style={styles.transcriptText}>
+            type="small"
+            className="mb-2 uppercase tracking-wide text-xs"
+            style={{ color: theme.textSecondary }}
+          >
+            Transcript (with PLAY button)
+          </ThemedText>
+          <ThemedText type="body" className="leading-[26px] text-text">
             {summaryText}
           </ThemedText>
         </Animated.View>
@@ -251,78 +243,3 @@ export default function VoiceModalScreen() {
     </ThemedView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(128, 128, 128, 0.1)",
-  },
-  closeButton: {
-    padding: Spacing.xs,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing["3xl"],
-    alignItems: "center",
-  },
-  avatarContainer: {
-    marginBottom: Spacing["2xl"],
-  },
-  avatarImage: {
-    width: 120,
-    height: 120,
-  },
-  waveformContainer: {
-    marginBottom: Spacing["3xl"],
-  },
-  waveform: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    height: 60,
-  },
-  waveBar: {
-    width: 6,
-    height: 24,
-    borderRadius: 3,
-  },
-  waveBarTall: {
-    height: 40,
-  },
-  playButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: Spacing["3xl"],
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  transcriptContainer: {
-    width: "100%",
-  },
-  transcriptLabel: {
-    marginBottom: Spacing.sm,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    fontSize: 12,
-  },
-  transcriptText: {
-    lineHeight: 26,
-  },
-});

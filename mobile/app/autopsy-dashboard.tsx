@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, FlatList, Pressable } from "react-native";
+import { View, FlatList, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useRouter } from "expo-router";
@@ -11,12 +11,13 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
-import { Image } from "expo-image";
 import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
+import { EmptyState } from "@/components/empty-state";
+import { FloatingButton } from "@/components/floating-button";
 import { useTheme } from "@/hooks/use-theme-color";
 import { useApp } from "@/context/app-context";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Spacing, Colors, getSeverityColor, type Severity } from "@/constants/theme";
 import { LossCategory, Language } from "@/types/app";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -33,16 +34,10 @@ function LossCategoryCard({ category, index, onPress, language }: LossCategoryCa
   const { t } = useApp();
   const scale = useSharedValue(1);
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case "critical":
-        return isDark ? Colors.dark.alarmRed : Colors.light.alarmRed;
-      case "warning":
-        return isDark ? Colors.dark.warningYellow : Colors.light.warningYellow;
-      default:
-        return isDark ? Colors.dark.info : Colors.light.info;
-    }
-  };
+  const severityColor = getSeverityColor(
+    category.severity as Severity,
+    isDark ? "dark" : "light"
+  );
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -56,16 +51,14 @@ function LossCategoryCard({ category, index, onPress, language }: LossCategoryCa
     scale.value = withSpring(1, { damping: 15, stiffness: 150 });
   };
 
-  const severityColor = getSeverityColor(category.severity);
-
   return (
     <Animated.View entering={FadeInDown.delay(200 + index * 80).springify()}>
       <AnimatedPressable
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
+        className="rounded-xl p-4 border-l-[3px] flex-1"
         style={[
-          styles.categoryCard,
           {
             backgroundColor: theme.backgroundDefault,
             borderLeftColor: severityColor,
@@ -74,24 +67,18 @@ function LossCategoryCard({ category, index, onPress, language }: LossCategoryCa
         ]}
         testID={`card-category-${category.id}`}
       >
-        <View style={styles.categoryContent}>
-          <View style={styles.categoryHeader}>
-            <ThemedText type="h4" style={styles.categoryName}>
+        <View className="flex-1">
+          <View className="flex-row justify-between items-center mb-2">
+            <ThemedText type="h4" className="flex-1">
               {language === "xh" ? category.nameXhosa : category.name}
             </ThemedText>
             <Feather name="chevron-right" size={20} color={theme.textSecondary} />
           </View>
-          <View style={styles.categoryStats}>
-            <ThemedText
-              type="h2"
-              style={[styles.categoryAmount, { color: severityColor }]}
-            >
+          <View className="flex-row items-baseline justify-between">
+            <ThemedText type="h2" className="font-bold" style={{ color: severityColor }}>
               R{category.amount.toLocaleString()}
             </ThemedText>
-            <ThemedText
-              type="small"
-              style={[styles.categoryPercentage, { color: theme.textSecondary }]}
-            >
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>
               {category.percentage}% {t("ofIncome")}
             </ThemedText>
           </View>
@@ -108,23 +95,32 @@ function MoMoSavingsCard() {
   const momoData = analysisData?.momoData;
   if (!momoData) return null;
 
+  const spentBg = isDark ? Colors.dark.alarmRed + "15" : Colors.light.alarmRed + "15";
+  const saveBg = isDark ? Colors.dark.hopeGreen + "15" : Colors.light.hopeGreen + "15";
+  const spentColor = isDark ? Colors.dark.alarmRed : Colors.light.alarmRed;
+  const saveColor = isDark ? Colors.dark.hopeGreen : Colors.light.hopeGreen;
+
   return (
     <Animated.View
       entering={FadeInDown.delay(150).springify()}
-      style={[styles.momoCard, { backgroundColor: theme.backgroundDefault }]}
+      className="rounded-xl p-4 mb-4"
+      style={{ backgroundColor: theme.backgroundDefault }}
     >
-      <View style={styles.momoHeader}>
-        <View style={[styles.momoIcon, { backgroundColor: Colors.light.warningYellow + "20" }]}>
+      <View className="flex-row items-center gap-3 mb-4">
+        <View
+          className="w-10 h-10 rounded-lg items-center justify-center"
+          style={{ backgroundColor: Colors.light.warningYellow + "20" }}
+        >
           <Feather name="smartphone" size={20} color={Colors.light.warningYellow} />
         </View>
         <ThemedText type="h4">{t("momoSavingsTitle")}</ThemedText>
       </View>
 
-      <View style={[styles.momoRow, { backgroundColor: isDark ? Colors.dark.alarmRed + "15" : Colors.light.alarmRed + "15" }]}>
+      <View className="p-3 rounded-lg mb-2 items-center" style={{ backgroundColor: spentBg }}>
         <ThemedText type="body" style={{ color: theme.textSecondary }}>
           {t("youSpent")}
         </ThemedText>
-        <ThemedText type="h3" style={{ color: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed }}>
+        <ThemedText type="h3" style={{ color: spentColor }}>
           R{momoData.totalSpent}
         </ThemedText>
         <ThemedText type="small" style={{ color: theme.textSecondary }}>
@@ -132,18 +128,18 @@ function MoMoSavingsCard() {
         </ThemedText>
       </View>
 
-      <View style={[styles.momoRow, { backgroundColor: isDark ? Colors.dark.hopeGreen + "15" : Colors.light.hopeGreen + "15" }]}>
+      <View className="p-3 rounded-lg mb-2 items-center" style={{ backgroundColor: saveBg }}>
         <ThemedText type="body" style={{ color: theme.textSecondary }}>
           {t("couldSpend")}
         </ThemedText>
-        <ThemedText type="h3" style={{ color: isDark ? Colors.dark.hopeGreen : Colors.light.hopeGreen }}>
+        <ThemedText type="h3" style={{ color: saveColor }}>
           R{momoData.alternativeCost}
         </ThemedText>
       </View>
 
-      <View style={styles.savingsHighlight}>
+      <View className="items-center pt-4 mt-2 border-t border-gray-200/10">
         <ThemedText type="body">{t("couldSave")}</ThemedText>
-        <ThemedText type="h1" style={{ color: isDark ? Colors.dark.hopeGreen : Colors.light.hopeGreen }}>
+        <ThemedText type="h1" style={{ color: saveColor }}>
           R{momoData.potentialSavings}
         </ThemedText>
         <ThemedText type="small" style={{ color: theme.textSecondary }}>
@@ -154,52 +150,35 @@ function MoMoSavingsCard() {
   );
 }
 
-function EmptyState() {
+function EmptyStateContent() {
   const { t } = useApp();
-  const { theme } = useTheme();
-
   return (
-    <Animated.View
-      entering={FadeInDown.delay(200).springify()}
-      style={styles.emptyContainer}
-    >
-      <Image
-        source={require("../assets/images/empty-analysis.png")}
-        style={styles.emptyImage}
-        contentFit="contain"
-      />
-      <ThemedText type="h2" style={styles.emptyTitle}>
-        {t("nothingWrong")}
-      </ThemedText>
-      <ThemedText
-        type="body"
-        style={[styles.emptyText, { color: theme.textSecondary }]}
-      >
-        {t("nothingWrongDetail")}
-      </ThemedText>
-    </Animated.View>
+    <EmptyState
+      title={t("nothingWrong")}
+      description={t("nothingWrongDetail")}
+      image={require("../assets/images/empty-analysis.png")}
+    />
   );
 }
 
 function TotalLossCard({ amount }: { amount: number }) {
   const { t } = useApp();
   const { isDark } = useTheme();
+  const bgColor = isDark ? Colors.dark.alarmRed : Colors.light.alarmRed;
 
   return (
     <Animated.View
       entering={FadeInDown.delay(100).springify()}
-      style={[
-        styles.totalCard,
-        { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
-      ]}
+      className="rounded-2xl p-6 mb-4 items-center"
+      style={{ backgroundColor: bgColor }}
     >
-      <ThemedText type="small" style={styles.totalLabel}>
+      <ThemedText type="small" className="text-white/80 mb-1">
         {t("lostTotal")}
       </ThemedText>
-      <ThemedText type="hero" style={styles.totalAmount}>
+      <ThemedText type="hero" className="text-white">
         R{amount.toLocaleString()}
       </ThemedText>
-      <ThemedText type="small" style={styles.totalPeriod}>
+      <ThemedText type="small" className="text-white/70 mt-1">
         {t("thisMonth")}
       </ThemedText>
     </Animated.View>
@@ -210,7 +189,7 @@ export default function AutopsyDashboardScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const router = useRouter();
-  const { theme, isDark } = useTheme();
+  const { isDark } = useTheme();
   const { analysisData, language, t, includeMomoData } = useApp();
 
   const handleCategoryPress = async (category: LossCategory) => {
@@ -235,6 +214,7 @@ export default function AutopsyDashboardScreen() {
   const categories = analysisData?.categories || [];
   const totalLoss = analysisData?.totalLoss || 0;
   const hasMomoData = includeMomoData && analysisData?.momoData;
+  const voiceBg = isDark ? Colors.dark.info : Colors.light.info;
 
   const ListHeader = () => (
     <View>
@@ -244,21 +224,19 @@ export default function AutopsyDashboardScreen() {
   );
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView className="flex-1">
       <FlatList
-        style={styles.list}
-        contentContainerStyle={[
-          styles.listContent,
-          {
-            paddingTop: headerHeight + Spacing.xl,
-            paddingBottom: insets.bottom + Spacing["2xl"],
-          },
-        ]}
+        className="flex-1"
+        contentContainerStyle={{
+          paddingTop: headerHeight + Spacing.xl,
+          paddingBottom: insets.bottom + Spacing["2xl"],
+          paddingHorizontal: Spacing.lg,
+        }}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
         data={categories}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={<ListHeader />}
-        ListEmptyComponent={<EmptyState />}
+        ListEmptyComponent={<EmptyStateContent />}
         renderItem={({ item, index }) => (
           <LossCategoryCard
             category={item}
@@ -267,152 +245,19 @@ export default function AutopsyDashboardScreen() {
             language={language}
           />
         )}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ItemSeparatorComponent={() => <View className="h-4" />}
       />
 
-      <Animated.View
-        entering={FadeInDown.delay(600).springify()}
-        style={[
-          styles.voiceButtonContainer,
-          { bottom: insets.bottom + Spacing.lg },
-        ]}
-      >
+      <FloatingButton>
         <Pressable
           onPress={handleVoicePress}
-          style={({ pressed }) => [
-            styles.voiceButton,
-            {
-              backgroundColor: isDark ? Colors.dark.info : Colors.light.info,
-              transform: [{ scale: pressed ? 0.95 : 1 }],
-            },
-          ]}
+          className="w-14 h-14 rounded-full items-center justify-center shadow-lg active:opacity-90"
+          style={{ backgroundColor: voiceBg }}
           testID="button-voice"
         >
           <Feather name="volume-2" size={22} color="#FFFFFF" />
         </Pressable>
-      </Animated.View>
+      </FloatingButton>
     </ThemedView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  list: {
-    flex: 1,
-  },
-  listContent: {
-    paddingHorizontal: Spacing.lg,
-  },
-  totalCard: {
-    borderRadius: BorderRadius.lg,
-    padding: Spacing["2xl"],
-    marginBottom: Spacing.lg,
-    alignItems: "center",
-  },
-  totalLabel: {
-    color: "rgba(255, 255, 255, 0.8)",
-    marginBottom: Spacing.xs,
-  },
-  totalAmount: {
-    color: "#FFFFFF",
-  },
-  totalPeriod: {
-    color: "rgba(255, 255, 255, 0.7)",
-    marginTop: Spacing.xs,
-  },
-  momoCard: {
-    borderRadius: BorderRadius.sm,
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-  },
-  momoHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    gap: Spacing.md,
-  },
-  momoIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: BorderRadius.xs,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  momoRow: {
-    padding: Spacing.md,
-    borderRadius: BorderRadius.xs,
-    marginBottom: Spacing.sm,
-    alignItems: "center",
-  },
-  savingsHighlight: {
-    alignItems: "center",
-    paddingTop: Spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(128, 128, 128, 0.1)",
-    marginTop: Spacing.sm,
-  },
-  categoryCard: {
-    borderRadius: BorderRadius.sm,
-    padding: Spacing.lg,
-    borderLeftWidth: 3,
-  },
-  categoryContent: {
-    flex: 1,
-  },
-  categoryHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: Spacing.sm,
-  },
-  categoryName: {
-    flex: 1,
-  },
-  categoryStats: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-  },
-  categoryAmount: {
-    fontWeight: "700",
-  },
-  categoryPercentage: {},
-  separator: {
-    height: Spacing.md,
-  },
-  emptyContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: Spacing["6xl"],
-  },
-  emptyImage: {
-    width: 180,
-    height: 180,
-    marginBottom: Spacing["2xl"],
-  },
-  emptyTitle: {
-    textAlign: "center",
-    marginBottom: Spacing.sm,
-  },
-  emptyText: {
-    textAlign: "center",
-  },
-  voiceButtonContainer: {
-    position: "absolute",
-    right: Spacing.lg,
-  },
-  voiceButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-});
