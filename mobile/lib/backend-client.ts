@@ -9,8 +9,14 @@
  * App state (settings, subscriptions, banks, etc.) stays in Supabase via lib/api.ts.
  * Set EXPO_PUBLIC_BACKEND_URL to your deployed backend URL (e.g. https://tracepay-api.example.com).
  *
+ * Auth: getAuthToken() returns the stored backend JWT first, then the Supabase session token.
+ * After backend login, call setBackendAuthToken(access_token). On logout, call clearBackendAuthToken().
+ *
  * See docs/ARCHITECTURE.md for frontend–backend linkage and Open Banking (other team member).
  */
+
+import { getBackendToken, setBackendToken } from "./auth-storage";
+import { supabase } from "./supabase";
 
 const BACKEND_BASE_URL =
   process.env.EXPO_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
@@ -19,9 +25,19 @@ export interface BackendApiError {
   detail: string;
 }
 
-function getAuthToken(): string | null {
-  // When mobile uses backend auth, store token (e.g. AsyncStorage) and return here.
-  return null;
+/** Re-export for callers that need to set/clear the backend JWT after login/logout. */
+export { setBackendToken as setBackendAuthToken, clearBackendToken as clearBackendAuthToken } from "./auth-storage";
+
+/**
+ * Returns the JWT to send to the backend (Bearer token).
+ * 1. Stored backend token (from setBackendAuthToken after POST /auth/login).
+ * 2. Current Supabase session access_token (for when backend supports Supabase JWT).
+ */
+async function getAuthToken(): Promise<string | null> {
+  const stored = await getBackendToken();
+  if (stored) return stored;
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
 }
 
 async function request<T>(
@@ -29,7 +45,7 @@ async function request<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${BACKEND_BASE_URL}${path}`;
-  const token = getAuthToken();
+  const token = await getAuthToken();
   const headers: HeadersInit = {
     "Content-Type": "application/json",
     ...options.headers,
@@ -69,6 +85,62 @@ async function request<T>(
 
 export async function backendHealth(): Promise<{ status: string }> {
   return request("/health");
+}
+
+// ---------------------------------------------------------------------------
+// Auth (backend login – store JWT for subsequent requests)
+// ---------------------------------------------------------------------------
+
+export interface BackendLoginResponse {
+  access_token: string;
+  token_type: string;
+  user_id: string;
+  email: string;
+  role: string;
+}
+
+/** Call after user signs in with email/password. Stores the JWT so all backend requests are authenticated. */
+export async function loginWithBackend(
+  email: string,
+  password: string
+): Promise<BackendLoginResponse> {
+  const url = `${BACKEND_BASE_URL}/auth/login`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!response.ok) {
+    const err: BackendApiError = await response.json().catch(() => ({
+      detail: `HTTP ${response.status}: ${response.statusText}`,
+    }));
+    throw new Error(err.detail || "Login failed");
+  }
+  const data = (await response.json()) as BackendLoginResponse;
+  await setBackendToken(data.access_token);
+  return data;
+}
+
+/** Call after user signs up. Creates account and stores the JWT. */
+export async function registerWithBackend(
+  email: string,
+  password: string
+): Promise<BackendLoginResponse> {
+  const url = `${BACKEND_BASE_URL}/auth/register`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!response.ok) {
+    const err: BackendApiError = await response.json().catch(() => ({
+      detail: `HTTP ${response.status}: ${response.statusText}`,
+    }));
+    throw new Error(err.detail || "Registration failed");
+  }
+  const data = (await response.json()) as BackendLoginResponse;
+  await setBackendToken(data.access_token);
+  return data;
 }
 
 // ---------------------------------------------------------------------------

@@ -483,5 +483,88 @@ on conflict (plan_id, account_id) do update
 set enabled = excluded.enabled;
 
 -- =========================
+-- REWARDS / DISCOUNTS (retailer offers – more app usage = more rewards)
+-- =========================
+create table if not exists discounts (
+  id text primary key,
+  retailer text not null,
+  title text not null,
+  description text not null,
+  discount_value text not null,
+  code text,
+  tier text not null check (tier in ('bronze', 'silver', 'gold')),
+  earned_from text not null,
+  expires_days int not null default 30,
+  display_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+insert into discounts (id, retailer, title, description, discount_value, code, tier, earned_from, expires_days, display_order)
+values
+  ('checkers-10', 'Checkers', '10% off your next shop', 'Save on groceries when you spend R200 or more.', '10% off', 'TRACEPAY10', 'bronze', 'Unlocked after your first analysis', 30, 1),
+  ('takealot-50', 'Takealot', 'R50 off electronics & home', 'Minimum spend R500. Excludes certain categories.', 'R50 off', 'TRACEPAY50', 'bronze', 'Unlocked after linking 1 bank', 30, 2),
+  ('pick-n-pay-15', 'Pick n Pay', '15% off Smart Shopper deal', 'Use at till or online. One use per account.', '15% off', 'TRACEPAY15', 'silver', 'Unlocked after 2 analyses', 30, 3),
+  ('woolworths-20', 'Woolworths', 'R20 off fresh food', 'Fresh fruit, veg & bakery. Min spend R150.', 'R20 off', 'TRACEPAY20', 'silver', 'Unlocked after freezing a leak', 30, 4),
+  ('mtn-airtime', 'MTN', 'R5 off airtime or data', 'Any recharge or bundle. In-store or app.', 'R5 off', null, 'silver', 'Unlocked after 3 analyses', 30, 5),
+  ('dischem-25', 'Dis-Chem', '25% off selected health & beauty', 'In-store only. Show code at till.', '25% off', 'TRACEPAY25', 'gold', 'Unlocked after 5 analyses', 30, 6),
+  ('makro-100', 'Makro', 'R100 off when you spend R1 000', 'Valid on bulk and general merchandise.', 'R100 off', 'TRACEPAY100', 'gold', 'Unlocked after linking 2+ banks', 30, 7)
+on conflict (id) do update
+set retailer = excluded.retailer,
+    title = excluded.title,
+    description = excluded.description,
+    discount_value = excluded.discount_value,
+    code = excluded.code,
+    tier = excluded.tier,
+    earned_from = excluded.earned_from,
+    expires_days = excluded.expires_days,
+    display_order = excluded.display_order;
+
+-- Which discounts a user has unlocked (optional: filter rewards by usage later)
+create table if not exists user_discounts (
+  user_id uuid not null references users(id) on delete cascade,
+  discount_id text not null references discounts(id) on delete cascade,
+  unlocked_at timestamptz not null default now(),
+  expires_at date,
+  primary key (user_id, discount_id)
+);
+
+-- =========================
+-- PARTNER RECOMMENDATIONS (rerouting – better savings based on user data)
+-- Partners: local retailers, telcos. Shown in reroute flow; matched to spending category.
+-- =========================
+create table if not exists partner_recommendations (
+  id text primary key,
+  partner_type text not null check (partner_type in ('retailer', 'telco')),
+  partner_name text not null,
+  title text not null,
+  description text not null,
+  savings_estimate text not null,
+  category text not null,
+  discount_id text references discounts(id) on delete set null,
+  cta_label text not null default 'See offer',
+  display_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+insert into partner_recommendations (id, partner_type, partner_name, title, description, savings_estimate, category, discount_id, cta_label, display_order)
+values
+  ('mtn-bundle-telco', 'telco', 'MTN', 'Switch to a monthly data bundle', 'You spend on airtime and data. A monthly bundle is cheaper than ad‑hoc top‑ups.', 'Save up to R146/mo', 'telcos', 'mtn-airtime', 'Get MTN offer', 1),
+  ('vodacom-telco', 'telco', 'Vodacom', 'Vodacom bundle for data & airtime', 'Bundle your airtime and data to avoid per‑use fees.', 'Save up to R80/mo', 'telcos', null, 'Compare bundles', 2),
+  ('checkers-groceries', 'retailer', 'Checkers', 'Shop groceries at Checkers', 'Use your TracePay reward for 10% off. Better than ad‑hoc spending.', '10% off your shop', 'subscriptions', 'checkers-10', 'Use discount', 3),
+  ('pnp-groceries', 'retailer', 'Pick n Pay', 'Pick n Pay Smart Shopper', 'Stack Smart Shopper with TracePay for 15% off.', '15% off', 'subscriptions', 'pick-n-pay-15', 'See offer', 4),
+  ('lowfee-banks', 'retailer', 'TracePay partners', 'Move salary to a low‑fee account', 'You lose money to bank fees. Reroute income to accounts that leak less.', 'Cut fee drain', 'banks', null, 'Reroute income above', 5),
+  ('streaming-partner', 'retailer', 'Partners', 'Review subscriptions', 'You spend on streaming and gym. Pause what you don’t use and use partner discounts.', 'Save on unused subs', 'subscriptions', null, 'Check subscriptions', 6)
+on conflict (id) do update
+set partner_type = excluded.partner_type,
+    partner_name = excluded.partner_name,
+    title = excluded.title,
+    description = excluded.description,
+    savings_estimate = excluded.savings_estimate,
+    category = excluded.category,
+    discount_id = excluded.discount_id,
+    cta_label = excluded.cta_label,
+    display_order = excluded.display_order;
+
+-- =========================
 -- DONE
 -- =========================

@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useEffect } from "react";
-import { View, ScrollView, Pressable } from "react-native";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
+import { View, ScrollView, Pressable, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
@@ -15,8 +15,9 @@ import { LeakTransactionRow, type LeakTransaction } from "@/components/leak-tran
 import { Spacing } from "@/constants/theme";
 import { AppHeader } from "@/components/app-header";
 import { useTheme } from "@/hooks/use-theme-color";
-import { fetchBanks, fetchBankAutopsyCauses, fetchBankAutopsyLeaksByCause } from "@/lib/api";
+import { fetchBanks, fetchBankAutopsyCauses, fetchBankAutopsyLeaksByCause, removeBank } from "@/lib/api";
 import { getBankLogo } from "@/lib/bank-logos";
+import { mobileFreeze, listFrozen } from "@/lib/backend-client";
 
 export default function BankAutopsyScreen() {
   const insets = useSafeAreaInsets();
@@ -28,8 +29,28 @@ export default function BankAutopsyScreen() {
   const [causes, setCauses] = useState<AutopsyCause[]>([]);
   const [leaksByCause, setLeaksByCause] = useState<Record<string, LeakTransaction[]>>({});
   const [expandedCauseId, setExpandedCauseId] = useState<string | null>(null);
+  /** Backend frozen leak_ids (from GET /mobile/frozen) for showing Frozen state. */
+  const [frozenLeakIds, setFrozenLeakIds] = useState<Set<string>>(new Set());
 
   const resolvedBankId = bankId ?? banks[0]?.id;
+
+  const refreshFrozen = useCallback(async () => {
+    try {
+      const items = await listFrozen();
+      const ids = new Set(
+        items
+          .map((i) => i.leak_id)
+          .filter((id): id is string => id != null)
+      );
+      setFrozenLeakIds(ids);
+    } catch {
+      setFrozenLeakIds(new Set());
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshFrozen();
+  }, [refreshFrozen]);
 
   useEffect(() => {
     setBanksLoading(true);
@@ -112,6 +133,32 @@ export default function BankAutopsyScreen() {
 
           <BankSummaryCard bank={bank} logo={getBankLogo(bank.name)} />
 
+          <Pressable
+            onPress={() => {
+              Alert.alert(
+                "Unlink bank",
+                `Remove ${bank.name} from your list? This will also remove its autopsy data.`,
+                [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Unlink",
+                    style: "destructive",
+                    onPress: async () => {
+                      const ok = await removeBank(bank.id);
+                      if (ok) router.back();
+                    },
+                  },
+                ]
+              );
+            }}
+            className="mt-3 py-3 rounded-xl items-center"
+            style={{ backgroundColor: theme.backgroundTertiary }}
+          >
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>
+              Unlink this bank
+            </ThemedText>
+          </Pressable>
+
           {bank.type === "momo" ? (
             <SavingsOpportunityCard momoSpent={496} bundleCost={350} savings={146} />
           ) : null}
@@ -137,7 +184,26 @@ export default function BankAutopsyScreen() {
               </ThemedText>
 
               {expandedLeaks.map((tx) => (
-                <LeakTransactionRow key={tx.id} transaction={tx} />
+                <LeakTransactionRow
+                  key={tx.id}
+                  transaction={tx}
+                  onFreeze={async (transaction) => {
+                    try {
+                      await mobileFreeze({ leak_id: transaction.id });
+                      await refreshFrozen();
+                    } catch (e) {
+                      const msg = e instanceof Error ? e.message : "Could not freeze";
+                      const isUnauth = msg.includes("401") || msg.toLowerCase().includes("credentials");
+                      Alert.alert(
+                        isUnauth ? "Sign in to freeze" : "Freeze failed",
+                        isUnauth
+                          ? "Sign in or create an account so we can save your frozen leaks."
+                          : msg
+                      );
+                    }
+                  }}
+                  isFrozen={frozenLeakIds.has(tx.id)}
+                />
               ))}
             </View>
           ) : null}

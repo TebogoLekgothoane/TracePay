@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { View, FlatList, Pressable, Modal, ActivityIndicator } from "react-native";
+import { View, FlatList, Pressable, Modal, ActivityIndicator, Image, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -7,10 +7,20 @@ import { useRouter } from "expo-router";
 import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
 import { EmptyState } from "@/components/empty-state";
+import { formatZar } from "@/components/utils/money";
+import { getBankLogo } from "@/lib/bank-logos";
 import { useTheme } from "@/hooks/use-theme-color";
 import { useApp } from "@/context/app-context";
 import { Spacing, Colors } from "@/constants/theme";
-import { fetchIncomeAccounts, fetchReroutePlan, updateReroutePlan } from "@/lib/api";
+import {
+  fetchIncomeAccounts,
+  fetchReroutePlan,
+  updateReroutePlan,
+  fetchSpendingSummaryForReroute,
+  fetchPartnerRecommendations,
+  type PartnerRecommendationRow,
+  type SpendingByCategory,
+} from "@/lib/api";
 
 type Account = {
   id: string;
@@ -33,11 +43,18 @@ export default function RerouteControlScreen() {
   const [isApplied, setIsApplied] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [spendingByCategory, setSpendingByCategory] = useState<SpendingByCategory[]>([]);
+  const [partnerRecommendations, setPartnerRecommendations] = useState<PartnerRecommendationRow[]>([]);
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([fetchIncomeAccounts(userId), fetchReroutePlan(userId)])
-      .then(([accs, { planId: pid, plan: p, isApplied: applied }]) => {
+    Promise.all([
+      fetchIncomeAccounts(userId),
+      fetchReroutePlan(userId),
+      fetchSpendingSummaryForReroute(userId),
+      fetchPartnerRecommendations(),
+    ])
+      .then(([accs, { planId: pid, plan: p, isApplied: applied }, spending, recommendations]) => {
         setAccounts(
           accs.map((a) => ({
             id: a.id,
@@ -51,6 +68,8 @@ export default function RerouteControlScreen() {
         if (pid) setPlanId(pid);
         if (p && Object.keys(p).length) setPlan(p);
         setIsApplied(applied);
+        setSpendingByCategory(spending ?? []);
+        setPartnerRecommendations(recommendations ?? []);
       })
       .finally(() => setLoading(false));
   }, [userId]);
@@ -61,6 +80,17 @@ export default function RerouteControlScreen() {
   }, [accounts]);
 
   const summaryCardColor = isDark ? Colors.dark.info : Colors.light.info;
+
+  const recommendationsWithSpending = useMemo(() => {
+    const spendingByCat = new Map(spendingByCategory.map((s) => [s.category, s]));
+    return partnerRecommendations
+      .map((rec) => {
+        const spending = spendingByCat.get(rec.category);
+        return { rec, spending };
+      })
+      .filter(({ spending }) => spending && spending.totalSpent > 0)
+      .slice(0, 4);
+  }, [partnerRecommendations, spendingByCategory]);
 
   const distribution = useMemo(() => {
     const result: Record<Account["type"], number> = {
@@ -77,7 +107,39 @@ export default function RerouteControlScreen() {
   }, [accounts, plan]);
 
   const handleToggle = (item: Account) => {
-    setPlan((prev) => ({ ...prev, [item.id]: !prev[item.id] }));
+    const currentlyEnabled = plan[item.id];
+    const willEnable = !currentlyEnabled;
+
+    if (willEnable) {
+      Alert.alert(
+        "Move income to this account?",
+        `We'll route ${item.suggestedIncome}% of your income to ${item.nickname} (${item.bank}). Salary and debit orders can be sent here. Do you want to turn this on?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Yes, move income here",
+            onPress: () => setPlan((prev) => ({ ...prev, [item.id]: true })),
+          },
+        ]
+      );
+    } else {
+      const typeLabel =
+        item.type === "highFee"
+          ? "stop sending new income to this high‑fee account"
+          : "stop routing income to this account";
+      Alert.alert(
+        "Stop routing income here?",
+        `No new salary or debit orders will go to ${item.nickname} (${item.bank}). Your existing balance is not affected. Are you sure you want to ${typeLabel}?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Yes, deactivate",
+            style: "destructive",
+            onPress: () => setPlan((prev) => ({ ...prev, [item.id]: false })),
+          },
+        ]
+      );
+    }
   };
 
   const renderAccount = ({ item }: { item: Account }) => {
@@ -114,12 +176,20 @@ export default function RerouteControlScreen() {
         <View className="flex-row justify-between items-center mb-3">
           <View className="flex-row items-center gap-2">
             <View
-              className="w-9 h-9 rounded-full items-center justify-center mr-1"
+              className="w-10 h-10 rounded-xl items-center justify-center mr-2 overflow-hidden"
               style={{ backgroundColor: pillColor + "20" }}
             >
-              <ThemedText type="body" className="text-text">
-                {item.bank[0]}
-              </ThemedText>
+              {getBankLogo(item.bank) ? (
+                <Image
+                  source={getBankLogo(item.bank)!}
+                  className="w-10 h-10 rounded-xl"
+                  resizeMode="cover"
+                />
+              ) : (
+                <ThemedText type="body" className="text-text">
+                  {item.bank[0]}
+                </ThemedText>
+              )}
             </View>
             <View>
               <ThemedText type="body" className="text-text">
@@ -393,6 +463,58 @@ export default function RerouteControlScreen() {
                 </View>
               ) : null}
             </View>
+
+            {recommendationsWithSpending.length > 0 ? (
+              <View className="mt-6">
+                <ThemedText type="h3" className="text-text mb-1">
+                  Better options for your money
+                </ThemedText>
+                <ThemedText type="small" className="text-text-muted mb-3">
+                  Based on your spending, our partner retailers and telcos can help you save.
+                </ThemedText>
+                {recommendationsWithSpending.map(({ rec, spending }) => (
+                  <View
+                    key={rec.id}
+                    className="rounded-xl p-4 mb-3 border"
+                    style={{
+                      backgroundColor: theme.backgroundDefault,
+                      borderColor: (isDark ? Colors.dark.hopeGreen : Colors.light.hopeGreen) + "40",
+                    }}
+                  >
+                    <ThemedText type="small" className="text-text-muted mb-1">
+                      You spend {formatZar(spending!.totalSpent)} on {spending!.label}
+                    </ThemedText>
+                    <ThemedText type="body" className="text-text font-semibold">
+                      {rec.partner_name}: {rec.title}
+                    </ThemedText>
+                    <ThemedText type="small" className="text-text-muted mt-1">
+                      {rec.description}
+                    </ThemedText>
+                    <View className="flex-row items-center justify-between mt-3">
+                      <View
+                        className="px-2 py-1 rounded-lg"
+                        style={{
+                          backgroundColor: (isDark ? Colors.dark.hopeGreen : Colors.light.hopeGreen) + "20",
+                        }}
+                      >
+                        <ThemedText
+                          type="small"
+                          style={{
+                            color: isDark ? Colors.dark.hopeGreen : Colors.light.hopeGreen,
+                            fontWeight: "600",
+                          }}
+                        >
+                          {rec.savings_estimate}
+                        </ThemedText>
+                      </View>
+                      <ThemedText type="small" className="text-primary">
+                        {rec.cta_label}
+                      </ThemedText>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
           </View>
         }
       />
