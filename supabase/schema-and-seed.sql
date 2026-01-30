@@ -376,7 +376,10 @@ insert into bank_autopsy_causes (id, bank_id, title, amount, percent_of_income)
 values
   ('hidden-fees', 'capitec', 'Hidden Fees', 320, 4.2),
   ('mashonisa', 'capitec', 'Mashonisa Interest', 780, 10.3),
-  ('airtime', 'capitec', 'Airtime Drains', 210, 2.8)
+  ('airtime', 'capitec', 'Airtime Drains', 210, 2.8),
+  ('sb-fees', 'standard-bank', 'Bank & Card Fees', 180, 2.4),
+  ('sb-subscriptions', 'standard-bank', 'Subscriptions', 220, 2.9),
+  ('sb-debit', 'standard-bank', 'Debit Orders', 130.2, 1.7)
 on conflict (id) do update
 set bank_id = excluded.bank_id,
     title = excluded.title,
@@ -408,7 +411,17 @@ values
   ('at-1', 'airtime', 'capitec', date '2026-01-26', 'Telco B', 'Airtime Bundle', 'airtime', 'airtime_drain', 29),
   ('at-2', 'airtime', 'capitec', date '2026-01-25', 'Telco B', 'Data Bundle', 'airtime', 'airtime_drain', 5),
   ('at-3', 'airtime', 'capitec', date '2026-01-24', 'Telco B', 'WASP Subscription - Games', 'airtime', 'airtime_drain', 12),
-  ('at-4', 'airtime', 'capitec', date '2026-01-17', 'Telco B', 'Airtime Advance Repayment', 'airtime', 'airtime_drain', 50)
+  ('at-4', 'airtime', 'capitec', date '2026-01-17', 'Telco B', 'Airtime Advance Repayment', 'airtime', 'airtime_drain', 50),
+  ('sbf-1', 'sb-fees', 'standard-bank', date '2026-01-15', 'Standard Bank', 'Monthly Account Fee', 'bank_fee', 'hidden_fee', 55),
+  ('sbf-2', 'sb-fees', 'standard-bank', date '2026-01-10', 'Standard Bank', 'Card Replacement Fee', 'bank_fee', 'hidden_fee', 75),
+  ('sbf-3', 'sb-fees', 'standard-bank', date '2026-01-08', 'Standard Bank', 'eStatement Fee', 'bank_fee', 'hidden_fee', 12),
+  ('sbf-4', 'sb-fees', 'standard-bank', date '2026-01-03', 'Standard Bank', 'ATM Withdrawal Fee', 'bank_fee', 'hidden_fee', 38),
+  ('sbs-1', 'sb-subscriptions', 'standard-bank', date '2026-01-18', 'Netflix', 'Monthly Subscription', 'subscription', 'subscription_trap', 99),
+  ('sbs-2', 'sb-subscriptions', 'standard-bank', date '2026-01-14', 'Showmax', 'Streaming', 'subscription', 'subscription_trap', 61),
+  ('sbs-3', 'sb-subscriptions', 'standard-bank', date '2026-01-05', 'Spotify', 'Premium', 'subscription', 'subscription_trap', 60),
+  ('sbd-1', 'sb-debit', 'standard-bank', date '2026-01-20', 'Hollard', 'Short-term Insurance', 'debit_order', 'debit_order', 45.5),
+  ('sbd-2', 'sb-debit', 'standard-bank', date '2026-01-15', 'Virgin Active', 'Gym Membership', 'debit_order', 'debit_order', 49),
+  ('sbd-3', 'sb-debit', 'standard-bank', date '2026-01-02', 'Discovery', 'Vitality Debit', 'debit_order', 'debit_order', 35.7)
 on conflict (id) do update
 set cause_id = excluded.cause_id,
     bank_id = excluded.bank_id,

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ScrollView, View, Pressable, ActivityIndicator } from "react-native";
+import { ScrollView, View, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
@@ -8,11 +8,13 @@ import { ThemedText } from "@/components/themed-text";
 import { AccountCard, type AccountAutopsy } from "@/components/account-card";
 import type { CategoryId } from "@/components/category-card";
 import { EmptyState } from "@/components/empty-state";
-import { Spacing, Colors } from "@/constants/theme";
+import { SpendSmarterCard, type SpendSmarterSuggestion } from "@/components/spend-smarter-card";
+import { AccountCardSkeleton, Skeleton } from "@/components/ui/skeleton";
+import { Spacing } from "@/constants/theme";
 import { formatZar } from "@/components/utils/money";
 import { useApp } from "@/context/app-context";
-import { fetchCategoryAccounts } from "@/lib/api";
 import { useTheme } from "@/hooks/use-theme-color";
+import { fetchCategoryAccounts, fetchPartnerRecommendations } from "@/lib/api";
 import { getBankLogo } from "@/lib/bank-logos";
 
 const CATEGORY_TITLES: Record<CategoryId, string> = {
@@ -29,9 +31,10 @@ export default function CategoryScreen() {
   const params = useLocalSearchParams<{ category?: CategoryId }>();
   const categoryId: CategoryId = (params.category as CategoryId) ?? "banks";
   const { userId } = useApp();
-  const { isDark } = useTheme();
+  const { theme } = useTheme();
   const [accounts, setAccounts] = useState<AccountAutopsy[]>([]);
   const [loading, setLoading] = useState(true);
+  const [spendSmarterSuggestions, setSpendSmarterSuggestions] = useState<SpendSmarterSuggestion[]>([]);
 
   useEffect(() => {
     setLoading(true);
@@ -41,16 +44,42 @@ export default function CategoryScreen() {
       .finally(() => setLoading(false));
   }, [userId, categoryId]);
 
+  useEffect(() => {
+    const totalLost = accounts.reduce((sum, a) => sum + a.spent, 0);
+    fetchPartnerRecommendations(categoryId)
+      .then((recs) => {
+        const spending = {
+          category: categoryId,
+          label: CATEGORY_TITLES[categoryId],
+          totalSpent: totalLost,
+        };
+        setSpendSmarterSuggestions(recs.slice(0, 2).map((rec) => ({ rec, spending })));
+      })
+      .catch(() => setSpendSmarterSuggestions([]));
+  }, [categoryId, accounts]);
+
   const title = CATEGORY_TITLES[categoryId];
   const totalLost = accounts.reduce((sum, a) => sum + a.spent, 0);
 
   if (loading) {
     return (
-      <ThemedView className="flex-1 bg-bg items-center justify-center">
-        <ActivityIndicator size="large" color={isDark ? Colors.dark.info : Colors.light.info} />
-        <ThemedText type="body" className="text-text-muted mt-3">
-          Loading {title}…
-        </ThemedText>
+      <ThemedView className="flex-1 bg-bg">
+        <ScrollView
+          contentContainerStyle={{
+            paddingTop: insets.top + Spacing["5xl"],
+            paddingBottom: insets.bottom + Spacing["5xl"],
+            paddingHorizontal: Spacing.lg,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View className="mb-4">
+            <Skeleton width={140} height={28} />
+            <Skeleton width="80%" height={18} style={{ marginTop: 8 }} />
+          </View>
+          <AccountCardSkeleton />
+          <AccountCardSkeleton />
+          <AccountCardSkeleton />
+        </ScrollView>
       </ThemedView>
     );
   }
@@ -118,6 +147,24 @@ export default function CategoryScreen() {
             />
           </Pressable>
         ))}
+
+        {spendSmarterSuggestions.length > 0 ? (
+          <View style={{ marginTop: Spacing["2xl"], marginBottom: Spacing.lg }}>
+            <ThemedText type="h3" style={{ color: theme.text, marginBottom: Spacing.sm }}>
+              Spend smarter in this category
+            </ThemedText>
+            <ThemedText type="body" style={{ color: theme.textSecondary, marginBottom: Spacing.md, fontSize: 16 }}>
+              Better options for {title} – cheaper ways to spend here.
+            </ThemedText>
+            {spendSmarterSuggestions.map((suggestion) => (
+              <SpendSmarterCard
+                key={suggestion.rec.id}
+                suggestion={suggestion}
+                onPress={() => router.push("/reroute-control" as any)}
+              />
+            ))}
+          </View>
+        ) : null}
       </ScrollView>
     </ThemedView>
   );

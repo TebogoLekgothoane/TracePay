@@ -68,7 +68,7 @@ export default function LanguageSelectionScreen() {
 
   const handleContinue = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await setLanguage(selectedLang);
+    setLanguage(selectedLang);
     router.push("/consent" as any);
   };
 

@@ -23,11 +23,12 @@ export default function RootLayout() {
             }}
           >
             <Stack.Screen name="index" />
+            <Stack.Screen name="(auth)" />
             <Stack.Screen name="language-selection" />
             <Stack.Screen name="consent" />
             <Stack.Screen name="analysis-loading" />
-            <Stack.Screen name="(auth)" />
             <Stack.Screen name="(tabs)" />
+
             <Stack.Screen name="bank-autopsy" />
             <Stack.Screen name="add-account" />
             <Stack.Screen name="autopsy-dashboard" />

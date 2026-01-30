@@ -4,8 +4,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
 import { ThemedView } from "@/components/themed-view";
-import { AppHeader } from "@/components/app-header";
+import { ThemedText } from "@/components/themed-text";
 import { ActionCard } from "@/components/action-card";
+import { Spacing } from "@/constants/theme";
 
 export default function ActionsScreen() {
   const insets = useSafeAreaInsets();
@@ -21,11 +22,14 @@ export default function ActionsScreen() {
         }}
       >
         <View className="px-5">
-          <AppHeader
-            title="Actions"
-            subtitle="Take control of your money leaks"
-            style={{ marginBottom: 24 }}
-          />
+          <View style={{ marginBottom: Spacing["2xl"] }}>
+            <ThemedText type="h2" className="text-text mb-1">
+              Actions
+            </ThemedText>
+            <ThemedText type="body" className="text-text-muted">
+              Take control of your money leaks
+            </ThemedText>
+          </View>
 
           <View className="flex-row flex-wrap justify-between">
             <ActionCard
@@ -51,6 +55,12 @@ export default function ActionsScreen() {
               title="Auto-Unsubscribe"
               subtitle="Cancel useless subscriptions"
               onPress={() => router.push("/opt-out-control")}
+            />
+            <ActionCard
+              icon="trending-down"
+              title="Spend Smarter"
+              subtitle="Cheaper options for what you buy"
+              onPress={() => router.push("/reroute-control")}
             />
           </View>
         </View>

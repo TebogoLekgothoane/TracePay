@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { View, Switch, Modal, Pressable, ScrollView, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useHeaderHeight } from "@react-navigation/elements";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import Animated, { FadeInDown, FadeIn } from "react-native-reanimated";
@@ -9,11 +8,14 @@ import * as Haptics from "expo-haptics";
 
 import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
-import { Button } from "@/components/ui/button";
+import { AccountRowSkeleton } from "@/components/ui/skeleton";
 import { useTheme } from "@/hooks/use-theme-color";
 import { useApp } from "@/context/app-context";
-import { Spacing, Colors } from "@/constants/theme";
+import { Spacing, Colors, BorderRadius } from "@/constants/theme";
 import { fetchUserBankAccounts, updateUserBankAccountFrozen, removeUserBankAccount } from "@/lib/api";
+
+const NAVY = "#1e40af";
+const navyTint = "rgba(30, 64, 175, 0.15)";
 import { mobileFreeze, mobileUnfreeze, listFrozen } from "@/lib/backend-client";
 
 interface FreezeToggleProps {
@@ -22,10 +24,13 @@ interface FreezeToggleProps {
   value: boolean;
   onValueChange: (value: boolean) => void;
   delay: number;
+  icon?: React.ComponentProps<typeof Feather>["name"];
+  accentColor?: string;
 }
 
-function FreezeToggle({ label, description, value, onValueChange, delay }: FreezeToggleProps) {
-  const { theme, isDark } = useTheme();
+function FreezeToggle({ label, description, value, onValueChange, delay, icon, accentColor }: FreezeToggleProps) {
+  const { theme } = useTheme();
+  const trackOn = accentColor ?? theme.tabIconSelected;
 
   const handleToggle = async (newValue: boolean) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -35,15 +40,43 @@ function FreezeToggle({ label, description, value, onValueChange, delay }: Freez
   return (
     <Animated.View
       entering={FadeInDown.delay(delay).springify()}
-      className="flex-row justify-between items-center p-4 rounded-xl"
-      style={{ backgroundColor: theme.backgroundDefault }}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        padding: Spacing.lg,
+        borderRadius: BorderRadius.lg,
+        backgroundColor: theme.backgroundSecondary,
+        borderWidth: 1,
+        borderLeftWidth: 4,
+        borderColor: theme.backgroundTertiary,
+        borderLeftColor: value ? trackOn : theme.backgroundTertiary,
+      }}
     >
-      <View className="flex-1 mr-4">
-        <ThemedText type="body" className="text-text">
+      {icon ? (
+        <View
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: BorderRadius.sm,
+            backgroundColor: (accentColor ?? theme.tabIconSelected) + "22",
+            alignItems: "center",
+            justifyContent: "center",
+            marginRight: Spacing.md,
+          }}
+        >
+          <Feather
+            name={icon}
+            size={20}
+            color={accentColor ?? theme.tabIconSelected}
+          />
+        </View>
+      ) : null}
+      <View style={{ flex: 1, marginRight: Spacing.md }}>
+        <ThemedText type="body" style={{ color: theme.text, fontWeight: "600", fontSize: 16 }}>
           {label}
         </ThemedText>
         {description ? (
-          <ThemedText type="small" className="mt-1" style={{ color: theme.textSecondary }}>
+          <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: 4, fontSize: 14, lineHeight: 20 }}>
             {description}
           </ThemedText>
         ) : null}
@@ -53,7 +86,7 @@ function FreezeToggle({ label, description, value, onValueChange, delay }: Freez
         onValueChange={handleToggle}
         trackColor={{
           false: theme.backgroundTertiary,
-          true: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed,
+          true: trackOn,
         }}
         thumbColor="#FFFFFF"
         ios_backgroundColor={theme.backgroundTertiary}
@@ -71,7 +104,6 @@ type BankAccount = {
 
 export default function FreezeControlScreen() {
   const insets = useSafeAreaInsets();
-  const headerHeight = useHeaderHeight();
   const { theme, isDark } = useTheme();
   const { t, freezeSettings, setFreezeSettings, airtimeLimit, userId } = useApp();
   const router = useRouter();
@@ -170,6 +202,9 @@ export default function FreezeControlScreen() {
     localSettings.cancelSubscriptions !== freezeSettings.cancelSubscriptions;
 
   const activeCount = Object.values(localSettings).filter(Boolean).length;
+  const purple = theme.tabIconSelected;
+  const navy = NAVY;
+  const navyTintBg = navyTint;
 
   const handleApply = () => {
     if (activeCount > 0) {
@@ -187,111 +222,43 @@ export default function FreezeControlScreen() {
 
   const HeaderContent = () => (
     <View>
-      <View className="flex-row items-center mb-6">
-        <Pressable
-          onPress={() => router.back()}
-          className="p-1 mr-2"
-          hitSlop={10}
-        >
-          <Feather name="arrow-left" size={20} color={theme.text} />
+      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: Spacing["2xl"] }}>
+        <Pressable onPress={() => router.back()} hitSlop={10} style={{ padding: Spacing.sm, marginRight: Spacing.sm }}>
+          <Feather name="arrow-left" size={22} color={theme.text} />
         </Pressable>
-        <View>
-          <ThemedText type="h2" className="text-text">
-            Freeze all
-          </ThemedText>
-        </View>
+        <ThemedText type="h2">Freeze all</ThemedText>
       </View>
 
-      {activeCount > 0 ? (
-        <Animated.View
-          entering={FadeInDown.delay(50).springify()}
-          className="rounded-xl p-4 mb-6"
-          style={{
-            backgroundColor: isDark
-              ? Colors.dark.warningYellow + "20"
-              : Colors.light.warningYellow + "20",
-          }}
-        >
-          <View className="flex-row items-center gap-2 mb-2">
-            <Feather
-              name="alert-triangle"
-              size={22}
-              color={isDark ? Colors.dark.warningYellow : Colors.light.warningYellow}
-            />
-            <ThemedText type="h4" className="text-text">
-              {t("warning")}
-            </ThemedText>
-          </View>
-          <ThemedText type="body" style={{ color: theme.textSecondary }}>
-            {t("freezeWarning")}
-          </ThemedText>
-        </Animated.View>
-      ) : null}
-
-      <View className="mt-8">
-        <View className="gap-3 mb-6">
-          <FreezeToggle
-            label={t("pauseDebitOrders")}
-            description="We’ll pause debit orders we detect as risky or unnecessary so they stop draining your account."
-            value={localSettings.pauseDebitOrders}
-            onValueChange={(value) =>
-              setLocalSettings({ ...localSettings, pauseDebitOrders: value })
-            }
-            delay={100}
-          />
-          <FreezeToggle
-            label={t("blockFeeAccounts")}
-            description="We’ll block high-fee accounts and products so future transactions don’t keep charging you hidden costs."
-            value={localSettings.blockFeeAccounts}
-            onValueChange={(value) =>
-              setLocalSettings({ ...localSettings, blockFeeAccounts: value })
-            }
-            delay={150}
-          />
-          <FreezeToggle
-            label={t("setAirtimeLimit")}
-            description={
-              airtimeLimit > 0
-                ? `We’ll cap airtime & data at about R${airtimeLimit.toFixed(
-                    0,
-                  )} a month so small top-ups don’t quietly eat your salary.`
-                : "We’ll cap how much airtime and data you can buy so small top-ups don’t quietly eat your salary."
-            }
-            value={localSettings.setAirtimeLimit}
-            onValueChange={(value) =>
-              setLocalSettings({ ...localSettings, setAirtimeLimit: value })
-            }
-            delay={200}
-          />
-          <FreezeToggle
-            label={t("cancelSubscriptions")}
-            description="We’ll cancel subscriptions you rarely use so those month‑end debits stop surprising you."
-            value={localSettings.cancelSubscriptions}
-            onValueChange={(value) =>
-              setLocalSettings({ ...localSettings, cancelSubscriptions: value })
-            }
-            delay={250}
-          />
-        </View>
-      </View>
-
-      <View className="mt-8">
-        <ThemedText type="body" className="text-text mb-2">
+      <View style={{ marginBottom: Spacing["2xl"] }}>
+        <ThemedText type="h3" style={{ color: theme.text, marginBottom: Spacing.sm }}>
           Freeze specific accounts
         </ThemedText>
-        <ThemedText type="small" className="text-text-muted mb-3">
-          Choose which bank and wallet accounts TracePay should treat as frozen for new debit orders
-          and fees.
+        <ThemedText type="body" style={{ color: theme.textSecondary, marginBottom: Spacing.lg, lineHeight: 22 }}>
+          Choose which bank and wallet accounts to treat as frozen for new debits and fees.
         </ThemedText>
 
         {accountsLoading ? (
-          <ThemedText type="body" className="text-text-muted py-4">
-            Loading accounts…
-          </ThemedText>
+          <View style={{ gap: Spacing.sm }}>
+            <AccountRowSkeleton />
+            <AccountRowSkeleton />
+            <AccountRowSkeleton />
+            <AccountRowSkeleton />
+          </View>
         ) : bankAccounts.length === 0 ? (
-          <ThemedText type="body" className="text-text-muted py-4">
-            No bank accounts linked yet.
-          </ThemedText>
+          <View
+            style={{
+              paddingVertical: Spacing["2xl"],
+              paddingHorizontal: Spacing.lg,
+              borderRadius: BorderRadius.lg,
+              backgroundColor: theme.backgroundSecondary,
+              borderWidth: 1,
+              borderColor: theme.backgroundTertiary,
+            }}
+          >
+            <ThemedText type="body" style={{ color: theme.textSecondary, fontSize: 16, textAlign: "center" }}>
+              No bank accounts linked yet.
+            </ThemedText>
+          </View>
         ) : null}
         {!accountsLoading && bankAccounts.map((account, index) => {
           const isFrozen = frozenAccounts[account.id] ?? false;
@@ -303,11 +270,13 @@ export default function FreezeControlScreen() {
               : "Wallet";
 
           return (
-            <View key={account.id} className="mb-2">
+            <View key={account.id} style={{ marginBottom: Spacing.lg }}>
               <FreezeToggle
                 label={account.name}
                 description={`${account.bank} • ${typeLabel}`}
                 value={isFrozen}
+                icon="layers"
+                accentColor={navy}
                 onValueChange={async (value) => {
                 await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 const prev = frozenAccounts[account.id] ?? false;
@@ -368,15 +337,114 @@ export default function FreezeControlScreen() {
               />
               <Pressable
                 onPress={() => handleUnlinkAccount(account)}
-                className="py-2 px-1"
+                style={{ paddingVertical: Spacing.sm, paddingHorizontal: Spacing.xs, marginTop: Spacing.xs }}
               >
-                <ThemedText type="small" className="text-primary">
+                <ThemedText type="small" style={{ color: purple, fontSize: 14 }}>
                   Unlink this account
                 </ThemedText>
               </Pressable>
             </View>
           );
         })}
+      </View>
+
+      {activeCount > 0 ? (
+        <Animated.View
+          entering={FadeInDown.delay(50).springify()}
+          style={{
+            borderRadius: BorderRadius.lg,
+            padding: Spacing.lg,
+            marginBottom: Spacing["2xl"],
+            backgroundColor: navyTintBg,
+            borderWidth: 1,
+            borderColor: NAVY + "45",
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: Spacing.sm }}>
+            <View
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: BorderRadius.xs,
+                backgroundColor: NAVY + "35",
+                alignItems: "center",
+                justifyContent: "center",
+                marginRight: Spacing.sm,
+              }}
+            >
+              <Feather name="alert-triangle" size={20} color={NAVY} />
+            </View>
+            <ThemedText type="h4" style={{ color: theme.text, fontSize: 18 }}>
+              {t("warning")}
+            </ThemedText>
+          </View>
+          <ThemedText type="body" style={{ color: theme.textSecondary, fontSize: 15, lineHeight: 22 }}>
+            {t("freezeWarning")}
+          </ThemedText>
+        </Animated.View>
+      ) : null}
+
+      <View style={{ marginBottom: Spacing["2xl"] }}>
+        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: Spacing.lg }}>
+          <View style={{ width: 32, height: 32, borderRadius: BorderRadius.xs, backgroundColor: purple + "25", alignItems: "center", justifyContent: "center", marginRight: Spacing.sm }}>
+            <Feather name="shield" size={18} color={purple} />
+          </View>
+          <ThemedText type="h3" style={{ color: theme.text, fontSize: 18 }}>
+            Protection options
+          </ThemedText>
+        </View>
+        <View style={{ gap: Spacing.md }}>
+          <FreezeToggle
+            label={t("pauseDebitOrders")}
+            description="We’ll pause debit orders we detect as risky or unnecessary so they stop draining your account."
+            value={localSettings.pauseDebitOrders}
+            onValueChange={(value) =>
+              setLocalSettings({ ...localSettings, pauseDebitOrders: value })
+            }
+            delay={100}
+            icon="pause-circle"
+            accentColor={purple}
+          />
+          <FreezeToggle
+            label={t("blockFeeAccounts")}
+            description="We’ll block high-fee accounts and products so future transactions don’t keep charging you hidden costs."
+            value={localSettings.blockFeeAccounts}
+            onValueChange={(value) =>
+              setLocalSettings({ ...localSettings, blockFeeAccounts: value })
+            }
+            delay={150}
+            icon="credit-card"
+            accentColor={navy}
+          />
+          <FreezeToggle
+            label={t("setAirtimeLimit")}
+            description={
+              airtimeLimit > 0
+                ? `We’ll cap airtime & data at about R${airtimeLimit.toFixed(
+                    0,
+                  )} a month so small top-ups don’t quietly eat your salary.`
+                : "We’ll cap how much airtime and data you can buy so small top-ups don’t quietly eat your salary."
+            }
+            value={localSettings.setAirtimeLimit}
+            onValueChange={(value) =>
+              setLocalSettings({ ...localSettings, setAirtimeLimit: value })
+            }
+            delay={200}
+            icon="smartphone"
+            accentColor={purple}
+          />
+          <FreezeToggle
+            label={t("cancelSubscriptions")}
+            description="We’ll cancel subscriptions you rarely use so those month‑end debits stop surprising you."
+            value={localSettings.cancelSubscriptions}
+            onValueChange={(value) =>
+              setLocalSettings({ ...localSettings, cancelSubscriptions: value })
+            }
+            delay={250}
+            icon="x-circle"
+            accentColor={purple}
+          />
+        </View>
       </View>
     </View>
   );
@@ -398,24 +466,35 @@ export default function FreezeControlScreen() {
       {hasChanges ? (
         <Animated.View
           entering={FadeInDown.springify()}
-          className="absolute bottom-0 left-0 right-0 px-4 pt-4"
           style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            paddingHorizontal: Spacing.lg,
+            paddingTop: Spacing.lg,
             paddingBottom: insets.bottom + Spacing.lg,
             backgroundColor: theme.backgroundRoot,
+            borderTopWidth: 1,
+            borderTopColor: theme.backgroundTertiary,
           }}
         >
-          <Button
+          <Pressable
             onPress={handleApply}
-            className="w-full"
+            className="btn-freeze-apply"
             style={{
-              backgroundColor: isDark
-                ? Colors.dark.alarmRed
-                : Colors.light.alarmRed,
+              backgroundColor: purple,
+              paddingVertical: Spacing.lg,
+              borderRadius: BorderRadius.lg,
+              alignItems: "center",
+              justifyContent: "center",
             }}
             testID="button-apply-freeze"
           >
-            {t("apply")}
-          </Button>
+            <ThemedText type="button" style={{ color: theme.buttonText, fontSize: 16, fontWeight: "600" }}>
+              {t("apply")}
+            </ThemedText>
+          </Pressable>
         </Animated.View>
       ) : null}
 
@@ -425,51 +504,70 @@ export default function FreezeControlScreen() {
         animationType="fade"
         onRequestClose={() => setShowConfirmModal(false)}
       >
-        <View className="flex-1 bg-black/50 justify-center items-center p-6">
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: Spacing["2xl"] }}>
           <Animated.View
             entering={FadeIn}
-            className="w-full rounded-3xl p-6 items-center"
-            style={{ backgroundColor: theme.backgroundRoot }}
+            style={{
+              width: "100%",
+              borderRadius: BorderRadius["2xl"],
+              padding: Spacing["2xl"],
+              alignItems: "center",
+              backgroundColor: theme.backgroundRoot,
+              borderWidth: 1,
+              borderColor: theme.backgroundTertiary,
+            }}
           >
-            <View className="items-center mb-4">
-              <Feather
-                name="alert-circle"
-                size={48}
-                color={isDark ? Colors.dark.warningYellow : Colors.light.warningYellow}
-              />
-              <ThemedText type="h2" className="text-text mt-4">
-                {t("confirm")}
-              </ThemedText>
-            </View>
-
-            <ThemedText
-              type="body"
-              className="text-center mb-6"
-              style={{ color: theme.textSecondary }}
+            <View
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 32,
+                backgroundColor: navyTintBg,
+                borderWidth: 1,
+                borderColor: NAVY + "45",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: Spacing.lg,
+              }}
             >
+              <Feather name="alert-circle" size={36} color={NAVY} />
+            </View>
+            <ThemedText type="h2" style={{ color: theme.text, marginBottom: Spacing.sm }}>
+              {t("confirm")}
+            </ThemedText>
+            <ThemedText type="body" style={{ color: theme.textSecondary, textAlign: "center", marginBottom: Spacing["2xl"], lineHeight: 22 }}>
               {t("freezeWarning")}
             </ThemedText>
-
-            <View className="flex-row gap-3 w-full">
+            <View style={{ flexDirection: "row", gap: Spacing.md, width: "100%" }}>
               <Pressable
                 onPress={() => setShowConfirmModal(false)}
-                className="flex-1 h-[52px] rounded-xl items-center justify-center"
-                style={{ backgroundColor: theme.backgroundDefault }}
+                style={{
+                  flex: 1,
+                  height: 52,
+                  borderRadius: BorderRadius.lg,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: theme.backgroundSecondary,
+                  borderWidth: 1,
+                  borderColor: theme.backgroundTertiary,
+                }}
                 testID="button-cancel-confirm"
               >
-                <ThemedText type="button">{t("cancel")}</ThemedText>
+                <ThemedText type="button" style={{ color: theme.text }}>{t("cancel")}</ThemedText>
               </Pressable>
               <Pressable
                 onPress={confirmApply}
-                className="flex-1 h-[52px] rounded-xl items-center justify-center"
                 style={{
-                  backgroundColor: isDark
-                    ? Colors.dark.alarmRed
-                    : Colors.light.alarmRed,
+                  flex: 1,
+                  height: 52,
+                  borderRadius: BorderRadius.lg,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: purple,
                 }}
                 testID="button-confirm"
               >
-                <ThemedText type="button" className="text-white">
+                <ThemedText type="button" style={{ color: theme.buttonText, fontWeight: "600" }}>
                   {t("confirm")}
                 </ThemedText>
               </Pressable>

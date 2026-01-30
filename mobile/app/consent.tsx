@@ -149,7 +149,7 @@ export default function ConsentScreen() {
 
   const handleAgree = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await setIncludeMomoData(localMomoSetting);
+    setIncludeMomoData(localMomoSetting);
     router.push("/analysis-loading" as any);
   };
 

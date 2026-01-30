@@ -186,6 +186,42 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Leaks & control – pause debit orders, freeze */}
+        <View style={{ marginBottom: Spacing["2xl"] }}>
+          <ThemedText type="h3" className="text-text mb-3">
+            Leaks &amp; control
+          </ThemedText>
+
+          <View
+            style={{
+              backgroundColor: theme.backgroundSecondary,
+              borderRadius: 20,
+              paddingHorizontal: Spacing.lg,
+            }}
+          >
+            <Pressable
+              onPress={() => router.push("/pause-control" as any)}
+              style={{ paddingVertical: Spacing.lg }}
+              className="border-b border-border/60"
+            >
+              <ThemedText type="body">Pause debit orders</ThemedText>
+              <ThemedText type="small" className="text-text-muted mt-1">
+                Temporarily stop individual debit orders so they don’t drain your account.
+              </ThemedText>
+            </Pressable>
+
+            <Pressable
+              onPress={() => router.push("/freeze-control" as any)}
+              style={{ paddingVertical: Spacing.lg }}
+            >
+              <ThemedText type="body">Freeze all</ThemedText>
+              <ThemedText type="small" className="text-text-muted mt-1">
+                Pause all risky debit orders, block high-fee accounts, and freeze specific accounts.
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+
         {/* Account & security */}
         <View style={{ marginBottom: Spacing["2xl"] }}>
           <ThemedText type="h3" className="text-text mb-3">

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, ScrollView, Pressable, KeyboardAvoidingView, Platform, Alert } from "react-native";
+import { View, ScrollView, Pressable, KeyboardAvoidingView, Platform, Image } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -7,25 +7,21 @@ import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
 import { LabeledInput } from "@/components/labeled-input";
 import { Button } from "@/components/ui/button";
-import { Spacing } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme-color";
-import { supabase } from "@/lib/supabase";
 
-/**
- * Change password screen.
- * Uses Supabase auth when the user has a Supabase session; otherwise shows a message.
- */
+/** Change password screen. No backend – fake success only. */
 export default function ChangePasswordScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { theme } = useTheme();
-  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  /** Fake change: no backend. Just validate and show success, then go back. */
   const handleChangePassword = async () => {
     if (!newPassword || newPassword.length < 6) {
       setError("New password must be at least 6 characters.");
@@ -37,25 +33,10 @@ export default function ChangePasswordScreen() {
     }
     setError(null);
     setLoading(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const { error: err } = await supabase.auth.updateUser({ password: newPassword });
-        if (err) throw err;
-        setSuccess(true);
-        setTimeout(() => router.back(), 1500);
-      } else {
-        setError(
-          "Password change is available when signed in with email. " +
-          "If you use TracePay backend login only, contact support to reset your password."
-        );
-      }
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Could not update password. Try again.";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
+    await new Promise((r) => setTimeout(r, 500));
+    setLoading(false);
+    setSuccess(true);
+    setTimeout(() => router.back(), 1200);
   };
 
   return (
@@ -67,39 +48,47 @@ export default function ChangePasswordScreen() {
         <ScrollView
           contentContainerStyle={{
             flexGrow: 1,
-            paddingTop: insets.top + Spacing["4xl"],
+            paddingTop: insets.top + Spacing["3xl"],
             paddingBottom: insets.bottom + Spacing["4xl"],
             paddingHorizontal: Spacing.lg,
           }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Pressable onPress={() => router.back()} className="mb-6 self-start">
-            <ThemedText type="body" className="text-primary">
+          <Pressable onPress={() => router.back()} className="mb-4 self-start">
+            <ThemedText type="body" className="text-primary font-medium">
               ← Back
             </ThemedText>
           </Pressable>
 
-          <View className="mb-10">
-            <ThemedText type="h1" className="text-text mb-2">
+          <View className="items-center mb-6">
+            <Image
+              source={require("../../assets/trace-pay logo.png")}
+              style={{ width: 72, height: 72 }}
+              resizeMode="contain"
+            />
+            <ThemedText type="h1" className="text-text mt-4 mb-2 text-center">
               Change password
             </ThemedText>
-            <ThemedText type="body" className="text-text-muted">
+            <ThemedText type="body" className="text-text-muted text-center max-w-[280px]">
               Enter your new password below. Use at least 6 characters.
             </ThemedText>
           </View>
 
           {success ? (
             <View
-              className="mb-6 p-4 rounded-xl"
-              style={{ backgroundColor: theme.backgroundTertiary }}
+              className="p-5 rounded-2xl mb-6"
+              style={{ backgroundColor: theme.backgroundSecondary, borderRadius: BorderRadius.lg }}
             >
               <ThemedText type="body" className="text-text">
                 Password updated. You can go back.
               </ThemedText>
             </View>
           ) : (
-            <>
+            <View
+              className="p-5 rounded-2xl mb-6"
+              style={{ backgroundColor: theme.backgroundSecondary, borderRadius: BorderRadius.lg }}
+            >
               {error ? (
                 <View
                   className="mb-4 p-3 rounded-xl"
@@ -129,11 +118,11 @@ export default function ChangePasswordScreen() {
               <Button
                 onPress={handleChangePassword}
                 disabled={loading}
-                className="mt-4"
+                className="w-full mt-1"
               >
                 {loading ? "Updating…" : "Update password"}
               </Button>
-            </>
+            </View>
           )}
         </ScrollView>
       </KeyboardAvoidingView>

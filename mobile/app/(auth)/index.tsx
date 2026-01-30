@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, ScrollView, Pressable, KeyboardAvoidingView, Platform, Alert } from "react-native";
+import { View, ScrollView, Pressable, KeyboardAvoidingView, Platform, Image } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -7,19 +7,23 @@ import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
 import { LabeledInput } from "@/components/labeled-input";
 import { Button } from "@/components/ui/button";
-import { Spacing } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme-color";
-import { loginWithBackend } from "@/lib/backend-client";
+import { useApp } from "@/context/app-context";
+import { setBackendToken } from "@/lib/auth-storage";
+import { DEMO_USER_ID } from "@/lib/supabase";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { theme } = useTheme();
+  const { setUserId } = useApp();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /** Fake sign-in: no backend. Just validate and set a fake token so app goes to home. */
   const handleSignIn = async () => {
     const trimmed = email.trim().toLowerCase();
     if (!trimmed || !password) {
@@ -29,11 +33,11 @@ export default function LoginScreen() {
     setError(null);
     setLoading(true);
     try {
-      await loginWithBackend(trimmed, password);
+      await setBackendToken("fake");
+      setUserId(DEMO_USER_ID);
       router.replace("/(tabs)/home" as any);
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Sign in failed. Check your email and password.";
-      setError(message);
+      setError("Something went wrong.");
     } finally {
       setLoading(false);
     }
@@ -48,68 +52,78 @@ export default function LoginScreen() {
         <ScrollView
           contentContainerStyle={{
             flexGrow: 1,
-            paddingTop: insets.top + Spacing["4xl"],
+            paddingTop: insets.top + Spacing["3xl"],
             paddingBottom: insets.bottom + Spacing["4xl"],
             paddingHorizontal: Spacing.lg,
           }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View className="mb-10">
-            <ThemedText type="h1" className="text-text mb-2">
+          <View className="items-center mb-8">
+            <Image
+              source={require("../../assets/trace-pay logo.png")}
+              style={{ width: 80, height: 80 }}
+              resizeMode="contain"
+            />
+            <ThemedText type="h1" className="text-text mt-4 mb-2 text-center">
               Welcome back
             </ThemedText>
-            <ThemedText type="body" className="text-text-muted">
+            <ThemedText type="body" className="text-text-muted text-center max-w-[280px]">
               Sign in to TracePay to see your money insights and control your leaks.
             </ThemedText>
           </View>
 
-          {error ? (
-            <View
-              className="mb-4 p-3 rounded-xl"
-              style={{ backgroundColor: theme.backgroundTertiary }}
+          <View
+            className="p-5 rounded-2xl mb-6"
+            style={{ backgroundColor: theme.backgroundSecondary, borderRadius: BorderRadius.lg }}
+          >
+            {error ? (
+              <View
+                className="mb-4 p-3 rounded-xl"
+                style={{ backgroundColor: theme.backgroundTertiary }}
+              >
+                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                  {error}
+                </ThemedText>
+              </View>
+            ) : null}
+
+            <LabeledInput
+              label="Email"
+              placeholder="you@example.com"
+              value={email}
+              onChangeText={(t) => setEmail(t)}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <LabeledInput
+              label="Password"
+              placeholder="••••••••"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
+
+            <Pressable
+              onPress={() => router.push("/(auth)/forgot-password" as any)}
+              className="mb-5 self-end"
             >
-              <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                {error}
+              <ThemedText type="small" className="text-primary font-medium">
+                Forgot password?
               </ThemedText>
-            </View>
-          ) : null}
+            </Pressable>
 
-          <LabeledInput
-            label="Email"
-            placeholder="you@example.com"
-            value={email}
-            onChangeText={(t) => setEmail(t)}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          <LabeledInput
-            label="Password"
-            placeholder="••••••••"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+            <Button
+              onPress={handleSignIn}
+              disabled={loading}
+              className="w-full"
+            >
+              {loading ? "Signing in…" : "Sign in"}
+            </Button>
+          </View>
 
-          <Pressable
-            onPress={() => router.push("/(auth)/forgot-password" as any)}
-            className="mb-6"
-          >
-            <ThemedText type="small" className="text-primary">
-              Forgot password?
-            </ThemedText>
-          </Pressable>
-
-          <Button
-            onPress={handleSignIn}
-            disabled={loading}
-            className="mb-4"
-          >
-            {loading ? "Signing in…" : "Sign in"}
-          </Button>
-
-          <View className="flex-row items-center justify-center mt-4">
+          <View className="flex-row items-center justify-center mt-2">
             <ThemedText type="body" className="text-text-muted mr-1">
               Don&apos;t have an account?
             </ThemedText>

@@ -4,19 +4,10 @@ import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/themed-text";
 import { useTheme } from "@/hooks/use-theme-color";
-import { Spacing, Colors } from "@/constants/theme";
+import { Colors } from "@/constants/theme";
 import type { UserDiscount } from "@/types/discount";
 
-function tierColor(tier: UserDiscount["tier"], isDark: boolean) {
-  switch (tier) {
-    case "gold":
-      return isDark ? "#FBBF24" : "#D97706";
-    case "silver":
-      return isDark ? "#9CA3AF" : "#6B7280";
-    default:
-      return isDark ? "#B45309" : "#92400E";
-  }
-}
+const NAVY = "#1e40af";
 
 function formatExpiry(expiresAt?: string): string {
   if (!expiresAt) return "No expiry";
@@ -33,7 +24,6 @@ export function DiscountCard({
 }) {
   const { theme, isDark } = useTheme();
   const [copied, setCopied] = useState(false);
-  const tier = tierColor(discount.tier, isDark);
 
   const handleCopy = () => {
     if (discount.code) {
@@ -49,7 +39,7 @@ export function DiscountCard({
       style={{
         backgroundColor: theme.backgroundDefault,
         borderLeftWidth: 4,
-        borderLeftColor: tier,
+        borderLeftColor: NAVY,
       }}
     >
       <View className="flex-row items-start justify-between">
@@ -63,9 +53,9 @@ export function DiscountCard({
         </View>
         <View
           className="px-2 py-1 rounded-lg"
-          style={{ backgroundColor: tier + "20" }}
+          style={{ backgroundColor: NAVY + "20" }}
         >
-          <ThemedText type="small" style={{ color: tier, fontWeight: "600" }}>
+          <ThemedText type="small" style={{ color: NAVY, fontWeight: "600" }}>
             {discount.discountValue}
           </ThemedText>
         </View>

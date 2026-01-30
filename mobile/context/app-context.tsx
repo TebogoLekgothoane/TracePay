@@ -3,6 +3,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Language, AnalysisData, Subscription } from "@/types/navigation";
 import { translations } from "@/hooks/use-language";
 import { DEMO_USER_ID } from "@/lib/supabase";
+// Auth commented out – always use demo user for data.
+// import { getStoredUserId } from "@/lib/auth-storage";
 import {
   fetchUserSettings,
   updateUserSettings,
@@ -31,6 +33,7 @@ interface AppContextType {
   airtimeLimit: number;
   setAirtimeLimitValue: (limit: number) => Promise<void>;
   userId: string;
+  setUserId: (id: string | null) => void;
 }
 
 interface FreezeSettings {
@@ -63,26 +66,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [includeMomoData, setIncludeMomoDataState] = useState(true);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [airtimeLimit, setAirtimeLimitState] = useState<number>(300);
+  const [userId, setUserIdState] = useState<string>(DEMO_USER_ID);
+
+  // Auth commented out – always use demo user, never load stored userId
+  // useEffect(() => {
+  //   let cancelled = false;
+  //   getStoredUserId().then((stored) => {
+  //     if (!cancelled && stored) setUserIdState(stored);
+  //   });
+  //   return () => { cancelled = true; };
+  // }, []);
 
   useEffect(() => {
     loadSettings();
-  }, []);
+  }, [userId]);
+
+  const setUserId = (id: string | null) => {
+    setUserIdState(id ?? DEMO_USER_ID);
+  };
 
   const loadSettings = async () => {
     try {
-      const userId = DEMO_USER_ID;
+      const effectiveUserId = userId;
       const [userSettings, freeze, subs] = await Promise.all([
-        fetchUserSettings(userId),
-        fetchFreezeSettings(userId),
-        fetchSubscriptions(userId),
+        fetchUserSettings(effectiveUserId),
+        fetchFreezeSettings(effectiveUserId),
+        fetchSubscriptions(effectiveUserId),
       ]);
 
-      if (userSettings) {
-        if (VALID_LANGUAGES.includes(userSettings.language as Language)) {
-          setLanguageState(userSettings.language as Language);
+      // If logged-in user has no data in Supabase (e.g. new account), fall back to demo user
+      // so the app still shows banks, rewards, subscriptions like before.
+      const useDemoData =
+        effectiveUserId !== DEMO_USER_ID &&
+        (!userSettings || !freeze || !subs?.length);
+      const [demoSettings, demoFreeze, demoSubs] = useDemoData
+        ? await Promise.all([
+            fetchUserSettings(DEMO_USER_ID),
+            fetchFreezeSettings(DEMO_USER_ID),
+            fetchSubscriptions(DEMO_USER_ID),
+          ])
+        : [null, null, null];
+
+      const settings = userSettings ?? demoSettings;
+      const freezeData = freeze ?? demoFreeze;
+      const subsData = (subs?.length ? subs : demoSubs) ?? [];
+
+      if (settings) {
+        if (VALID_LANGUAGES.includes(settings.language as Language)) {
+          setLanguageState(settings.language as Language);
         }
-        setIncludeMomoDataState(userSettings.include_momo_data);
-        setAirtimeLimitState(Number(userSettings.airtime_limit) || 300);
+        setIncludeMomoDataState(settings.include_momo_data);
+        setAirtimeLimitState(Number(settings.airtime_limit) || 300);
       } else {
         const savedLanguage = await AsyncStorage.getItem(LANGUAGE_KEY);
         if (savedLanguage && VALID_LANGUAGES.includes(savedLanguage as Language)) {
@@ -97,20 +131,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      if (freeze) {
+      if (freezeData) {
         setFreezeSettingsState({
-          pauseDebitOrders: freeze.pause_debit_orders,
-          blockFeeAccounts: freeze.block_fee_accounts,
-          setAirtimeLimit: freeze.set_airtime_limit,
-          cancelSubscriptions: freeze.cancel_subscriptions,
+          pauseDebitOrders: freezeData.pause_debit_orders,
+          blockFeeAccounts: freezeData.block_fee_accounts,
+          setAirtimeLimit: freezeData.set_airtime_limit,
+          cancelSubscriptions: freezeData.cancel_subscriptions,
         });
       } else {
         const savedFreeze = await AsyncStorage.getItem(FREEZE_KEY);
         if (savedFreeze) setFreezeSettingsState(JSON.parse(savedFreeze));
       }
 
-      if (subs?.length) {
-        setSubscriptions(subs);
+      if (subsData.length) {
+        setSubscriptions(subsData);
       } else {
         const savedSubscriptions = await AsyncStorage.getItem(SUBSCRIPTIONS_KEY);
         if (savedSubscriptions) setSubscriptions(JSON.parse(savedSubscriptions));
@@ -142,7 +176,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setLanguage = async (lang: Language) => {
     setLanguageState(lang);
     try {
-      const ok = await updateUserSettings(DEMO_USER_ID, { language: lang });
+      const ok = await updateUserSettings(userId, { language: lang });
       if (!ok) await AsyncStorage.setItem(LANGUAGE_KEY, lang);
     } catch (error) {
       console.error("Error saving language:", error);
@@ -153,7 +187,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setFreezeSettings = async (settings: FreezeSettings) => {
     setFreezeSettingsState(settings);
     try {
-      const ok = await updateFreezeSettings(DEMO_USER_ID, {
+      const ok = await updateFreezeSettings(userId, {
         pause_debit_orders: settings.pauseDebitOrders,
         block_fee_accounts: settings.blockFeeAccounts,
         set_airtime_limit: settings.setAirtimeLimit,
@@ -169,7 +203,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setIncludeMomoData = async (include: boolean) => {
     setIncludeMomoDataState(include);
     try {
-      const ok = await updateUserSettings(DEMO_USER_ID, { include_momo_data: include });
+      const ok = await updateUserSettings(userId, { include_momo_data: include });
       if (!ok) await AsyncStorage.setItem(MOMO_KEY, JSON.stringify(include));
     } catch (error) {
       console.error("Error saving momo setting:", error);
@@ -181,7 +215,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const safe = Number.isNaN(limit) || limit <= 0 ? 0 : Math.round(limit);
     setAirtimeLimitState(safe);
     try {
-      const ok = await updateUserSettings(DEMO_USER_ID, { airtime_limit: safe });
+      const ok = await updateUserSettings(userId, { airtime_limit: safe });
       if (!ok) await AsyncStorage.setItem(AIRTIME_LIMIT_KEY, String(safe));
     } catch (error) {
       console.error("Error saving airtime limit:", error);
@@ -195,7 +229,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
     setSubscriptions(updated);
     try {
-      const ok = await apiToggleSubscriptionOptOut(DEMO_USER_ID, id);
+      const ok = await apiToggleSubscriptionOptOut(userId, id);
       if (!ok) await AsyncStorage.setItem(SUBSCRIPTIONS_KEY, JSON.stringify(updated));
     } catch (error) {
       console.error("Error saving subscriptions:", error);
@@ -227,7 +261,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         toggleSubscriptionOptOut,
         airtimeLimit,
         setAirtimeLimitValue,
-        userId: DEMO_USER_ID,
+        userId,
+        setUserId,
       }}
     >
       {children}
@@ -238,7 +273,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 const defaultContextValue: AppContextType = {
   language: "en",
   setLanguage: async () => {},
-  t: (key) => key,
+  t: (key) => (translations.en[key] ?? key) as string,
   analysisData: null,
   setAnalysisData: () => {},
   freezeSettings: defaultFreezeSettings,
@@ -252,6 +287,7 @@ const defaultContextValue: AppContextType = {
   airtimeLimit: 300,
   setAirtimeLimitValue: async () => {},
   userId: DEMO_USER_ID,
+  setUserId: () => {},
 };
 
 export function useApp() {

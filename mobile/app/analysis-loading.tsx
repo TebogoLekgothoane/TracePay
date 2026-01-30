@@ -19,12 +19,11 @@ import { useTheme } from "@/hooks/use-theme-color";
 import { useApp } from "@/context/app-context";
 import { Spacing } from "@/constants/theme";
 import { Button } from "@/components/ui/button";
-import { fetchAnalysis } from "@/lib/api";
 
 export default function AnalysisLoadingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { t, setAnalysisData, setIsAnalysisComplete, includeMomoData } = useApp();
+  const { t, setAnalysisData, setIsAnalysisComplete } = useApp();
   const [analysisError, setAnalysisError] = useState(false);
 
   const pulseScale = useSharedValue(1);
@@ -73,24 +72,15 @@ export default function AnalysisLoadingScreen() {
       );
     }, 400);
 
-    const timer = setTimeout(async () => {
-      try {
-        const data = await fetchAnalysis(undefined, includeMomoData);
-        if (data) {
-          setAnalysisData(data);
-          setIsAnalysisComplete(true);
-          router.replace("/(tabs)/home" as any);
-        } else {
-          setAnalysisError(true);
-        }
-      } catch (e) {
-        console.warn("Failed to fetch analysis from DB:", e);
-        setAnalysisError(true);
-      }
-    }, 3000);
+    // No backend: just redirect to home after a short delay (no fetch).
+    const timer = setTimeout(() => {
+      setAnalysisData(null);
+      setIsAnalysisComplete(true);
+      router.replace("/(tabs)/home" as any);
+    }, 1200);
 
     return () => clearTimeout(timer);
-  }, [includeMomoData]);
+  }, []);
 
   const pulseStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulseScale.value }],
@@ -162,18 +152,11 @@ export default function AnalysisLoadingScreen() {
                 Could not load analysis. Check your connection and try again.
               </ThemedText>
               <Button
-                onPress={async () => {
+                onPress={() => {
                   setAnalysisError(false);
-                  try {
-                    const data = await fetchAnalysis(undefined, includeMomoData);
-                    if (data) {
-                      setAnalysisData(data);
-                      setIsAnalysisComplete(true);
-                      router.replace("/(tabs)/home" as any);
-                    } else setAnalysisError(true);
-                  } catch {
-                    setAnalysisError(true);
-                  }
+                  setAnalysisData(null);
+                  setIsAnalysisComplete(true);
+                  router.replace("/(tabs)/home" as any);
                 }}
                 className="bg-accent"
                 textClassName="text-white"

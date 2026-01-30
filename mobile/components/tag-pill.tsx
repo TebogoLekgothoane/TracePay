@@ -5,12 +5,14 @@ import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme-color";
 
-export type TagPillVariant = "airtime_drain" | "hidden_fee" | "loan_shark";
+export type TagPillVariant = "airtime_drain" | "hidden_fee" | "loan_shark" | "subscription_trap" | "debit_order";
 
 const LABELS: Record<TagPillVariant, string> = {
   airtime_drain: "AIRTIME DRAIN",
   hidden_fee: "HIDDEN FEE",
   loan_shark: "LOAN SHARK",
+  subscription_trap: "SUBSCRIPTION",
+  debit_order: "DEBIT ORDER",
 };
 
 type TagPillProps = {
@@ -28,6 +30,12 @@ export function TagPill({ variant }: TagPillProps) {
     textColor = bgBase;
   } else if (variant === "hidden_fee") {
     bgBase = isDark ? Colors.dark.alarmRed : Colors.light.alarmRed;
+    textColor = bgBase;
+  } else if (variant === "subscription_trap") {
+    bgBase = isDark ? Colors.dark.info : Colors.light.info;
+    textColor = bgBase;
+  } else if (variant === "debit_order") {
+    bgBase = isDark ? Colors.dark.hopeGreen : Colors.light.hopeGreen;
     textColor = bgBase;
   } else {
     bgBase = isDark ? Colors.dark.text : Colors.light.text;

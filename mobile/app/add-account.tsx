@@ -6,7 +6,7 @@ import * as Haptics from "expo-haptics";
 
 import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
-import { AppHeader } from "@/components/app-header";
+import { ScreenHeader } from "@/components/screen-header";
 import { Spacing } from "@/constants/theme";
 import { addBank } from "@/lib/api";
 import { getBankLogo } from "@/lib/bank-logos";
@@ -58,11 +58,10 @@ export default function AddAccountScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <AppHeader
+        <ScreenHeader
           title="Add account"
           subtitle="Choose a bank or mobile wallet to add."
-          showBackButton
-          onBackPress={() => router.back()}
+          onBack={() => router.back()}
         />
 
         {error ? (

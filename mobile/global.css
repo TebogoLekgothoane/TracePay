@@ -1,3 +1,10 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Freeze / actions flow: primary (purple) and info (blue) for consistency */
+@layer components {
+  .btn-freeze-apply {
+    @apply rounded-xl items-center justify-center;
+  }
+}

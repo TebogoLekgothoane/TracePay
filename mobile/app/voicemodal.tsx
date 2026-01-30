@@ -1,9 +1,7 @@
 /**
- * Voice modal: type + optional speech input.
- * In Expo Go the native speech module is not available, so we show type-only.
- * In a development build (npx expo run:android / run:ios) we load the speech-enabled version.
+ * Voice modal: type-only chat (no native speech recognition / mic input).
  */
-import React, { useState, useEffect, useRef, Suspense, lazy } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Pressable,
@@ -33,10 +31,8 @@ import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
 import { useTheme } from "@/hooks/use-theme-color";
 import { useApp } from "@/context/app-context";
-import { Spacing, Colors } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { voiceChat, type VoiceChatMessage } from "@/lib/backend-client";
-
-const VoiceModalWithSpeech = lazy(() => import("./voicemodal-with-speech"));
 
 type ChatEntry = { id: string; role: "user" | "assistant"; content: string };
 
@@ -174,34 +170,66 @@ function VoiceModalTypeOnly() {
     return (
       <Animated.View
         entering={FadeInUp.duration(200)}
-        className={`mb-3 ${isUser ? "items-end" : "items-start"}`}
+        style={{
+          flexDirection: "row",
+          marginBottom: Spacing.lg,
+          justifyContent: isUser ? "flex-end" : "flex-start",
+          paddingHorizontal: Spacing.md,
+        }}
       >
+        {!isUser && (
+          <View
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 16,
+              backgroundColor: purpleTintStrong,
+              marginRight: Spacing.sm,
+              overflow: "hidden",
+              alignSelf: "flex-end",
+            }}
+          >
+            <Image
+              source={require("../assets/images/voice-avatar.png")}
+              style={{ width: 32, height: 32 }}
+              contentFit="cover"
+            />
+          </View>
+        )}
         <View
-          className="max-w-[85%] rounded-2xl px-4 py-3"
           style={{
+            maxWidth: "80%",
+            borderRadius: BorderRadius.lg,
+            paddingHorizontal: Spacing.lg,
+            paddingVertical: Spacing.md,
             backgroundColor: isUser
-              ? isDark
-                ? Colors.dark.alarmRed
-                : Colors.light.alarmRed
-              : isDark
-                ? "rgba(255,255,255,0.12)"
-                : "rgba(0,0,0,0.08)",
+              ? purple
+              : purpleTintStrong,
+            borderTopLeftRadius: isUser ? BorderRadius.lg : 4,
+            borderTopRightRadius: isUser ? 4 : BorderRadius.lg,
           }}
         >
           <ThemedText
             type="body"
-            className="leading-[22px]"
-            style={{ color: isUser ? "#fff" : theme.text }}
+            style={{
+              color: isUser ? theme.buttonText : theme.text,
+              lineHeight: 22,
+            }}
           >
             {item.content}
           </ThemedText>
           {!isUser && item.content && (
             <Pressable
               onPress={() => speak(item.content)}
-              className="mt-2 flex-row items-center gap-1 active:opacity-70"
+              style={{
+                marginTop: Spacing.sm,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 4,
+              }}
             >
-              <Feather name="volume-2" size={14} color={theme.textSecondary} />
-              <ThemedText type="small" style={{ color: theme.textSecondary, fontSize: 12 }}>
+              <Feather name="volume-2" size={14} color={purple} />
+              <ThemedText type="small" style={{ color: purple, fontSize: 12 }}>
                 Play
               </ThemedText>
             </Pressable>
@@ -211,49 +239,94 @@ function VoiceModalTypeOnly() {
     );
   };
 
+  // Purple accent (#6D28D9) tints for a cohesive, colorful UI
+  const purple = isDark ? "rgba(139, 92, 246, 0.95)" : "#6D28D9";
+  const purpleTintLight = isDark ? "rgba(139, 92, 246, 0.2)" : "rgba(109, 40, 217, 0.1)";
+  const purpleTintStrong = isDark ? "rgba(139, 92, 246, 0.28)" : "rgba(109, 40, 217, 0.16)";
+  const purpleTintBorder = isDark ? "rgba(139, 92, 246, 0.4)" : "rgba(109, 40, 217, 0.35)";
+  const inputBg = isDark ? "rgba(139, 92, 246, 0.12)" : "rgba(109, 40, 217, 0.06)";
+  const inputBorder = purpleTintBorder;
+  const sendActive = purple;
+  const sendDisabled = isDark ? "rgba(139, 92, 246, 0.35)" : "rgba(109, 40, 217, 0.35)";
+
   return (
-    <ThemedView className="flex-1">
+    <ThemedView style={{ flex: 1 }}>
       <View
-        className="flex-row justify-between items-center px-4 py-4 border-b border-gray-200/10"
-        style={{ paddingTop: insets.top + Spacing.sm }}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingHorizontal: Spacing.lg,
+          paddingTop: insets.top + Spacing.sm,
+          paddingBottom: Spacing.md,
+          borderBottomWidth: 2,
+          borderBottomColor: purpleTintBorder,
+          backgroundColor: purpleTintLight,
+        }}
       >
-        <ThemedText type="h3" className="text-text flex-1">
+        <View style={{ width: 32 }} />
+        <ThemedText type="h3" style={{ color: theme.text, fontWeight: "600" }}>
           {t("voiceExplanation")}
         </ThemedText>
         <Pressable
           onPress={handleClose}
-          className="p-1 active:opacity-60"
+          style={{ padding: Spacing.sm }}
           testID="button-close-voice"
         >
-          <Feather name="x" size={24} color={theme.text} />
+          <Feather name="x" size={22} color={theme.text} />
         </Pressable>
       </View>
 
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
+        style={{ flex: 1, backgroundColor: theme.backgroundDefault }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={0}
       >
-        <View className="flex-1 px-4 pt-4">
-          <Animated.View entering={FadeIn.delay(100)} className="mb-4 flex-row items-center gap-3">
-            <Image
-              source={require("../assets/images/voice-avatar.png")}
-              className="w-[48px] h-[48px]"
-              contentFit="contain"
-            />
-            <View className="flex-1">
-              <ThemedText type="body" className="text-text">
-                Ask about your spending or analysis. I’ll reply and read it out.
-              </ThemedText>
-            </View>
-          </Animated.View>
-
+        <View style={{ flex: 1, paddingTop: Spacing.md, backgroundColor: theme.backgroundDefault }}>
           {messages.length === 0 && (
-            <Animated.View entering={FadeInUp.delay(200)} className="py-4">
-              <ThemedText type="body" style={{ color: theme.textSecondary }}>
-                Type a question below (e.g. “What’s my biggest leak?” or “Summarise my spending”).
-                Your analysis summary is shared with the assistant so it can answer.
-              </ThemedText>
+            <Animated.View
+              entering={FadeIn.delay(100)}
+              style={{
+                flexDirection: "row",
+                paddingHorizontal: Spacing.md,
+                marginBottom: Spacing.lg,
+              }}
+            >
+              <View
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 16,
+                  backgroundColor: purpleTintStrong,
+                  marginRight: Spacing.sm,
+                  overflow: "hidden",
+                }}
+              >
+                <Image
+                  source={require("../assets/images/voice-avatar.png")}
+                  style={{ width: 32, height: 32 }}
+                  contentFit="cover"
+                />
+              </View>
+              <View
+                style={{
+                  flex: 1,
+                  borderRadius: BorderRadius.lg,
+                  borderTopLeftRadius: 4,
+                  paddingHorizontal: Spacing.lg,
+                  paddingVertical: Spacing.md,
+                  backgroundColor: purpleTintStrong,
+                  borderWidth: 1,
+                  borderColor: purpleTintBorder,
+                }}
+              >
+                <ThemedText type="body" style={{ color: theme.text, marginBottom: Spacing.xs }}>
+                  Ask about your spending or analysis. I’ll reply and read it out.
+                </ThemedText>
+                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                  Try: "What’s my biggest leak?" or "Summarise my spending". Your analysis summary is shared so I can answer.
+                </ThemedText>
+              </View>
             </Animated.View>
           )}
 
@@ -264,17 +337,55 @@ function VoiceModalTypeOnly() {
             renderItem={renderMessage}
             onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
             onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
-            contentContainerStyle={{ paddingBottom: Spacing.lg, flexGrow: 1 }}
+            contentContainerStyle={{
+              paddingBottom: Spacing.xl,
+              flexGrow: 1,
+            }}
             ListFooterComponent={
               isLoading ? (
-                <View className="mb-3 flex-row items-center gap-2 py-2">
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingHorizontal: Spacing.md,
+                    marginBottom: Spacing.lg,
+                  }}
+                >
                   <View
-                    className="h-2 w-2 rounded-full opacity-70"
-                    style={{ backgroundColor: theme.textSecondary }}
-                  />
-                  <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                    Thinking…
-                  </ThemedText>
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 16,
+                      backgroundColor: purpleTintStrong,
+                      marginRight: Spacing.sm,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Image
+                      source={require("../assets/images/voice-avatar.png")}
+                      style={{ width: 28, height: 28 }}
+                      contentFit="cover"
+                    />
+                  </View>
+                  <View
+                    style={{
+                      borderRadius: BorderRadius.lg,
+                      borderTopLeftRadius: 4,
+                      paddingHorizontal: Spacing.lg,
+                      paddingVertical: Spacing.md,
+                      backgroundColor: purpleTintStrong,
+                      borderWidth: 1,
+                      borderColor: purpleTintBorder,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: purple, opacity: 0.8 }} />
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: purple, opacity: 0.8 }} />
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: purple, opacity: 0.8 }} />
+                  </View>
                 </View>
               ) : null
             }
@@ -282,39 +393,65 @@ function VoiceModalTypeOnly() {
         </View>
 
         {messages.some((m) => m.role === "assistant") && (
-          <View className="px-4 pb-2 flex-row justify-center">
+          <View
+            style={{
+              paddingHorizontal: Spacing.lg,
+              paddingBottom: Spacing.sm,
+              flexDirection: "row",
+              justifyContent: "center",
+            }}
+          >
             <Pressable
               onPress={handlePlayLastReply}
               disabled={isPlaying}
-              className="flex-row items-center gap-2 py-2 px-3 rounded-full active:opacity-70"
               style={{
-                backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)",
+                flexDirection: "row",
+                alignItems: "center",
+                gap: Spacing.sm,
+                paddingVertical: Spacing.sm,
+                paddingHorizontal: Spacing.lg,
+                borderRadius: BorderRadius.full,
+                backgroundColor: purpleTintStrong,
+                borderWidth: 1,
+                borderColor: purpleTintBorder,
               }}
             >
-              <View className="flex-row items-center gap-1 h-6">
+              <View style={{ flexDirection: "row", alignItems: "center", height: 24, gap: 3 }}>
                 <Animated.View
-                  className="w-1 h-4 rounded"
                   style={[
-                    { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
+                    {
+                      width: 4,
+                      height: 14,
+                      borderRadius: 2,
+                      backgroundColor: purple,
+                    },
                     wave1Style,
                   ]}
                 />
                 <Animated.View
-                  className="w-1 h-5 rounded"
                   style={[
-                    { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
+                    {
+                      width: 4,
+                      height: 18,
+                      borderRadius: 2,
+                      backgroundColor: purple,
+                    },
                     wave2Style,
                   ]}
                 />
                 <Animated.View
-                  className="w-1 h-4 rounded"
                   style={[
-                    { backgroundColor: isDark ? Colors.dark.alarmRed : Colors.light.alarmRed },
+                    {
+                      width: 4,
+                      height: 14,
+                      borderRadius: 2,
+                      backgroundColor: purple,
+                    },
                     wave3Style,
                   ]}
                 />
               </View>
-              <ThemedText type="small" style={{ color: theme.textSecondary }}>
+              <ThemedText type="small" style={{ color: purple, fontWeight: "500" }}>
                 {isPlaying ? "Speaking…" : "Play last reply"}
               </ThemedText>
             </Pressable>
@@ -322,45 +459,59 @@ function VoiceModalTypeOnly() {
         )}
 
         <View
-          className="flex-row items-end gap-2 px-4 pb-4 pt-2 border-t border-gray-200/10"
-          style={{ paddingBottom: insets.bottom + Spacing.md }}
+          style={{
+            flexDirection: "row",
+            alignItems: "flex-end",
+            gap: Spacing.sm,
+            paddingHorizontal: Spacing.lg,
+            paddingTop: Spacing.md,
+            paddingBottom: insets.bottom + Spacing.lg,
+            borderTopWidth: 2,
+            borderTopColor: purpleTintBorder,
+            backgroundColor: purpleTintLight,
+          }}
         >
           <TextInput
             value={input}
             onChangeText={setInput}
-            placeholder="Ask anything…"
+            placeholder="Message TracePay…"
             placeholderTextColor={theme.textSecondary}
             multiline
             maxLength={500}
             editable={!isLoading}
             onSubmitEditing={sendMessage}
             returnKeyType="send"
-            className="flex-1 rounded-xl px-4 py-3 text-base min-h-[44px] max-h-[100px]"
             style={{
-              backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)",
+              flex: 1,
+              borderRadius: BorderRadius.lg,
+              paddingHorizontal: Spacing.lg,
+              paddingVertical: Spacing.md,
+              fontSize: 16,
+              minHeight: 44,
+              maxHeight: 100,
+              backgroundColor: inputBg,
+              borderWidth: 2,
+              borderColor: inputBorder,
               color: theme.text,
             }}
           />
           <Pressable
             onPress={sendMessage}
             disabled={!input.trim() || isLoading}
-            className="rounded-xl p-3 min-h-[44px] justify-center active:opacity-70"
             style={{
-              backgroundColor:
-                input.trim() && !isLoading
-                  ? isDark
-                    ? Colors.dark.alarmRed
-                    : Colors.light.alarmRed
-                  : isDark
-                    ? "rgba(255,255,255,0.15)"
-                    : "rgba(0,0,0,0.1)",
+              width: 44,
+              height: 44,
+              borderRadius: BorderRadius.sm,
+              backgroundColor: input.trim() && !isLoading ? sendActive : sendDisabled,
+              alignItems: "center",
+              justifyContent: "center",
             }}
             testID="button-send-voice"
           >
             <Feather
               name="send"
               size={20}
-              color={input.trim() && !isLoading ? "#fff" : theme.textSecondary}
+              color={input.trim() && !isLoading ? theme.buttonText : purple}
             />
           </Pressable>
         </View>
@@ -370,30 +521,5 @@ function VoiceModalTypeOnly() {
 }
 
 export default function VoiceModalScreen() {
-  const [speechAvailable, setSpeechAvailable] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    import("expo-speech-recognition")
-      .then((mod) => mod.ExpoSpeechRecognitionModule.getStateAsync())
-      .then(() => {
-        if (!cancelled) setSpeechAvailable(true);
-      })
-      .catch(() => {
-        if (!cancelled) setSpeechAvailable(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (speechAvailable === true) {
-    return (
-      <Suspense fallback={<VoiceModalTypeOnly />}>
-        <VoiceModalWithSpeech />
-      </Suspense>
-    );
-  }
-
   return <VoiceModalTypeOnly />;
 }

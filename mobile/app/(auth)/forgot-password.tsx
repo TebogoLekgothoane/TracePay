@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, ScrollView, Pressable, KeyboardAvoidingView, Platform } from "react-native";
+import { View, ScrollView, Pressable, KeyboardAvoidingView, Platform, Image } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -7,9 +7,8 @@ import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
 import { LabeledInput } from "@/components/labeled-input";
 import { Button } from "@/components/ui/button";
-import { Spacing } from "@/constants/theme";
+import { Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme-color";
-import { supabase } from "@/lib/supabase";
 
 export default function ForgotPasswordScreen() {
   const insets = useSafeAreaInsets();
@@ -20,6 +19,7 @@ export default function ForgotPasswordScreen() {
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
+  /** Fake reset: no backend. Just validate email and show "sent" message. */
   const handleSendReset = async () => {
     const trimmed = email.trim().toLowerCase();
     if (!trimmed) {
@@ -28,19 +28,9 @@ export default function ForgotPasswordScreen() {
     }
     setError(null);
     setLoading(true);
-    try {
-      const { error: err } = await supabase.auth.resetPasswordForEmail(trimmed, {
-        redirectTo: undefined,
-      });
-      if (err) throw err;
-      setSent(true);
-    } catch (e) {
-      const message =
-        e instanceof Error ? e.message : "Could not send reset link. Check your email or try again.";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
+    await new Promise((r) => setTimeout(r, 600));
+    setLoading(false);
+    setSent(true);
   };
 
   return (
@@ -52,34 +42,39 @@ export default function ForgotPasswordScreen() {
         <ScrollView
           contentContainerStyle={{
             flexGrow: 1,
-            paddingTop: insets.top + Spacing["4xl"],
+            paddingTop: insets.top + Spacing["3xl"],
             paddingBottom: insets.bottom + Spacing["4xl"],
             paddingHorizontal: Spacing.lg,
           }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Pressable onPress={() => router.back()} className="mb-6 self-start">
-            <ThemedText type="body" className="text-primary">
+          <Pressable onPress={() => router.back()} className="mb-4 self-start">
+            <ThemedText type="body" className="text-primary font-medium">
               ← Back to sign in
             </ThemedText>
           </Pressable>
 
-          <View className="mb-10">
-            <ThemedText type="h1" className="text-text mb-2">
+          <View className="items-center mb-6">
+            <Image
+              source={require("../../assets/trace-pay logo.png")}
+              style={{ width: 72, height: 72 }}
+              resizeMode="contain"
+            />
+            <ThemedText type="h1" className="text-text mt-4 mb-2 text-center">
               Forgot password?
             </ThemedText>
-            <ThemedText type="body" className="text-text-muted">
+            <ThemedText type="body" className="text-text-muted text-center max-w-[280px]">
               Enter the email you use for TracePay and we&apos;ll send you a link to reset your password.
             </ThemedText>
           </View>
 
           {sent ? (
             <View
-              className="mb-6 p-4 rounded-xl"
-              style={{ backgroundColor: theme.backgroundTertiary }}
+              className="p-5 rounded-2xl mb-6"
+              style={{ backgroundColor: theme.backgroundSecondary, borderRadius: BorderRadius.lg }}
             >
-              <ThemedText type="body" className="text-text mb-1">
+              <ThemedText type="body" className="text-text mb-1 font-semibold">
                 Check your email
               </ThemedText>
               <ThemedText type="small" style={{ color: theme.textSecondary }}>
@@ -87,7 +82,10 @@ export default function ForgotPasswordScreen() {
               </ThemedText>
             </View>
           ) : (
-            <>
+            <View
+              className="p-5 rounded-2xl mb-6"
+              style={{ backgroundColor: theme.backgroundSecondary, borderRadius: BorderRadius.lg }}
+            >
               {error ? (
                 <View
                   className="mb-4 p-3 rounded-xl"
@@ -112,11 +110,11 @@ export default function ForgotPasswordScreen() {
               <Button
                 onPress={handleSendReset}
                 disabled={loading}
-                className="mt-4"
+                className="w-full"
               >
                 {loading ? "Sending…" : "Send reset link"}
               </Button>
-            </>
+            </View>
           )}
         </ScrollView>
       </KeyboardAvoidingView>

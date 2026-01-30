@@ -1,26 +1,33 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { View, FlatList, Pressable, Modal, ActivityIndicator, Image, Alert } from "react-native";
+import { View, FlatList, ScrollView, Pressable, Modal, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
+import * as Haptics from "expo-haptics";
 
 import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
 import { EmptyState } from "@/components/empty-state";
+import { AccountRowSkeleton, Skeleton } from "@/components/ui/skeleton";
 import { formatZar } from "@/components/utils/money";
 import { getBankLogo } from "@/lib/bank-logos";
 import { useTheme } from "@/hooks/use-theme-color";
 import { useApp } from "@/context/app-context";
-import { Spacing, Colors } from "@/constants/theme";
+import { Spacing, Colors, BorderRadius } from "@/constants/theme";
 import {
   fetchIncomeAccounts,
   fetchReroutePlan,
   updateReroutePlan,
   fetchSpendingSummaryForReroute,
   fetchPartnerRecommendations,
+  fetchAnalysis,
   type PartnerRecommendationRow,
   type SpendingByCategory,
 } from "@/lib/api";
+
+const NAVY = "#1e40af";
+const navyTint = "rgba(30, 64, 175, 0.15)";
 
 type Account = {
   id: string;
@@ -40,11 +47,17 @@ export default function RerouteControlScreen() {
   const [planId, setPlanId] = useState<string>("");
   const [plan, setPlan] = useState<Record<string, boolean>>({});
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const [toggleModalVisible, setToggleModalVisible] = useState(false);
+  const [pendingAccount, setPendingAccount] = useState<Account | null>(null);
+  const [pendingEnable, setPendingEnable] = useState(false);
   const [isApplied, setIsApplied] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [loading, setLoading] = useState(true);
   const [spendingByCategory, setSpendingByCategory] = useState<SpendingByCategory[]>([]);
   const [partnerRecommendations, setPartnerRecommendations] = useState<PartnerRecommendationRow[]>([]);
+  const [totalLoss, setTotalLoss] = useState<number>(0);
+
+  const navyTintBg = navyTint;
 
   useEffect(() => {
     setLoading(true);
@@ -53,8 +66,9 @@ export default function RerouteControlScreen() {
       fetchReroutePlan(userId),
       fetchSpendingSummaryForReroute(userId),
       fetchPartnerRecommendations(),
+      fetchAnalysis(userId),
     ])
-      .then(([accs, { planId: pid, plan: p, isApplied: applied }, spending, recommendations]) => {
+      .then(([accs, { planId: pid, plan: p, isApplied: applied }, spending, recommendations, analysis]) => {
         setAccounts(
           accs.map((a) => ({
             id: a.id,
@@ -70,6 +84,7 @@ export default function RerouteControlScreen() {
         setIsApplied(applied);
         setSpendingByCategory(spending ?? []);
         setPartnerRecommendations(recommendations ?? []);
+        setTotalLoss(analysis?.totalLoss ?? 0);
       })
       .finally(() => setLoading(false));
   }, [userId]);
@@ -79,7 +94,7 @@ export default function RerouteControlScreen() {
     return Math.round(highFeeShare * 0.6);
   }, [accounts]);
 
-  const summaryCardColor = isDark ? Colors.dark.info : Colors.light.info;
+  const summaryCardColor = NAVY;
 
   const recommendationsWithSpending = useMemo(() => {
     const spendingByCat = new Map(spendingByCategory.map((s) => [s.category, s]));
@@ -107,48 +122,32 @@ export default function RerouteControlScreen() {
   }, [accounts, plan]);
 
   const handleToggle = (item: Account) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const currentlyEnabled = plan[item.id];
     const willEnable = !currentlyEnabled;
-
-    if (willEnable) {
-      Alert.alert(
-        "Move income to this account?",
-        `We'll route ${item.suggestedIncome}% of your income to ${item.nickname} (${item.bank}). Salary and debit orders can be sent here. Do you want to turn this on?`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Yes, move income here",
-            onPress: () => setPlan((prev) => ({ ...prev, [item.id]: true })),
-          },
-        ]
-      );
-    } else {
-      const typeLabel =
-        item.type === "highFee"
-          ? "stop sending new income to this high‑fee account"
-          : "stop routing income to this account";
-      Alert.alert(
-        "Stop routing income here?",
-        `No new salary or debit orders will go to ${item.nickname} (${item.bank}). Your existing balance is not affected. Are you sure you want to ${typeLabel}?`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Yes, deactivate",
-            style: "destructive",
-            onPress: () => setPlan((prev) => ({ ...prev, [item.id]: false })),
-          },
-        ]
-      );
-    }
+    setPendingAccount(item);
+    setPendingEnable(willEnable);
+    setToggleModalVisible(true);
   };
 
-  const renderAccount = ({ item }: { item: Account }) => {
+  const handleConfirmToggle = () => {
+    if (pendingAccount) {
+      setPlan((prev) => ({ ...prev, [pendingAccount.id]: pendingEnable }));
+    }
+    setToggleModalVisible(false);
+    setPendingAccount(null);
+  };
+
+  const handleCancelToggle = () => {
+    setToggleModalVisible(false);
+    setPendingAccount(null);
+  };
+
+  const renderAccount = ({ item, index }: { item: Account; index: number }) => {
     const enabled = plan[item.id];
     const pillColor =
       item.type === "highFee"
-        ? isDark
-          ? Colors.dark.alarmRed
-          : Colors.light.alarmRed
+        ? NAVY
         : isDark
         ? Colors.dark.hopeGreen
         : Colors.light.hopeGreen;
@@ -157,127 +156,164 @@ export default function RerouteControlScreen() {
 
     const ctaLabel = isHighFee
       ? enabled
-        ? "Account deactivated (no new income)"
-        : "Tap to stop new income"
+        ? "No new income"
+        : "Stop new income here"
       : enabled
-      ? "Account activated"
-      : "Tap to move income here";
+      ? "Receiving income"
+      : "Move income here";
 
     return (
-      <Pressable
-        onPress={() => handleToggle(item)}
-        className="rounded-xl p-4 active:scale-[0.99]"
-        style={({ pressed }) => ({
-          backgroundColor: theme.backgroundDefault,
-          opacity: isApplied && isHighFee ? 0.7 : 1,
-          transform: pressed ? [{ scale: 0.99 }] : undefined,
-        })}
+      <Animated.View
+        entering={FadeInDown.delay(80 + index * 40).springify()}
+        style={{ marginBottom: Spacing.md }}
       >
-        <View className="flex-row justify-between items-center mb-3">
-          <View className="flex-row items-center gap-2">
-            <View
-              className="w-10 h-10 rounded-xl items-center justify-center mr-2 overflow-hidden"
-              style={{ backgroundColor: pillColor + "20" }}
-            >
-              {getBankLogo(item.bank) ? (
-                <Image
-                  source={getBankLogo(item.bank)!}
-                  className="w-10 h-10 rounded-xl"
-                  resizeMode="cover"
-                />
-              ) : (
-                <ThemedText type="body" className="text-text">
-                  {item.bank[0]}
+        <Pressable
+          onPress={() => handleToggle(item)}
+          style={({ pressed }) => ({
+            padding: Spacing.lg,
+            borderRadius: BorderRadius.lg,
+            backgroundColor: theme.backgroundSecondary,
+            borderWidth: 1,
+            borderLeftWidth: 4,
+            borderColor: theme.backgroundTertiary,
+            borderLeftColor: pillColor,
+            opacity: isApplied && isHighFee ? 0.7 : 1,
+            transform: pressed ? [{ scale: 0.99 }] : undefined,
+          })}
+        >
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: Spacing.md }}>
+            <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+              <View
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: BorderRadius.sm,
+                  backgroundColor: pillColor + "22",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginRight: Spacing.md,
+                  overflow: "hidden",
+                }}
+              >
+                {getBankLogo(item.bank) ? (
+                  <Image
+                    source={getBankLogo(item.bank)!}
+                    style={{ width: 40, height: 40 }}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <ThemedText type="body" style={{ color: theme.text, fontWeight: "600" }}>
+                    {item.bank[0]}
+                  </ThemedText>
+                )}
+              </View>
+              <View>
+                <ThemedText type="body" style={{ color: theme.text, fontWeight: "600", fontSize: 16 }}>
+                  {item.bank}
                 </ThemedText>
-              )}
+                <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: 2, fontSize: 14 }}>
+                  {item.nickname}
+                </ThemedText>
+              </View>
             </View>
-            <View>
-              <ThemedText type="body" className="text-text">
-                {item.bank}
-              </ThemedText>
-              <ThemedText type="small" className="text-text-muted mt-0.5">
-                {item.nickname}
+
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                backgroundColor: pillColor + "20",
+                paddingVertical: 4,
+                paddingHorizontal: Spacing.sm,
+                borderRadius: BorderRadius.full,
+              }}
+            >
+              <View
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: 3,
+                  marginRight: 6,
+                  backgroundColor: pillColor,
+                }}
+              />
+              <ThemedText type="small" style={{ color: pillColor, fontSize: 12 }}>
+                {isApplied
+                  ? isHighFee
+                    ? "No new income"
+                    : "Now receiving income"
+                  : item.type === "highFee"
+                  ? "High‑fee"
+                  : item.type === "salary"
+                  ? "Salary home"
+                  : "Low‑fee savings"}
               </ThemedText>
             </View>
           </View>
+
+          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: Spacing.sm }}>
+            <View style={{ flex: 1 }}>
+              <ThemedText type="small" style={{ color: theme.textSecondary, fontSize: 13 }}>
+                {isApplied ? "Before" : "Today"}
+              </ThemedText>
+              <ThemedText type="h3" style={{ color: theme.text, marginTop: 4, fontSize: 18 }}>
+                {item.currentIncome}%
+              </ThemedText>
+            </View>
+            <Feather
+              name="arrow-right"
+              size={18}
+              color={theme.textSecondary}
+              style={{ marginHorizontal: Spacing.sm }}
+            />
+            <View style={{ flex: 1 }}>
+              <ThemedText type="small" style={{ color: theme.textSecondary, fontSize: 13 }}>
+                {isApplied ? "Now" : "With this plan"}
+              </ThemedText>
+              <ThemedText type="h3" style={{ color: theme.text, marginTop: 4, fontSize: 18 }}>
+                {enabled ? item.suggestedIncome : item.currentIncome}%
+              </ThemedText>
+            </View>
+          </View>
+
+          {isApplied && isHighFee ? (
+            <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: Spacing.sm, lineHeight: 20 }}>
+              We&apos;ll stop sending new income here. Existing balance stays, but fresh money moves to safer accounts.
+            </ThemedText>
+          ) : null}
 
           <View
-            className="flex-row items-center rounded-full px-2 py-1"
-            style={{ backgroundColor: pillColor + "20" }}
-          >
-            <View
-              className="w-2 h-2 rounded-full mr-1"
-              style={{ backgroundColor: pillColor }}
-            />
-            <ThemedText
-              type="small"
-              style={{ color: pillColor }}
-            >
-              {isApplied
-                ? isHighFee
-                  ? "No new income"
-                  : "Now receiving income"
-                : item.type === "highFee"
-                ? "High‑fee"
-                : item.type === "salary"
-                ? "Salary home"
-                : "Low‑fee savings"}
-            </ThemedText>
-          </View>
-        </View>
-
-        <View className="flex-row items-center mt-2">
-          <View className="flex-1">
-            <ThemedText type="small" className="text-text-muted">
-              {isApplied ? "Before" : "Today"}
-            </ThemedText>
-            <ThemedText type="h3" className="text-text mt-0.5">
-              {item.currentIncome}%
-            </ThemedText>
-          </View>
-          <Feather
-            name="arrow-right"
-            size={18}
-            color={theme.textSecondary}
-            style={{ marginHorizontal: Spacing.sm }}
-          />
-          <View className="flex-1">
-            <ThemedText type="small" className="text-text-muted">
-              {isApplied ? "Now" : "With this plan"}
-            </ThemedText>
-            <ThemedText type="h3" className="text-text mt-0.5">
-              {enabled ? item.suggestedIncome : item.currentIncome}%
-            </ThemedText>
-          </View>
-        </View>
-
-        {isApplied && isHighFee ? (
-          <ThemedText type="small" className="text-text-muted mt-2">
-            We&apos;ll stop sending new income here. Existing balance stays, but fresh money moves
-            to safer accounts.
-          </ThemedText>
-        ) : null}
-
-        <View
-          className="flex-row items-center mt-4 rounded py-2 px-3 self-stretch justify-center"
-          style={{ backgroundColor: enabled ? pillColor : theme.backgroundTertiary }}
-        >
-          <Feather
-            name={enabled ? "check-circle" : "circle"}
-            size={18}
-            color={enabled ? "#FFFFFF" : theme.text}
-          />
-          <ThemedText
-            type="button"
-            className="ml-1"
             style={{
-              color: enabled ? "#FFFFFF" : theme.text,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              marginTop: Spacing.lg,
+              paddingVertical: Spacing.sm,
+              paddingHorizontal: Spacing.md,
+              borderRadius: BorderRadius.lg,
+              backgroundColor: enabled ? theme.backgroundTertiary : NAVY,
+              borderWidth: enabled ? 1 : 0,
+              borderColor: theme.backgroundTertiary,
             }}
           >
-            {ctaLabel}
-          </ThemedText>
-        </View>
-      </Pressable>
+            <Feather
+              name={enabled ? "check-circle" : "arrow-right-circle"}
+              size={18}
+              color={enabled ? theme.text : "#FFFFFF"}
+            />
+            <ThemedText
+              type="button"
+              style={{
+                marginLeft: 6,
+                color: enabled ? theme.text : "#FFFFFF",
+                fontSize: 14,
+                fontWeight: "600",
+              }}
+            >
+              {ctaLabel}
+            </ThemedText>
+          </View>
+        </Pressable>
+      </Animated.View>
     );
   };
 
@@ -310,11 +346,32 @@ export default function RerouteControlScreen() {
 
   if (loading) {
     return (
-      <ThemedView className="flex-1 bg-bg items-center justify-center">
-        <ActivityIndicator size="large" color={isDark ? Colors.dark.info : Colors.light.info} />
-        <ThemedText type="body" className="text-text-muted mt-3">
-          Loading income accounts…
-        </ThemedText>
+      <ThemedView className="flex-1 bg-bg">
+        <ScrollView
+          contentContainerStyle={{
+            paddingTop: insets.top + Spacing.xl,
+            paddingBottom: insets.bottom + Spacing["4xl"],
+            paddingHorizontal: Spacing.lg,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View className="flex-row items-center mb-3">
+            <Pressable onPress={() => router.back()} className="p-1 mr-2" hitSlop={10}>
+              <Feather name="arrow-left" size={20} color={theme.text} />
+            </Pressable>
+            <Skeleton width={220} height={24} />
+          </View>
+          <Skeleton width="100%" height={80} style={{ marginBottom: 16, borderRadius: 12 }} />
+          <View className="mb-2">
+            <AccountRowSkeleton />
+          </View>
+          <View className="h-3" />
+          <AccountRowSkeleton />
+          <View className="h-3" />
+          <AccountRowSkeleton />
+          <View className="h-3" />
+          <AccountRowSkeleton />
+        </ScrollView>
       </ThemedView>
     );
   }
@@ -326,7 +383,6 @@ export default function RerouteControlScreen() {
           <Pressable onPress={() => router.back()} className="p-1 mr-2" hitSlop={10}>
             <Feather name="arrow-left" size={20} color={theme.text} />
           </Pressable>
-          <ThemedText type="h2" className="text-text">Route income differently</ThemedText>
         </View>
         <EmptyState
           title="No income accounts"
@@ -347,68 +403,86 @@ export default function RerouteControlScreen() {
         data={accounts}
         keyExtractor={(item) => item.id}
         renderItem={renderAccount}
-        ItemSeparatorComponent={() => <View className="h-3" />}
         ListHeaderComponent={
-          <View className="mb-6">
-            <View className="flex-row items-center mb-3">
-              <Pressable
-                onPress={() => router.back()}
-                className="p-1 mr-2"
-                hitSlop={10}
-              >
-                <Feather name="arrow-left" size={20} color={theme.text} />
+          <View style={{ marginBottom: Spacing["2xl"] }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: Spacing["2xl"] }}>
+              <Pressable onPress={() => router.back()} hitSlop={10} style={{ padding: Spacing.sm, marginRight: Spacing.sm }}>
+                <Feather name="arrow-left" size={22} color={theme.text} />
               </Pressable>
-              <ThemedText type="h2" className="text-text">
+              <ThemedText type="h2" style={{ color: theme.text }}>
                 Route income differently
               </ThemedText>
             </View>
+
             {isApplied && showSuccess ? (
               <View
-                className="rounded-xl p-3 mb-4"
                 style={{
-                  backgroundColor:
-                    (isDark ? Colors.dark.hopeGreen : Colors.light.hopeGreen) + "20",
+                  borderRadius: BorderRadius.lg,
+                  padding: Spacing.lg,
+                  marginBottom: Spacing.lg,
+                  backgroundColor: (isDark ? Colors.dark.hopeGreen : Colors.light.hopeGreen) + "20",
+                  borderWidth: 1,
+                  borderColor: (isDark ? Colors.dark.hopeGreen : Colors.light.hopeGreen) + "45",
                 }}
               >
-                <View className="flex-row items-center">
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
                   <Feather
                     name="check-circle"
                     size={18}
                     color={isDark ? Colors.dark.hopeGreen : Colors.light.hopeGreen}
                   />
-                  <View className="flex-1 ml-2">
-                    <ThemedText type="body" className="text-text">
+                  <View style={{ flex: 1, marginLeft: Spacing.md }}>
+                    <ThemedText type="body" style={{ color: theme.text, fontWeight: "600" }}>
                       Your safer income route is on.
                     </ThemedText>
-                    <ThemedText type="small" className="text-text-muted mt-0.5">
+                    <ThemedText type="small" style={{ color: theme.textSecondary, marginTop: 4, fontSize: 14 }}>
                       We&apos;ll help you move salary and debit orders into low‑fee accounts.
                     </ThemedText>
                   </View>
-                  <Pressable onPress={() => setShowSuccess(false)}>
-                    <Feather
-                      name="x"
-                      size={16}
-                      color={theme.textSecondary}
-                    />
+                  <Pressable onPress={() => setShowSuccess(false)} hitSlop={10}>
+                    <Feather name="x" size={16} color={theme.textSecondary} />
                   </Pressable>
                 </View>
               </View>
             ) : null}
 
-            <ThemedText type="h2" className="text-text mb-1">
-              Route income differently
-            </ThemedText>
-            <ThemedText type="body" className="text-text-muted mb-4">
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: Spacing.lg }}>
+              <View
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: BorderRadius.xs,
+                  backgroundColor: navyTintBg,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginRight: Spacing.sm,
+                }}
+              >
+                <Feather name="shuffle" size={18} color={NAVY} />
+              </View>
+              <ThemedText type="h3" style={{ color: theme.text, fontSize: 18 }}>
+                Your income accounts
+              </ThemedText>
+            </View>
+            <ThemedText type="body" style={{ color: theme.textSecondary, marginBottom: Spacing.sm, lineHeight: 22 }}>
               {isApplied
                 ? "Your new route is live. Future income is steered into safer, low‑fee accounts."
-                : "Choose smarter homes for your future income. We&apos;ll shift money away from high‑fee accounts into safer, low‑fee ones."}
+                : "Choose smarter homes for your future income. We'll shift money away from high‑fee accounts into safer, low‑fee ones."}
             </ThemedText>
+            {totalLoss > 0 ? (
+              <ThemedText type="small" style={{ color: theme.textSecondary, marginBottom: Spacing.lg, lineHeight: 20 }}>
+                You&apos;re losing about {formatZar(totalLoss)} this month. Moving income to low‑fee accounts helps reduce what ends up in fees and leaks.
+              </ThemedText>
+            ) : null}
 
             <View
-              className="rounded-lg p-4 border"
               style={{
+                borderRadius: BorderRadius.lg,
+                padding: Spacing.lg,
+                marginBottom: Spacing.lg,
                 backgroundColor: summaryCardColor + "16",
-                borderColor: summaryCardColor + "60",
+                borderWidth: 1,
+                borderColor: summaryCardColor + "55",
               }}
             >
               <View className="flex-row items-center mb-3 gap-2">
@@ -555,19 +629,24 @@ export default function RerouteControlScreen() {
 
         <Pressable
           onPress={handleApply}
-          className="h-[52px] rounded-xl px-4 items-center justify-center active:opacity-90"
           style={({ pressed }) => ({
-            backgroundColor: isApplied
-              ? theme.backgroundTertiary
-              : isDark
-              ? Colors.dark.hopeGreen
-              : Colors.light.hopeGreen,
+            height: 52,
+            borderRadius: BorderRadius.lg,
+            paddingHorizontal: Spacing.lg,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: isApplied ? theme.backgroundTertiary : NAVY,
+            borderWidth: isApplied ? 1 : 0,
+            borderColor: theme.backgroundTertiary,
             opacity: pressed ? 0.9 : 1,
           })}
         >
           <ThemedText
             type="button"
-            className={isApplied ? "text-text" : "text-white"}
+            style={{
+              color: isApplied ? theme.text : "#FFFFFF",
+              fontWeight: "600",
+            }}
           >
             {isApplied ? "Plan applied" : "Confirm plan"}
           </ThemedText>
@@ -580,52 +659,177 @@ export default function RerouteControlScreen() {
         animationType="fade"
         onRequestClose={handleCancelConfirm}
       >
-        <View className="flex-1 bg-black/50 justify-center items-center p-6">
-          <View
-            className="w-full rounded-3xl p-6 items-center"
-            style={{ backgroundColor: theme.backgroundRoot }}
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: Spacing["2xl"] }}>
+          <Animated.View
+            entering={FadeIn}
+            style={{
+              width: "100%",
+              borderRadius: BorderRadius["2xl"],
+              padding: Spacing["2xl"],
+              alignItems: "center",
+              backgroundColor: theme.backgroundRoot,
+              borderWidth: 1,
+              borderColor: theme.backgroundTertiary,
+            }}
           >
-            <Feather
-              name="alert-circle"
-              size={40}
-              color={isDark ? Colors.dark.warningYellow : Colors.light.warningYellow}
-            />
-            <ThemedText type="h2" className="mt-4 mb-2 text-text">
+            <View
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 32,
+                backgroundColor: navyTintBg,
+                borderWidth: 1,
+                borderColor: NAVY + "45",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: Spacing.lg,
+              }}
+            >
+              <Feather name="alert-circle" size={36} color={NAVY} />
+            </View>
+            <ThemedText type="h2" style={{ color: theme.text, marginBottom: Spacing.sm }}>
               Confirm new income route
             </ThemedText>
             <ThemedText
               type="body"
-              className="text-text-secondary text-center mb-6"
+              style={{
+                color: theme.textSecondary,
+                textAlign: "center",
+                marginBottom: Spacing["2xl"],
+                lineHeight: 22,
+              }}
             >
-              We&apos;ll recommend that your salary and debit orders move to this new split:
-              {"\n\n"}
-              {distribution.highFee}% high‑fee · {distribution.salary}% salary ·{" "}
-              {distribution.savings}% savings.
+              {totalLoss > 0
+                ? `Your leaks this month are about ${formatZar(totalLoss)}. `
+                : ""}
+              We&apos;ll recommend that your salary and debit orders move to this new split:{"\n\n"}
+              {distribution.highFee}% high‑fee · {distribution.salary}% salary · {distribution.savings}% savings.
             </ThemedText>
-
-            <View className="flex-row gap-3 w-full">
+            <View style={{ flexDirection: "row", gap: Spacing.md, width: "100%" }}>
               <Pressable
                 onPress={handleCancelConfirm}
-                className="flex-1 h-[52px] rounded-xl items-center justify-center"
-                style={{ backgroundColor: theme.backgroundDefault }}
+                style={{
+                  flex: 1,
+                  height: 52,
+                  borderRadius: BorderRadius.lg,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: theme.backgroundSecondary,
+                  borderWidth: 1,
+                  borderColor: theme.backgroundTertiary,
+                }}
               >
-                <ThemedText type="button">Cancel</ThemedText>
+                <ThemedText type="button" style={{ color: theme.text, fontWeight: "600" }}>
+                  Cancel
+                </ThemedText>
               </Pressable>
               <Pressable
                 onPress={handleConfirmPlan}
-                className="flex-1 h-[52px] rounded-xl items-center justify-center"
                 style={{
-                  backgroundColor: isDark
-                    ? Colors.dark.hopeGreen
-                    : Colors.light.hopeGreen,
+                  flex: 1,
+                  height: 52,
+                  borderRadius: BorderRadius.lg,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: NAVY,
                 }}
               >
-                <ThemedText type="button" className="text-white">
+                <ThemedText type="button" style={{ color: "#FFFFFF", fontWeight: "600" }}>
                   Confirm
                 </ThemedText>
               </Pressable>
             </View>
-          </View>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={toggleModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCancelToggle}
+      >
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: Spacing["2xl"] }}>
+          <Animated.View
+            entering={FadeIn}
+            style={{
+              width: "100%",
+              borderRadius: BorderRadius["2xl"],
+              padding: Spacing["2xl"],
+              alignItems: "center",
+              backgroundColor: theme.backgroundRoot,
+              borderWidth: 1,
+              borderColor: theme.backgroundTertiary,
+            }}
+          >
+            <View
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 32,
+                backgroundColor: navyTintBg,
+                borderWidth: 1,
+                borderColor: NAVY + "45",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: Spacing.lg,
+              }}
+            >
+              <Feather name="alert-circle" size={36} color={NAVY} />
+            </View>
+            <ThemedText type="h2" style={{ color: theme.text, marginBottom: Spacing.sm }}>
+              {pendingEnable ? "Move income to this account?" : "Stop routing income here?"}
+            </ThemedText>
+            <ThemedText
+              type="body"
+              style={{
+                color: theme.textSecondary,
+                textAlign: "center",
+                marginBottom: Spacing["2xl"],
+                lineHeight: 22,
+              }}
+            >
+              {pendingAccount && pendingEnable
+                ? `We'll route ${pendingAccount.suggestedIncome}% of your income to ${pendingAccount.nickname} (${pendingAccount.bank}). Salary and debit orders can be sent here. Do you want to turn this on?`
+                : pendingAccount
+                ? `No new salary or debit orders will go to ${pendingAccount.nickname} (${pendingAccount.bank}). Your existing balance is not affected. Are you sure?`
+                : ""}
+            </ThemedText>
+            <View style={{ flexDirection: "row", gap: Spacing.md, width: "100%" }}>
+              <Pressable
+                onPress={handleCancelToggle}
+                style={{
+                  flex: 1,
+                  height: 52,
+                  borderRadius: BorderRadius.lg,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: theme.backgroundSecondary,
+                  borderWidth: 1,
+                  borderColor: theme.backgroundTertiary,
+                }}
+              >
+                <ThemedText type="button" style={{ color: theme.text, fontWeight: "600" }}>
+                  Cancel
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={handleConfirmToggle}
+                style={{
+                  flex: 1,
+                  height: 52,
+                  borderRadius: BorderRadius.lg,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: NAVY,
+                }}
+              >
+                <ThemedText type="button" style={{ color: "#FFFFFF", fontWeight: "600" }}>
+                  {pendingEnable ? "Move income here" : "Yes, deactivate"}
+                </ThemedText>
+              </Pressable>
+            </View>
+          </Animated.View>
         </View>
       </Modal>
     </ThemedView>

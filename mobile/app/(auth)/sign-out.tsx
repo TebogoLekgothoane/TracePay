@@ -4,25 +4,24 @@ import { useRouter } from "expo-router";
 
 import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
-import { clearBackendAuthToken } from "@/lib/backend-client";
-import { supabase } from "@/lib/supabase";
+import { useApp } from "@/context/app-context";
+import { clearAuthStorage } from "@/lib/auth-storage";
 
-/**
- * Sign-out screen: clears backend JWT and Supabase session, then redirects to login.
- * Can be navigated to directly (e.g. from settings) or used as a redirect target.
- */
+/** Sign-out: clears local auth storage only (no backend). Then redirects to login. */
 export default function SignOutScreen() {
   const router = useRouter();
+  const { setUserId } = useApp();
 
   useEffect(() => {
     let cancelled = false;
 
     async function signOut() {
       try {
-        await clearBackendAuthToken();
-        await supabase.auth.signOut();
+        await clearAuthStorage();
+        setUserId(null);
+        // No backend/Supabase – UI-only
       } catch {
-        // Ignore errors; still redirect
+        // Ignore
       }
       if (!cancelled) {
         router.replace("/(auth)" as any);
@@ -33,7 +32,7 @@ export default function SignOutScreen() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, setUserId]);
 
   return (
     <ThemedView className="flex-1 bg-bg items-center justify-center px-6">

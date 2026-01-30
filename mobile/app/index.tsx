@@ -4,37 +4,24 @@ import { useRouter } from "expo-router";
 import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
 import { getBackendToken } from "@/lib/auth-storage";
-import { supabase } from "@/lib/supabase";
 
 /**
- * Root index: if user has a backend JWT or Supabase session, go to tabs; otherwise go to login.
- * (You don't see sign-in because the app "remembers" you – sign out from Settings to see it again.)
+ * Root index: if user has a (fake) token, go to home; otherwise show auth.
+ * No backend or Supabase – auth is UI-only with fake login.
  */
 export default function IndexScreen() {
   const router = useRouter();
 
   useEffect(() => {
     let cancelled = false;
-
-    async function resolveRoute() {
-      try {
-        const token = await getBackendToken();
-        if (token) {
-          if (!cancelled) router.replace("/(tabs)/home" as any);
-          return;
-        }
-        const { data } = await supabase.auth.getSession();
-        if (data.session) {
-          if (!cancelled) router.replace("/(tabs)/home" as any);
-          return;
-        }
-      } catch {
-        // Ignore
+    getBackendToken().then((token) => {
+      if (cancelled) return;
+      if (token) {
+        router.replace("/(tabs)/home" as any);
+      } else {
+        router.replace("/(auth)" as any);
       }
-      if (!cancelled) router.replace("/(auth)" as any);
-    }
-
-    resolveRoute();
+    });
     return () => {
       cancelled = true;
     };

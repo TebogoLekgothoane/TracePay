@@ -3,44 +3,78 @@ import { View, Image, ImageSourcePropType } from "react-native";
 import { ThemedText } from "@/components/themed-text";
 import { Bank } from "@/components/bank-card";
 import { formatZar, getLossStatus } from "@/components/utils/money";
+import { useTheme } from "@/hooks/use-theme-color";
+import { Spacing, Colors } from "@/constants/theme";
 
-function statusPillClass(totalLost: number) {
+function getStatusColors(totalLost: number, isDark: boolean) {
   const status = getLossStatus(totalLost);
-  if (status === "high") return "bg-red-100";
-  if (status === "medium") return "bg-orange-100";
-  return "bg-green-100";
-}
-
-function statusTextClass(totalLost: number) {
-  const status = getLossStatus(totalLost);
-  if (status === "high") return "text-red-700";
-  if (status === "medium") return "text-orange-700";
-  return "text-green-700";
+  const c = isDark ? Colors.dark : Colors.light;
+  if (status === "high") return { bg: c.alarmRed + "28", text: c.alarmRed };
+  if (status === "medium") return { bg: c.warningYellow + "28", text: c.warningYellow };
+  return { bg: c.hopeGreen + "28", text: c.hopeGreen };
 }
 
 export function BankSummaryCard({ bank, logo }: { bank: Bank; logo?: ImageSourcePropType }) {
+  const { theme, isDark } = useTheme();
+  const statusColors = getStatusColors(bank.totalLost, isDark);
+  const statusLabel = getLossStatus(bank.totalLost);
+
   return (
-    <View className="w-full rounded-2xl bg-bg-card px-5 py-5">
-      <View className="flex-row items-center justify-between">
-        <View className="flex-row items-center flex-1">
+    <View
+      style={{
+        width: "100%",
+        borderRadius: 18,
+        paddingHorizontal: Spacing.lg,
+        paddingVertical: Spacing.lg,
+        backgroundColor: theme.backgroundSecondary,
+        borderWidth: 1,
+        borderColor: theme.backgroundTertiary,
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
           {logo ? (
             <Image
               source={logo}
-              className="w-10 h-10 rounded-lg mr-3"
+              style={{ width: 44, height: 44, borderRadius: 10, marginRight: Spacing.md }}
               resizeMode="contain"
             />
           ) : null}
-          <ThemedText type="h2" className="text-text flex-1">
+          <ThemedText type="h2" style={{ color: theme.text, flex: 1, fontSize: 20 }}>
             {bank.name}
           </ThemedText>
         </View>
-        <View className={["px-3 py-1 rounded-full", statusPillClass(bank.totalLost)].join(" ")}>
-          <ThemedText type="small" className={statusTextClass(bank.totalLost)}>
-            {getLossStatus(bank.totalLost).toUpperCase()}
+        <View
+          style={{
+            paddingHorizontal: Spacing.md,
+            paddingVertical: Spacing.xs,
+            borderRadius: 9999,
+            backgroundColor: statusColors.bg,
+          }}
+        >
+          <ThemedText
+            type="body"
+            style={{
+              color: statusColors.text,
+              fontSize: 14,
+              fontWeight: "600",
+              textTransform: "uppercase",
+              letterSpacing: 0.3,
+            }}
+          >
+            {statusLabel}
           </ThemedText>
         </View>
       </View>
-      <ThemedText type="body" className="text-text-muted mt-3">
+      <ThemedText
+        type="body"
+        style={{
+          color: theme.textSecondary,
+          marginTop: Spacing.md,
+          fontSize: 16,
+          lineHeight: 22,
+        }}
+      >
         You lost {formatZar(bank.totalLost)} this month
       </ThemedText>
     </View>
