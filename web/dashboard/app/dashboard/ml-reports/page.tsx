@@ -14,37 +14,57 @@ export default function AdminDashboardPage() {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isFetching, setIsFetching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     void loadStats();
-    void handleGlobalSync();
+    // Removed auto-sync on load to prevent hanging - sync should be manual only
+    // void handleGlobalSync();
   }, []);
 
   async function handleGlobalSync() {
+    if (refreshing || isFetching) return; // Prevent concurrent calls
     setRefreshing(true);
+    setError(null);
     try {
       await apiClient.syncAllData();
       await loadStats();
     } catch (e) {
       console.error("Sync error:", e);
+      setError("Failed to sync data. The backend may be slow or unavailable.");
     } finally {
       setRefreshing(false);
     }
   }
 
   async function loadStats() {
+    if (isFetching) return; // Prevent concurrent calls
+    setIsFetching(true);
+    setError(null); // Clear previous errors
     try {
       const overview = await apiClient.getOverviewStats();
       setStats(overview);
     } catch (error) {
       console.error("Failed to load stats:", error);
+      setError("Failed to load statistics. The backend may be slow or unavailable. Please try again.");
     } finally {
       setLoading(false);
+      setIsFetching(false);
     }
   }
 
   if (loading || !stats) {
-    return <div className="p-8 text-primary font-medium">Loading Stakeholder Intelligence...</div>;
+    return (
+      <div className="p-8">
+        <div className="text-primary font-medium">Loading Stakeholder Intelligence...</div>
+        {error && (
+          <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded text-yellow-100 text-sm">
+            {error}
+          </div>
+        )}
+      </div>
+    );
   }
 
   const chartOptions: any = {

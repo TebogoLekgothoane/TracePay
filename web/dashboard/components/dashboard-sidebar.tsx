@@ -68,25 +68,25 @@ export function DashboardSidebar() {
                                     className="data-[active=true]:bg-primary/25 data-[active=true]:border-l-2 data-[active=true]:border-primary data-[active=true]:shadow-sm !hover:bg-primary/10 !hover:text-foreground"
                                 >
                                     <Link href="/dashboard">
-                                    <LayoutDashboard className="h-4 w-4" />
-                                    <span>Overview</span>
+                                        <LayoutDashboard className="h-4 w-4" />
+                                        <span>Overview</span>
                                     </Link>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
                             <SidebarMenuItem>
-                                <SidebarMenuButton 
+                                <SidebarMenuButton
                                     asChild
                                     isActive={pathname === "/dashboard/history"}
                                     className="data-[active=true]:bg-primary/25 data-[active=true]:border-l-2 data-[active=true]:border-primary data-[active=true]:shadow-sm !hover:bg-primary/10 !hover:text-foreground"
                                 >
                                     <Link href="/dashboard/history">
-                                    <Flame className="h-4 w-4" />
+                                        <Flame className="h-4 w-4" />
                                         <span>Leak Analytics</span>
                                     </Link>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
                             <SidebarMenuItem>
-                                <SidebarMenuButton 
+                                <SidebarMenuButton
                                     asChild
                                     isActive={pathname === "/dashboard/ml-reports"}
                                     className="data-[active=true]:bg-primary/25 data-[active=true]:border-l-2 data-[active=true]:border-primary data-[active=true]:shadow-sm !hover:bg-primary/10 !hover:text-foreground"
@@ -98,7 +98,7 @@ export function DashboardSidebar() {
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
                             <SidebarMenuItem>
-                                <SidebarMenuButton 
+                                <SidebarMenuButton
                                     asChild
                                     isActive={pathname === "/dashboard/regional"}
                                     className="data-[active=true]:bg-primary/25 data-[active=true]:border-l-2 data-[active=true]:border-primary data-[active=true]:shadow-sm !hover:bg-primary/10 !hover:text-foreground"
@@ -117,22 +117,24 @@ export function DashboardSidebar() {
                     <SidebarGroupContent>
                         <SidebarMenu>
                             <SidebarMenuItem>
-                                <SidebarMenuButton 
+                                <SidebarMenuButton
                                     asChild
-                                    className="!hover:bg-primary/10 !hover:text-foreground"
+                                    isActive={pathname === "/dashboard/methodology"}
+                                    className="data-[active=true]:bg-primary/25 data-[active=true]:border-l-2 data-[active=true]:border-primary data-[active=true]:shadow-sm !hover:bg-primary/10 !hover:text-foreground"
                                 >
-                                    <Link href="#">
+                                    <Link href="/dashboard/methodology">
                                         <BookOpen className="h-4 w-4" />
                                         <span>Methodology Guide</span>
                                     </Link>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
                             <SidebarMenuItem>
-                                <SidebarMenuButton 
+                                <SidebarMenuButton
                                     asChild
-                                    className="!hover:bg-primary/10 !hover:text-foreground"
+                                    isActive={pathname === "/dashboard/compliance"}
+                                    className="data-[active=true]:bg-primary/25 data-[active=true]:border-l-2 data-[active=true]:border-primary data-[active=true]:shadow-sm !hover:bg-primary/10 !hover:text-foreground"
                                 >
-                                    <Link href="#">
+                                    <Link href="/dashboard/compliance">
                                         <ShieldCheck className="h-4 w-4" />
                                         <span>Compliance (SARB)</span>
                                     </Link>
@@ -155,7 +157,7 @@ export function DashboardSidebar() {
                         </SidebarMenuButton>
                     </SidebarMenuItem>
                     <SidebarMenuItem>
-                        <SidebarMenuButton 
+                        <SidebarMenuButton
                             className="w-full text-red-300 !hover:bg-red-500/10 !hover:text-red-300"
                             onClick={() => logout()}
                         >

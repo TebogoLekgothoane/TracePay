@@ -110,8 +110,10 @@ export default function DashboardPage() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [isFetching, setIsFetching] = useState(false);
 
     async function handleGlobalSync() {
+        if (refreshing || isFetching) return; // Prevent concurrent calls
         setRefreshing(true);
         try {
             await apiClient.syncAllData();
@@ -125,6 +127,8 @@ export default function DashboardPage() {
     }
 
     async function fetchStats() {
+        if (isFetching) return; // Prevent concurrent calls
+        setIsFetching(true);
         setLoading(true);
         setError(null);
         try {
@@ -146,6 +150,7 @@ export default function DashboardPage() {
             setError("Live data sync failed. Ensure the TracePay backend is running on port 8001.");
         } finally {
             setLoading(false);
+            setIsFetching(false);
         }
     }
 

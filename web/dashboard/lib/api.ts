@@ -7,9 +7,16 @@ export interface ApiError {
 export class ApiClient {
   private baseUrl: string;
   private token: string | null = null;
+  private pendingRequests = new Map<string, Promise<any>>();
 
   constructor(baseUrl: string = API_BASE_URL) {
-    this.baseUrl = baseUrl;
+    // Force IPv4 loopback in browser to avoid ::1 preference
+    let finalBase = baseUrl;
+    if (typeof window !== "undefined" && finalBase.includes("localhost")) {
+      finalBase = finalBase.replace("localhost", "127.0.0.1");
+    }
+    this.baseUrl = finalBase.endsWith("/") ? finalBase.slice(0, -1) : finalBase;
+
     if (typeof window !== "undefined") {
       this.token = localStorage.getItem("auth_token");
     }
@@ -28,85 +35,147 @@ export class ApiClient {
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    timeoutMs: number = 15000 // Make timeout configurable
   ): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
+    // Normalize endpoint
+    const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+    const url = `${this.baseUrl}${cleanEndpoint}`;
+
+    // Create a unique key for this request (include timeout in key to allow different timeouts for same endpoint)
+    const requestKey = `${options.method || "GET"}:${url}:${timeoutMs}`;
+
+    // If there's already a pending request for this endpoint, return it
+    if (this.pendingRequests.has(requestKey)) {
+      return this.pendingRequests.get(requestKey)!;
+    }
+
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      ...(options.headers as Record<string, string> | undefined),
+      ...(options.headers as Record<string, string> ?? {}),
     };
-    
+
     if (this.token) {
       headers["Authorization"] = `Bearer ${this.token}`;
     }
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
+    // Add timeout (very helpful for debugging hanging requests)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs); // Use configurable timeout
 
-    if (!response.ok) {
-      const error: ApiError = await response.json().catch(() => ({
-        detail: `HTTP ${response.status}: ${response.statusText}`,
-      }));
-      throw new Error(error.detail || "API request failed");
-    }
+    // Create the request promise
+    const requestPromise = (async () => {
+      try {
+        console.log("[API Request]", options.method || "GET", url); // ← debug
 
-    return response.json();
+        const response = await fetch(url, {
+          ...options,
+          headers,
+          signal: controller.signal,
+          // Important in Next.js + browser context
+          credentials: "same-origin", // or "include" if you use cookies
+          cache: "no-store",          // avoid stale Next.js cache issues
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          let errorData: ApiError;
+          try {
+            errorData = await response.json();
+          } catch {
+            errorData = {
+              detail: `HTTP ${response.status} ${response.statusText}`,
+            };
+          }
+          console.error("[API Error]", response.status, url, errorData);
+          throw new Error(errorData.detail || "API request failed");
+        }
+
+        const data = await response.json();
+        return data as T;
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+
+        if (err.name === "AbortError") {
+          throw new Error("Request timeout - backend may be down or too slow");
+        }
+
+        if (err.message?.includes("fetch")) {
+          console.error("[Fetch failed]", err.message, url);
+          throw new Error(
+            `Failed to fetch ${url}\n` +
+            `→ Is backend running at ${this.baseUrl}?\n` +
+            `→ Check NEXT_PUBLIC_API_URL in .env.local / Vercel\n` +
+            `→ CORS / network / firewall issue?`
+          );
+        }
+
+        throw err;
+      } finally {
+        // Remove from pending requests when done
+        this.pendingRequests.delete(requestKey);
+      }
+    })();
+
+    // Store the pending request
+    this.pendingRequests.set(requestKey, requestPromise);
+
+    return requestPromise;
   }
 
   // Auth endpoints
   // In web/dashboard/lib/api.ts - Update user_id types:
 
-async register(email: string, password: string) {
-  const response = await this.request<{
-    access_token: string;
-    user_id: string;  // Changed from number to string
-    email: string;
-    role: string;
-  }>("/auth/register", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
-  this.setToken(response.access_token);
-  return response;
-}
+  async register(email: string, password: string) {
+    const response = await this.request<{
+      access_token: string;
+      user_id: string;  // Changed from number to string
+      email: string;
+      role: string;
+    }>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+    this.setToken(response.access_token);
+    return response;
+  }
 
-async login(email: string, password: string) {
-  const response = await this.request<{
-    access_token: string;
-    user_id: string;  // Changed from number to string
-    email: string;
-    role: string;
-  }>("/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
-  this.setToken(response.access_token);
-  return response;
-}
+  async login(email: string, password: string) {
+    const response = await this.request<{
+      access_token: string;
+      user_id: string;  // Changed from number to string
+      email: string;
+      role: string;
+    }>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+    this.setToken(response.access_token);
+    return response;
+  }
 
-async getMe() {
-  return this.request<{
-    id: string;  // Changed from number to string
-    email: string;
-    role: string;
-    created_at: string;
-  }>("/auth/me");
-}
+  async getMe() {
+    return this.request<{
+      id: string;  // Changed from number to string
+      email: string;
+      role: string;
+      created_at: string;
+    }>("/auth/me");
+  }
 
-async refreshToken() {
-  const response = await this.request<{
-    access_token: string;
-    user_id: string;  // Changed from number to string
-    email: string;
-    role: string;
-  }>("/auth/refresh", {
-    method: "POST",
-  });
-  this.setToken(response.access_token);
-  return response;
-}
+  async refreshToken() {
+    const response = await this.request<{
+      access_token: string;
+      user_id: string;  // Changed from number to string
+      email: string;
+      role: string;
+    }>("/auth/refresh", {
+      method: "POST",
+    });
+    this.setToken(response.access_token);
+    return response;
+  }
 
   // Analysis endpoints
   async analyze(transactions: any[]) {
@@ -189,7 +258,7 @@ async refreshToken() {
       retail_wealth_unlock: number;
       avg_inclusion_delta: number;
       total_retail_velocity: number;
-    }>("/admin/stats/overview");
+    }>("/admin/stats/overview", {}, 30000); // 30s timeout for stats endpoints
   }
 
   async getRegionalStats() {
@@ -201,7 +270,7 @@ async refreshToken() {
         total_users: number;
         top_leak_type: string;
       }>
-    >("/admin/stats/regional");
+    >("/admin/stats/regional", {}, 30000); // 30s timeout for stats endpoints
   }
 
   async getTemporalStats(days: number = 30) {
@@ -215,12 +284,9 @@ async refreshToken() {
         average_score: number;
         count: number;
       }>;
-    }>("/admin/stats/temporal", {
+    }>(`/admin/stats/temporal?days=${days}`, {
       method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+    }, 30000); // 30s timeout for stats endpoints
   }
 
   async listUsers(skip: number = 0, limit: number = 50) {
@@ -262,6 +328,7 @@ async refreshToken() {
   }
 
   async syncAllData() {
+    // sync-all returns immediately (background task), so default timeout is fine
     return this.request<{ status: string, message: string }>("/admin/sync-all", {
       method: "POST"
     });
