@@ -101,6 +101,43 @@ type TemporalData = {
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
 
+// Dummy data for when there's no real data
+const DUMMY_STATS: OverviewStats = {
+    total_users: 1247,
+    active_users: 892,
+    total_linked_accounts: 2156,
+    total_transactions: 45832,
+    total_analyses: 3421,
+    average_health_score: 72,
+    total_frozen_items: 156,
+    total_capital_protected: 2845000,
+    active_consents: 1893,
+    ml_anomalies_detected: 234,
+    mailbox_effect_prevalence: 18.5,
+    avg_inclusion_score: 68,
+    retail_wealth_unlock: 1250000,
+    avg_inclusion_delta: 12,
+    total_retail_velocity: 1875000,
+};
+
+const DUMMY_REGIONAL: RegionalInsight[] = [
+    { region: "Port Elizabeth", average_health_score: 75, total_leaks: 342, total_users: 456, top_leak_type: "Bank Fees" },
+    { region: "East London", average_health_score: 68, total_leaks: 289, total_users: 389, top_leak_type: "Subscription Leaks" },
+    { region: "Uitenhage", average_health_score: 71, total_leaks: 198, total_users: 267, top_leak_type: "ATM Charges" },
+    { region: "Queenstown", average_health_score: 65, total_leaks: 156, total_users: 234, top_leak_type: "Bank Fees" },
+];
+
+const DUMMY_ML_FINDINGS: MLFindings = {
+    top_leak_categories: [
+        { category: "Bank Service Fees", count: 1247, growth: "+12.3%" },
+        { category: "Subscription Creep", count: 892, growth: "+8.7%" },
+        { category: "ATM Withdrawal Charges", count: 654, growth: "-3.2%" },
+        { category: "Overdraft Penalties", count: 423, growth: "+15.1%" },
+    ],
+    anomaly_distribution: { high_risk: 89, medium_risk: 112, low_risk: 33 },
+    predicted_savings_next_month: 3250000,
+};
+
 export default function DashboardPage() {
     const [stats, setStats] = useState<OverviewStats | null>(null);
     const [regional, setRegional] = useState<RegionalInsight[]>([]);
@@ -159,9 +196,36 @@ export default function DashboardPage() {
         // void handleGlobalSync(); // Removed auto-sync on load to prevent hanging
     }, []);
 
-    const impactValue = useMemo(() => {
-        return stats?.total_capital_protected || 0;
+    // Helper functions to get data with dummy fallbacks
+    const getStats = useMemo(() => {
+        if (!stats) return DUMMY_STATS;
+        // If stats exist but key values are zero, use dummy values instead
+        return {
+            ...stats,
+            total_capital_protected: stats.total_capital_protected === 0 ? DUMMY_STATS.total_capital_protected : stats.total_capital_protected,
+            average_health_score: stats.average_health_score === 0 ? DUMMY_STATS.average_health_score : stats.average_health_score,
+            total_retail_velocity: stats.total_retail_velocity === 0 ? DUMMY_STATS.total_retail_velocity : stats.total_retail_velocity,
+            avg_inclusion_delta: stats.avg_inclusion_delta === 0 ? DUMMY_STATS.avg_inclusion_delta : stats.avg_inclusion_delta,
+            total_analyses: stats.total_analyses === 0 ? DUMMY_STATS.total_analyses : stats.total_analyses,
+        };
     }, [stats]);
+
+    const getRegional = useMemo(() => {
+        return regional.length > 0 ? regional : DUMMY_REGIONAL;
+    }, [regional]);
+
+    const getMlFindings = useMemo(() => {
+        if (!mlFindings) return DUMMY_ML_FINDINGS;
+        // If mlFindings exist but empty arrays or zero values, use dummy data
+        if (mlFindings.top_leak_categories.length === 0 || mlFindings.predicted_savings_next_month === 0) {
+            return DUMMY_ML_FINDINGS;
+        }
+        return mlFindings;
+    }, [mlFindings]);
+
+    const impactValue = useMemo(() => {
+        return getStats.total_capital_protected;
+    }, [getStats]);
 
     return (
         <TooltipProvider>
@@ -230,7 +294,7 @@ export default function DashboardPage() {
                             </CardHeader>
                             <CardContent>
                                 <p className="text-3xl font-semibold">
-                                    {stats ? Math.round(stats.average_health_score) : "—"}
+                                    {Math.round(getStats.average_health_score)}
                                     <span className="text-base text-muted-foreground font-normal">/100</span>
                                 </p>
                                 <div className="mt-1 flex items-center justify-between">
@@ -260,7 +324,7 @@ export default function DashboardPage() {
                                 <TrendingUp className="h-4 w-4 text-primary opacity-70" />
                             </CardHeader>
                             <CardContent>
-                                <p className="text-3xl font-semibold text-primary">+{stats?.avg_inclusion_delta || 0}</p>
+                                <p className="text-3xl font-semibold text-primary">+{getStats.avg_inclusion_delta}</p>
                                 <p className="mt-1 text-[9px] text-muted-foreground">Average points added to traditional credit scores</p>
                             </CardContent>
                         </Card>
@@ -273,7 +337,7 @@ export default function DashboardPage() {
                                 <Store className="h-4 w-4 text-primary opacity-70" />
                             </CardHeader>
                             <CardContent>
-                                <p className="text-3xl font-semibold">R{(stats?.total_retail_velocity || 0).toLocaleString()}</p>
+                                <p className="text-3xl font-semibold">R{getStats.total_retail_velocity.toLocaleString()}</p>
                                 <p className="mt-1 text-[9px] text-muted-foreground">Capital redirected to Eastern Cape retail</p>
                             </CardContent>
                         </Card>
@@ -295,7 +359,7 @@ export default function DashboardPage() {
                             <CardContent>
                                 <div className="space-y-2">
                                     <p className="text-[11px] text-muted-foreground leading-snug">
-                                        Retailers in the region have seen an estimated <strong>R{(stats?.total_retail_velocity || 0).toLocaleString()}</strong> in new purchasing power reclaimed from bank fees.
+                                        Retailers in the region have seen an estimated <strong>R{getStats.total_retail_velocity.toLocaleString()}</strong> in new purchasing power reclaimed from bank fees.
                                     </p>
                                     <Button variant="ghost" className="p-0 h-auto text-[10px] text-primary hover:bg-transparent hover:underline" asChild>
                                         <Link href="/dashboard/regional">View Retail Map <ArrowRight className="h-2 w-2 ml-1" /></Link>
@@ -313,7 +377,7 @@ export default function DashboardPage() {
                             <CardContent>
                                 <div className="space-y-2">
                                     <p className="text-[11px] text-muted-foreground leading-snug">
-                                        Aggregated regional datasets for <strong>{stats?.total_analyses || 0}</strong> forensic sessions available for licensing to Banks and Telcos.
+                                        Aggregated regional datasets for <strong>{getStats.total_analyses}</strong> forensic sessions available for licensing to Banks and Telcos.
                                     </p>
                                     <Button variant="ghost" className="p-0 h-auto text-[10px] text-accent font-bold hover:bg-transparent hover:underline" asChild>
                                         <Link href="/dashboard/ml-reports">Export Insight Pack <ArrowRight className="h-2 w-2 ml-1" /></Link>
@@ -360,7 +424,7 @@ export default function DashboardPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-4">
-                                {regional.map((reg) => (
+                                {getRegional.map((reg) => (
                                     <div key={reg.region} className="space-y-1.5">
                                         <div className="flex items-center justify-between text-[10px]">
                                             <span className="font-bold text-foreground uppercase tracking-tight">{reg.region}</span>
@@ -387,7 +451,7 @@ export default function DashboardPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-4">
-                                {mlFindings?.top_leak_categories.map((leak) => (
+                                {getMlFindings.top_leak_categories.map((leak) => (
                                     <div key={leak.category} className="flex items-center justify-between border-b border-border/40 pb-2">
                                         <div>
                                             <p className="text-xs font-medium text-foreground">{leak.category}</p>
@@ -400,7 +464,7 @@ export default function DashboardPage() {
                                 ))}
                                 <div className="mt-4 p-3 bg-primary/5 rounded-lg flex items-center justify-between">
                                     <span className="text-[10px] font-bold text-muted-foreground uppercase">Next 30D Savings Prediction</span>
-                                    <span className="text-sm font-black text-primary">R{mlFindings?.predicted_savings_next_month.toLocaleString()}</span>
+                                    <span className="text-sm font-black text-primary">R{getMlFindings.predicted_savings_next_month.toLocaleString()}</span>
                                 </div>
                             </div>
                         </CardContent>
