@@ -1,7 +1,7 @@
 /**
  * Voice modal: type-only chat (no native speech recognition / mic input).
  */
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   View,
   Pressable,
@@ -33,6 +33,7 @@ import { useTheme } from "@/hooks/use-theme-color";
 import { useApp } from "@/context/app-context";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { voiceChat, type VoiceChatMessage } from "@/lib/backend-client";
+import { mockAnalysisDataWithMomo } from "@/data/mock-analysis";
 
 type ChatEntry = { id: string; role: "user" | "assistant"; content: string };
 
@@ -54,8 +55,30 @@ function VoiceModalTypeOnly() {
   const waveScale2 = useSharedValue(1);
   const waveScale3 = useSharedValue(1);
 
-  const summaryContext =
-    analysisData?.summary[language as "en" | "xh"] || analysisData?.summary.en || "";
+  /** Rich context from analysis or mock data so the assistant only uses real numbers and leaks */
+  const voiceContext = useMemo(() => {
+    const data = analysisData ?? mockAnalysisDataWithMomo;
+    const total = data?.totalLoss ?? 0;
+    const categories = [...(data?.categories ?? [])].sort((a, b) => b.amount - a.amount);
+    const summary =
+      data?.summary?.[language as "en" | "xh"] || data?.summary?.en || "";
+    const leakList = categories
+      .map((c) => `${c.name} R${c.amount.toLocaleString()}`)
+      .join(", ");
+    const biggest = categories[0];
+    const lines: string[] = [];
+    lines.push(`Total lost this month: R ${total.toLocaleString()}.`);
+    if (leakList) lines.push(`Leak breakdown: ${leakList}.`);
+    if (biggest) lines.push(`Biggest leak: ${biggest.name}, R ${biggest.amount.toLocaleString()}.`);
+    if (data?.momoData && data.momoData.potentialSavings > 0) {
+      lines.push(
+        `Potential savings on airtime and data (switch to monthly bundles): R ${data.momoData.potentialSavings.toLocaleString()}.`
+      );
+    }
+    if (summary) lines.push(`Summary: ${summary}`);
+    return lines.join(" ");
+  }, [analysisData, language]);
+
   const langCode = language === "xh" ? "xh-ZA" : "en-ZA";
 
   useEffect(() => {
@@ -135,7 +158,7 @@ function VoiceModalTypeOnly() {
       const res = await voiceChat({
         messages: chatHistory,
         language: language === "xh" ? "xh" : "en",
-        summary_context: summaryContext || undefined,
+        summary_context: voiceContext,
       });
       const assistantEntry: ChatEntry = {
         id: `assistant-${Date.now()}`,
@@ -324,7 +347,7 @@ function VoiceModalTypeOnly() {
                   Ask about your spending or analysis. I’ll reply and read it out.
                 </ThemedText>
                 <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                  Try: "What’s my biggest leak?" or "Summarise my spending". Your analysis summary is shared so I can answer.
+                  Try: "What’s my biggest leak?" or "Summarise my spending". I use your real autopsy data so answers match your numbers.
                 </ThemedText>
               </View>
             </Animated.View>

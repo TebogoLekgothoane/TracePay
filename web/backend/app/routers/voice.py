@@ -54,12 +54,14 @@ async def voice_chat(req: VoiceChatRequest) -> VoiceChatResponse:
         )
 
     system_content = (
-        "You are a helpful TracePay assistant. You help users understand their spending, "
-        "money leaks, and financial health in a friendly, concise way. "
-        "Answer in the same language the user uses. Keep replies brief so they work well as voice."
+        "You are the TracePay voice assistant. You help users understand their spending, "
+        "money leaks, and financial health. Use ONLY the context below to answer. "
+        "Do not invent or guess numbers, leak names, amounts, or savings. "
+        "If the user asks about something not in the context, say you don't have that information. "
+        "Answer in the same language the user uses. Keep replies brief for voice."
     )
     if req.summary_context:
-        system_content += f"\n\nCurrent analysis context (use this to answer questions): {req.summary_context}"
+        system_content += f"\n\n--- Context (use only these facts) ---\n{req.summary_context}\n--- End context ---"
 
     messages_for_groq: List[Dict[str, str]] = [
         {"role": "system", "content": system_content},

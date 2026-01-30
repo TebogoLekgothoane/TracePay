@@ -3,6 +3,7 @@ import { View, ScrollView, Pressable, KeyboardAvoidingView, Platform, Image } fr
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
 import { LabeledInput } from "@/components/labeled-input";
@@ -23,6 +24,21 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /** Continue with Google: demo flow; replace with real OAuth (e.g. expo-auth-session) when ready. */
+  const handleContinueWithGoogle = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      await setBackendToken("fake");
+      setUserId(DEMO_USER_ID);
+      router.replace("/language-selection" as any);
+    } catch (e) {
+      setError("Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   /** Fake sign-up: no backend. Just validate and set a fake token, then go to language selection. */
   const handleCreateAccount = async () => {
@@ -129,6 +145,29 @@ export default function RegisterScreen() {
               {loading ? "Creating account…" : "Create account"}
             </Button>
           </View>
+
+          <View className="flex-row items-center my-4">
+            <View className="flex-1 h-px" style={{ backgroundColor: theme.textSecondary }} />
+            <ThemedText type="small" className="mx-3 text-text-muted">
+              or
+            </ThemedText>
+            <View className="flex-1 h-px" style={{ backgroundColor: theme.textSecondary }} />
+          </View>
+
+          <Pressable
+            onPress={handleContinueWithGoogle}
+            disabled={loading}
+            className="flex-row items-center justify-center h-12 rounded-full mb-4 border-2 gap-2"
+            style={{
+              borderColor: theme.textSecondary,
+              backgroundColor: theme.backgroundSecondary,
+            }}
+          >
+            <MaterialCommunityIcons name="google" size={20} color={theme.text} />
+            <ThemedText type="body" className="font-semibold" style={{ color: theme.text }}>
+              Continue with Google
+            </ThemedText>
+          </Pressable>
 
           <View className="flex-row items-center justify-center mt-2">
             <ThemedText type="body" className="text-text-muted mr-1">

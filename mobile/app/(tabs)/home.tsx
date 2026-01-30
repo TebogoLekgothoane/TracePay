@@ -41,30 +41,12 @@ export default function HomeScreen() {
   const [unlinkingId, setUnlinkingId] = useState<string | null>(null);
   const [spendSmarterSuggestions, setSpendSmarterSuggestions] = useState<SpendSmarterSuggestion[]>([]);
   const [spendSmarterLoading, setSpendSmarterLoading] = useState(true);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  /** After user stops playback, don't auto-play when they return to Home until they tap mic to play again */
+  const [skipAutoPlayNextFocus, setSkipAutoPlayNextFocus] = useState(false);
 
   const summaryText =
     analysisData?.summary[(language as "en" | "xh") ?? "en"] || analysisData?.summary?.en || "";
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!summaryText) return;
-      const langCode = language === "xh" ? "xh-ZA" : "en-ZA";
-      const play = () => {
-        Speech.speak(summaryText, {
-          language: langCode,
-          rate: 0.9,
-          onDone: () => {},
-          onStopped: () => {},
-          onError: () => {},
-        });
-      };
-      const t = setTimeout(play, 100);
-      return () => {
-        clearTimeout(t);
-        // Do not stop speech on blur so audio continues when user navigates to other screens
-      };
-    }, [summaryText, language])
-  );
 
   const loadBanks = useCallback(() => {
     setBanksLoading(true);
@@ -159,41 +141,134 @@ export default function HomeScreen() {
     Share.share({ message: code, title: "Promo code" }).catch(() => {});
   };
 
+  /** Voice script: specific facts once — total lost, each leak with amount, savings plan, discounts. No repetition. */
+  const voiceScript = useMemo(() => {
+    const total = totalLossFromAnalysis ?? 0;
+    const categories = [...(analysisData?.categories ?? [])].sort((a, b) => b.amount - a.amount);
+    const momoData = analysisData?.momoData;
+    const isXh = (lang: "en" | "xh") => lang === "xh";
+
+    const build = (lang: "en" | "xh") => {
+      if (total <= 0 && categories.length === 0) {
+        return isXh(lang)
+          ? "Akukho datha. Qhagamshela ii-akhawunti uze ubenze uhlolo ukuze ube nolwazi ngemali oyilahlekileyo, imithombo, icebo lokugcina nezipho."
+          : "No autopsy data. Link accounts and run an autopsy to hear your total loss, leak breakdown, savings plan and rewards.";
+      }
+
+      const parts: string[] = [];
+
+      // 1. Total lost (once, exact)
+      if (total > 0) {
+        if (isXh(lang)) {
+          parts.push(`Kule nyanga ulahlekelwe yi R ${total.toLocaleString()}.`);
+        } else {
+          parts.push(`This month you lost R ${total.toLocaleString()}.`);
+        }
+      }
+
+      // 2. Money leaks: every category with exact amount, biggest first. Say each once.
+      if (categories.length > 0) {
+        const leakList = categories
+          .map((c) => (isXh(lang) ? `${c.nameXhosa || c.name} R${c.amount.toLocaleString()}` : `${c.name} R${c.amount.toLocaleString()}`))
+          .join(", ");
+        if (isXh(lang)) {
+          parts.push(`Iindleko: ${leakList}.`);
+        } else {
+          parts.push(`Breakdown: ${leakList}.`);
+        }
+        const biggest = categories[0];
+        if (biggest && biggest.amount > 0) {
+          if (isXh(lang)) {
+            parts.push(`Eyona nkulu: ${biggest.nameXhosa || biggest.name}.`);
+          } else {
+            parts.push(`Biggest leak: ${biggest.name}.`);
+          }
+        }
+      }
+
+      // 3. Savings plan (specific actions only; do not repeat summary)
+      if (momoData && momoData.potentialSavings > 0) {
+        if (isXh(lang)) {
+          parts.push(`Ungagcina R ${momoData.potentialSavings.toLocaleString()} ngokutshintsha kwi-data ne-airtime bundles zenyanga.`);
+        } else {
+          parts.push(`You could save R ${momoData.potentialSavings.toLocaleString()} by switching to monthly airtime and data bundles.`);
+        }
+      }
+      if (isXh(lang)) {
+        parts.push("Kwi-TracePay: yihlela imali kwi-akhawunti ezinemali ephantsi, umise i-debit orders ongazifuniyo.");
+      } else {
+        parts.push("In TracePay: reroute income to low-fee accounts and pause debit orders you don't need.");
+      }
+
+      // 4. Discounts (specific: retailer and value; where to find codes)
+      if (discounts.length > 0) {
+        const rewardList = discounts
+          .slice(0, 4)
+          .map((d) => (isXh(lang) ? `${d.retailer}: ${d.discountValue}` : `${d.retailer}, ${d.discountValue}`))
+          .join(". ");
+        if (isXh(lang)) {
+          parts.push(`Izipho ezi-${discounts.length}: ${rewardList}. Bona i-Your rewards ukuze ubone ii-promo codes.`);
+        } else {
+          parts.push(`${discounts.length} rewards: ${rewardList}. Open Your rewards for promo codes.`);
+        }
+      } else if (total > 0 || categories.length > 0) {
+        if (isXh(lang)) {
+          parts.push("Sebenzisa i-TracePay ngakumbi ukuze ufumane izipho.");
+        } else {
+          parts.push("Use TracePay more to unlock rewards.");
+        }
+      }
+
+      return parts.join(" ");
+    };
+
+    return { en: build("en"), xh: build("xh") };
+  }, [
+    totalLossFromAnalysis,
+    analysisData?.categories,
+    analysisData?.momoData,
+    discounts,
+  ]);
+
+  const textToSpeakOnFocus = language === "xh" ? voiceScript.xh : voiceScript.en;
+
+  const clearSpeaking = useCallback(() => setIsSpeaking(false), []);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!textToSpeakOnFocus || skipAutoPlayNextFocus) return;
+      const langCode = language === "xh" ? "xh-ZA" : "en-ZA";
+      const t = setTimeout(() => {
+        setIsSpeaking(true);
+        Speech.speak(textToSpeakOnFocus, {
+          language: langCode,
+          rate: 0.9,
+          onDone: clearSpeaking,
+          onStopped: clearSpeaking,
+          onError: clearSpeaking,
+        });
+      }, 100);
+      return () => clearTimeout(t);
+    }, [textToSpeakOnFocus, language, clearSpeaking, skipAutoPlayNextFocus])
+  );
+
   const handleVoicePress = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    const langCode = language === "xh" ? "xh-ZA" : "en-ZA";
-    const isXh = language === "xh";
-
-    let textToSpeak: string;
-    if (totalLossFromAnalysis > 0 && summaryText) {
-      if (isXh) {
-        textToSpeak = `Ulahlekelwe yi R ${totalLossFromAnalysis.toLocaleString()} kule nyanga. ${summaryText}`;
-      } else {
-        textToSpeak = `You lost R ${totalLossFromAnalysis.toLocaleString()} this month. ${summaryText}`;
-      }
-    } else if (totalLossFromAnalysis > 0) {
-      if (isXh) {
-        textToSpeak = `Ulahlekelwe yi R ${totalLossFromAnalysis.toLocaleString()} kule nyanga. Nceda uqhagamshelle ii-akhawunti uze ubenze uhlolo ukuze ube nokuziva ngokungcono.`;
-      } else {
-        textToSpeak = `You lost R ${totalLossFromAnalysis.toLocaleString()} this month. Link accounts and run an autopsy to hear what you could save.`;
-      }
-    } else if (summaryText) {
-      textToSpeak = summaryText;
-    } else {
-      if (isXh) {
-        textToSpeak = "Akukho datha ye-autopsy. Nceda uqhagamshelle ii-akhawunti uze ubenze uhlolo.";
-      } else {
-        textToSpeak = "No autopsy data yet. Link accounts and run an autopsy to hear how much you could save.";
-      }
+    if (isSpeaking) {
+      Speech.stop();
+      setSkipAutoPlayNextFocus(true);
+      return;
     }
-
+    setSkipAutoPlayNextFocus(false);
+    const langCode = language === "xh" ? "xh-ZA" : "en-ZA";
+    const textToSpeak = language === "xh" ? voiceScript.xh : voiceScript.en;
+    setIsSpeaking(true);
     Speech.speak(textToSpeak, {
       language: langCode,
       rate: 0.9,
-      onDone: () => {},
-      onStopped: () => {},
-      onError: () => {},
+      onDone: clearSpeaking,
+      onStopped: clearSpeaking,
+      onError: clearSpeaking,
     });
   };
 
@@ -208,7 +283,7 @@ export default function HomeScreen() {
       >
         <View style={{ paddingHorizontal: Spacing.lg }}>
           <AppHeader
-            title="Where your money died"
+            title="Welcome, Tebogo"
             subtitle="See all your money leaks per bank. Tap a bank to see the autopsy."
             className="mb-6"
             rightAccessory={
@@ -217,10 +292,14 @@ export default function HomeScreen() {
                 style={{
                   padding: Spacing.sm,
                   borderRadius: 9999,
-                  backgroundColor: NAVY + "18",
+                  backgroundColor: isSpeaking ? "#dc2626" + "20" : NAVY + "18",
                 }}
               >
-                <Feather name="mic" size={22} color={NAVY} />
+                <Feather
+                  name={isSpeaking ? "square" : "mic"}
+                  size={22}
+                  color={isSpeaking ? "#dc2626" : NAVY}
+                />
               </Pressable>
             }
           />
