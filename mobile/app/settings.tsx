@@ -12,6 +12,8 @@ import { SettingsSection, SettingsRow } from "@/components/settings-section";
 import { Spacing } from "@/constants/theme";
 import { useApp } from "@/context/app-context";
 import { useTheme } from "@/hooks/use-theme-color";
+import { clearBackendAuthToken } from "@/lib/backend-client";
+import { supabase } from "@/lib/supabase";
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -51,6 +53,8 @@ export default function SettingsScreen() {
 
     setIsSigningOut(true);
     try {
+      await clearBackendAuthToken();
+      await supabase.auth.signOut();
       await AsyncStorage.multiRemove([
         "@tracepay_language",
         "@tracepay_freeze",
@@ -58,6 +62,7 @@ export default function SettingsScreen() {
         "@tracepay_subscriptions",
         "@tracepay_passcode",
         "@tracepay_mobile",
+        "@tracepay_backend_token",
       ]);
 
       await setLanguage("en");
@@ -71,7 +76,7 @@ export default function SettingsScreen() {
       setAnalysisData(null);
       setIsAnalysisComplete(false);
 
-      router.replace("/language-selection" as any);
+      router.replace("/(auth)" as any);
     } finally {
       setIsSigningOut(false);
     }
@@ -195,7 +200,7 @@ export default function SettingsScreen() {
             }}
           >
             <Pressable
-              onPress={() => router.push("/change-password" as any)}
+              onPress={() => router.push("/(auth)/change-password" as any)}
               style={{ paddingVertical: Spacing.lg }}
             >
               <ThemedText type="body">Change password</ThemedText>

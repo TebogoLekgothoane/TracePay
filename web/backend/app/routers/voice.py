@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import os
 from io import BytesIO
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from gtts import gTTS
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
@@ -14,6 +16,94 @@ from ..database import get_db
 from ..models_db import AnalysisResult, User
 
 router = APIRouter(prefix="/voice", tags=["voice"])
+
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+
+
+class ChatMessage(BaseModel):
+    role: str  # "user" | "assistant" | "system"
+    content: str
+
+
+class VoiceChatRequest(BaseModel):
+    messages: List[ChatMessage]
+    language: Optional[str] = "en"
+    summary_context: Optional[str] = None  # Optional analysis summary so assistant can answer about finances
+
+
+class VoiceChatResponse(BaseModel):
+    message: str
+
+
+@router.post("/chat", response_model=VoiceChatResponse)
+async def voice_chat(req: VoiceChatRequest) -> VoiceChatResponse:
+    """
+    Interactive voice chat using Groq. Send conversation history; returns assistant reply.
+    Put your Groq API key in web/backend/.env as GROQ_API_KEY=your-key
+    """
+    if not GROQ_API_KEY or not GROQ_API_KEY.strip():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="GROQ_API_KEY is not set. Add it to web/backend/.env",
+        )
+    if not req.messages:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one message is required",
+        )
+
+    system_content = (
+        "You are a helpful TracePay assistant. You help users understand their spending, "
+        "money leaks, and financial health in a friendly, concise way. "
+        "Answer in the same language the user uses. Keep replies brief so they work well as voice."
+    )
+    if req.summary_context:
+        system_content += f"\n\nCurrent analysis context (use this to answer questions): {req.summary_context}"
+
+    messages_for_groq: List[Dict[str, str]] = [
+        {"role": "system", "content": system_content},
+        *[{"role": m.role, "content": m.content} for m in req.messages],
+    ]
+
+    payload = {
+        "model": "llama-3.1-8b-instant",
+        "messages": messages_for_groq,
+        "max_tokens": 512,
+        "temperature": 0.7,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(
+                GROQ_API_URL,
+                headers={
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            r.raise_for_status()
+            data = r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Groq API error: {e.response.text}",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to call Groq: {str(e)}",
+        )
+
+    choices = data.get("choices") or []
+    if not choices:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="No reply from Groq",
+        )
+    content = (choices[0].get("message") or {}).get("content") or ""
+    return VoiceChatResponse(message=content.strip())
 
 
 @router.post("/generate")

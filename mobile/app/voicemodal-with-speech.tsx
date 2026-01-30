@@ -1,9 +1,8 @@
 /**
- * Voice modal: type + optional speech input.
- * In Expo Go the native speech module is not available, so we show type-only.
- * In a development build (npx expo run:android / run:ios) we load the speech-enabled version.
+ * Voice modal with speech input. Only loaded when expo-speech-recognition native module is available (dev build).
+ * In Expo Go this file is not loaded, so "native module not found" is avoided.
  */
-import React, { useState, useEffect, useRef, Suspense, lazy } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Pressable,
@@ -11,6 +10,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -28,6 +28,10 @@ import Animated, {
 import * as Speech from "expo-speech";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
+import {
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from "expo-speech-recognition";
 
 import { ThemedView } from "@/components/themed-view";
 import { ThemedText } from "@/components/themed-text";
@@ -36,11 +40,9 @@ import { useApp } from "@/context/app-context";
 import { Spacing, Colors } from "@/constants/theme";
 import { voiceChat, type VoiceChatMessage } from "@/lib/backend-client";
 
-const VoiceModalWithSpeech = lazy(() => import("./voicemodal-with-speech"));
-
 type ChatEntry = { id: string; role: "user" | "assistant"; content: string };
 
-function VoiceModalTypeOnly() {
+export default function VoiceModalWithSpeech() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { theme, isDark } = useTheme();
@@ -50,7 +52,12 @@ function VoiceModalTypeOnly() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [listeningTranscript, setListeningTranscript] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
+  const lastFinalTranscriptRef = useRef("");
+  const sendMessageWithTextRef = useRef<(text: string) => void>(() => {});
   const messagesRef = useRef<ChatEntry[]>([]);
   messagesRef.current = messages;
 
@@ -60,11 +67,44 @@ function VoiceModalTypeOnly() {
 
   const summaryContext =
     analysisData?.summary[language as "en" | "xh"] || analysisData?.summary.en || "";
-  const langCode = language === "xh" ? "xh-ZA" : "en-ZA";
+  const speechLang = language === "xh" ? "xh-ZA" : "en-ZA";
+
+  useSpeechRecognitionEvent("result", (event) => {
+    const transcript = (event.results?.map((r) => r.transcript).join(" ") ?? "").trim();
+    if (event.isFinal && transcript) {
+      lastFinalTranscriptRef.current = transcript;
+      setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
+      setListeningTranscript("");
+    } else {
+      setListeningTranscript(transcript);
+    }
+  });
+  useSpeechRecognitionEvent("end", () => {
+    setIsListening(false);
+    setListeningTranscript("");
+    const finalText = lastFinalTranscriptRef.current.trim();
+    lastFinalTranscriptRef.current = "";
+    if (finalText) {
+      sendMessageWithTextRef.current?.(finalText);
+    }
+  });
+  useSpeechRecognitionEvent("error", (event) => {
+    setIsListening(false);
+    setListeningTranscript("");
+    if (event.error !== "aborted" && event.error !== "no-speech") {
+      Alert.alert(
+        "Speech recognition",
+        event.message || "Could not recognize speech. Try again or type instead."
+      );
+    }
+  });
 
   useEffect(() => {
     return () => {
-      void Speech.stop();
+      Speech.stop();
+      try {
+        ExpoSpeechRecognitionModule.stop();
+      } catch (_) {}
     };
   }, []);
 
@@ -104,6 +144,7 @@ function VoiceModalTypeOnly() {
   const wave1Style = useAnimatedStyle(() => ({ transform: [{ scaleY: waveScale1.value }] }));
   const wave2Style = useAnimatedStyle(() => ({ transform: [{ scaleY: waveScale2.value }] }));
   const wave3Style = useAnimatedStyle(() => ({ transform: [{ scaleY: waveScale3.value }] }));
+  const langCode = language === "xh" ? "xh-ZA" : "en-ZA";
 
   const speak = (text: string) => {
     if (isPlaying) Speech.stop();
@@ -119,21 +160,21 @@ function VoiceModalTypeOnly() {
     });
   };
 
-  const sendMessage = async () => {
-    const text = input.trim();
-    if (!text || isLoading) return;
-
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  const sendMessageWithText = async (text: string) => {
+    if (!text.trim() || isLoading) return;
     setInput("");
-
-    const userEntry: ChatEntry = { id: `user-${Date.now()}`, role: "user", content: text };
+    setError(null);
+    const userEntry: ChatEntry = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: text.trim(),
+    };
     setMessages((prev) => [...prev, userEntry]);
-
     setIsLoading(true);
     const currentMessages = messagesRef.current;
     const chatHistory: VoiceChatMessage[] = [
       ...currentMessages.map((m) => ({ role: m.role, content: m.content })),
-      { role: "user", content: text },
+      { role: "user", content: text.trim() },
     ];
     try {
       const res = await voiceChat({
@@ -150,13 +191,27 @@ function VoiceModalTypeOnly() {
       speak(res.message);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Something went wrong";
+      setError(msg);
       setMessages((prev) => [
         ...prev,
-        { id: `error-${Date.now()}`, role: "assistant", content: msg },
+        {
+          id: `error-${Date.now()}`,
+          role: "assistant",
+          content: msg,
+        },
       ]);
     } finally {
       setIsLoading(false);
     }
+  };
+  sendMessageWithTextRef.current = sendMessageWithText;
+
+  const sendMessage = async () => {
+    const text = input.trim();
+    if (!text || isLoading) return;
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setInput("");
+    await sendMessageWithText(text);
   };
 
   const handlePlayLastReply = () => {
@@ -164,8 +219,37 @@ function VoiceModalTypeOnly() {
     if (last) speak(last.content);
   };
 
+  const toggleListening = async () => {
+    if (isListening) {
+      try {
+        ExpoSpeechRecognitionModule.stop();
+      } catch (_) {}
+      return;
+    }
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!granted) {
+        Alert.alert("Microphone", "Allow microphone access to speak your question.");
+        return;
+      }
+      lastFinalTranscriptRef.current = "";
+      ExpoSpeechRecognitionModule.start({
+        lang: speechLang,
+        interimResults: true,
+        maxAlternatives: 1,
+      });
+      setIsListening(true);
+    } catch (e) {
+      Alert.alert("Speech", "Could not start listening. Try typing instead.");
+    }
+  };
+
   const handleClose = () => {
     Speech.stop();
+    try {
+      ExpoSpeechRecognitionModule.stop();
+    } catch (_) {}
     router.back();
   };
 
@@ -251,8 +335,7 @@ function VoiceModalTypeOnly() {
           {messages.length === 0 && (
             <Animated.View entering={FadeInUp.delay(200)} className="py-4">
               <ThemedText type="body" style={{ color: theme.textSecondary }}>
-                Type a question below (e.g. “What’s my biggest leak?” or “Summarise my spending”).
-                Your analysis summary is shared with the assistant so it can answer.
+                Type or tap the mic to speak. Your analysis summary is shared with the assistant.
               </ThemedText>
             </Animated.View>
           )}
@@ -326,13 +409,13 @@ function VoiceModalTypeOnly() {
           style={{ paddingBottom: insets.bottom + Spacing.md }}
         >
           <TextInput
-            value={input}
+            value={isListening ? listeningTranscript : input}
             onChangeText={setInput}
-            placeholder="Ask anything…"
+            placeholder={isListening ? "Listening…" : "Ask anything…"}
             placeholderTextColor={theme.textSecondary}
             multiline
             maxLength={500}
-            editable={!isLoading}
+            editable={!isLoading && !isListening}
             onSubmitEditing={sendMessage}
             returnKeyType="send"
             className="flex-1 rounded-xl px-4 py-3 text-base min-h-[44px] max-h-[100px]"
@@ -342,12 +425,32 @@ function VoiceModalTypeOnly() {
             }}
           />
           <Pressable
+            onPress={toggleListening}
+            className="rounded-xl p-3 min-h-[44px] justify-center active:opacity-70"
+            style={{
+              backgroundColor: isListening
+                ? isDark
+                  ? Colors.dark.alarmRed
+                  : Colors.light.alarmRed
+                : isDark
+                  ? "rgba(255,255,255,0.15)"
+                  : "rgba(0,0,0,0.1)",
+            }}
+            testID="button-mic-voice"
+          >
+            <Feather
+              name="mic"
+              size={20}
+              color={isListening ? "#fff" : theme.textSecondary}
+            />
+          </Pressable>
+          <Pressable
             onPress={sendMessage}
-            disabled={!input.trim() || isLoading}
+            disabled={!input.trim() || isLoading || isListening}
             className="rounded-xl p-3 min-h-[44px] justify-center active:opacity-70"
             style={{
               backgroundColor:
-                input.trim() && !isLoading
+                input.trim() && !isLoading && !isListening
                   ? isDark
                     ? Colors.dark.alarmRed
                     : Colors.light.alarmRed
@@ -360,40 +463,11 @@ function VoiceModalTypeOnly() {
             <Feather
               name="send"
               size={20}
-              color={input.trim() && !isLoading ? "#fff" : theme.textSecondary}
+              color={input.trim() && !isLoading && !isListening ? "#fff" : theme.textSecondary}
             />
           </Pressable>
         </View>
       </KeyboardAvoidingView>
     </ThemedView>
   );
-}
-
-export default function VoiceModalScreen() {
-  const [speechAvailable, setSpeechAvailable] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    import("expo-speech-recognition")
-      .then((mod) => mod.ExpoSpeechRecognitionModule.getStateAsync())
-      .then(() => {
-        if (!cancelled) setSpeechAvailable(true);
-      })
-      .catch(() => {
-        if (!cancelled) setSpeechAvailable(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (speechAvailable === true) {
-    return (
-      <Suspense fallback={<VoiceModalTypeOnly />}>
-        <VoiceModalWithSpeech />
-      </Suspense>
-    );
-  }
-
-  return <VoiceModalTypeOnly />;
 }

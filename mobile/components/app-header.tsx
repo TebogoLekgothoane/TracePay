@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Image, Pressable, StyleProp, ViewStyle } from "react-native";
+import { View, Image, Pressable, StyleProp, ViewStyle, ImageSourcePropType } from "react-native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/themed-text";
@@ -9,6 +9,7 @@ import { Colors } from "@/constants/theme";
 type AppHeaderProps = {
   title: string;
   subtitle?: string;
+  titleLogo?: ImageSourcePropType;
   children?: React.ReactNode;
   className?: string;
   style?: StyleProp<ViewStyle>;
@@ -20,6 +21,7 @@ type AppHeaderProps = {
 export function AppHeader({
   title,
   subtitle,
+  titleLogo,
   children,
   className = "",
   style,
@@ -56,15 +58,24 @@ export function AppHeader({
         {rightAccessory ? <View className="ml-4">{rightAccessory}</View> : null}
       </View>
 
-      <View className="mb-4">
-        <ThemedText type="h2" className="text-text mb-1">
-          {title}
-        </ThemedText>
-        {subtitle ? (
-          <ThemedText type="body" className="text-text-muted">
-            {subtitle}
-          </ThemedText>
+      <View className="mb-4 flex-row items-center">
+        {titleLogo ? (
+          <Image
+            source={titleLogo}
+            className="w-10 h-10 rounded-lg mr-3"
+            resizeMode="contain"
+          />
         ) : null}
+        <View>
+          <ThemedText type="h2" className="text-text mb-1">
+            {title}
+          </ThemedText>
+          {subtitle ? (
+            <ThemedText type="body" className="text-text-muted">
+              {subtitle}
+            </ThemedText>
+          ) : null}
+        </View>
       </View>
 
       {children}

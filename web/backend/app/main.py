@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-import os
+from pathlib import Path
 from typing import Any, Dict, List
 
-from fastapi import FastAPI, HTTPException, Body
-from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-# Load environment variables early
-load_dotenv()
+# Load .env from web/backend/ so GROQ_API_KEY etc. are available
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+from fastapi import Body, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from .database import Base, engine, get_db
 from .forensic_engine import ForensicEngine
@@ -37,7 +38,7 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-engine = ForensicEngine()
+forensic_engine = ForensicEngine()
 
 # In-memory "revocations" to simulate freezing / revoking consent.
 FROZEN: List[Dict[str, Any]] = []
@@ -62,7 +63,7 @@ def analyze(payload: Any = Body(...)) -> AnalyzeResponse:
     else:
         raise HTTPException(status_code=400, detail="Invalid payload. Send {transactions:[...]} or a raw list.")
 
-    result = engine.analyze([t.model_dump() for t in req.transactions])
+    result = forensic_engine.analyze([t.model_dump() for t in req.transactions])
     # Cast money_leaks into pydantic model for stable API output
     leaks = [MoneyLeak(**l) for l in result["money_leaks"]]
     return AnalyzeResponse(

@@ -4,12 +4,23 @@
 
 ## Run locally
 
+Use **Python 3.11 or 3.12** (pandas builds reliably; 3.14 may fail). Create a venv and run with it.
+
+**Option A – use the venv’s Python (no activation needed):**
 ```bash
 cd web/backend
-python -m venv .venv
+# Git Bash / WSL / Linux / Mac (forward slashes):
+.venv/Scripts/python -m uvicorn app.main:app --reload --port 8001
+# Windows CMD / PowerShell (backslashes):
+# .venv\Scripts\python -m uvicorn app.main:app --reload --port 8001
+```
+
+**Option B – activate venv then run:**
+```bash
+cd web/backend
 .venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8001
+pip install -r requirements.txt   # first time only
+python -m uvicorn app.main:app --reload --port 8001
 ```
 
 ## Endpoints

@@ -235,10 +235,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 }
 
+const defaultContextValue: AppContextType = {
+  language: "en",
+  setLanguage: async () => {},
+  t: (key) => key,
+  analysisData: null,
+  setAnalysisData: () => {},
+  freezeSettings: defaultFreezeSettings,
+  setFreezeSettings: async () => {},
+  isAnalysisComplete: false,
+  setIsAnalysisComplete: () => {},
+  includeMomoData: true,
+  setIncludeMomoData: async () => {},
+  subscriptions: [],
+  toggleSubscriptionOptOut: async () => {},
+  airtimeLimit: 300,
+  setAirtimeLimitValue: async () => {},
+  userId: DEMO_USER_ID,
+};
+
 export function useApp() {
   const context = useContext(AppContext);
   if (context === undefined) {
-    throw new Error("useApp must be used within an AppProvider");
+    if (__DEV__) {
+      console.warn("useApp was called outside AppProvider; using default context. Wrap your app root with <AppProvider>.");
+    }
+    return defaultContextValue;
   }
   return context;
 }

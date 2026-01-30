@@ -1,5 +1,6 @@
-import React from "react";
-import { View } from "react-native";
+import React, { useState } from "react";
+import { View, Pressable } from "react-native";
+import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/themed-text";
 import { useTheme } from "@/hooks/use-theme-color";
@@ -28,11 +29,30 @@ function formatAmount(amount: number) {
 
 type LeakTransactionRowProps = {
   transaction: LeakTransaction;
+  /** When provided, shows a Freeze button that calls the backend to freeze this leak. */
+  onFreeze?: (transaction: LeakTransaction) => Promise<void>;
+  /** When true, shows a "Frozen" state and hides the Freeze button. */
+  isFrozen?: boolean;
 };
 
-export function LeakTransactionRow({ transaction }: LeakTransactionRowProps) {
+export function LeakTransactionRow({
+  transaction,
+  onFreeze,
+  isFrozen = false,
+}: LeakTransactionRowProps) {
   const { theme } = useTheme();
+  const [freezing, setFreezing] = useState(false);
   const { day, month } = formatDisplayDate(transaction.date);
+
+  const handleFreeze = async () => {
+    if (!onFreeze || freezing || isFrozen) return;
+    setFreezing(true);
+    try {
+      await onFreeze(transaction);
+    } finally {
+      setFreezing(false);
+    }
+  };
 
   return (
     <View
@@ -63,10 +83,28 @@ export function LeakTransactionRow({ transaction }: LeakTransactionRowProps) {
         </ThemedText>
       </View>
 
-      <View className="items-end">
+      <View className="items-end gap-1">
         <ThemedText type="body" className="font-semibold text-success">
           {formatAmount(transaction.amount)}
         </ThemedText>
+        {onFreeze && (
+          isFrozen ? (
+            <View className="flex-row items-center gap-1">
+              <Feather name="lock" size={14} color={theme.textSecondary} />
+              <ThemedText type="small" style={{ color: theme.textSecondary }}>Frozen</ThemedText>
+            </View>
+          ) : (
+            <Pressable
+              onPress={handleFreeze}
+              disabled={freezing}
+              className="flex-row items-center gap-1 px-2 py-1 rounded"
+              style={{ backgroundColor: theme.backgroundTertiary }}
+            >
+              <Feather name="minus-circle" size={14} color={theme.text} />
+              <ThemedText type="small">{freezing ? "…" : "Freeze"}</ThemedText>
+            </Pressable>
+          )
+        )}
       </View>
     </View>
   );
