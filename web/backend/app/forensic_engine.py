@@ -237,6 +237,97 @@ class ForensicEngine:
             )
         ]
 
+    def detect_mailbox_effect(self, df: pd.DataFrame) -> List[Leak]:
+        """
+        Mailbox Effect Detector (Eastern Cape Hackathon Mission):
+        Detects if large credits (salaries/grants) are immediately withdrawn in full/large part.
+        """
+        if df.empty:
+            return []
+
+        # Find large credits (>= R500)
+        credits = df[df["direction"] == "credit"]
+        large_credits = credits[credits["abs_amount"] >= 500]
+        
+        if large_credits.empty:
+            return []
+
+        mailbox_leaks = []
+        for idx, row in large_credits.iterrows():
+            credit_time = row["timestamp"]
+            credit_amount = row["abs_amount"]
+            
+            # Look for withdrawals/debits within 48 hours after this credit
+            window_end = credit_time + pd.Timedelta(hours=48)
+            following_debits = df[(df["direction"] == "debit") & (df["timestamp"] > credit_time) & (df["timestamp"] <= window_end)]
+            
+            total_withdrawn = following_debits["abs_amount"].sum()
+            
+            if total_withdrawn >= (credit_amount * 0.8):
+                # Detected Mailbox Effect
+                mailbox_leaks.append(
+                    Leak(
+                        id=f"mailbox-effect-{row['id']}",
+                        detector="MailboxEffect",
+                        title="Passing through: Mailbox Effect detected",
+                        plain_language_reason=(
+                            f"You received R{credit_amount:.0f} and withdrew/spent about {total_withdrawn/credit_amount*100:.0f}% of it "
+                            "within 48 hours. This 'pass-through' behavior often leads to high fees and low financial resilience."
+                        ),
+                        severity="high",
+                        transaction_id=str(row["id"]),
+                        estimated_monthly_cost=total_withdrawn * 0.05, # Estimated 5% loss in fees/informal costs
+                        evidence={
+                            "credit_amount": credit_amount,
+                            "withdrawn_amount": total_withdrawn,
+                            "withdrawal_ratio": total_withdrawn / credit_amount,
+                            "window_hours": 48
+                        }
+                    )
+                )
+        
+        return mailbox_leaks[:1]
+
+    def calculate_inclusion_score(self, df: pd.DataFrame, leaks: List[Leak]) -> Dict[str, Any]:
+        """
+        Hybrid Inclusion Score (MNO Bonus):
+        An alternative credit score based on MNO consistency and forensic stability.
+        """
+        if df.empty:
+            return {"score": 0, "level": "N/A"}
+
+        base_score = 50.0
+
+        # 1. MNO Consistency Reward
+        telco_keywords = ["airtime", "data", "mtn", "vodacom", "cell c", "telkom", "momo"]
+        text = (df["description"] + " " + df["merchant"]).str.lower()
+        is_telco = text.apply(lambda s: any(k in s for k in telco_keywords))
+        telco_txs = df[is_telco]
+        
+        if not telco_txs.empty:
+            last_30 = telco_txs[telco_txs["timestamp"] >= (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=30))]
+            if len(last_30) >= 3:
+                base_score += 15.0
+            elif len(last_30) >= 1:
+                base_score += 5.0
+
+        # 2. Forensic Stability
+        high_severity_leaks = [l for l in leaks if l.severity == "high"]
+        base_score -= (len(high_severity_leaks) * 10.0)
+
+        # 3. Transaction Depth
+        if len(df) > 20:
+            base_score += 10.0
+        
+        final_score = int(max(0, min(100, base_score)))
+        level = "High" if final_score >= 75 else "Medium" if final_score >= 40 else "Low"
+        
+        return {
+            "score": final_score,
+            "level": level,
+            "mno_consistency": True if not telco_txs.empty else False
+        }
+
     # -----------------------------
     # Scoring + orchestration
     # -----------------------------
@@ -255,16 +346,49 @@ class ForensicEngine:
         leaks.extend(detect_debit_orders(df))
         leaks.extend(detect_weekend_spending(df))
 
+        # MISSION: Mailbox Effect
+        leaks.extend(self.detect_mailbox_effect(df))
+
         score = self._score(df, leaks)
         band = "green" if score >= 75 else "yellow" if score >= 50 else "red"
         summary = self._summary_plain_language(score, band, leaks)
+
+        # MISSION: Hybrid Inclusion Score
+        inclusion = self.calculate_inclusion_score(df, leaks)
+
+        # HACKATHON: Advanced Stakeholder Metrics
+        inclusion_delta = self.calculate_inclusion_delta(inclusion["score"], leaks)
+        retail_velocity = self.calculate_retail_velocity(leaks)
 
         return {
             "financial_health_score": score,
             "health_band": band,
             "money_leaks": [self._leak_to_dict(l) for l in leaks],
             "summary_plain_language": summary,
+            "inclusion_metrics": inclusion,
+            "stakeholder_metrics": {
+                "inclusion_delta": inclusion_delta,
+                "retail_velocity": retail_velocity,
+                "potential_recovered_capital": retail_velocity
+            }
         }
+
+    def calculate_inclusion_delta(self, hybrid_score: int, leaks: List[Leak]) -> int:
+        """
+        Calculates the 'Inclusion Delta'—how much TracePay improves a user's 
+        credit-worthiness profile compared to traditional banking metrics.
+        """
+        # Traditional bank score would be lower if high leaks/mailbox effect present
+        mailbox_penalty = 25 if any(l.detector == "MailboxEffect" for l in leaks) else 0
+        traditional_score = max(0, hybrid_score - 15 - mailbox_penalty)
+        return hybrid_score - traditional_score
+
+    def calculate_retail_velocity(self, leaks: List[Leak]) -> float:
+        """
+        Estimates the monthly Rand value that can be 'redirected' from leaks 
+        back into the local retail economy.
+        """
+        return sum(l.estimated_monthly_cost for l in leaks if l.estimated_monthly_cost)
 
     def _score(self, df: pd.DataFrame, leaks: List[Leak]) -> int:
         # Start at 100 and subtract penalties based on severity + estimated leakage.

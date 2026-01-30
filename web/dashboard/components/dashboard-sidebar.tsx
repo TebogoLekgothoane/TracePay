@@ -11,6 +11,8 @@ import {
     LogOut,
     Moon,
     User2,
+    BookOpen,
+    ShieldCheck
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -74,10 +76,10 @@ export function DashboardSidebar() {
                             <SidebarMenuItem>
                                 <SidebarMenuButton 
                                     asChild
-                                    isActive={pathname === "/analysis/history"}
+                                    isActive={pathname === "/dashboard/history"}
                                     className="data-[active=true]:bg-primary/25 data-[active=true]:border-l-2 data-[active=true]:border-primary data-[active=true]:shadow-sm !hover:bg-primary/10 !hover:text-foreground"
                                 >
-                                    <Link href="/analysis/history">
+                                    <Link href="/dashboard/history">
                                     <Flame className="h-4 w-4" />
                                         <span>Leak Analytics</span>
                                     </Link>
@@ -86,10 +88,10 @@ export function DashboardSidebar() {
                             <SidebarMenuItem>
                                 <SidebarMenuButton 
                                     asChild
-                                    isActive={pathname === "/admin"}
+                                    isActive={pathname === "/dashboard/ml-reports"}
                                     className="data-[active=true]:bg-primary/25 data-[active=true]:border-l-2 data-[active=true]:border-primary data-[active=true]:shadow-sm !hover:bg-primary/10 !hover:text-foreground"
                                 >
-                                    <Link href="/admin">
+                                    <Link href="/dashboard/ml-reports">
                                         <Brain className="h-4 w-4" />
                                         <span>ML Reports</span>
                                     </Link>
@@ -98,12 +100,41 @@ export function DashboardSidebar() {
                             <SidebarMenuItem>
                                 <SidebarMenuButton 
                                     asChild
-                                    isActive={pathname === "/admin/regional"}
+                                    isActive={pathname === "/dashboard/regional"}
                                     className="data-[active=true]:bg-primary/25 data-[active=true]:border-l-2 data-[active=true]:border-primary data-[active=true]:shadow-sm !hover:bg-primary/10 !hover:text-foreground"
                                 >
-                                    <Link href="/admin/regional">
+                                    <Link href="/dashboard/regional">
                                         <BarChart3 className="h-4 w-4" />
                                         <span>Regional Trends</span>
+                                    </Link>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+                        </SidebarMenu>
+                    </SidebarGroupContent>
+                </SidebarGroup>
+
+                <SidebarGroup>
+                    <SidebarGroupContent>
+                        <SidebarMenu>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton 
+                                    asChild
+                                    className="!hover:bg-primary/10 !hover:text-foreground"
+                                >
+                                    <Link href="#">
+                                        <BookOpen className="h-4 w-4" />
+                                        <span>Methodology Guide</span>
+                                    </Link>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton 
+                                    asChild
+                                    className="!hover:bg-primary/10 !hover:text-foreground"
+                                >
+                                    <Link href="#">
+                                        <ShieldCheck className="h-4 w-4" />
+                                        <span>Compliance (SARB)</span>
                                     </Link>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>

@@ -91,7 +91,7 @@ class FrozenItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    leak_id = Column(String(255), nullable=True)
+    # leak_id = Column(String(255), nullable=True)
     transaction_id = Column(String(255), nullable=True)
     consent_id = Column(String(255), nullable=True)
     reason = Column(Text, nullable=False)
