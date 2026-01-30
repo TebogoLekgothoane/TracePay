@@ -28,6 +28,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
+import { getCachedData, setCachedData, isCacheFresh } from "@/lib/data-cache";
 import {
     Card,
     CardContent,
@@ -154,7 +155,7 @@ export default function DashboardPage() {
         setRefreshing(true);
         try {
             await apiClient.syncAllData();
-            await fetchStats();
+            await fetchStats(true); // Force refresh after sync
         } catch (e) {
             console.error("Sync error:", e);
             setError("Global data ingestion failed. Please check the backend connection.");
@@ -163,8 +164,32 @@ export default function DashboardPage() {
         }
     }
 
-    async function fetchStats() {
+    async function fetchStats(force = false) {
         if (isFetching) return; // Prevent concurrent calls
+
+        // Check cache first if not forcing refresh
+        if (!force) {
+            const cacheKey = "dashboard_overview";
+            const isFresh = isCacheFresh(cacheKey, 5 * 60 * 1000); // 5 minutes TTL
+
+            if (isFresh) {
+                const cachedStats = getCachedData<OverviewStats>("dashboard_stats");
+                const cachedRegional = getCachedData<RegionalInsight[]>("dashboard_regional");
+                const cachedTemporal = getCachedData<TemporalData[]>("dashboard_temporal");
+                const cachedMlFindings = getCachedData<MLFindings>("dashboard_ml_findings");
+                const cachedIngestion = getCachedData<IngestionStats>("dashboard_ingestion");
+
+                if (cachedStats) setStats(cachedStats);
+                if (cachedRegional) setRegional(cachedRegional);
+                if (cachedTemporal) setTemporal(cachedTemporal);
+                if (cachedMlFindings) setMlFindings(cachedMlFindings);
+                if (cachedIngestion) setIngestion(cachedIngestion);
+
+                setLoading(false);
+                return; // Use cached data
+            }
+        }
+
         setIsFetching(true);
         setLoading(true);
         setError(null);
@@ -177,11 +202,25 @@ export default function DashboardPage() {
                 fetch(`${BACKEND_URL}/admin/stats/data-ingestion`).then(r => r.ok ? r.json() : null)
             ]);
 
-            if (ov) setStats(ov);
-            if (ml) setMlFindings(ml);
-            if (ing) setIngestion(ing);
-            setRegional(Array.isArray(reg) ? reg : []);
-            setTemporal(temp?.temporal_data || []);
+            if (ov) {
+                setStats(ov);
+                setCachedData("dashboard_stats", ov);
+            }
+            if (ml) {
+                setMlFindings(ml);
+                setCachedData("dashboard_ml_findings", ml);
+            }
+            if (ing) {
+                setIngestion(ing);
+                setCachedData("dashboard_ingestion", ing);
+            }
+            const regionalData = Array.isArray(reg) ? reg : [];
+            setRegional(regionalData);
+            setCachedData("dashboard_regional", regionalData);
+
+            const temporalData = temp?.temporal_data || [];
+            setTemporal(temporalData);
+            setCachedData("dashboard_temporal", temporalData);
         } catch (e) {
             console.error("Fetch error:", e);
             setError("Live data sync failed. Ensure the TracePay backend is running on port 8001.");
@@ -244,14 +283,14 @@ export default function DashboardPage() {
                 <div>
                     <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight md:text-2xl">
                         <Target className="h-5 w-5 text-primary" />
-                        Stakeholder Intelligence Portal
+                        Dashboard
                     </h1>
                     <p className="mt-1 text-xs text-muted-foreground md:text-sm">
                         High-fidelity forensic monitoring and commercial opportunity mapping for the Eastern Cape.
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button
+                    {/* <Button
                         size="sm"
                         variant="outline"
                         onClick={() => void handleGlobalSync()}
@@ -260,7 +299,7 @@ export default function DashboardPage() {
                     >
                         <Activity className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
                         {refreshing ? "Updating Intelligence..." : "Sync Global Pipelines"}
-                    </Button>
+                    </Button> */}
                 </div>
             </header>
 

@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { getCachedData, setCachedData, isCacheFresh } from "@/lib/data-cache";
 import {
   Tooltip,
   TooltipContent,
@@ -208,19 +209,37 @@ export default function RegionalInsightsPage() {
   const [geoJsonData, setGeoJsonData] = useState<FeatureCollection | null>(null);
 
   useEffect(() => {
-    // Load GeoJSON data
-    fetch(geoUrl)
-      .then((res) => res.json())
-      .then((data) => setGeoJsonData(data))
-      .catch((err) => console.error("Error loading GeoJSON:", err));
+    // Load GeoJSON data (cache this too)
+    const cachedGeoJson = getCachedData<FeatureCollection>("regional_geojson", 60 * 60 * 1000); // 1 hour cache for GeoJSON
+    if (cachedGeoJson) {
+      setGeoJsonData(cachedGeoJson);
+    } else {
+      fetch(geoUrl)
+        .then((res) => res.json())
+        .then((data) => {
+          setGeoJsonData(data);
+          setCachedData("regional_geojson", data);
+        })
+        .catch((err) => console.error("Error loading GeoJSON:", err));
+    }
 
-    // Use mock data for now - replace with actual API call
-    const timer = setTimeout(() => {
-      console.log("=== LOADING REGIONAL DATA ===");
-      setRegionalData(mockRegionalData);
+    // Check cache for regional data
+    const cacheKey = "regional_data";
+    const cached = getCachedData<RegionData[]>(cacheKey, 5 * 60 * 1000); // 5 minutes
+
+    if (cached && isCacheFresh(cacheKey, 5 * 60 * 1000)) {
+      setRegionalData(cached);
       setLoading(false);
-    }, 500);
-    return () => clearTimeout(timer);
+    } else {
+      // Use mock data for now - replace with actual API call
+      const timer = setTimeout(() => {
+        console.log("=== LOADING REGIONAL DATA ===");
+        setRegionalData(mockRegionalData);
+        setCachedData(cacheKey, mockRegionalData);
+        setLoading(false);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
   }, []);
 
   // GeoJSON style function

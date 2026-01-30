@@ -7,6 +7,7 @@ import Link from "next/link";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
+import { getCachedData, setCachedData, isCacheFresh } from "@/lib/data-cache";
 
 const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
@@ -29,7 +30,7 @@ export default function AdminDashboardPage() {
     setError(null);
     try {
       await apiClient.syncAllData();
-      await loadStats();
+      await loadStats(true); // Force refresh after sync
     } catch (e) {
       console.error("Sync error:", e);
       setError("Failed to sync data. The backend may be slow or unavailable.");
@@ -38,13 +39,28 @@ export default function AdminDashboardPage() {
     }
   }
 
-  async function loadStats() {
+  async function loadStats(force = false) {
     if (isFetching) return; // Prevent concurrent calls
+
+    // Check cache first if not forcing refresh
+    if (!force) {
+      const cacheKey = "ml_reports_stats";
+      if (isCacheFresh(cacheKey, 5 * 60 * 1000)) {
+        const cached = getCachedData<any>(cacheKey);
+        if (cached) {
+          setStats(cached);
+          setLoading(false);
+          return;
+        }
+      }
+    }
+
     setIsFetching(true);
     setError(null); // Clear previous errors
     try {
       const overview = await apiClient.getOverviewStats();
       setStats(overview);
+      setCachedData("ml_reports_stats", overview);
     } catch (error) {
       console.error("Failed to load stats:", error);
       setError("Failed to load statistics. The backend may be slow or unavailable. Please try again.");

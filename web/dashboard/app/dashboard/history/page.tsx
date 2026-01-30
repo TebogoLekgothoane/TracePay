@@ -28,6 +28,7 @@ import {
   SheetTrigger
 } from "@/components/ui/sheet";
 import { apiClient } from "@/lib/api";
+import { getCachedData, setCachedData, isCacheFresh } from "@/lib/data-cache";
 
 const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
@@ -40,10 +41,24 @@ export default function AnalysisHistoryPage() {
     void loadForensicFeed();
   }, []);
 
-  async function loadForensicFeed() {
+  async function loadForensicFeed(force = false) {
+    // Check cache first if not forcing refresh
+    if (!force) {
+      const cacheKey = "forensic_feed";
+      if (isCacheFresh(cacheKey, 5 * 60 * 1000)) {
+        const cached = getCachedData<any[]>(cacheKey);
+        if (cached) {
+          setAnalyses(cached);
+          setLoading(false);
+          return;
+        }
+      }
+    }
+
     try {
       const data = await apiClient.getForensicFeed(50);
       setAnalyses(data);
+      setCachedData("forensic_feed", data);
     } catch (error) {
       console.error("Failed to load forensic feed:", error);
     } finally {

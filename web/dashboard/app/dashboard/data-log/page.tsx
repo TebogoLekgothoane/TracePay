@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
+import { getCachedData, setCachedData, isCacheFresh } from "@/lib/data-cache";
 
 export default function UsersPage() {
   const [users, setUsers] = useState<any[]>([]);
@@ -16,11 +17,29 @@ export default function UsersPage() {
     void loadUsers();
   }, [skip]);
 
-  async function loadUsers() {
+  async function loadUsers(force = false) {
+    // Check cache first if not forcing refresh (only cache first page)
+    if (!force && skip === 0) {
+      const cacheKey = "data_log_users";
+      if (isCacheFresh(cacheKey, 5 * 60 * 1000)) {
+        const cached = getCachedData<{ users: any[], total: number }>(cacheKey);
+        if (cached) {
+          setUsers(cached.users);
+          setTotal(cached.total);
+          setLoading(false);
+          return;
+        }
+      }
+    }
+
     try {
       const data = await apiClient.listUsers(skip, limit);
       setUsers(data.users);
       setTotal(data.total);
+      // Only cache first page
+      if (skip === 0) {
+        setCachedData("data_log_users", data);
+      }
     } catch (error) {
       console.error("Failed to load users:", error);
     } finally {
