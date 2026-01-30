@@ -181,6 +181,14 @@ async refreshToken() {
       total_analyses: number;
       average_health_score: number;
       total_frozen_items: number;
+      total_capital_protected: number;
+      active_consents: number;
+      ml_anomalies_detected: number;
+      mailbox_effect_prevalence: number;
+      avg_inclusion_score: number;
+      retail_wealth_unlock: number;
+      avg_inclusion_delta: number;
+      total_retail_velocity: number;
     }>("/admin/stats/overview");
   }
 
@@ -218,7 +226,7 @@ async refreshToken() {
   async listUsers(skip: number = 0, limit: number = 50) {
     return this.request<{
       users: Array<{
-        id: number;
+        id: string;
         email: string;
         role: string;
         created_at: string;
@@ -228,6 +236,29 @@ async refreshToken() {
       skip: number;
       limit: number;
     }>(`/admin/users?skip=${skip}&limit=${limit}`);
+  }
+
+  async getForensicFeed(limit: number = 50) {
+    return this.request<
+      Array<{
+        id: string;
+        user_id: string;
+        username: string;
+        score: number;
+        band: string;
+        created_at: string;
+        transaction_count: number;
+        leaks: Array<{
+          type: string;
+          severity: string;
+          impact: number;
+          name_xhosa: string;
+        }>;
+        inclusion_delta: number;
+        retail_velocity: number;
+        summary: string;
+      }>
+    >(`/admin/forensic-feed?limit=${limit}`);
   }
 
   async syncAllData() {

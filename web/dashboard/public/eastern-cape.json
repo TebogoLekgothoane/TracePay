@@ -1,0 +1,277 @@
+{
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "Buffalo City",
+                "id": "BUF"
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            27.5,
+                            -33.0
+                        ],
+                        [
+                            28.0,
+                            -33.0
+                        ],
+                        [
+                            28.0,
+                            -32.7
+                        ],
+                        [
+                            27.5,
+                            -32.7
+                        ],
+                        [
+                            27.5,
+                            -33.0
+                        ]
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "Nelson Mandela Bay",
+                "id": "NMA"
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            25.5,
+                            -34.0
+                        ],
+                        [
+                            26.0,
+                            -34.0
+                        ],
+                        [
+                            26.0,
+                            -33.7
+                        ],
+                        [
+                            25.5,
+                            -33.7
+                        ],
+                        [
+                            25.5,
+                            -34.0
+                        ]
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "OR Tambo",
+                "id": "ORT"
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            28.5,
+                            -31.5
+                        ],
+                        [
+                            29.5,
+                            -31.5
+                        ],
+                        [
+                            29.5,
+                            -31.0
+                        ],
+                        [
+                            28.5,
+                            -31.0
+                        ],
+                        [
+                            28.5,
+                            -31.5
+                        ]
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "Amathole",
+                "id": "AMA"
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            27.0,
+                            -32.5
+                        ],
+                        [
+                            27.5,
+                            -32.5
+                        ],
+                        [
+                            27.5,
+                            -32.0
+                        ],
+                        [
+                            27.0,
+                            -32.0
+                        ],
+                        [
+                            27.0,
+                            -32.5
+                        ]
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "Chris Hani",
+                "id": "CHR"
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            26.0,
+                            -32.0
+                        ],
+                        [
+                            27.0,
+                            -32.0
+                        ],
+                        [
+                            27.0,
+                            -31.5
+                        ],
+                        [
+                            26.0,
+                            -31.5
+                        ],
+                        [
+                            26.0,
+                            -32.0
+                        ]
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "Sarah Baartman",
+                "id": "SBA"
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            24.0,
+                            -33.5
+                        ],
+                        [
+                            25.5,
+                            -33.5
+                        ],
+                        [
+                            25.5,
+                            -32.5
+                        ],
+                        [
+                            24.0,
+                            -32.5
+                        ],
+                        [
+                            24.0,
+                            -33.5
+                        ]
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "Joe Gqabi",
+                "id": "JGQ"
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            26.5,
+                            -31.5
+                        ],
+                        [
+                            28.5,
+                            -31.5
+                        ],
+                        [
+                            28.5,
+                            -30.5
+                        ],
+                        [
+                            26.5,
+                            -30.5
+                        ],
+                        [
+                            26.5,
+                            -31.5
+                        ]
+                    ]
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "Alfred Nzo",
+                "id": "ANZ"
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            28.5,
+                            -31.0
+                        ],
+                        [
+                            30.0,
+                            -31.0
+                        ],
+                        [
+                            30.0,
+                            -30.0
+                        ],
+                        [
+                            28.5,
+                            -30.0
+                        ],
+                        [
+                            28.5,
+                            -31.0
+                        ]
+                    ]
+                ]
+            }
+        }
+    ]
+}
