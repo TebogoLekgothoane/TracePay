@@ -2,6 +2,17 @@
 
 **Hackathon / teams:** Integration with the **Open Banking API** (consent, accounts, transactions) is expected from another team member. This backend is the single point that talks to that API; mobile and dashboard call this backend, not the Open Banking API directly. See [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) for frontend–backend linkage.
 
+## Open Banking sandbox
+
+Add to a `.env` file in `web/backend/`:
+
+```env
+OPEN_BANKING_CLIENT_ID=your_client_id_here
+OPEN_BANKING_CLIENT_SECRET=your_client_secret_here
+```
+
+Get credentials from the sandbox provider. Full flow and testing: see [OPEN_BANKING.md](OPEN_BANKING.md).
+
 ## Run locally
 
 Use **Python 3.11 or 3.12** (pandas builds reliably; 3.14 may fail). Create a venv and run with it.

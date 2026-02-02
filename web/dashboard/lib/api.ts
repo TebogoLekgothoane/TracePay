@@ -240,6 +240,59 @@ export class ApiClient {
     );
   }
 
+  // Open Banking endpoints (consent → authorize → fetch-transactions)
+  async createOpenBankingConsent(options?: {
+    permissions?: string[];
+    expiration_days?: number;
+  }) {
+    return this.request<{
+      consent_id: string;
+      status: string;
+      authorization_url: string | null;
+    }>("/open-banking/consent", {
+      method: "POST",
+      body: JSON.stringify({
+        permissions: options?.permissions ?? [
+          "ReadAccountsBasic",
+          "ReadTransactionsBasic",
+          "ReadTransactionsCredits",
+          "ReadTransactionsDebits",
+        ],
+        expiration_days: options?.expiration_days ?? 90,
+      }),
+    });
+  }
+
+  async listOpenBankingAccounts() {
+    return this.request<{
+      accounts: Array<{
+        id: number;
+        bank_name: string;
+        account_id: string;
+        status: string;
+        consent_id: string | null;
+      }>;
+    }>("/open-banking/accounts");
+  }
+
+  /** Use for Open Banking–linked accounts; runs fetch + forensics. Do not use syncAccount for OB accounts. */
+  async fetchOpenBankingTransactions(accountId: number) {
+    return this.request<{
+      status: string;
+      message: string;
+      account_id: number;
+      new_transactions: number;
+      total_monitored: number;
+      health_score: number | null;
+    }>(`/open-banking/fetch-transactions?account_id=${encodeURIComponent(accountId)}`, {
+      method: "POST",
+    });
+  }
+
+  async getOpenBankingConsent(consentId: string) {
+    return this.request<Record<string, unknown>>(`/open-banking/consent/${consentId}`);
+  }
+
   // Admin endpoints
   async getOverviewStats() {
     return this.request<{

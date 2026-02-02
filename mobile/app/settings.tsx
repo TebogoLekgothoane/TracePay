@@ -63,6 +63,7 @@ export default function SettingsScreen() {
         "@tracepay_passcode",
         "@tracepay_mobile",
         "@tracepay_backend_token",
+        "@tracepay_user_id",
       ]);
 
       await setLanguage("en");
@@ -235,6 +236,17 @@ export default function SettingsScreen() {
               paddingHorizontal: Spacing.lg,
             }}
           >
+            <Pressable
+              onPress={() => router.push("/open-banking-link" as any)}
+              style={{ paddingVertical: Spacing.lg }}
+              className="border-b border-border/60"
+            >
+              <ThemedText type="body">Link bank (Open Banking)</ThemedText>
+              <ThemedText type="small" className="text-text-muted mt-1">
+                Connect your bank via Open Banking to sync transactions and run forensics.
+              </ThemedText>
+            </Pressable>
+
             <Pressable
               onPress={() => router.push("/(auth)/change-password" as any)}
               style={{ paddingVertical: Spacing.lg }}

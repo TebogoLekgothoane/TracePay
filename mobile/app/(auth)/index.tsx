@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme-color";
 import { useApp } from "@/context/app-context";
-import { setBackendToken } from "@/lib/auth-storage";
+import { setBackendToken, setStoredUserId } from "@/lib/auth-storage";
+import { loginWithBackend } from "@/lib/backend-client";
 import { DEMO_USER_ID } from "@/lib/supabase";
 
 export default function LoginScreen() {
@@ -39,7 +40,7 @@ export default function LoginScreen() {
     }
   };
 
-  /** Fake sign-in: no backend. Just validate and set a fake token so app goes to home. */
+  /** Sign in via backend; store JWT so Open Banking and other API calls are authenticated. */
   const handleSignIn = async () => {
     const trimmed = email.trim().toLowerCase();
     if (!trimmed || !password) {
@@ -49,11 +50,13 @@ export default function LoginScreen() {
     setError(null);
     setLoading(true);
     try {
-      await setBackendToken("fake");
-      setUserId(DEMO_USER_ID);
+      const data = await loginWithBackend(trimmed, password);
+      await setStoredUserId(data.user_id);
+      setUserId(data.user_id);
       router.replace("/(tabs)/home" as any);
     } catch (e) {
-      setError("Something went wrong.");
+      const msg = e instanceof Error ? e.message : "Something went wrong.";
+      setError(msg.includes("401") || msg.toLowerCase().includes("credentials") ? "Incorrect email or password." : msg);
     } finally {
       setLoading(false);
     }

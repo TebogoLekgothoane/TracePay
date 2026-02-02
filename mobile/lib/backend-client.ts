@@ -164,7 +164,12 @@ export async function createConsent(
   return request("/open-banking/consent", {
     method: "POST",
     body: JSON.stringify({
-      permissions: body.permissions ?? ["ReadAccountsBasic", "ReadTransactionsBasic"],
+      permissions: body.permissions ?? [
+        "ReadAccountsBasic",
+        "ReadTransactionsBasic",
+        "ReadTransactionsCredits",
+        "ReadTransactionsDebits",
+      ],
       expiration_days: body.expiration_days ?? 90,
     }),
   });

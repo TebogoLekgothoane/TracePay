@@ -11,7 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Spacing, BorderRadius } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme-color";
 import { useApp } from "@/context/app-context";
-import { setBackendToken } from "@/lib/auth-storage";
+import { setBackendToken, setStoredUserId } from "@/lib/auth-storage";
+import { registerWithBackend } from "@/lib/backend-client";
+import { registerUserInSupabase } from "@/lib/api";
 import { DEMO_USER_ID } from "@/lib/supabase";
 
 export default function RegisterScreen() {
@@ -40,7 +42,7 @@ export default function RegisterScreen() {
     }
   };
 
-  /** Fake sign-up: no backend. Just validate and set a fake token, then go to language selection. */
+  /** Register via backend; store JWT and optionally seed Supabase data. */
   const handleCreateAccount = async () => {
     const trimmed = email.trim().toLowerCase();
     if (!trimmed || !password) {
@@ -58,11 +60,14 @@ export default function RegisterScreen() {
     setError(null);
     setLoading(true);
     try {
-      await setBackendToken("fake");
-      setUserId(DEMO_USER_ID);
+      const data = await registerWithBackend(trimmed, password);
+      await setStoredUserId(data.user_id);
+      setUserId(data.user_id);
+      await registerUserInSupabase(data.user_id, data.email).catch(() => {});
       router.replace("/language-selection" as any);
     } catch (e) {
-      setError("Something went wrong.");
+      const msg = e instanceof Error ? e.message : "Something went wrong.";
+      setError(msg.includes("400") && msg.toLowerCase().includes("already") ? "Email already registered." : msg);
     } finally {
       setLoading(false);
     }

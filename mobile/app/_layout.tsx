@@ -31,6 +31,7 @@ export default function RootLayout() {
 
             <Stack.Screen name="bank-autopsy" />
             <Stack.Screen name="add-account" />
+            <Stack.Screen name="open-banking-link" />
             <Stack.Screen name="autopsy-dashboard" />
           <Stack.Screen name="change-password" />
           <Stack.Screen name="device-settings" />
