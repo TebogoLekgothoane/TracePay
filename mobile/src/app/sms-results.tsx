@@ -136,7 +136,7 @@ export default function SmsResultsScreen() {
         <View style={styles.totalCard}>
           <Text style={styles.totalLabel}>TOTAL LEAKING MONTHLY</Text>
           <Text style={styles.totalAmount}>R{totalMonthly.toFixed(2)}</Text>
-          <Text style={styles.totalYearly}>That's R{(totalMonthly * 12).toFixed(0)} lost every year</Text>
+          <Text style={styles.totalYearly}>That is R{(totalMonthly * 12).toFixed(0)} lost every year</Text>
         </View>
 
         <Text style={styles.detectedTitle}>DETECTED LEAKS</Text>

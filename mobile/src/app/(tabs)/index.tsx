@@ -88,7 +88,7 @@ export default function HomeScreen() {
         ]);
       }
     })();
-  }, []);
+  }, [fetchLeaks]);
 
   const activeLeaks = leaks.filter((l) => l.status === "active");
   const totalLeaking = activeLeaks.reduce((sum, l) => sum + l.amountMonthly, 0);

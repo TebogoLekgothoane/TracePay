@@ -41,6 +41,7 @@ interface LeaksState {
   fetchLeaks: () => Promise<void>;
   addLeaks: (leaks: Omit<Leak, "id" | "createdAt">[]) => Promise<void>;
   freezeLeak: (id: number) => Promise<void>;
+  resetLeaks: () => void;
 }
 
 export const useLeaksStore = create<LeaksState>((set, get) => ({
@@ -80,5 +81,9 @@ export const useLeaksStore = create<LeaksState>((set, get) => ({
     );
     await saveLeaks(updated);
     set({ leaks: updated });
+  },
+
+  resetLeaks: () => {
+    set({ leaks: [], isLoading: false, error: null });
   },
 }));

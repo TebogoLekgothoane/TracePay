@@ -8,7 +8,7 @@ import {
   TextInput,
   Platform,
 } from "react-native";
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, Stack } from "expo-router";
 

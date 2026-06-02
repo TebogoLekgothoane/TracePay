@@ -12,9 +12,9 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
-import { router } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { TracePayLogo } from "@/components/TracePayLogo";
+import { AuthError } from "@/lib/auth-errors";
 import { useProfileStore } from "@/stores/profileStore";
 
 export default function WelcomeScreen() {
@@ -24,7 +24,7 @@ export default function WelcomeScreen() {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const { setAuthenticated } = useProfileStore();
+  const { signUp, signIn } = useProfileStore();
 
   const normalizedEmail = email.trim().toLowerCase();
   const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
@@ -40,10 +40,15 @@ export default function WelcomeScreen() {
       const cleanPhone = phone.replace(/\s/g, "").startsWith("0")
         ? "+27" + phone.replace(/\s/g, "").slice(1)
         : phone.replace(/\s/g, "");
-      await setAuthenticated(normalizedEmail, password, mode === "signup" ? cleanPhone : undefined);
-      router.replace("/(onboarding)/language");
-    } catch {
-      setError("Something went wrong. Please try again.");
+
+      if (mode === "signup") {
+        await signUp(normalizedEmail, password, cleanPhone);
+      } else {
+        await signIn(normalizedEmail, password);
+      }
+      // NavigationGuard routes to onboarding or tabs based on onboardingComplete.
+    } catch (e) {
+      setError(e instanceof AuthError ? e.message : "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -166,7 +171,7 @@ export default function WelcomeScreen() {
 
           <View style={styles.trustRow}>
             <MaterialCommunityIcons name="shield-lock-outline" size={13} color="#9CA3AF" />
-            <Text style={styles.trustText}> POPIA compliant · Prototype auth stored locally</Text>
+            <Text style={styles.trustText}> POPIA compliant · Credentials stored on this device</Text>
           </View>
 
           <View style={styles.features}>
@@ -177,7 +182,7 @@ export default function WelcomeScreen() {
             ].map((f, i) => (
               <View key={i} style={styles.featureRow}>
                 <View style={styles.featureIcon}>
-                  <MaterialCommunityIcons name={f.icon as any} size={16} color="#7C3AED" />
+                  <MaterialCommunityIcons name={f.icon as "magnify-scan"} size={16} color="#7C3AED" />
                 </View>
                 <Text style={styles.featureText}>{f.text}</Text>
               </View>
