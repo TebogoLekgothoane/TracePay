@@ -39,7 +39,7 @@ interface BudgetPlan {
   freePct: number;
   riskLevel: string;
   riskDescription: string;
-  obligations: Array<{ name: string; dueDate: string; amount: number; icon: string }>;
+  obligations: { name: string; dueDate: string; amount: number; icon: string }[];
   playbook: PlaybookItem[];
 }
 
@@ -728,3 +728,4 @@ const styles = StyleSheet.create({
   deletePaymentBtn: { alignItems: "center", paddingVertical: 14, marginTop: 4 },
   deletePaymentText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#DC2626" },
 });
+

@@ -42,7 +42,7 @@ export default function CircularProgress({
       circumference - targetProgress * circumference,
       { duration: 1200, easing: Easing.out(Easing.cubic) }
     );
-  }, [targetProgress, circumference]);
+  }, [targetProgress, circumference, strokeDashoffset]);
 
   const animatedProps = useAnimatedProps(() => ({
     strokeDashoffset: strokeDashoffset.value,
@@ -99,3 +99,4 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 });
+

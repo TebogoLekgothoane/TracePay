@@ -7,8 +7,6 @@ import {
   StatusBar,
   Switch,
   ScrollView,
-  Platform,
-  Alert,
 } from "react-native";
 import { router } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -35,7 +33,6 @@ export default function ConnectAccountsScreen() {
   const { setConnectedAccounts, setConsentGiven } = useProfileStore();
   const onboardingData = useOnboardingStore();
   const [selectedBanks, setSelectedBanks] = useState<Set<string>>(new Set(["capitec"]));
-  const [statementUploaded, setStatementUploaded] = useState(false);
 
   const toggleBank = (key: string) => {
     setSelectedBanks((prev) => {
@@ -132,15 +129,6 @@ export default function ConnectAccountsScreen() {
             <Text style={styles.activeBadgeText}>ON</Text>
           </View>
         </View>
-
-          <View style={[styles.sourceIcon, { backgroundColor: statementUploaded ? "#DCFCE7" : "#F3F4F6" }]}>
-            <MaterialCommunityIcons
-              name={statementUploaded ? "file-check-outline" : "file-upload-outline"}
-              size={20}
-              color={statementUploaded ? "#16A34A" : "#6B7280"}
-            />
-          </View>
-
         <View style={styles.noteRow}>
           <MaterialCommunityIcons name="information-outline" size={14} color="#6B7280" />
           <Text style={styles.noteText}> You can update linked accounts anytime from your Profile.</Text>
@@ -234,3 +222,4 @@ const styles = StyleSheet.create({
   },
   btnText: { fontSize: 17, fontFamily: "Inter_700Bold", color: "#FFFFFF" },
 });
+

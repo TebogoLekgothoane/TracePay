@@ -8,10 +8,10 @@ export interface SimulatedLeak {
   advice: string;
 }
 
-const SMS_LEAK_RULES: Array<{
+const SMS_LEAK_RULES: {
   match: (text: string) => boolean;
   leak: SimulatedLeak;
-}> = [
+}[] = [
   {
     match: (t) => t.includes("iflix") || t.includes("subscription"),
     leak: {
@@ -76,7 +76,7 @@ export function simulateSmsAnalysis(_messages: string[]) {
 
 export function simulateBudgetGenerate(
   income: number,
-  leaks: Array<{ name: string; amountMonthly: number; category: string }>,
+  leaks: { name: string; amountMonthly: number; category: string }[],
 ) {
   const weeklyAmount = Math.round(income / 4.33);
   const dailyLimit = Math.round(weeklyAmount / 7);
@@ -159,3 +159,4 @@ export function simulateBudgetGenerate(
     createdAt: new Date().toISOString(),
   };
 }
+

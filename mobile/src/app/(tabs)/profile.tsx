@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -14,7 +14,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useProfileStore } from "@/stores/profileStore";
 import { useVoice } from "@/hooks/useVoice";
 import { useLeaksStore } from "@/stores/leaksStore";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 
 export default function ProfileScreen() {
@@ -27,8 +26,7 @@ export default function ProfileScreen() {
     voiceEnabled,
     setVoiceEnabled,
     connectedAccounts,
-    onboardingComplete,
-    resetProfile,
+    signOut,
   } = useProfileStore();
   const { leaks } = useLeaksStore();
   const { speak } = useVoice();
@@ -81,13 +79,6 @@ export default function ProfileScreen() {
   };
 
   const handleExportData = () => {
-    const csvRows = [
-      "Name,Category,Amount Monthly,Severity,Status",
-      ...leaks.map(
-        (l) =>
-          `"${l.name}","${l.category}",${l.amountMonthly},"${l.severity}","${l.status}"`
-      ),
-    ];
     Alert.alert(
       "Export Data",
       `Your data summary:\n• ${leaks.length} leaks\n• R${totalLeaking.toFixed(2)}/mo total leaking\n\nIn a production app, this would download a CSV file.`,
@@ -96,23 +87,8 @@ export default function ProfileScreen() {
   };
 
   const doSignOut = async () => {
-    await AsyncStorage.multiRemove([
-      "@tracepay:onboardingComplete",
-      "@tracepay:userId",
-      "@tracepay:name",
-      "@tracepay:income",
-      "@tracepay:language",
-      "@tracepay:voice",
-      "@tracepay:consent",
-      "@tracepay:accounts",
-      "@tracepay:isAuthenticated",
-      "@tracepay:email",
-      "@tracepay:password",
-      "@tracepay:phone",
-      "@tracepay:rewardPoints",
-    ]);
-    resetProfile();
-    router.replace("/welcome" as any);
+    await signOut();
+    router.replace("/welcome");
   };
 
   const handleSignOut = () => {
@@ -131,7 +107,7 @@ export default function ProfileScreen() {
   const menuItems = [
     { id: "lang", icon: "web", label: "Language", value: language, hasChevron: true, onPress: () => {} },
     { id: "privacy", icon: "lock-outline", label: "Privacy & Consent", value: "Active", hasChevron: true, onPress: () => {} },
-    { id: "rescan", icon: "message-processing-outline", label: "Rescan SMS Inbox", value: "Run", hasChevron: true, onPress: () => router.push("/sms-scanning" as any) },
+    { id: "rescan", icon: "message-processing-outline", label: "Rescan SMS Inbox", value: "Run", hasChevron: true, onPress: () => router.push("/sms-scanning") },
     { id: "export", icon: "file-document-outline", label: "Export My Data", value: "CSV", hasChevron: true, onPress: handleExportData },
     { id: "help", icon: "help-circle-outline", label: "Help & Support", value: "", hasChevron: true, onPress: () => {} },
   ];

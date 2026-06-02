@@ -93,7 +93,7 @@ export default function FeaturesScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.btn}
-          onPress={() => router.push("/(onboarding)/consent" as any)}
+          onPress={() => router.push("/(onboarding)/consent")}
           activeOpacity={0.85}
         >
           <Text style={styles.btnText}>Sounds good</Text>

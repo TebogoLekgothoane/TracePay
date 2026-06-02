@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -22,25 +22,24 @@ export default function SmsScanningScreen() {
   const { requestPermissionAndRead, analyzeWithAI } = useSms();
 
   const [phase, setPhase] = useState<"preparing" | "reading" | "analysing" | "done">("preparing");
-  const [messages, setMessages] = useState<Array<{ address: string; body: string; date: number }>>([]);
+  const [messages, setMessages] = useState<{ address: string; body: string; date: number }[]>([]);
   const [leaksFound, setLeaksFound] = useState(0);
   const [analysisResult, setAnalysisResult] = useState<{ leaks: any[]; totalMonthly: number } | null>(null);
   const progressAnim = useRef(new Animated.Value(0)).current;
 
-  const animateTo = (toValue: number, duration: number) =>
-    new Promise<void>((resolve) => {
-      Animated.timing(progressAnim, {
-        toValue,
-        duration,
-        useNativeDriver: false,
-      }).start(() => resolve());
-    });
+  const animateTo = useCallback(
+    (toValue: number, duration: number) =>
+      new Promise<void>((resolve) => {
+        Animated.timing(progressAnim, {
+          toValue,
+          duration,
+          useNativeDriver: false,
+        }).start(() => resolve());
+      }),
+    [progressAnim],
+  );
 
-  useEffect(() => {
-    runScan();
-  }, []);
-
-  const runScan = async () => {
+  const runScan = useCallback(async () => {
     setPhase("preparing");
     await animateTo(0.15, 400);
 
@@ -57,7 +56,11 @@ export default function SmsScanningScreen() {
     setLeaksFound(result.leaks.length);
     setPhase("done");
     await animateTo(1.0, 500);
-  };
+  }, [analyzeWithAI, requestPermissionAndRead, animateTo]);
+
+  useEffect(() => {
+    runScan();
+  }, [runScan]);
 
   const progressWidth = progressAnim.interpolate({
     inputRange: [0, 1],
@@ -242,3 +245,4 @@ const styles = StyleSheet.create({
   },
   resultsBtnText: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#FFFFFF" },
 });
+
