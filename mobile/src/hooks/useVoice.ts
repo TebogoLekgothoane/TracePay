@@ -6,14 +6,18 @@ export function useVoice() {
   const voiceEnabled = useProfileStore((s) => s.voiceEnabled);
   const language = useProfileStore((s) => s.language);
 
-  const getLocale = () => {
+  const getLocale = useCallback(() => {
     switch (language) {
-      case "isiXhosa": return "xh-ZA";
-      case "isiZulu": return "zu-ZA";
-      case "Sesotho": return "st-ZA";
-      default: return "en-ZA";
+      case "isiXhosa":
+        return "xh-ZA";
+      case "isiZulu":
+        return "zu-ZA";
+      case "Sesotho":
+        return "st-ZA";
+      default:
+        return "en-ZA";
     }
-  };
+  }, [language]);
 
   const speak = useCallback(
     (text: string) => {
@@ -25,7 +29,7 @@ export function useVoice() {
         rate: 0.9,
       });
     },
-    [voiceEnabled, language]
+    [voiceEnabled, getLocale],
   );
 
   const stop = useCallback(() => {

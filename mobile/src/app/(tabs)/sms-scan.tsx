@@ -35,7 +35,7 @@ export default function SmsScanScreen() {
       showsVerticalScrollIndicator={false}
     >
       <Text style={styles.title}>Money Leak Scanner</Text>
-      <Text style={styles.subtitle}>Find out what's draining your airtime & money</Text>
+      <Text style={styles.subtitle}>Find out what is draining your airtime and money</Text>
 
       <View style={styles.analysisCard}>
         <View style={styles.analysisIconBox}>
@@ -52,7 +52,7 @@ export default function SmsScanScreen() {
         </View>
       </View>
 
-      <Text style={styles.sectionLabel}>WHAT WE'LL SCAN</Text>
+      <Text style={styles.sectionLabel}>WHAT WE WILL SCAN</Text>
 
       {SCAN_SOURCES.map((source) => (
         <View key={source.id} style={styles.sourceCard}>
@@ -71,7 +71,7 @@ export default function SmsScanScreen() {
       <TouchableOpacity
         style={styles.scanBtn}
         activeOpacity={0.85}
-        onPress={() => router.push("/sms-scanning" as any)}
+        onPress={() => router.push("/sms-scanning")}
       >
         <MaterialCommunityIcons name="lightning-bolt" size={20} color="#FFFFFF" />
         <Text style={styles.scanBtnText}> Scan My SMS Inbox →</Text>

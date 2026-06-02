@@ -183,7 +183,7 @@ export default function ConsentScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIncludeMomoData(localMomoSetting);
     setConsentGiven(true);
-    router.push("/(onboarding)/connect-accounts" as any);
+    router.push("/(onboarding)/connect-accounts");
   };
 
   const handleCancel = () => {

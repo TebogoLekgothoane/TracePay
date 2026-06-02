@@ -29,21 +29,29 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     loadFromStorage();
-  }, []);
+  }, [loadFromStorage]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    const inOnboarding = segments[0] === "(onboarding)";
-    const onWelcome = segments[0] === "welcome";
-    const onSmsFlow =
-      segments[0] === "sms-scanning" || segments[0] === "sms-results";
+
+    const root = segments[0] as string | undefined;
+    const inOnboarding = root === "(onboarding)";
+    const onWelcome = root === "welcome";
+    const onBoot = !root || root === "index";
+    const onSmsFlow = root === "sms-scanning" || root === "sms-results";
 
     if (!isAuthenticated) {
       if (!onWelcome) router.replace("/welcome");
-    } else if (!onboardingComplete) {
+      return;
+    }
+
+    if (!onboardingComplete) {
       if (!inOnboarding && !onSmsFlow) router.replace("/(onboarding)/language");
-    } else {
-      if (inOnboarding || onWelcome) router.replace("/(tabs)");
+      return;
+    }
+
+    if (inOnboarding || onWelcome || onBoot) {
+      router.replace("/(tabs)");
     }
   }, [isLoaded, isAuthenticated, onboardingComplete, segments]);
 
