@@ -1,4 +1,4 @@
-# tracepay
+# TracePay
 A React Native hackathon prototype that uses Open Banking and optional telco data to reveal hidden money leaks, show users where their money goes, and help them take control. Features include money autopsy cards, voice explanations in IsiXhosa, and freeze controls for accounts and subscriptions. Designed for financial inclusion in the Eastern Cape.
 
 ## Get started
