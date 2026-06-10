@@ -26,7 +26,8 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.RECORD_AUDIO",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.READ_SMS",
+        "android.permission.RECEIVE_SMS"
       ],
       "package": "com.tebogo.l.tracepay"
     },
@@ -55,6 +56,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "872cf9c9-a9e6-45c5-a426-bcb00f70468c"
+      }
     }
   }
 }
