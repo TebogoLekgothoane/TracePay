@@ -10,6 +10,8 @@ import {
   requestSMSPermission,
   checkSMSPermission,
   ingestSMS,
+  openAppPermissionSettings,
+  SMS_PERMISSION_BLOCKED_HELP,
 } from '../services/sms/SMSIngestionService';
 import { SMSListener } from '../services/sms/SMSListener';
 
@@ -27,7 +29,9 @@ interface UseSMSIngestionReturn {
 
   // Actions
   requestPermission: () => Promise<PermissionStatus>;
-  syncNow: () => Promise<void>;
+  refreshPermission: () => Promise<PermissionStatus>;
+  openPermissionSettings: () => Promise<void>;
+  syncNow: () => Promise<boolean>;
   startListening: () => void;
   stopListening: () => void;
   clearTransactions: () => Promise<void>;
@@ -92,13 +96,32 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
     return status;
   }, []);
 
+  const refreshPermission = useCallback(async (): Promise<PermissionStatus> => {
+    const status = await checkSMSPermission();
+    setServiceState((prev) => ({ ...prev, permissionStatus: status }));
+    return status;
+  }, []);
+
+  const openPermissionSettings = useCallback(async () => {
+    await openAppPermissionSettings();
+  }, []);
+
   // ── Sync (batch ingest) ───────────────────────────────────────────────────
 
-  const syncNow = useCallback(async () => {
+  const syncNow = useCallback(async (): Promise<boolean> => {
     setIsLoading(true);
     setError(null);
 
     try {
+      let permission = await checkSMSPermission();
+      if (permission !== 'granted') {
+        permission = await requestSMSPermission();
+        setServiceState((prev) => ({ ...prev, permissionStatus: permission }));
+      }
+      if (permission !== 'granted') {
+        throw new Error(SMS_PERMISSION_BLOCKED_HELP);
+      }
+
       const current = await loadPersistedTransactions();
       const result = await ingestSMS({ existingTransactions: current });
 
@@ -120,8 +143,10 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
         lastSyncAt: now,
         totalIngested: current.length + result.transactions.length,
       }));
+      return true;
     } catch (err) {
       setError((err as Error).message);
+      return false;
     } finally {
       setIsLoading(false);
     }
@@ -187,6 +212,8 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
     isLoading,
     error,
     requestPermission,
+    refreshPermission,
+    openPermissionSettings,
     syncNow,
     startListening,
     stopListening,

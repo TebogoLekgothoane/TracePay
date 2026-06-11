@@ -1,14 +1,14 @@
-import React, { useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
   ScrollView,
-  Pressable,
   Switch,
-  StyleSheet,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  AppState,
 } from "react-native";
+import { Button } from "@/components/Button";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -23,6 +23,7 @@ import * as Haptics from "expo-haptics";
 
 import { consentCopy as t } from "@/constants/consent-copy";
 import { useOnboardingStore } from "@/stores/onboardingStore";
+import { useIngestion } from "@/context/SMSIngestionContext";
 
 const ROADMAP_STEPS = 6;
 
@@ -35,23 +36,11 @@ const ROADMAP_ICONS: (keyof typeof Feather.glyphMap)[] = [
   "lock",
 ];
 
-const Colors = {
-  bg: "#F5F5F7",
-  card: "#FFFFFF",
-  text: "#111827",
-  textMuted: "#6B7280",
-  navy: "#0B1B3A",
-  accent: "#BF00FF",
-  blue: "#2563EB",
-  trackOff: "#E0E0E0",
-  stepOff: "#E0E0E0",
-  stepBorderOff: "#C0C0C0",
-  trackBg: "#D1D5DB",
-  bullet: "#2563EB",
-};
+const NAVY = "#0B1B3A";
+const STEP_OFF = "#E0E0E0";
+const STEP_BORDER_OFF = "#C0C0C0";
 
 const Spacing = {
-  lg: 16,
   "2xl": 24,
   "4xl": 32,
   "6xl": 48,
@@ -70,9 +59,9 @@ function RoadmapStep({
   const circleStyle = useAnimatedStyle(() => {
     const isFilled = filledSteps.value > index;
     return {
-      backgroundColor: isFilled ? Colors.navy : Colors.stepOff,
+      backgroundColor: isFilled ? NAVY : STEP_OFF,
       borderWidth: 2,
-      borderColor: isFilled ? Colors.navy : Colors.stepBorderOff,
+      borderColor: isFilled ? NAVY : STEP_BORDER_OFF,
     };
   });
 
@@ -85,11 +74,20 @@ function RoadmapStep({
   }));
 
   return (
-    <Animated.View style={[styles.roadmapStep, circleStyle]}>
-      <Animated.View style={[styles.roadmapIconLayer, unfilledIconStyle]}>
+    <Animated.View
+      className="h-11 w-11 items-center justify-center rounded-full"
+      style={circleStyle}
+    >
+      <Animated.View
+        className="absolute inset-0 items-center justify-center"
+        style={unfilledIconStyle}
+      >
         <Feather name={icon} size={18} color="#6B7280" />
       </Animated.View>
-      <Animated.View style={[styles.roadmapIconLayer, filledIconStyle]}>
+      <Animated.View
+        className="absolute inset-0 items-center justify-center"
+        style={filledIconStyle}
+      >
         <Feather name={icon} size={18} color="#FFFFFF" />
       </Animated.View>
     </Animated.View>
@@ -108,14 +106,14 @@ function ConsentSection({
   return (
     <Animated.View
       entering={FadeInDown.delay(delay).springify()}
-      style={styles.consentSection}
+      className="mb-4 rounded-xl bg-white p-4 shadow-sm"
     >
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.sectionItems}>
+      <Text className="mb-3 text-base font-semibold text-gray-900">{title}</Text>
+      <View className="gap-2">
         {items.map((item, index) => (
-          <View key={index} style={styles.bulletRow}>
-            <View style={styles.bullet} />
-            <Text style={styles.sectionItem}>{item}</Text>
+          <View key={index} className="flex-row items-start">
+            <View className="mr-3 mt-2 h-1.5 w-1.5 rounded-full bg-blue-600" />
+            <Text className="flex-1 text-sm font-sans leading-5 text-gray-500">{item}</Text>
           </View>
         ))}
       </View>
@@ -130,8 +128,10 @@ export default function ConsentScreen() {
   const includeMomoData = useOnboardingStore((s) => s.includeMomoData);
   const setIncludeMomoData = useOnboardingStore((s) => s.setIncludeMomoData);
   const setConsentGiven = useOnboardingStore((s) => s.setConsentGiven);
+  const { requestPermission, refreshPermission, openPermissionSettings } = useIngestion();
 
   const [localMomoSetting, setLocalMomoSetting] = useState(includeMomoData);
+  const [permissionBlocked, setPermissionBlocked] = useState(false);
   const scrollProgress = useSharedValue(0);
   const filledSteps = useSharedValue(0);
   const roadmapHeight = useSharedValue(0);
@@ -179,12 +179,43 @@ export default function ConsentScreen() {
     height: scrollProgress.value * roadmapHeight.value,
   }));
 
+  const continueIfGranted = useCallback(async () => {
+    const status = await refreshPermission();
+    if (status === "granted") {
+      setPermissionBlocked(false);
+      router.push("/(onboarding)/connect-accounts");
+      return true;
+    }
+    setPermissionBlocked(true);
+    return false;
+  }, [refreshPermission]);
+
   const handleAgree = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIncludeMomoData(localMomoSetting);
     setConsentGiven(true);
-    router.push("/(onboarding)/connect-accounts");
+
+    const status = await requestPermission();
+    if (status === "granted") {
+      router.push("/(onboarding)/connect-accounts");
+      return;
+    }
+
+    setPermissionBlocked(true);
   };
+
+  const handleOpenSettings = async () => {
+    await openPermissionSettings();
+  };
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active" && permissionBlocked) {
+        void continueIfGranted();
+      }
+    });
+    return () => sub.remove();
+  }, [permissionBlocked, continueIfGranted]);
 
   const handleCancel = () => {
     router.back();
@@ -198,42 +229,40 @@ export default function ConsentScreen() {
   const topPadding = insets.top + Spacing["6xl"];
 
   return (
-    <View style={styles.screen}>
+    <View className="screen">
       <ScrollView
         ref={scrollViewRef}
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.scrollContent,
-          {
-            paddingTop: topPadding,
-            paddingBottom: insets.bottom + Spacing["4xl"],
-          },
-        ]}
+        className="flex-1"
+        contentContainerClassName="px-4"
+        contentContainerStyle={{
+          paddingTop: topPadding,
+          paddingBottom: insets.bottom + Spacing["4xl"],
+        }}
         onScroll={handleScroll}
         scrollEventThrottle={24}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View
-          entering={FadeInDown.delay(50).springify()}
-          style={styles.introBlock}
-        >
-          <Text style={styles.title}>{t.consentTitle}</Text>
-          <Text style={styles.subtitle}>{t.consentSubtitle}</Text>
-          <Text style={styles.intro}>{t.consentIntro}</Text>
+        <Animated.View entering={FadeInDown.delay(50).springify()} className="pb-4">
+          <Text className="mb-2 text-[28px] font-bold text-gray-900">{t.consentTitle}</Text>
+          <Text className="mb-4 text-[15px] font-sans text-gray-500">{t.consentSubtitle}</Text>
+          <Text className="mb-6 text-[15px] font-sans leading-[22px] text-gray-900">
+            {t.consentIntro}
+          </Text>
         </Animated.View>
 
-        <View style={styles.roadmapRow} onLayout={handleCardsSectionLayout}>
-          <View style={styles.roadmapRail}>
-            <View style={styles.roadmapTrack}>
-              <Animated.View style={[styles.roadmapFill, roadmapFillStyle]} />
+        <View className="mb-10 flex-row items-stretch" onLayout={handleCardsSectionLayout}>
+          <View className="relative mr-1 min-h-[200px] w-14">
+            <View className="absolute bottom-0 left-5 top-0 w-1.5 overflow-hidden rounded-[3px] bg-gray-300">
+              <Animated.View
+                className="absolute left-0 right-0 top-0 rounded-[3px] bg-navy"
+                style={roadmapFillStyle}
+              />
             </View>
             {Array.from({ length: ROADMAP_STEPS }).map((_, i) => (
               <View
                 key={i}
-                style={[
-                  styles.roadmapStepAnchor,
-                  { top: `${(i / (ROADMAP_STEPS - 1)) * 100}%` },
-                ]}
+                className="absolute left-0 -mt-[22px]"
+                style={{ top: `${(i / (ROADMAP_STEPS - 1)) * 100}%` }}
               >
                 <RoadmapStep
                   index={i}
@@ -245,7 +274,7 @@ export default function ConsentScreen() {
             ))}
           </View>
 
-          <View style={styles.cardsColumn}>
+          <View className="min-w-0 flex-1">
             <ConsentSection
               title={t.dataAccessTitle}
               items={[t.dataAccess1, t.dataAccess2]}
@@ -254,18 +283,22 @@ export default function ConsentScreen() {
 
             <Animated.View
               entering={FadeInDown.delay(150).springify()}
-              style={styles.momoCard}
+              className="mb-4 flex-row items-center justify-between rounded-xl bg-white p-4 shadow-sm"
             >
-              <View style={styles.momoText}>
-                <Text style={styles.sectionTitle}>{t.includeMomoData}</Text>
-                <Text style={styles.momoDescription}>{t.momoDescription}</Text>
+              <View className="mr-4 flex-1">
+                <Text className="mb-3 text-base font-semibold text-gray-900">
+                  {t.includeMomoData}
+                </Text>
+                <Text className="mt-1 text-[13px] font-sans leading-[18px] text-gray-500">
+                  {t.momoDescription}
+                </Text>
               </View>
               <Switch
                 value={localMomoSetting}
                 onValueChange={handleMomoToggle}
-                trackColor={{ false: Colors.trackOff, true: Colors.accent }}
+                trackColor={{ false: "#E0E0E0", true: "#BF00FF" }}
                 thumbColor="#FFFFFF"
-                ios_backgroundColor={Colors.trackOff}
+                ios_backgroundColor="#E0E0E0"
               />
             </Animated.View>
 
@@ -292,205 +325,43 @@ export default function ConsentScreen() {
           </View>
         </View>
 
-        <View style={[styles.actions, { paddingBottom: insets.bottom + Spacing["2xl"] }]}>
-          <Pressable
-            onPress={handleAgree}
-            style={({ pressed }) => [styles.agreeBtn, pressed && styles.btnPressed]}
-            testID="button-agree"
-          >
-            <Text style={styles.agreeBtnText}>{t.agreeAndContinue}</Text>
-          </Pressable>
-          <Pressable
+        {permissionBlocked && (
+          <View className="mb-4 gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+            <View className="flex-row items-center gap-2">
+              <Feather name="shield" size={20} color="#DC2626" />
+              <Text className="flex-1 text-base font-semibold text-red-800">
+                Android blocked SMS access
+              </Text>
+            </View>
+            <Text className="text-sm font-sans leading-5 text-red-900">
+              Your phone showed a security warning instead of Allow/Deny. On newer Android this is
+              normal for dev builds. Open Settings, go to Permissions → SMS, allow access for
+              TracePay, then return here.
+            </Text>
+            <Button variant="accent" fullWidth onPress={handleOpenSettings}>
+              Open Settings
+            </Button>
+            <Button variant="info" fullWidth onPress={continueIfGranted}>
+              I&apos;ve enabled it — check again
+            </Button>
+          </View>
+        )}
+
+        <View className="gap-3" style={{ paddingBottom: insets.bottom + Spacing["2xl"] }}>
+          <Button variant="accent" fullWidth onPress={handleAgree} testID="button-agree">
+            {permissionBlocked ? "Try SMS permission again" : t.agreeAndContinue}
+          </Button>
+          <Button
+            variant="info"
+            fullWidth
             onPress={handleCancel}
-            style={({ pressed }) => [styles.cancelBtn, pressed && styles.btnPressed]}
             testID="button-cancel"
+            className="mt-1"
           >
-            <Text style={styles.cancelBtnText}>{t.cancel}</Text>
-          </Pressable>
+            {t.cancel}
+          </Button>
         </View>
       </ScrollView>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: Colors.bg,
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-  },
-  introBlock: {
-    paddingBottom: 16,
-  },
-  title: {
-    fontSize: 28,
-    fontFamily: "Inter_700Bold",
-    color: Colors.text,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 15,
-    fontFamily: "Inter_400Regular",
-    color: Colors.textMuted,
-    marginBottom: 16,
-  },
-  intro: {
-    fontSize: 15,
-    fontFamily: "Inter_400Regular",
-    color: Colors.text,
-    lineHeight: 22,
-    marginBottom: 24,
-  },
-  roadmapRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    marginBottom: 40,
-  },
-  roadmapRail: {
-    width: 56,
-    marginRight: 4,
-    position: "relative",
-    minHeight: 200,
-  },
-  roadmapTrack: {
-    position: "absolute",
-    left: 20,
-    top: 0,
-    bottom: 0,
-    width: 6,
-    borderRadius: 3,
-    overflow: "hidden",
-    backgroundColor: Colors.trackBg,
-  },
-  roadmapFill: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    borderRadius: 3,
-    backgroundColor: Colors.navy,
-  },
-  roadmapStepAnchor: {
-    position: "absolute",
-    left: 0,
-    marginTop: -22,
-  },
-  roadmapStep: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  roadmapIconLayer: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cardsColumn: {
-    flex: 1,
-    minWidth: 0,
-  },
-  consentSection: {
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.text,
-    marginBottom: 12,
-  },
-  sectionItems: {
-    gap: 8,
-  },
-  bulletRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-  },
-  bullet: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.bullet,
-    marginTop: 8,
-    marginRight: 12,
-  },
-  sectionItem: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: Colors.textMuted,
-    lineHeight: 20,
-  },
-  momoCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  momoText: {
-    flex: 1,
-    marginRight: 16,
-  },
-  momoDescription: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: Colors.textMuted,
-    marginTop: 4,
-    lineHeight: 18,
-  },
-  actions: {
-    gap: 12,
-  },
-  agreeBtn: {
-    backgroundColor: Colors.accent,
-    width: "100%",
-    height: 48,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  agreeBtnText: {
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
-    color: "#FFFFFF",
-  },
-  cancelBtn: {
-    backgroundColor: Colors.blue,
-    width: "100%",
-    height: 48,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 4,
-  },
-  cancelBtnText: {
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
-    color: "#FFFFFF",
-  },
-  btnPressed: {
-    opacity: 0.88,
-  },
-});

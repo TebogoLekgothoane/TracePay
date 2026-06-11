@@ -3,19 +3,18 @@ import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
-  StyleSheet,
   SafeAreaView,
   StatusBar,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  ActivityIndicator,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { Button } from "@/components/Button";
 import { TracePayLogo } from "@/components/TracePayLogo";
 import { AuthError } from "@/lib/auth-errors";
 import { useProfileStore } from "@/stores/profileStore";
+import { cn } from "@/lib/cn";
 
 export default function WelcomeScreen() {
   const [mode, setMode] = useState<"signup" | "signin">("signup");
@@ -55,49 +54,75 @@ export default function WelcomeScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView className="screen">
       <StatusBar barStyle="dark-content" />
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-
-          <View style={styles.logoArea}>
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerClassName="screen-scroll"
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View className="items-center mb-8 gap-2">
             <TracePayLogo size={96} layout="column" />
-            <Text style={styles.logoTagline}>Your money guardian</Text>
+            <Text className="body-text mt-1">Your money guardian</Text>
           </View>
 
-          <View style={styles.card}>
-            <View style={styles.toggle}>
-              <TouchableOpacity
-                style={[styles.toggleBtn, mode === "signup" && styles.toggleBtnActive]}
-                onPress={() => { setMode("signup"); setError(""); }}
-                activeOpacity={0.7}
+          <View className="card-lg mb-5">
+            <View className="flex-row bg-gray-100 rounded-[10px] p-1 mb-6">
+              <Button
+                variant="ghost"
+                className={cn(
+                  "flex-1 py-2.5 rounded-lg items-center justify-center",
+                  mode === "signup" && "bg-white shadow-sm",
+                )}
+                onPress={() => {
+                  setMode("signup");
+                  setError("");
+                }}
+                textClassName={cn(
+                  "text-sm font-medium text-gray-500",
+                  mode === "signup" && "text-gray-900 font-semibold",
+                )}
               >
-                <Text style={[styles.toggleText, mode === "signup" && styles.toggleTextActive]}>Create Account</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.toggleBtn, mode === "signin" && styles.toggleBtnActive]}
-                onPress={() => { setMode("signin"); setError(""); }}
-                activeOpacity={0.7}
+                Create Account
+              </Button>
+              <Button
+                variant="ghost"
+                className={cn(
+                  "flex-1 py-2.5 rounded-lg items-center justify-center",
+                  mode === "signin" && "bg-white shadow-sm",
+                )}
+                onPress={() => {
+                  setMode("signin");
+                  setError("");
+                }}
+                textClassName={cn(
+                  "text-sm font-medium text-gray-500",
+                  mode === "signin" && "text-gray-900 font-semibold",
+                )}
               >
-                <Text style={[styles.toggleText, mode === "signin" && styles.toggleTextActive]}>Sign In</Text>
-              </TouchableOpacity>
+                Sign In
+              </Button>
             </View>
 
-            <Text style={styles.cardTitle}>
+            <Text className="heading-lg mb-1.5">
               {mode === "signup" ? "Create your account" : "Welcome back"}
             </Text>
-            <Text style={styles.cardSub}>
+            <Text className="body-text leading-5 mb-6">
               {mode === "signup"
                 ? "Use your email, password and phone number to create your TracePay account."
                 : "Use your email and password to sign back in."}
             </Text>
 
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Email address</Text>
-              <View style={styles.inputWrap}>
+            <View className="field">
+              <Text className="field-label">Email address</Text>
+              <View className="input-group">
                 <MaterialCommunityIcons name="email-outline" size={18} color="#9CA3AF" />
                 <TextInput
-                  style={styles.input}
+                  className="input-field"
                   placeholder="you@example.com"
                   placeholderTextColor="#9CA3AF"
                   value={email}
@@ -110,12 +135,12 @@ export default function WelcomeScreen() {
               </View>
             </View>
 
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Password</Text>
-              <View style={styles.inputWrap}>
+            <View className="field">
+              <Text className="field-label">Password</Text>
+              <View className="input-group">
                 <MaterialCommunityIcons name="lock-outline" size={18} color="#9CA3AF" />
                 <TextInput
-                  style={styles.input}
+                  className="input-field"
                   placeholder="At least 6 characters"
                   placeholderTextColor="#9CA3AF"
                   value={password}
@@ -130,12 +155,12 @@ export default function WelcomeScreen() {
             </View>
 
             {mode === "signup" && (
-              <View style={styles.field}>
-                <Text style={styles.fieldLabel}>SA phone number</Text>
-                <View style={styles.inputWrap}>
-                  <Text style={styles.prefix}>+27</Text>
+              <View className="field">
+                <Text className="field-label">SA phone number</Text>
+                <View className="input-group">
+                  <Text className="text-[15px] font-medium text-gray-700">+27</Text>
                   <TextInput
-                    style={styles.input}
+                    className="input-field"
                     placeholder="72 123 4567"
                     placeholderTextColor="#9CA3AF"
                     value={phone}
@@ -148,105 +173,51 @@ export default function WelcomeScreen() {
               </View>
             )}
 
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {error ? (
+              <Text className="text-[13px] font-sans text-red-600 mb-3">{error}</Text>
+            ) : null}
 
-            <TouchableOpacity
-              style={[styles.btn, !isValid && styles.btnDisabled]}
+            <Button
+              size="lg"
+              fullWidth
               onPress={handleSubmit}
-              activeOpacity={0.85}
-              disabled={loading || !isValid}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <Text style={styles.btnText}>
-                    {mode === "signup" ? "Create Account" : "Sign In"}
-                  </Text>
+              disabled={!isValid}
+              loading={loading}
+              className="mt-1"
+              iconRight={
+                !loading ? (
                   <MaterialCommunityIcons name="arrow-right" size={20} color="#fff" />
-                </>
-              )}
-            </TouchableOpacity>
+                ) : undefined
+              }
+            >
+              {mode === "signup" ? "Create Account" : "Sign In"}
+            </Button>
           </View>
 
-          <View style={styles.trustRow}>
+          <View className="flex-row items-center justify-center mb-6">
             <MaterialCommunityIcons name="shield-lock-outline" size={13} color="#9CA3AF" />
-            <Text style={styles.trustText}> POPIA compliant · Credentials stored on this device</Text>
+            <Text className="caption">
+              {" "}
+              POPIA compliant · Credentials stored on this device
+            </Text>
           </View>
 
-          <View style={styles.features}>
+          <View className="gap-3.5">
             {[
               { icon: "magnify-scan", text: "Detect hidden money leaks from your SMS inbox" },
               { icon: "brain", text: "AI budget coach built for South Africa" },
               { icon: "tag-heart-outline", text: "Earn retail discounts by stopping leaks" },
             ].map((f, i) => (
-              <View key={i} style={styles.featureRow}>
-                <View style={styles.featureIcon}>
+              <View key={i} className="flex-row items-center gap-3">
+                <View className="w-[34px] h-[34px] rounded-[10px] bg-brand-purple-light items-center justify-center shrink-0">
                   <MaterialCommunityIcons name={f.icon as "magnify-scan"} size={16} color="#7C3AED" />
                 </View>
-                <Text style={styles.featureText}>{f.text}</Text>
+                <Text className="flex-1 text-sm font-sans text-gray-700 leading-5">{f.text}</Text>
               </View>
             ))}
           </View>
-
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#F7F6FB" },
-  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 40, paddingBottom: 40 },
-
-  logoArea: { alignItems: "center", marginBottom: 32, gap: 8 },
-  logoTagline: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#6B7280", marginTop: 4 },
-
-  card: {
-    backgroundColor: "#FFFFFF", borderRadius: 20, padding: 24, marginBottom: 20,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 3,
-  },
-  toggle: {
-    flexDirection: "row", backgroundColor: "#F3F4F6", borderRadius: 10,
-    padding: 4, marginBottom: 24,
-  },
-  toggleBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: "center" },
-  toggleBtnActive: { backgroundColor: "#FFFFFF", shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 1 },
-  toggleText: { fontSize: 14, fontFamily: "Inter_500Medium", color: "#6B7280" },
-  toggleTextActive: { color: "#111827", fontFamily: "Inter_600SemiBold" },
-
-  cardTitle: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#111827", marginBottom: 6 },
-  cardSub: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#6B7280", lineHeight: 20, marginBottom: 24 },
-
-  field: { marginBottom: 18 },
-  fieldLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#374151", marginBottom: 8 },
-  inputWrap: {
-    flexDirection: "row", alignItems: "center", gap: 10,
-    backgroundColor: "#F9FAFB", borderRadius: 12,
-    borderWidth: 1.5, borderColor: "#E5E7EB",
-    paddingHorizontal: 14, paddingVertical: 14,
-  },
-  prefix: { fontSize: 15, fontFamily: "Inter_500Medium", color: "#374151" },
-  input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular", color: "#111827" },
-
-  errorText: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#DC2626", marginBottom: 12 },
-
-  btn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    backgroundColor: "#7C3AED", borderRadius: 14, paddingVertical: 17, marginTop: 4,
-    shadowColor: "#7C3AED", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 4,
-  },
-  btnDisabled: { opacity: 0.4 },
-  btnText: { fontSize: 17, fontFamily: "Inter_700Bold", color: "#FFFFFF" },
-
-  trustRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 24 },
-  trustText: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#9CA3AF" },
-
-  features: { gap: 14 },
-  featureRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  featureIcon: {
-    width: 34, height: 34, borderRadius: 10,
-    backgroundColor: "#EDE9FE", alignItems: "center", justifyContent: "center", flexShrink: 0,
-  },
-  featureText: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular", color: "#374151", lineHeight: 20 },
-});

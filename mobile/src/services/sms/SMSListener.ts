@@ -4,6 +4,7 @@ import AndroidSmsListener from 'react-native-android-sms-listener';
 import { ParsedTransaction, RawSMS } from './sms.types';
 import { makeTransactionId, inferCategory } from './sms.utils';
 import { parserRegistry } from './ParserRegistry';
+import { isSmsNativeModuleAvailable } from './SMSIngestionService';
 
 type OnTransactionCallback = (transaction: ParsedTransaction) => void;
 type OnErrorCallback = (error: Error, rawBody: string) => void;
@@ -28,7 +29,7 @@ export class SMSListener {
   }
 
   start(): boolean {
-    if (Platform.OS !== 'android') return false;
+    if (Platform.OS !== 'android' || !isSmsNativeModuleAvailable()) return false;
     if (this.subscription) return true; // already listening
 
     this.subscription = AndroidSmsListener.addListener((message: { originatingAddress: string; body: string }) => {

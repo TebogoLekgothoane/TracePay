@@ -1,22 +1,15 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  // NOTE: Update this to include the paths to all files that contain Nativewind classes.
-  content: [
-    "./app/**/*.{js,jsx,ts,tsx}",
-    "./components/**/*.{js,jsx,ts,tsx}",
-  ],
+  content: ["./src/**/*.{js,jsx,ts,tsx}"],
   presets: [require("nativewind/preset")],
   theme: {
     extend: {
       colors: {
-        // Brand palette (single source of truth)
         navy: "#0B1B3A",
         white: "#FFFFFF",
         purple: "#6D28D9",
         "neon-purple": "#BF00FF",
         blue: "#0B1B3A",
-
-        // Semantic tokens (prefer these in className)
         bg: {
           DEFAULT: "#FFFFFF",
           surface: "#F5F5F5",
@@ -36,8 +29,75 @@ module.exports = {
         warning: "#F59E0B",
         success: "#10B981",
         info: "#3B82F6",
+        brand: {
+          purple: "#7C3AED",
+          "purple-dark": "#5B21B6",
+          "purple-light": "#EDE9FE",
+          "purple-muted": "#C4B5FD",
+          "purple-faint": "#FAFAFF",
+        },
+        app: {
+          bg: "#F7F6FB",
+        },
+        gray: {
+          50: "#F9FAFB",
+          100: "#F3F4F6",
+          200: "#E5E7EB",
+          300: "#D1D5DB",
+          400: "#9CA3AF",
+          500: "#6B7280",
+          600: "#4B5563",
+          700: "#374151",
+          800: "#1F2937",
+          900: "#111827",
+        },
+        red: {
+          50: "#FEF2F2",
+          100: "#FEE2E2",
+          200: "#FECACA",
+          600: "#DC2626",
+          700: "#B91C1C",
+          800: "#991B1B",
+          900: "#7F1D1D",
+        },
+        green: {
+          50: "#F0FDF4",
+          100: "#DCFCE7",
+          200: "#BBF7D0",
+          400: "#4ADE80",
+          600: "#16A34A",
+          700: "#15803D",
+        },
+        amber: {
+          50: "#FFFBEB",
+          100: "#FEF3C7",
+          200: "#FDE68A",
+          500: "#F59E0B",
+          600: "#D97706",
+        },
+        yellow: {
+          50: "#FEFCE8",
+          100: "#FEF9C3",
+          600: "#CA8A04",
+          800: "#92400E",
+        },
+        violet: {
+          50: "#F5F3FF",
+          100: "#EDE9FE",
+          400: "#A78BFA",
+        },
+        blue: {
+          100: "#DBEAFE",
+          600: "#2563EB",
+        },
+      },
+      fontFamily: {
+        sans: ["Inter_400Regular"],
+        medium: ["Inter_500Medium"],
+        semibold: ["Inter_600SemiBold"],
+        bold: ["Inter_700Bold"],
       },
     },
   },
   plugins: [],
-}
+};

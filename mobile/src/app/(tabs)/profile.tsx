@@ -2,23 +2,20 @@ import React from "react";
 import {
   View,
   Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
   Switch,
   Platform,
   Alert,
 } from "react-native";
 import { Feather, MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Button } from "@/components/Button";
+import { Screen } from "@/components/Screen";
 import { useProfileStore } from "@/stores/profileStore";
 import { useVoice } from "@/hooks/useVoice";
 import { useLeaksStore } from "@/stores/leaksStore";
 import { router } from "expo-router";
+import { cn } from "@/lib/cn";
 
 export default function ProfileScreen() {
-  const insets = useSafeAreaInsets();
-  const isWeb = Platform.OS === "web";
   const {
     name,
     email,
@@ -41,7 +38,7 @@ export default function ProfileScreen() {
       name: "Bank Account",
       sub: connectedAccounts.bank ? "Connected" : "Not connected",
       iconName: "bank-outline",
-      iconBg: connectedAccounts.bank ? "#DCFCE7" : "#F3F4F6",
+      iconBg: connectedAccounts.bank ? "bg-green-100" : "bg-gray-100",
       iconColor: connectedAccounts.bank ? "#16A34A" : "#6B7280",
       connected: connectedAccounts.bank,
     },
@@ -50,7 +47,7 @@ export default function ProfileScreen() {
       name: "Mobile Money",
       sub: connectedAccounts.mobile ? "MTN MoMo / Vodacom" : "Not connected",
       iconName: "cellphone",
-      iconBg: connectedAccounts.mobile ? "#DCFCE7" : "#F3F4F6",
+      iconBg: connectedAccounts.mobile ? "bg-green-100" : "bg-gray-100",
       iconColor: connectedAccounts.mobile ? "#16A34A" : "#6B7280",
       connected: connectedAccounts.mobile,
     },
@@ -59,7 +56,7 @@ export default function ProfileScreen() {
       name: "SASSA Grant",
       sub: connectedAccounts.sassa ? "Connected" : "Not connected",
       iconName: "shield-outline",
-      iconBg: connectedAccounts.sassa ? "#DCFCE7" : "#F3F4F6",
+      iconBg: connectedAccounts.sassa ? "bg-green-100" : "bg-gray-100",
       iconColor: connectedAccounts.sassa ? "#16A34A" : "#6B7280",
       connected: connectedAccounts.sassa,
     },
@@ -113,50 +110,42 @@ export default function ProfileScreen() {
   ];
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={[
-        styles.content,
-        {
-          paddingTop: isWeb ? 67 + 16 : insets.top + 16,
-          paddingBottom: isWeb ? 34 + 80 : 80 + insets.bottom,
-        },
-      ]}
-      showsVerticalScrollIndicator={false}
-    >
-      <Text style={styles.title}>Profile</Text>
+    <Screen>
+      <Text className="heading-xl mb-5">Profile</Text>
 
-      <View style={styles.userCard}>
-        <View style={styles.userAvatarBox}>
-          <MaterialCommunityIcons name="account-outline" size={32} color="#7C3AED" />
-        </View>
-        <View style={styles.userInfo}>
-          <Text style={styles.userName}>{name}</Text>
-          <Text style={styles.userIncome}>{email || "Email verified"}</Text>
-          <View style={styles.popiaRow}>
-            <View style={styles.popiaDot} />
-            <Text style={styles.popiaText}>POPIA Compliant</Text>
+      <View className="card flex-row items-center mb-3">
+          <View className="w-[60px] h-[60px] rounded-[14px] bg-brand-purple-light items-center justify-center mr-3.5">
+            <MaterialCommunityIcons name="account-outline" size={32} color="#7C3AED" />
           </View>
-        </View>
-        <TouchableOpacity
-          onPress={() =>
-            speak(
-              `Hello ${name.split(" ")[0]}. You have ${leaks.filter((l) => l.status === "active").length} active leaks.`
-            )
-          }
-          style={styles.speakBtn}
-        >
-          <MaterialCommunityIcons name="volume-high" size={20} color="#7C3AED" />
-        </TouchableOpacity>
+          <View className="flex-1">
+            <Text className="heading-md mb-1">{name}</Text>
+            <Text className="body-text mb-1.5">{email || "Email verified"}</Text>
+            <View className="flex-row items-center">
+              <View className="w-2 h-2 rounded-full bg-green-600 mr-1.5" />
+              <Text className="text-xs font-semibold text-green-600">POPIA Compliant</Text>
+            </View>
+          </View>
+          <Button
+            variant="ghost"
+            size="icon"
+            onPress={() =>
+              speak(
+                `Hello ${name.split(" ")[0]}. You have ${leaks.filter((l) => l.status === "active").length} active leaks.`
+              )
+            }
+            className="p-2"
+          >
+            <MaterialCommunityIcons name="volume-high" size={20} color="#7C3AED" />
+          </Button>
       </View>
 
-      <View style={styles.voiceCard}>
-        <View style={styles.voiceIcon}>
+      <View className="flex-row items-center bg-white rounded-[14px] p-4 mb-3 shadow-sm">
+        <View className="w-[42px] h-[42px] rounded-[10px] bg-brand-purple-light items-center justify-center mr-3">
           <Ionicons name="volume-medium-outline" size={20} color="#7C3AED" />
         </View>
-        <View style={styles.voiceInfo}>
-          <Text style={styles.voiceTitle}>Voice Narration</Text>
-          <Text style={styles.voiceSub}>Hear insights in {language}</Text>
+        <View className="flex-1">
+          <Text className="text-[15px] font-semibold text-gray-900 mb-0.5">Voice Narration</Text>
+          <Text className="body-text">Hear insights in {language}</Text>
         </View>
         <Switch
           value={voiceEnabled}
@@ -167,201 +156,74 @@ export default function ProfileScreen() {
       </View>
 
       {totalLeaking > 0 && (
-        <View style={styles.leakSummaryCard}>
+        <View className="flex-row items-center bg-red-50 rounded-xl p-3.5 mb-4 border border-red-200">
           <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#DC2626" />
-          <Text style={styles.leakSummaryText}>
-            {" "}<Text style={styles.leakSummaryBold}>R{totalLeaking.toFixed(2)}/month</Text> leaking from {leaks.filter((l) => l.status === "active").length} active leaks
+          <Text className="text-sm font-sans text-gray-700 flex-1">
+            {" "}<Text className="font-bold text-red-600">R{totalLeaking.toFixed(2)}/month</Text> leaking from {leaks.filter((l) => l.status === "active").length} active leaks
           </Text>
         </View>
       )}
 
-      <Text style={styles.sectionLabel}>Connected Accounts</Text>
+      <Text className="label-sm mb-2.5">Connected Accounts</Text>
 
-      <View style={styles.accountsCard}>
+      <View className="bg-white rounded-[14px] px-3.5 mb-5 shadow-sm">
         {connectedList.map((acc, i) => (
           <View key={acc.id}>
-            {i > 0 && <View style={styles.divider} />}
-            <View style={styles.accountRow}>
-              <View style={[styles.accountIcon, { backgroundColor: acc.iconBg }]}>
+            {i > 0 && <View className="h-px bg-gray-100" />}
+            <View className="flex-row items-center py-3.5">
+              <View className={cn("w-[42px] h-[42px] rounded-[10px] items-center justify-center mr-3", acc.iconBg)}>
                 <MaterialCommunityIcons name={acc.iconName as any} size={20} color={acc.iconColor} />
               </View>
-              <View style={styles.accountInfo}>
-                <Text style={styles.accountName}>{acc.name}</Text>
-                <Text style={styles.accountSub}>{acc.sub}</Text>
+              <View className="flex-1">
+                <Text className="text-[15px] font-semibold text-gray-900 mb-0.5">{acc.name}</Text>
+                <Text className="body-text">{acc.sub}</Text>
               </View>
               {acc.connected ? (
                 <MaterialCommunityIcons name="check-circle-outline" size={22} color="#16A34A" />
               ) : (
-                <TouchableOpacity style={styles.addBtn} activeOpacity={0.7}>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="w-[30px] h-[30px] rounded-full border-[1.5px] border-brand-purple min-h-0"
+                >
                   <Feather name="plus" size={16} color="#7C3AED" />
-                </TouchableOpacity>
+                </Button>
               )}
             </View>
           </View>
         ))}
       </View>
 
-      <View style={styles.menuCard}>
+      <View className="bg-white rounded-[14px] px-3.5 mb-4 shadow-sm">
         {menuItems.map((item, i) => (
           <View key={item.id}>
-            {i > 0 && <View style={styles.divider} />}
-            <TouchableOpacity style={styles.menuRow} activeOpacity={0.7} onPress={item.onPress}>
-              <MaterialCommunityIcons name={item.icon as any} size={20} color="#374151" style={styles.menuIcon} />
-              <Text style={styles.menuLabel}>{item.label}</Text>
-              <View style={styles.menuRight}>
-                {item.value ? <Text style={styles.menuValue}>{item.value}</Text> : null}
+            {i > 0 && <View className="h-px bg-gray-100" />}
+            <Button variant="ghost" className="flex-row items-center py-3.5 gap-3" onPress={item.onPress}>
+              <MaterialCommunityIcons name={item.icon as any} size={20} color="#374151" />
+              <Text className="flex-1 text-[15px] font-medium text-gray-900">{item.label}</Text>
+              <View className="flex-row items-center gap-1.5">
+                {item.value ? <Text className="body-text">{item.value}</Text> : null}
                 {item.hasChevron && <Feather name="chevron-right" size={16} color="#9CA3AF" />}
               </View>
-            </TouchableOpacity>
+            </Button>
           </View>
         ))}
       </View>
 
-      <View style={styles.dataProtectedCard}>
-        <View style={styles.dataProtectedHeader}>
+      <View className="bg-brand-purple-light rounded-[14px] p-4 mb-4">
+        <View className="flex-row items-center mb-2">
           <MaterialCommunityIcons name="shield-lock-outline" size={18} color="#7C3AED" />
-          <Text style={styles.dataProtectedTitle}> Your Data is Protected</Text>
+          <Text className="text-sm font-semibold text-brand-purple"> Your Data is Protected</Text>
         </View>
-        <Text style={styles.dataProtectedDesc}>
+        <Text className="body-text text-gray-700 leading-[19px]">
           TracePay only accesses data you explicitly consent to share. Your information is encrypted and never shared with third parties. You can revoke access anytime.
         </Text>
       </View>
 
-      <TouchableOpacity style={styles.signOutBtn} activeOpacity={0.7} onPress={handleSignOut}>
+      <Button variant="outline" fullWidth onPress={handleSignOut} className="py-4 mb-2 shadow-sm">
         <Feather name="log-out" size={16} color="#DC2626" />
-        <Text style={styles.signOutText}> Sign Out</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <Text className="text-[15px] font-semibold text-red-600"> Sign Out</Text>
+      </Button>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F7F6FB" },
-  content: { paddingHorizontal: 18 },
-  title: { fontSize: 28, fontFamily: "Inter_700Bold", color: "#111827", marginBottom: 20 },
-  userCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  userAvatarBox: {
-    width: 60,
-    height: 60,
-    borderRadius: 14,
-    backgroundColor: "#EDE9FE",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 14,
-  },
-  userInfo: { flex: 1 },
-  userName: { fontSize: 18, fontFamily: "Inter_700Bold", color: "#111827", marginBottom: 4 },
-  userIncome: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#6B7280", marginBottom: 6 },
-  popiaRow: { flexDirection: "row", alignItems: "center" },
-  popiaDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#16A34A", marginRight: 6 },
-  popiaText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: "#16A34A" },
-  speakBtn: { padding: 8 },
-  voiceCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  voiceIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 10,
-    backgroundColor: "#EDE9FE",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  voiceInfo: { flex: 1 },
-  voiceTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#111827", marginBottom: 2 },
-  voiceSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#6B7280" },
-  leakSummaryCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFF5F5",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#FECACA",
-  },
-  leakSummaryText: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#374151", flex: 1 },
-  leakSummaryBold: { fontFamily: "Inter_700Bold", color: "#DC2626" },
-  sectionLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#374151", marginBottom: 10 },
-  accountsCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  accountRow: { flexDirection: "row", alignItems: "center", paddingVertical: 14 },
-  accountIcon: { width: 42, height: 42, borderRadius: 10, alignItems: "center", justifyContent: "center", marginRight: 12 },
-  accountInfo: { flex: 1 },
-  accountName: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#111827", marginBottom: 2 },
-  accountSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#6B7280" },
-  addBtn: { width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, borderColor: "#7C3AED", alignItems: "center", justifyContent: "center" },
-  divider: { height: 1, backgroundColor: "#F3F4F6" },
-  menuCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  menuRow: { flexDirection: "row", alignItems: "center", paddingVertical: 14 },
-  menuIcon: { marginRight: 12 },
-  menuLabel: { flex: 1, fontSize: 15, fontFamily: "Inter_500Medium", color: "#111827" },
-  menuRight: { flexDirection: "row", alignItems: "center", gap: 6 },
-  menuValue: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#6B7280" },
-  dataProtectedCard: {
-    backgroundColor: "#EDE9FE",
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 16,
-  },
-  dataProtectedHeader: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
-  dataProtectedTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#7C3AED" },
-  dataProtectedDesc: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#374151", lineHeight: 19 },
-  signOutBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    paddingVertical: 16,
-    marginBottom: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  signOutText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#DC2626" },
-});

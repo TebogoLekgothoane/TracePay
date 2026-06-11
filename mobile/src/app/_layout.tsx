@@ -1,3 +1,5 @@
+import "../../global.css";
+
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -12,10 +14,11 @@ import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { View, ActivityIndicator } from "react-native";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useProfileStore } from "@/stores/profileStore";
+import { SMSIngestionProvider } from "@/context/SMSIngestionContext";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -57,7 +60,7 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
 
   if (!isLoaded) {
     return (
-      <View style={styles.loading}>
+      <View className="screen items-center justify-center">
         <ActivityIndicator size="large" color="#7C3AED" />
       </View>
     );
@@ -98,19 +101,17 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <KeyboardProvider>
-              <NavigationGuard>
-                <RootLayoutNav />
-              </NavigationGuard>
-            </KeyboardProvider>
-          </GestureHandlerRootView>
+          <SMSIngestionProvider>
+            <GestureHandlerRootView className="flex-1">
+              <KeyboardProvider>
+                <NavigationGuard>
+                  <RootLayoutNav />
+                </NavigationGuard>
+              </KeyboardProvider>
+            </GestureHandlerRootView>
+          </SMSIngestionProvider>
         </QueryClientProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  loading: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F7F6FB" },
-});

@@ -1,4 +1,6 @@
-import { Image, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import { Image, Text, View } from "react-native";
+
+import { cn } from "@/lib/cn";
 
 const logoSource = require("@/assets/images/tracepay-logo.png");
 
@@ -6,24 +8,24 @@ type TracePayLogoProps = {
   size?: number;
   showWordmark?: boolean;
   layout?: "row" | "column";
-  style?: ViewStyle;
+  className?: string;
 };
 
 export function TracePayLogo({
   size = 34,
   showWordmark = true,
   layout = "row",
-  style,
+  className,
 }: TracePayLogoProps) {
   const isColumn = layout === "column";
 
   return (
     <View
-      style={[
-        styles.root,
-        isColumn ? styles.column : styles.row,
-        style,
-      ]}
+      className={cn(
+        "items-center",
+        isColumn ? "flex-col gap-3" : "flex-row gap-2",
+        className,
+      )}
     >
       <Image
         source={logoSource}
@@ -32,32 +34,10 @@ export function TracePayLogo({
         accessibilityLabel="TracePay logo"
       />
       {showWordmark ? (
-        <Text style={[styles.wordmark, isColumn && styles.wordmarkColumn]}>
+        <Text className={cn("font-bold text-gray-900", isColumn ? "text-[28px]" : "text-lg")}>
           TracePay
         </Text>
       ) : null}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  root: {
-    alignItems: "center",
-  },
-  row: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  column: {
-    flexDirection: "column",
-    gap: 12,
-  },
-  wordmark: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-    color: "#111827",
-  },
-  wordmarkColumn: {
-    fontSize: 28,
-  },
-});

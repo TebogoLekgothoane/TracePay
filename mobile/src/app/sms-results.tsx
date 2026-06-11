@@ -2,16 +2,17 @@ import React, { useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Platform,
 } from "react-native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Button } from "@/components/Button";
+import { Screen } from "@/components/Screen";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useProfileStore } from "@/stores/profileStore";
 import { useLeaksStore } from "@/stores/leaksStore";
+import { useIngestion } from "@/context/SMSIngestionContext";
+import { TransactionCategory } from "@/services/sms/sms.types";
+import { cn } from "@/lib/cn";
+import { getSeverityStyle } from "@/lib/severity";
 
 interface LeakResult {
   name: string;
@@ -54,20 +55,41 @@ const FALLBACK_LEAKS: LeakResult[] = [
   },
 ];
 
-const SEVERITY_COLORS: Record<string, { bg: string; text: string }> = {
-  High: { bg: "#FEE2E2", text: "#DC2626" },
-  Medium: { bg: "#FEF3C7", text: "#D97706" },
-  Low: { bg: "#FEF9C3", text: "#CA8A04" },
+const CATEGORY_ICONS: Record<TransactionCategory, string> = {
+  groceries:     "cart-outline",
+  fuel:          "gas-station-outline",
+  dining:        "food-outline",
+  entertainment: "television-play",
+  utilities:     "lightning-bolt-outline",
+  transfer:      "bank-transfer",
+  atm:           "cash",
+  online:        "web",
+  medical:       "hospital-box-outline",
+  other:         "dots-horizontal",
 };
 
 export default function SmsResultsScreen() {
-  const insets = useSafeAreaInsets();
-  const isWeb = Platform.OS === "web";
   const params = useLocalSearchParams<{ data?: string; fromOnboarding?: string }>();
   const fromOnboarding = params.fromOnboarding === "1";
   const completeOnboarding = useProfileStore((s) => s.completeOnboarding);
   const addLeaks = useLeaksStore((s) => s.addLeaks);
   const [expandedLeak, setExpandedLeak] = useState<number | null>(0);
+
+  const { state, transactions } = useIngestion();
+
+  const categoryBreakdown = transactions.reduce<
+    Record<TransactionCategory, { count: number; total: number }>
+  >((acc, tx) => {
+    const entry = acc[tx.category] ?? { count: 0, total: 0 };
+    acc[tx.category] = {
+      count: entry.count + 1,
+      total: entry.total + (tx.type === "debit" ? tx.amount : 0),
+    };
+    return acc;
+  }, {} as Record<TransactionCategory, { count: number; total: number }>);
+
+  const categoryEntries = (Object.entries(categoryBreakdown) as [TransactionCategory, { count: number; total: number }][])
+    .sort((a, b) => b[1].total - a[1].total);
 
   const parsedData = params.data
     ? (() => {
@@ -107,86 +129,146 @@ export default function SmsResultsScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={[
-          styles.content,
-          {
-            paddingTop: isWeb ? 67 + 16 : insets.top + 16,
-            paddingBottom: isWeb ? 34 + 80 : 40 + insets.bottom,
-          },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.headerRow}>
+      <Screen bottomInset="compact">
+        <View className="flex-row items-start gap-3 mb-[18px]">
           {!fromOnboarding ? (
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <Button
+              variant="outline"
+              size="icon"
+              onPress={() => router.back()}
+              className="back-btn mt-0.5"
+            >
               <Feather name="arrow-left" size={22} color="#111827" />
-            </TouchableOpacity>
+            </Button>
           ) : null}
           <View>
-            <View style={styles.titleRow}>
+            <View className="flex-row items-center mb-1">
               <MaterialCommunityIcons name="message-text-outline" size={20} color="#7C3AED" />
-              <Text style={styles.title}> SMS Scan Results</Text>
+              <Text className="text-[22px] font-bold text-gray-900"> SMS Scan Results</Text>
             </View>
-            <Text style={styles.subtitle}>AI found {rawLeaks.length} money leaks in your SMS history</Text>
+            <Text className="body-text">
+              AI found {rawLeaks.length} money leaks in your SMS history
+            </Text>
           </View>
         </View>
 
-        <View style={styles.totalCard}>
-          <Text style={styles.totalLabel}>TOTAL LEAKING MONTHLY</Text>
-          <Text style={styles.totalAmount}>R{totalMonthly.toFixed(2)}</Text>
-          <Text style={styles.totalYearly}>That is R{(totalMonthly * 12).toFixed(0)} lost every year</Text>
+        {state.totalIngested > 0 && (
+          <View className="bg-green-50 rounded-[14px] p-4 mb-[18px] border border-green-200">
+            <View className="flex-row items-center mb-2.5">
+              <MaterialCommunityIcons name="check-circle-outline" size={18} color="#16A34A" />
+              <Text className="flex-1 text-sm font-semibold text-green-700">
+                {" "}{state.totalIngested} transaction{state.totalIngested !== 1 ? "s" : ""} ingested
+              </Text>
+              {state.lastSyncAt && (
+                <Text className="caption">
+                  {state.lastSyncAt.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })}
+                </Text>
+              )}
+            </View>
+            {categoryEntries.length > 0 && (
+              <View className="gap-1.5">
+                <Text className="overline mb-1.5">
+                  BY CATEGORY
+                </Text>
+                {categoryEntries.map(([cat, { count, total }]) => (
+                  <View key={cat} className="flex-row items-center gap-2">
+                    <View className="w-6 h-6 rounded-md bg-violet-100 items-center justify-center">
+                      <MaterialCommunityIcons
+                        name={CATEGORY_ICONS[cat] as any}
+                        size={14}
+                        color="#7C3AED"
+                      />
+                    </View>
+                    <Text className="flex-1 text-[13px] font-medium text-gray-700 capitalize">{cat}</Text>
+                    <Text className="caption">{count} tx</Text>
+                    {total > 0 && (
+                      <Text className="text-[13px] font-bold text-red-600 min-w-[70px] text-right">
+                        R{total.toFixed(2)}
+                      </Text>
+                    )}
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        <View className="bg-red-600 rounded-2xl p-5 mb-[22px] shadow-md">
+          <Text className="overline text-white/75 mb-1.5">
+            TOTAL LEAKING MONTHLY
+          </Text>
+          <Text className="text-[40px] font-bold text-white mb-1.5">R{totalMonthly.toFixed(2)}</Text>
+          <Text className="text-sm font-sans text-white/80">
+            That is R{(totalMonthly * 12).toFixed(0)} lost every year
+          </Text>
         </View>
 
-        <Text style={styles.detectedTitle}>DETECTED LEAKS</Text>
+        <Text className="overline mb-3">
+          DETECTED LEAKS
+        </Text>
 
         {rawLeaks.map((leak, idx) => {
-          const sev = SEVERITY_COLORS[leak.severity] ?? SEVERITY_COLORS.Low;
+          const sev = getSeverityStyle(leak.severity);
           const isExpanded = expandedLeak === idx;
           return (
-            <View key={idx} style={[styles.leakCard, isExpanded && styles.leakCardExpanded]}>
-              <TouchableOpacity
-                style={styles.leakRow}
-                activeOpacity={0.7}
+            <View
+              key={idx}
+              className={cn(
+                "bg-white rounded-[14px] mb-2.5 overflow-hidden shadow-sm",
+                isExpanded && "border-[1.5px] border-brand-purple-muted",
+              )}
+            >
+              <Button
+                variant="ghost"
+                className="flex-row items-center p-3.5 gap-2.5 w-full justify-start min-h-0 rounded-none"
                 onPress={() => setExpandedLeak(isExpanded ? null : idx)}
               >
-                <View style={[styles.iconCircle, { backgroundColor: sev.bg }]}>
-                  <MaterialCommunityIcons name={leak.categoryIcon as any} size={18} color={sev.text} />
+                <View className={cn("w-[38px] h-[38px] rounded-full items-center justify-center", sev.badge)}>
+                  <MaterialCommunityIcons name={leak.categoryIcon as any} size={18} color={sev.icon} />
                 </View>
-                <View style={styles.leakInfo}>
-                  <Text style={styles.leakName} numberOfLines={1}>{leak.name}</Text>
-                  <View style={styles.leakMeta}>
-                    <Text style={styles.leakCategory}>{leak.category} · </Text>
-                    <View style={[styles.severityBadge, { backgroundColor: sev.bg }]}>
-                      <Text style={[styles.severityText, { color: sev.text }]}>{leak.severity}</Text>
+                <View className="flex-1">
+                  <Text className="text-[15px] font-semibold text-gray-900 mb-1" numberOfLines={1}>
+                    {leak.name}
+                  </Text>
+                  <View className="flex-row items-center flex-wrap">
+                    <Text className="caption">{leak.category} · </Text>
+                    <View className={cn("px-[7px] py-0.5 rounded-md", sev.badge)}>
+                      <Text className={cn("text-[11px] font-medium", sev.text)}>
+                        {leak.severity}
+                      </Text>
                     </View>
                   </View>
                 </View>
-                <Text style={styles.leakAmount}>R{leak.amountMonthly.toFixed(2)}/mo</Text>
+                <Text className="text-[15px] font-bold text-red-600 mr-1">
+                  R{leak.amountMonthly.toFixed(2)}/mo
+                </Text>
                 <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={16} color="#6B7280" />
-              </TouchableOpacity>
+              </Button>
 
               {!isExpanded && (
-                <View style={styles.leakCollapsed}>
-                  <Text style={styles.collapsedText} numberOfLines={2}>
+                <View className="px-3.5 pb-3.5">
+                  <Text className="body-text leading-[19px]" numberOfLines={2}>
                     {leak.advice ?? leak.sourceSms ?? "Tap to see the SMS evidence and next step."}
                   </Text>
                 </View>
               )}
 
               {isExpanded && (
-                <View style={styles.leakExpanded}>
+                <View className="px-3.5 pb-4 border-t border-violet-100 gap-2.5">
                   {leak.sourceSms && (
-                    <View style={styles.smsBox}>
+                    <View className="flex-row items-start bg-gray-50 rounded-lg p-2.5 mt-2.5">
                       <MaterialCommunityIcons name="message-text-outline" size={13} color="#6B7280" />
-                      <Text style={styles.sourceText}> {leak.sourceSms}</Text>
+                      <Text className="caption flex-1 leading-[18px]">
+                        {" "}{leak.sourceSms}
+                      </Text>
                     </View>
                   )}
                   {leak.advice && (
-                    <View style={styles.adviceBox}>
+                    <View className="flex-row items-start bg-violet-50 rounded-[10px] p-3">
                       <MaterialCommunityIcons name="star-four-points-outline" size={14} color="#7C3AED" />
-                      <Text style={styles.adviceText}> {leak.advice}</Text>
+                      <Text className="text-[13px] font-medium text-brand-purple-dark flex-1 leading-[19px] flex-wrap">
+                        {" "}{leak.advice}
+                      </Text>
                     </View>
                   )}
                 </View>
@@ -196,80 +278,17 @@ export default function SmsResultsScreen() {
         })}
 
         {fromOnboarding ? (
-          <TouchableOpacity
-            style={styles.homeBtn}
-            activeOpacity={0.85}
+          <Button
+            size="lg"
+            fullWidth
             onPress={goToHome}
+            className="mt-4"
+            icon={<MaterialCommunityIcons name="home-outline" size={20} color="#fff" />}
           >
-            <MaterialCommunityIcons name="home-outline" size={20} color="#fff" />
-            <Text style={styles.homeBtnText}> Go to home</Text>
-          </TouchableOpacity>
+            Go to home
+          </Button>
         ) : null}
-      </ScrollView>
+      </Screen>
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F7F6FB" },
-  content: { paddingHorizontal: 18 },
-  headerRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 18 },
-  backBtn: {
-    width: 38, height: 38, borderRadius: 10, backgroundColor: "#FFFFFF",
-    alignItems: "center", justifyContent: "center", marginTop: 2,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
-  },
-  titleRow: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
-  title: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#111827" },
-  subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#6B7280" },
-  totalCard: {
-    backgroundColor: "#DC2626", borderRadius: 16, padding: 20, marginBottom: 22,
-    shadowColor: "#DC2626", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
-  },
-  totalLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "rgba(255,255,255,0.75)", letterSpacing: 1.2, marginBottom: 6 },
-  totalAmount: { fontSize: 40, fontFamily: "Inter_700Bold", color: "#FFFFFF", marginBottom: 6 },
-  totalYearly: { fontSize: 14, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.8)" },
-  detectedTitle: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#6B7280", letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 },
-  leakCard: {
-    backgroundColor: "#FFFFFF", borderRadius: 14, marginBottom: 10, overflow: "hidden",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
-  },
-  leakCardExpanded: { borderWidth: 1.5, borderColor: "#C4B5FD" },
-  leakRow: { flexDirection: "row", alignItems: "center", padding: 14, gap: 10 },
-  iconCircle: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
-  leakInfo: { flex: 1 },
-  leakName: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#111827", marginBottom: 4 },
-  leakMeta: { flexDirection: "row", alignItems: "center", flexWrap: "wrap" },
-  leakCategory: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#6B7280" },
-  severityBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
-  severityText: { fontSize: 11, fontFamily: "Inter_500Medium" },
-  leakAmount: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#DC2626", marginRight: 4 },
-  leakCollapsed: { paddingHorizontal: 14, paddingBottom: 14 },
-  collapsedText: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#6B7280", lineHeight: 19 },
-  leakExpanded: { paddingHorizontal: 14, paddingBottom: 16, borderTopWidth: 1, borderTopColor: "#EDE9FE", gap: 10 },
-  smsBox: {
-    flexDirection: "row", alignItems: "flex-start",
-    backgroundColor: "#F9FAFB", borderRadius: 8, padding: 10, marginTop: 10,
-  },
-  sourceText: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#6B7280", flex: 1, lineHeight: 18 },
-  adviceBox: {
-    flexDirection: "row", alignItems: "flex-start",
-    backgroundColor: "#F5F3FF", borderRadius: 10, padding: 12,
-  },
-  adviceText: { fontSize: 13, fontFamily: "Inter_500Medium", color: "#5B21B6", flex: 1, lineHeight: 19, flexWrap: "wrap" },
-  homeBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#7C3AED",
-    borderRadius: 14,
-    paddingVertical: 17,
-    marginTop: 16,
-    shadowColor: "#7C3AED",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  homeBtnText: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#FFFFFF" },
-});

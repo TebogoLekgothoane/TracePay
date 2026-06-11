@@ -2,11 +2,6 @@ import React, { useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Platform,
-  ActivityIndicator,
   Alert,
   Linking,
   Modal,
@@ -14,11 +9,14 @@ import {
   TextInput,
 } from "react-native";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Button } from "@/components/Button";
+import { Screen } from "@/components/Screen";
 import { useProfileStore } from "@/stores/profileStore";
 import { useLeaksStore } from "@/stores/leaksStore";
 import { useVoice } from "@/hooks/useVoice";
 import { simulateBudgetGenerate } from "@/lib/simulate";
+import { getCategoryStyle } from "@/lib/category-colors";
+import { cn } from "@/lib/cn";
 
 interface PlaybookItem {
   name: string;
@@ -89,13 +87,6 @@ const DEFAULT_PLAN: BudgetPlan = {
   ],
 };
 
-const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
-  Savings: { bg: "#EDE9FE", text: "#7C3AED" },
-  Groceries: { bg: "#DCFCE7", text: "#16A34A" },
-  Transport: { bg: "#DBEAFE", text: "#2563EB" },
-  Banking: { bg: "#FEF3C7", text: "#D97706" },
-};
-
 const CATEGORY_ICONS: Record<string, string> = {
   Savings: "piggy-bank",
   Groceries: "cart-outline",
@@ -112,8 +103,6 @@ const ACTION_LINKS = {
 };
 
 export default function BudgetScreen() {
-  const insets = useSafeAreaInsets();
-  const isWeb = Platform.OS === "web";
   const [plan, setPlan] = useState<BudgetPlan>(DEFAULT_PLAN);
   const [generating, setGenerating] = useState(false);
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
@@ -289,50 +278,38 @@ export default function BudgetScreen() {
   const actionItems = [...plan.playbook].sort((a, b) => b.saving - a.saving).slice(0, 3);
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={[
-        styles.content,
-        {
-          paddingTop: isWeb ? 67 + 16 : insets.top + 16,
-          paddingBottom: isWeb ? 34 + 80 : 80 + insets.bottom,
-        },
-      ]}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.pageHeader}>
+    <Screen>
+      <View className="flex-row justify-between items-start mb-5">
         <View>
-          <Text style={styles.title}>Budget</Text>
-          <Text style={styles.subtitle}>Weekly money plan from your latest SMS scan</Text>
+          <Text className="heading-lg mb-0.5">Budget</Text>
+          <Text className="body-text max-w-[230px]">
+            Weekly money plan from your latest SMS scan
+          </Text>
         </View>
-        <TouchableOpacity
-          style={[styles.updateBtn, generating && styles.updateBtnLoading]}
+        <Button
+          size="sm"
           onPress={handleGenerate}
-          activeOpacity={0.8}
-          disabled={generating}
+          loading={generating}
+          className="px-3.5 py-2 rounded-full min-w-[86px]"
+          icon={!generating ? <MaterialCommunityIcons name="refresh" size={14} color="#FFFFFF" /> : undefined}
         >
-          {generating ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <>
-              <MaterialCommunityIcons name="refresh" size={14} color="#FFFFFF" />
-              <Text style={styles.updateText}> Update</Text>
-            </>
-          )}
-        </TouchableOpacity>
+          Update
+        </Button>
       </View>
 
-      <View style={styles.weeklyCard}>
-        <View style={styles.weeklyTop}>
+      <View className="bg-brand-purple rounded-[18px] p-5 mb-4 shadow-lg">
+        <View className="flex-row justify-between items-start mb-3">
           <View>
-            <View style={styles.weeklyIconRow}>
+            <View className="flex-row items-center mb-1">
               <MaterialCommunityIcons name="credit-card-outline" size={16} color="rgba(255,255,255,0.8)" />
-              <Text style={styles.weeklyWeekLabel}> {weekLabel}</Text>
+              <Text className="text-[11px] font-medium text-white/70 tracking-wide"> {weekLabel}</Text>
             </View>
-            <Text style={styles.weeklySafeLabel}>Left to spend this week</Text>
+            <Text className="text-sm font-medium text-white/85">Left to spend this week</Text>
           </View>
-          <TouchableOpacity
-            style={styles.speakerBtn}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-9 h-9 rounded-full bg-white/15 min-h-0"
             onPress={() =>
               speak(
                 `You have R${weekLeft.toFixed(2)} left this week. You have spent R${weekSpent} from a weekly budget of R${plan.weeklyAmount}.`,
@@ -340,392 +317,183 @@ export default function BudgetScreen() {
             }
           >
             <Ionicons name="volume-medium-outline" size={18} color="rgba(255,255,255,0.7)" />
-          </TouchableOpacity>
+          </Button>
         </View>
 
-        <Text style={styles.weeklyAmount}>
-          R{weekLeft.toFixed(2)} <Text style={styles.weeklyPer}>left</Text>
+        <Text className="text-[38px] font-bold text-white mb-3.5">
+          R{weekLeft.toFixed(2)} <Text className="text-lg font-sans text-white/75">left</Text>
         </Text>
 
-        <View style={styles.weekProgressTrack}>
-          <View style={[styles.weekProgressFill, { width: `${weekUsedPct}%` }]} />
+        <View className="h-2 bg-white/25 rounded overflow-hidden mb-2">
+          <View className="progress-fill progress-fill-green" style={{ width: `${weekUsedPct}%` }} />
         </View>
-        <View style={styles.weekSummaryRow}>
-          <Text style={styles.weekSummaryText}>R{weekSpent} spent</Text>
-          <Text style={styles.weekSummaryText}>R{plan.weeklyAmount} budget</Text>
+        <View className="flex-row justify-between mb-4">
+          <Text className="text-xs font-medium text-white/75">R{weekSpent} spent</Text>
+          <Text className="text-xs font-medium text-white/75">R{plan.weeklyAmount} budget</Text>
         </View>
 
-        <View style={styles.weeklyStats}>
-          <View style={styles.weeklyStat}>
-            <Text style={styles.weeklyStatValue}>R{plan.dailyLimit}</Text>
-            <Text style={styles.weeklyStatLabel}>DAILY LIMIT</Text>
+        <View className="flex-row bg-white/15 rounded-xl p-3.5">
+          <View className="flex-1 items-center">
+            <Text className="text-[17px] font-bold text-white mb-0.5">R{plan.dailyLimit}</Text>
+            <Text className="text-[10px] font-medium text-white/70 tracking-wide">DAILY LIMIT</Text>
           </View>
-          <View style={styles.weeklyStatDivider} />
-          <View style={styles.weeklyStat}>
-            <Text style={styles.weeklyStatValue}>R{plan.buffer}</Text>
-            <Text style={styles.weeklyStatLabel}>BUFFER</Text>
+          <View className="w-px bg-white/20" />
+          <View className="flex-1 items-center">
+            <Text className="text-[17px] font-bold text-white mb-0.5">R{plan.buffer}</Text>
+            <Text className="text-[10px] font-medium text-white/70 tracking-wide">BUFFER</Text>
           </View>
         </View>
       </View>
 
-      <View style={styles.todayCard}>
-        <View style={styles.todayHeader}>
-          <View style={styles.todayIcon}>
+      <View className="card mb-4">
+        <View className="flex-row items-center mb-3">
+          <View className="w-[42px] h-[42px] rounded-[10px] bg-brand-purple-light items-center justify-center mr-3">
             <MaterialCommunityIcons name="calendar-today-outline" size={20} color="#7C3AED" />
           </View>
-          <View style={styles.todayText}>
-            <Text style={styles.todayTitle}>Today</Text>
-            <Text style={styles.todaySub}>R{todaySpent} of R{plan.dailyLimit} used</Text>
+          <View className="flex-1">
+            <Text className="text-base font-bold text-gray-900 mb-0.5">Today</Text>
+            <Text className="body-text">R{todaySpent} of R{plan.dailyLimit} used</Text>
           </View>
-          <Text style={styles.todayLeft}>R{todayLeft} left</Text>
+          <Text className="text-[15px] font-bold text-green-600">R{todayLeft} left</Text>
         </View>
-        <View style={styles.todayProgressTrack}>
-          <View style={[styles.todayProgressFill, { width: `${todayUsedPct}%` }]} />
+        <View className="h-[7px] bg-gray-200 rounded overflow-hidden mb-2.5">
+          <View className="progress-fill progress-fill-purple" style={{ width: `${todayUsedPct}%` }} />
         </View>
-        <Text style={styles.todayNote}>Keep the buffer for taxi changes, medicine, airtime or surprise debit orders.</Text>
+        <Text className="body-text leading-[19px]">
+          Keep the buffer for taxi changes, medicine, airtime or surprise debit orders.
+        </Text>
       </View>
 
-      <View style={styles.obligationsCard}>
-        <View style={styles.obligationsHeader}>
-          <View style={styles.obligationsTitleRow}>
+      <View className="card mb-4">
+        <View className="flex-row justify-between items-center mb-3.5">
+          <View className="flex-row items-center">
             <MaterialCommunityIcons name="calendar-month-outline" size={20} color="#7C3AED" />
-            <Text style={styles.obligationsTitle}> Upcoming Payments</Text>
+            <Text className="text-base font-bold text-gray-900"> Upcoming Payments</Text>
           </View>
-          <View style={styles.obligationsBadge}>
-            <Text style={styles.obligationsBadgeText}>R{obligationsDue} due</Text>
+          <View className="badge-danger rounded-xl">
+            <Text className="text-xs font-semibold text-red-600">R{obligationsDue} due</Text>
           </View>
         </View>
         {plan.obligations.slice(0, 4).map((ob, i) => (
-          <TouchableOpacity
+          <Button
             key={`${ob.name}-${i}`}
-            style={styles.obligationRow}
-            activeOpacity={0.75}
+            variant="ghost"
+            className="flex-row items-center py-2.5 border-t border-gray-100"
             onPress={() => openEditPayment(ob, i)}
           >
-            <View style={styles.obIconBox}>
+            <View className="w-[38px] h-[38px] rounded-[10px] bg-brand-purple-light items-center justify-center mr-3">
               <MaterialCommunityIcons name={ob.icon as any} size={18} color="#7C3AED" />
             </View>
-            <View style={styles.obInfo}>
-              <Text style={styles.obName}>{ob.name}</Text>
-              <Text style={styles.obDue}>{ob.dueDate}</Text>
+            <View className="flex-1">
+              <Text className="text-sm font-semibold text-gray-900 mb-0.5">{ob.name}</Text>
+              <Text className="caption">{ob.dueDate}</Text>
             </View>
-            <Text style={styles.obAmount}>R{ob.amount}</Text>
-            <MaterialCommunityIcons name="pencil-outline" size={16} color="#9CA3AF" style={styles.editIcon} />
-          </TouchableOpacity>
+            <Text className="text-[15px] font-bold text-red-600">R{ob.amount}</Text>
+            <View className="ml-2">
+              <MaterialCommunityIcons name="pencil-outline" size={16} color="#9CA3AF" />
+            </View>
+          </Button>
         ))}
-        <TouchableOpacity style={styles.addObligationBtn} activeOpacity={0.75} onPress={openAddPayment}>
+        <Button variant="ghost" className="flex-row items-center justify-center border-t border-gray-100 pt-3.5 mt-1" onPress={openAddPayment}>
           <MaterialCommunityIcons name="plus" size={16} color="#7C3AED" />
-          <Text style={styles.addObligationText}> Add payment</Text>
-        </TouchableOpacity>
+          <Text className="text-sm font-semibold text-brand-purple"> Add payment</Text>
+        </Button>
       </View>
 
       {actionItems.map((item, index) => {
-        const actionColors = CATEGORY_COLORS[item.category] ?? CATEGORY_COLORS.Savings;
+        const category = getCategoryStyle(item.category);
         const actionIcon = CATEGORY_ICONS[item.category] ?? "piggy-bank";
 
         return (
-          <View key={`${item.name}-${index}`} style={styles.nextActionCard}>
-            <View style={styles.nextActionHeader}>
-              <View style={[styles.nextActionIcon, { backgroundColor: actionColors.bg }]}>
-                <MaterialCommunityIcons name={actionIcon as any} size={22} color={actionColors.text} />
+          <View key={`${item.name}-${index}`} className="card mb-4">
+            <View className="flex-row items-center mb-3">
+              <View className={cn("w-11 h-11 rounded-[10px] items-center justify-center mr-3", category.iconBg)}>
+                <MaterialCommunityIcons name={actionIcon as any} size={22} color={category.iconColor} />
               </View>
-              <View style={styles.nextActionText}>
-                <Text style={styles.nextActionLabel}>
+              <View className="flex-1">
+                <Text className="overline-brand mb-0.5">
                   {index === 0 ? "Best next action" : "More savings"}
                 </Text>
-                <Text style={styles.nextActionTitle}>{item.name}</Text>
+                <Text className="text-base font-bold text-gray-900">{item.name}</Text>
               </View>
-              <View style={styles.nextActionSaving}>
-                <Text style={styles.nextActionSavingText}>+R{item.saving}/mo</Text>
+              <View className="badge-success rounded-xl">
+                <Text className="text-xs font-bold text-green-600">+R{item.saving}/mo</Text>
               </View>
             </View>
-            <Text style={styles.nextActionDetail}>{item.detail}</Text>
-            <TouchableOpacity
-              style={[styles.nextActionBtn, { backgroundColor: actionColors.text }]}
-              activeOpacity={0.85}
+            <Text className="text-sm font-sans text-gray-700 leading-[21px] mb-3.5">{item.detail}</Text>
+            <Button
+              className={cn("rounded-[10px] py-3", category.btn)}
               onPress={() => handleActionPress(item)}
+              icon={
+                <MaterialCommunityIcons
+                  name={getActionUrl(item)?.startsWith("tel:") ? "phone" : "open-in-new"}
+                  size={15}
+                  color="#FFFFFF"
+                />
+              }
             >
-              <MaterialCommunityIcons
-                name={getActionUrl(item)?.startsWith("tel:") ? "phone" : "open-in-new"}
-                size={15}
-                color="#FFFFFF"
-              />
-              <Text style={styles.nextActionBtnText}> {item.btnText}</Text>
-            </TouchableOpacity>
+              {item.btnText}
+            </Button>
           </View>
         );
       })}
 
-      <Text style={styles.generatedText}>
+      <Text className="caption text-center my-5">
         Updated from latest SMS scan · R{totalSavings}/mo possible savings
       </Text>
 
       <Modal visible={paymentModalVisible} transparent animationType="fade" onRequestClose={closePaymentModal}>
-        <Pressable style={styles.modalOverlay} onPress={closePaymentModal}>
-          <Pressable style={styles.paymentSheet} onPress={() => {}}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
+        <Pressable className="flex-1 bg-gray-900/45 justify-end" onPress={closePaymentModal}>
+          <Pressable className="bg-white rounded-t-[22px] p-5 pb-7" onPress={() => {}}>
+            <View className="flex-row items-center mb-[18px]">
+              <Text className="flex-1 text-xl font-bold text-gray-900">
                 {editingPaymentIndex === null ? "Add payment" : "Update payment"}
               </Text>
-              <TouchableOpacity style={styles.modalCloseBtn} onPress={closePaymentModal}>
+              <Button variant="ghost" size="icon" className="w-9 h-9 rounded-full bg-gray-100 min-h-0" onPress={closePaymentModal}>
                 <MaterialCommunityIcons name="close" size={20} color="#6B7280" />
-              </TouchableOpacity>
+              </Button>
             </View>
 
-            <Text style={styles.inputLabel}>Payment name</Text>
+            <Text className="field-label">Payment name</Text>
             <TextInput
               value={paymentName}
               onChangeText={setPaymentName}
               placeholder="Rent, transport, school fees"
               placeholderTextColor="#9CA3AF"
-              style={styles.input}
+              className="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-3 input-field mb-3.5"
             />
 
-            <Text style={styles.inputLabel}>Due date</Text>
+            <Text className="field-label">Due date</Text>
             <TextInput
               value={paymentDue}
               onChangeText={setPaymentDue}
               placeholder="Due Friday"
               placeholderTextColor="#9CA3AF"
-              style={styles.input}
+              className="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-3 input-field mb-3.5"
             />
 
-            <Text style={styles.inputLabel}>Amount</Text>
+            <Text className="field-label">Amount</Text>
             <TextInput
               value={paymentAmount}
               onChangeText={setPaymentAmount}
               placeholder="350"
               placeholderTextColor="#9CA3AF"
               keyboardType="numeric"
-              style={styles.input}
+              className="bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-3 input-field mb-3.5"
             />
 
-            <TouchableOpacity style={styles.savePaymentBtn} activeOpacity={0.85} onPress={handleSavePayment}>
-              <Text style={styles.savePaymentText}>
-                {editingPaymentIndex === null ? "Add payment" : "Update payment"}
-              </Text>
-            </TouchableOpacity>
+            <Button fullWidth onPress={handleSavePayment} className="rounded-xl py-3.5 mt-1">
+              {editingPaymentIndex === null ? "Add payment" : "Update payment"}
+            </Button>
 
             {editingPaymentIndex !== null && (
-              <TouchableOpacity style={styles.deletePaymentBtn} activeOpacity={0.75} onPress={handleDeletePayment}>
-                <Text style={styles.deletePaymentText}>Delete payment</Text>
-              </TouchableOpacity>
+              <Button variant="ghost" fullWidth onPress={handleDeletePayment} className="py-3.5 mt-1" textClassName="text-sm font-semibold text-red-600">
+                Delete payment
+              </Button>
             )}
           </Pressable>
         </Pressable>
       </Modal>
-    </ScrollView>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F7F6FB" },
-  content: { paddingHorizontal: 18 },
-  pageHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 },
-  title: { fontSize: 24, fontFamily: "Inter_700Bold", color: "#111827", marginBottom: 2 },
-  subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#6B7280", maxWidth: 230 },
-  updateBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#7C3AED",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    minWidth: 86,
-    justifyContent: "center",
-  },
-  updateBtnLoading: { opacity: 0.7 },
-  updateText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#FFFFFF" },
-  weeklyCard: {
-    backgroundColor: "#7C3AED",
-    borderRadius: 18,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: "#7C3AED",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  weeklyTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 },
-  weeklyIconRow: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
-  weeklyWeekLabel: { fontSize: 11, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.7)", letterSpacing: 0.5 },
-  weeklySafeLabel: { fontSize: 14, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.85)" },
-  speakerBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  weeklyAmount: { fontSize: 38, fontFamily: "Inter_700Bold", color: "#FFFFFF", marginBottom: 14 },
-  weeklyPer: { fontSize: 18, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.75)" },
-  weekProgressTrack: {
-    height: 8,
-    backgroundColor: "rgba(255,255,255,0.24)",
-    borderRadius: 4,
-    overflow: "hidden",
-    marginBottom: 8,
-  },
-  weekProgressFill: { height: "100%", backgroundColor: "#4ADE80", borderRadius: 4 },
-  weekSummaryRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 16 },
-  weekSummaryText: { fontSize: 12, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.75)" },
-  weeklyStats: { flexDirection: "row", backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 12, padding: 14 },
-  weeklyStat: { flex: 1, alignItems: "center" },
-  weeklyStatDivider: { width: 1, backgroundColor: "rgba(255,255,255,0.2)" },
-  weeklyStatValue: { fontSize: 17, fontFamily: "Inter_700Bold", color: "#FFFFFF", marginBottom: 2 },
-  weeklyStatLabel: { fontSize: 10, fontFamily: "Inter_500Medium", color: "rgba(255,255,255,0.7)", letterSpacing: 0.5 },
-  todayCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  todayHeader: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
-  todayIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 10,
-    backgroundColor: "#EDE9FE",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  todayText: { flex: 1 },
-  todayTitle: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#111827", marginBottom: 2 },
-  todaySub: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#6B7280" },
-  todayLeft: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#16A34A" },
-  todayProgressTrack: { height: 7, backgroundColor: "#E5E7EB", borderRadius: 4, overflow: "hidden", marginBottom: 10 },
-  todayProgressFill: { height: "100%", backgroundColor: "#7C3AED", borderRadius: 4 },
-  todayNote: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#6B7280", lineHeight: 19 },
-  obligationsCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  obligationsHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
-  obligationsTitleRow: { flexDirection: "row", alignItems: "center" },
-  obligationsTitle: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#111827" },
-  obligationsBadge: { backgroundColor: "#FEE2E2", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  obligationsBadgeText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: "#DC2626" },
-  obligationRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, borderTopWidth: 1, borderTopColor: "#F3F4F6" },
-  obIconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: "#EDE9FE",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  obInfo: { flex: 1 },
-  obName: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#111827", marginBottom: 2 },
-  obDue: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#6B7280" },
-  obAmount: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#DC2626" },
-  editIcon: { marginLeft: 8 },
-  addObligationBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    borderTopWidth: 1,
-    borderTopColor: "#F3F4F6",
-    paddingTop: 14,
-    marginTop: 4,
-  },
-  addObligationText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#7C3AED" },
-  nextActionCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  nextActionHeader: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
-  nextActionIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  nextActionText: { flex: 1 },
-  nextActionLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: "#7C3AED", marginBottom: 2 },
-  nextActionTitle: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#111827" },
-  nextActionSaving: { backgroundColor: "#DCFCE7", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
-  nextActionSavingText: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#16A34A" },
-  nextActionDetail: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#374151", lineHeight: 21, marginBottom: 14 },
-  nextActionButtons: { flexDirection: "row", gap: 10 },
-  nextActionBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 10,
-    paddingVertical: 12,
-  },
-  nextActionBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#FFFFFF" },
-  generatedText: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#9CA3AF", textAlign: "center", marginVertical: 20 },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(17,24,39,0.45)",
-    justifyContent: "flex-end",
-  },
-  paymentSheet: {
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    padding: 20,
-    paddingBottom: 28,
-  },
-  modalHeader: { flexDirection: "row", alignItems: "center", marginBottom: 18 },
-  modalTitle: { flex: 1, fontSize: 20, fontFamily: "Inter_700Bold", color: "#111827" },
-  modalCloseBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#F3F4F6",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  inputLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#374151", marginBottom: 8 },
-  input: {
-    backgroundColor: "#F9FAFB",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    fontFamily: "Inter_400Regular",
-    color: "#111827",
-    marginBottom: 14,
-  },
-  savePaymentBtn: {
-    backgroundColor: "#7C3AED",
-    borderRadius: 12,
-    alignItems: "center",
-    paddingVertical: 14,
-    marginTop: 4,
-  },
-  savePaymentText: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#FFFFFF" },
-  deletePaymentBtn: { alignItems: "center", paddingVertical: 14, marginTop: 4 },
-  deletePaymentText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#DC2626" },
-});
-

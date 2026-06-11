@@ -1,5 +1,4 @@
-import { PermissionsAndroid, Platform } from 'react-native';
-import SmsAndroid from 'react-native-get-sms-android';
+import { Linking, NativeModules, PermissionsAndroid, Platform } from 'react-native';
 
 import {
   RawSMS,
@@ -13,34 +12,46 @@ import { parserRegistry } from './ParserRegistry';
 
 // ─── SMS permission ───────────────────────────────────────────────────────────
 
+const SMS_PERMISSIONS = [
+  PermissionsAndroid.PERMISSIONS.READ_SMS,
+  PermissionsAndroid.PERMISSIONS.RECEIVE_SMS,
+] as const;
+
+export const SMS_PERMISSION_BLOCKED_HELP =
+  'Android blocked SMS access for this app. Open Settings, tap Permissions → SMS, ' +
+  'and allow access. Then return to TracePay and tap "Check again".';
+
+export async function openAppPermissionSettings(): Promise<void> {
+  await Linking.openSettings();
+}
+
+async function areSmsPermissionsGranted(): Promise<boolean> {
+  const results = await Promise.all(
+    SMS_PERMISSIONS.map((p) => PermissionsAndroid.check(p))
+  );
+  return results.every(Boolean);
+}
+
 export async function requestSMSPermission(): Promise<PermissionStatus> {
   if (Platform.OS !== 'android') {
-    // iOS does not support SMS reading
     return 'denied';
   }
 
-  try {
-    const result = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.READ_SMS,
-      {
-        title: 'TracePay needs SMS access',
-        message:
-          'To automatically track your bank transactions, TracePay needs ' +
-          'permission to read your SMS messages. Only messages from known ' +
-          'banks are processed — personal messages are never read.',
-        buttonPositive: 'Allow',
-        buttonNegative: 'Deny',
-      }
-    );
+  if (await areSmsPermissionsGranted()) {
+    return 'granted';
+  }
 
-    switch (result) {
-      case PermissionsAndroid.RESULTS.GRANTED:
-        return 'granted';
-      case PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN:
-        return 'never_ask_again';
-      default:
-        return 'denied';
+  try {
+    const results = await PermissionsAndroid.requestMultiple([...SMS_PERMISSIONS]);
+
+    const statuses = SMS_PERMISSIONS.map((p) => results[p]);
+    if (statuses.every((s) => s === PermissionsAndroid.RESULTS.GRANTED)) {
+      return 'granted';
     }
+    if (statuses.some((s) => s === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN)) {
+      return 'never_ask_again';
+    }
+    return 'denied';
   } catch {
     return 'denied';
   }
@@ -48,24 +59,50 @@ export async function requestSMSPermission(): Promise<PermissionStatus> {
 
 export async function checkSMSPermission(): Promise<PermissionStatus> {
   if (Platform.OS !== 'android') return 'denied';
+  return (await areSmsPermissionsGranted()) ? 'granted' : 'undetermined';
+}
 
-  const granted = await PermissionsAndroid.check(
-    PermissionsAndroid.PERMISSIONS.READ_SMS
-  );
-  return granted ? 'granted' : 'undetermined';
+// ─── Native module access ─────────────────────────────────────────────────────
+// react-native-get-sms-android exports NativeModules.Sms — null in Expo Go / web.
+
+type SmsNativeModule = {
+  list: (
+    filter: string,
+    fail: (error: string) => void,
+    success: (count: number, smsList: string) => void
+  ) => void;
+};
+
+export function isSmsNativeModuleAvailable(): boolean {
+  if (Platform.OS !== 'android') return false;
+  const sms = NativeModules.Sms as SmsNativeModule | undefined;
+  return typeof sms?.list === 'function';
+}
+
+function getSmsModule(): SmsNativeModule {
+  const sms = NativeModules.Sms as SmsNativeModule | undefined;
+  if (!sms?.list) {
+    throw new Error(
+      'SMS scanning is not available in this build. Install the dev client with ' +
+      '"npx expo run:android" — Expo Go cannot read SMS.'
+    );
+  }
+  return sms;
 }
 
 // ─── Raw SMS fetch ────────────────────────────────────────────────────────────
 
 function fetchSMSFromDevice(filter: object): Promise<RawSMS[]> {
+  const sms = getSmsModule();
+
   return new Promise((resolve, reject) => {
-    SmsAndroid.list(
+    sms.list(
       JSON.stringify(filter),
       (error: string) => reject(new Error(error)),
       (_count: number, smsList: string) => {
         try {
           resolve(JSON.parse(smsList) as RawSMS[]);
-        } catch (e) {
+        } catch {
           reject(new Error('Failed to parse SMS list JSON'));
         }
       }
@@ -94,7 +131,26 @@ export interface IngestOptions {
   maxCount?: number;
 }
 
+const EMPTY_RESULT: IngestionResult = {
+  total: 0, parsed: 0, skipped: 0, failed: 0, transactions: [], errors: [],
+};
+
 export async function ingestSMS(options: IngestOptions = {}): Promise<IngestionResult> {
+  // SMS inbox access is Android-only; return gracefully on other platforms.
+  if (Platform.OS !== 'android') return EMPTY_RESULT;
+
+  if (!isSmsNativeModuleAvailable()) {
+    throw new Error(
+      'SMS scanning is not available in this build. Run "npx expo run:android" ' +
+      'to create a dev build with SMS support — Expo Go cannot read SMS.'
+    );
+  }
+
+  const permission = await checkSMSPermission();
+  if (permission !== 'granted') {
+    throw new Error(SMS_PERMISSION_BLOCKED_HELP);
+  }
+
   const {
     sinceMs = Date.now() - SYNC_LOOKBACK_DAYS * 24 * 60 * 60 * 1000,
     existingTransactions = [],
