@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import Animated, {
   useSharedValue,
@@ -49,8 +49,11 @@ export default function CircularProgress({
   }));
 
   return (
-    <View style={[styles.container, { width: size, height: size }]}>
-      <Svg width={size} height={size} style={styles.svg}>
+    <View
+      className="items-center justify-center relative"
+      style={{ width: size, height: size }}
+    >
+      <Svg width={size} height={size} className="absolute">
         <Circle
           cx={size / 2}
           cy={size / 2}
@@ -73,30 +76,16 @@ export default function CircularProgress({
           origin={`${size / 2}, ${size / 2}`}
         />
       </Svg>
-      <View style={styles.labelContainer}>
-        {label ? <Text style={styles.label}>{label}</Text> : null}
-        {sublabel ? <Text style={styles.sublabel}>{sublabel}</Text> : null}
+      <View className="items-center justify-center">
+        {label ? (
+          <Text className="text-[26px] font-bold text-gray-900 leading-[30px]">{label}</Text>
+        ) : null}
+        {sublabel ? (
+          <Text className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">
+            {sublabel}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { alignItems: "center", justifyContent: "center", position: "relative" },
-  svg: { position: "absolute" },
-  labelContainer: { alignItems: "center", justifyContent: "center" },
-  label: {
-    fontSize: 26,
-    fontFamily: "Inter_700Bold",
-    color: "#111827",
-    lineHeight: 30,
-  },
-  sublabel: {
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
-    color: "#6B7280",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-});
-

@@ -2,30 +2,28 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
   Animated,
-  Platform,
   ActivityIndicator,
+  AppState,
 } from "react-native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Button } from "@/components/Button";
+import { Screen } from "@/components/Screen";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { useSms } from "@/hooks/useSms";
+import { useIngestion } from "@/context/SMSIngestionContext";
+import { cn } from "@/lib/cn";
 
 export default function SmsScanningScreen() {
-  const insets = useSafeAreaInsets();
-  const isWeb = Platform.OS === "web";
   const params = useLocalSearchParams<{ fromOnboarding?: string }>();
   const fromOnboarding = params.fromOnboarding === "1";
-  const { requestPermissionAndRead, analyzeWithAI } = useSms();
 
-  const [phase, setPhase] = useState<"preparing" | "reading" | "analysing" | "done">("preparing");
-  const [messages, setMessages] = useState<{ address: string; body: string; date: number }[]>([]);
-  const [leaksFound, setLeaksFound] = useState(0);
-  const [analysisResult, setAnalysisResult] = useState<{ leaks: any[]; totalMonthly: number } | null>(null);
+  const { syncNow, isLoading, error, state, transactions, openPermissionSettings, refreshPermission } =
+    useIngestion();
+
+  const [phase, setPhase] = useState<"preparing" | "reading" | "analysing" | "done" | "failed">("preparing");
+  const [scanError, setScanError] = useState<string | null>(null);
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const hasStarted = useRef(false);
 
   const animateTo = useCallback(
     (toValue: number, duration: number) =>
@@ -40,27 +38,63 @@ export default function SmsScanningScreen() {
   );
 
   const runScan = useCallback(async () => {
+    setScanError(null);
     setPhase("preparing");
     await animateTo(0.15, 400);
 
-    const smsMessages = await requestPermissionAndRead();
-    setMessages(smsMessages);
     setPhase("reading");
-    await animateTo(0.45, 700);
+    await animateTo(0.35, 600);
 
     setPhase("analysing");
-    await animateTo(0.75, 800);
+    animateTo(0.85, 4000);
+    const ok = await syncNow();
 
-    const result = await analyzeWithAI(smsMessages);
-    setAnalysisResult(result);
-    setLeaksFound(result.leaks.length);
+    if (!ok) {
+      progressAnim.stopAnimation();
+      setPhase("failed");
+      return;
+    }
+
     setPhase("done");
-    await animateTo(1.0, 500);
-  }, [analyzeWithAI, requestPermissionAndRead, animateTo]);
+    await animateTo(1.0, 400);
+
+    router.replace({
+      pathname: "/sms-results",
+      params: fromOnboarding ? { fromOnboarding: "1" } : {},
+    });
+  }, [syncNow, animateTo, fromOnboarding, progressAnim]);
+
+  const handleRetry = useCallback(() => {
+    hasStarted.current = false;
+    progressAnim.setValue(0);
+    hasStarted.current = true;
+    runScan();
+  }, [runScan, progressAnim]);
 
   useEffect(() => {
+    if (hasStarted.current) return;
+    hasStarted.current = true;
     runScan();
   }, [runScan]);
+
+  useEffect(() => {
+    if (phase === "failed" && error) {
+      setScanError(error);
+    }
+  }, [phase, error]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active" && phase === "failed") {
+        void refreshPermission().then((status) => {
+          if (status === "granted") {
+            handleRetry();
+          }
+        });
+      }
+    });
+    return () => sub.remove();
+  }, [phase, refreshPermission, handleRetry]);
 
   const progressWidth = progressAnim.interpolate({
     inputRange: [0, 1],
@@ -68,181 +102,143 @@ export default function SmsScanningScreen() {
   });
 
   const phaseLabels = {
-    preparing: "Loading demo bank SMS messages...",
-    reading: `Reading ${messages.length || 4} messages...`,
-    analysing: "Scanning for money leaks...",
-    done: `Analysis complete — ${leaksFound || 3} leaks found`,
+    preparing:  "Preparing SMS service…",
+    reading:    "Reading messages from inbox…",
+    analysing:  "Parsing bank transactions…",
+    done:       `Done — ${state.totalIngested} transaction${state.totalIngested !== 1 ? "s" : ""} ingested`,
+    failed:     "Scanning failed",
   };
 
-  const displayMessages = messages.slice(0, 6);
+  const displayError = scanError ?? error;
+
+  const recentTx = transactions.slice(0, 5);
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={[
-          styles.content,
-          {
-            paddingTop: isWeb ? 67 + 16 : insets.top + 16,
-            paddingBottom: isWeb ? 34 + 80 : 40 + insets.bottom,
-          },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.headerRow}>
+      <Screen bottomInset="compact">
+        <View className="flex-row items-start flex-wrap gap-2.5 mb-[18px]">
           {!fromOnboarding ? (
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <Button
+              variant="outline"
+              size="icon"
+              onPress={() => router.back()}
+              className="back-btn"
+            >
               <Feather name="arrow-left" size={22} color="#111827" />
-            </TouchableOpacity>
+            </Button>
           ) : null}
-          <View style={styles.headerText}>
-            <Text style={styles.title}>Scanning SMS Inbox</Text>
-            <Text style={styles.subtitle}>{phaseLabels[phase]}</Text>
+          <View className="flex-1 min-w-[140px]">
+            <Text className="text-[22px] font-bold text-gray-900 mb-0.5">Scanning SMS Inbox</Text>
+            <Text className="body-text">{phaseLabels[phase]}</Text>
           </View>
-          {leaksFound > 0 && (
-            <View style={styles.leaksBadge}>
-              <Feather name="alert-triangle" size={13} color="#DC2626" />
-              <Text style={styles.leaksBadgeText}> {leaksFound} leaks</Text>
+          {state.totalIngested > 0 && (
+            <View className="badge-success flex-row items-center self-start py-1.5">
+              <Feather name="check-circle" size={13} color="#16A34A" />
+              <Text className="text-[13px] font-semibold text-green-600"> {state.totalIngested}</Text>
             </View>
           )}
         </View>
 
-        <View style={styles.progressBar}>
-          <Animated.View style={[styles.progressFill, { width: progressWidth }]} />
+        <View className="h-1.5 bg-gray-200 rounded-sm mb-3.5 overflow-hidden">
+          <Animated.View
+            className="progress-fill progress-fill-purple h-full"
+            style={{ width: progressWidth }}
+          />
         </View>
 
-        <View style={styles.analysingRow}>
-          {phase !== "done" ? (
+        <View className="flex-row items-center gap-2 mb-[18px]">
+          {phase === "failed" ? (
+            <>
+              <Feather name="alert-circle" size={18} color="#DC2626" />
+              <Text className="text-sm font-sans text-red-600">{phaseLabels.failed}</Text>
+            </>
+          ) : phase !== "done" ? (
             <>
               <ActivityIndicator size="small" color="#7C3AED" />
-              <Text style={styles.analysingText}>{phaseLabels[phase]}</Text>
+              <Text className="text-sm font-sans text-gray-700">{phaseLabels[phase]}</Text>
             </>
           ) : (
             <>
               <MaterialCommunityIcons name="check-circle-outline" size={18} color="#16A34A" />
-              <Text style={[styles.analysingText, { color: "#16A34A" }]}>
-                Found 3 money leaks in {messages.length} messages
+              <Text className="text-sm font-sans text-green-600">
+                Ingested {state.totalIngested} transaction{state.totalIngested !== 1 ? "s" : ""}
               </Text>
             </>
           )}
         </View>
 
-        {displayMessages.map((msg, i) => {
-          const body = msg.body.toLowerCase();
-          const leakHint = analysisResult?.leaks.find((l) => {
-            const n = l.name.toLowerCase();
-            if (n.includes("iflix") && body.includes("iflix")) return true;
-            if (n.includes("loan") && body.includes("loan")) return true;
-            if (n.includes("advance") && body.includes("advance")) return true;
-            return false;
-          });
-          const isLeak = !!leakHint;
-          return (
-            <View key={i} style={[styles.msgCard, isLeak && styles.msgCardLeak]}>
-              <View style={styles.msgHeader}>
-                <View style={[styles.msgIcon, isLeak ? styles.msgIconLeak : styles.msgIconNormal]}>
-                  <MaterialCommunityIcons
-                    name="message-text-outline"
-                    size={16}
-                    color={isLeak ? "#DC2626" : "#7C3AED"}
-                  />
-                </View>
-                <Text style={styles.msgSender}>{msg.address}</Text>
-                <Text style={styles.msgTime}>
-                  {new Date(msg.date).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })}
-                </Text>
-              </View>
-              <Text style={styles.msgText} numberOfLines={3}>
-                {msg.body}
-              </Text>
-              {isLeak && leakHint && (
-                <View style={styles.leakLabel}>
-                  <Feather name="alert-triangle" size={12} color="#DC2626" />
-                  <Text style={styles.leakLabelText}>
-                    {" "}Leak detected: {leakHint.category} — R{leakHint.amountMonthly}/mo
-                  </Text>
-                </View>
-              )}
-            </View>
-          );
-        })}
-
-        {phase === "done" && analysisResult && (
-          <TouchableOpacity
-            style={styles.resultsBtn}
-            activeOpacity={0.85}
-            onPress={() => {
-              const encoded = encodeURIComponent(JSON.stringify(analysisResult));
-              router.push({
-                pathname: "/sms-results",
-                params: {
-                  data: encoded,
-                  ...(fromOnboarding ? { fromOnboarding: "1" } : {}),
-                },
-              });
-            }}
-          >
-            <MaterialCommunityIcons name="chart-box-outline" size={18} color="#fff" />
-            <Text style={styles.resultsBtnText}>  View Results →</Text>
-          </TouchableOpacity>
+        {displayError && (
+          <View className="flex-row items-start bg-red-100 rounded-[10px] p-3 mb-3.5">
+            <Feather name="alert-circle" size={14} color="#DC2626" />
+            <Text className="text-[13px] font-sans text-red-600 flex-1 flex-wrap"> {displayError}</Text>
+          </View>
         )}
 
-      </ScrollView>
+        {phase === "failed" && (
+          <View className="gap-2.5 mb-2">
+            <Button
+              variant="accent"
+              fullWidth
+              onPress={openPermissionSettings}
+              icon={<Feather name="settings" size={16} color="#fff" />}
+            >
+              Open Settings
+            </Button>
+            <Button
+              variant="destructive"
+              fullWidth
+              onPress={handleRetry}
+              icon={<Feather name="refresh-cw" size={16} color="#fff" />}
+            >
+              Try again
+            </Button>
+          </View>
+        )}
+
+        {recentTx.map((tx) => (
+          <View key={tx.id} className="bg-white rounded-[14px] p-3.5 mb-3 shadow-sm">
+            <View className="flex-row items-center mb-2">
+              <View
+                className={cn(
+                  "w-8 h-8 rounded-lg items-center justify-center mr-2",
+                  tx.type === "debit" ? "bg-red-100" : "bg-green-100",
+                )}
+              >
+                <MaterialCommunityIcons
+                  name="message-text-outline"
+                  size={16}
+                  color={tx.type === "debit" ? "#DC2626" : "#16A34A"}
+                />
+              </View>
+              <Text className="flex-1 text-[15px] font-semibold text-gray-900">{tx.bank}</Text>
+              <Text className="caption">
+                {tx.timestamp instanceof Date
+                  ? tx.timestamp.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })
+                  : ""}
+              </Text>
+            </View>
+            <Text className="text-sm font-sans text-gray-700 leading-5 mb-2" numberOfLines={2}>
+              {tx.merchant ?? tx.reference ?? tx.rawBody}
+            </Text>
+            <View className="flex-row items-center gap-2">
+              <Text className={cn("text-sm font-bold", tx.type === "debit" ? "text-red-600" : "text-green-600")}>
+                {tx.type === "debit" ? "-" : "+"}R{tx.amount.toFixed(2)}
+              </Text>
+              <View className="bg-violet-100 rounded-md px-2 py-0.5">
+                <Text className="text-[11px] font-medium text-brand-purple">{tx.category}</Text>
+              </View>
+            </View>
+          </View>
+        ))}
+
+        {isLoading && recentTx.length === 0 && (
+          <View className="items-center py-12 gap-4">
+            <ActivityIndicator size="large" color="#7C3AED" />
+            <Text className="body-text">Reading your bank SMS messages…</Text>
+          </View>
+        )}
+      </Screen>
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F7F6FB" },
-  content: { paddingHorizontal: 18 },
-  headerRow: { flexDirection: "row", alignItems: "flex-start", flexWrap: "wrap", gap: 10, marginBottom: 18 },
-  backBtn: {
-    width: 38, height: 38, borderRadius: 10,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center", justifyContent: "center",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
-  },
-  headerText: { flex: 1, minWidth: 140 },
-  title: { fontSize: 22, fontFamily: "Inter_700Bold", color: "#111827", marginBottom: 2 },
-  subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#6B7280" },
-  leaksBadge: {
-    flexDirection: "row", alignItems: "center",
-    backgroundColor: "#FEE2E2",
-    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, alignSelf: "flex-start",
-  },
-  leaksBadgeText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#DC2626" },
-  progressBar: { height: 6, backgroundColor: "#E5E7EB", borderRadius: 3, marginBottom: 14, overflow: "hidden" },
-  progressFill: { height: "100%", backgroundColor: "#7C3AED", borderRadius: 3 },
-  analysingRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 18 },
-  analysingText: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#374151" },
-  msgCard: {
-    backgroundColor: "#FFFFFF", borderRadius: 14, padding: 14, marginBottom: 12,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
-  },
-  msgCardLeak: { backgroundColor: "#FFF5F5", borderWidth: 1, borderColor: "#FECACA" },
-  msgHeader: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
-  msgIcon: { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center", marginRight: 8 },
-  msgIconLeak: { backgroundColor: "#FEE2E2" },
-  msgIconNormal: { backgroundColor: "#EDE9FE" },
-  msgSender: { flex: 1, fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#111827" },
-  msgTime: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#6B7280" },
-  msgText: { fontSize: 14, fontFamily: "Inter_400Regular", color: "#374151", lineHeight: 20, marginBottom: 8 },
-  leakLabel: {
-    flexDirection: "row", alignItems: "flex-start",
-    backgroundColor: "#FEE2E2", borderRadius: 8, padding: 8,
-  },
-  leakLabelText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#DC2626", flex: 1, flexWrap: "wrap" },
-  resultsBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    backgroundColor: "#7C3AED", borderRadius: 14, paddingVertical: 16, marginTop: 8,
-    shadowColor: "#7C3AED", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
-  },
-  retryBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    backgroundColor: "#DC2626", borderRadius: 14, paddingVertical: 16, marginTop: 8,
-  },
-  resultsBtnText: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#FFFFFF" },
-});
-

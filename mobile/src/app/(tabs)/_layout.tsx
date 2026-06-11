@@ -5,7 +5,7 @@ import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
-import { Platform, StyleSheet, View, useColorScheme } from "react-native";
+import { Platform, View, useColorScheme } from "react-native";
 
 function NativeTabLayout() {
   return (
@@ -56,15 +56,10 @@ function ClassicTabLayout() {
             <BlurView
               intensity={100}
               tint={isDark ? "dark" : "light"}
-              style={StyleSheet.absoluteFill}
+              className="absolute inset-0"
             />
           ) : isWeb ? (
-            <View
-              style={[
-                StyleSheet.absoluteFill,
-                { backgroundColor: "#FFFFFF" },
-              ]}
-            />
+            <View className="absolute inset-0 bg-white" />
           ) : null,
       }}
     >

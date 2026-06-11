@@ -2,20 +2,21 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
-  TouchableOpacity,
-  Platform,
   Modal,
   Pressable,
 } from "react-native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useScreenInsets } from "@/hooks/useScreenInsets";
 import { router } from "expo-router";
+import { Button } from "@/components/Button";
 import CircularProgress from "@/components/CircularProgress";
+import { Screen } from "@/components/Screen";
 import { useProfileStore } from "@/stores/profileStore";
 import { useLeaksStore } from "@/stores/leaksStore";
 import { useVoice } from "@/hooks/useVoice";
+import { cn } from "@/lib/cn";
+import { getSeverityStyle } from "@/lib/severity";
 
 const SAMPLE_TRANSACTIONS = [
   { id: "1", name: "MTN Airtime Advance", date: "20 Apr · MTN Advance", amount: "-R11", isLeak: true },
@@ -26,24 +27,23 @@ const SAMPLE_TRANSACTIONS = [
 ];
 
 const REWARDS = [
-  { id: "shoprite", partner: "Shoprite", offer: "5% off groceries", icon: "cart-outline", color: "#DC2626", ptsNeeded: 150 },
-  { id: "pnp", partner: "Pick n Pay", offer: "R20 voucher", icon: "shopping-outline", color: "#16A34A", ptsNeeded: 200 },
-  { id: "checkers", partner: "Checkers", offer: "3% cashback", icon: "cash-check", color: "#0085C7", ptsNeeded: 180 },
-  { id: "mrprice", partner: "Mr Price", offer: "10% off clothing", icon: "hanger", color: "#D97706", ptsNeeded: 120 },
-  { id: "clicks", partner: "Clicks", offer: "R15 off pharmacy", icon: "medical-bag", color: "#7C3AED", ptsNeeded: 100 },
-  { id: "woolworths", partner: "Woolworths", offer: "8% off food", icon: "food-apple-outline", color: "#111827", ptsNeeded: 160 },
+  { id: "shoprite", partner: "Shoprite", offer: "5% off groceries", icon: "cart-outline", color: "#DC2626", iconBg: "bg-red-100", ptsNeeded: 150 },
+  { id: "pnp", partner: "Pick n Pay", offer: "R20 voucher", icon: "shopping-outline", color: "#16A34A", iconBg: "bg-green-100", ptsNeeded: 200 },
+  { id: "checkers", partner: "Checkers", offer: "3% cashback", icon: "cash-check", color: "#0085C7", iconBg: "bg-blue-100", ptsNeeded: 180 },
+  { id: "mrprice", partner: "Mr Price", offer: "10% off clothing", icon: "hanger", color: "#D97706", iconBg: "bg-amber-100", ptsNeeded: 120 },
+  { id: "clicks", partner: "Clicks", offer: "R15 off pharmacy", icon: "medical-bag", color: "#7C3AED", iconBg: "bg-brand-purple-light", ptsNeeded: 100 },
+  { id: "woolworths", partner: "Woolworths", offer: "8% off food", icon: "food-apple-outline", color: "#111827", iconBg: "bg-gray-100", ptsNeeded: 160 },
 ];
 
 const ACTIONS = [
-  { id: "freeze", label: "Freeze\nLeaks", icon: "snowflake", color: "#7C3AED" },
-  { id: "budget", label: "Smart\nBudget", icon: "chart-bar", color: "#7C3AED" },
-  { id: "scan", label: "Rescan\nSMS", icon: "message-text-outline", color: "#A78BFA" },
-  { id: "history", label: "History", icon: "chart-line", color: "#C4B5FD" },
+  { id: "freeze", label: "Freeze\nLeaks", icon: "snowflake", bgClass: "bg-brand-purple" },
+  { id: "budget", label: "Smart\nBudget", icon: "chart-bar", bgClass: "bg-brand-purple" },
+  { id: "scan", label: "Rescan\nSMS", icon: "message-text-outline", bgClass: "bg-violet-400" },
+  { id: "history", label: "History", icon: "chart-line", bgClass: "bg-brand-purple-muted" },
 ];
 
 export default function HomeScreen() {
-  const insets = useSafeAreaInsets();
-  const isWeb = Platform.OS === "web";
+  const { topOffset } = useScreenInsets();
   const { name, monthlyIncome, rewardPoints } = useProfileStore();
   const { leaks, fetchLeaks } = useLeaksStore();
   const { speak } = useVoice();
@@ -113,44 +113,36 @@ export default function HomeScreen() {
 
   return (
     <>
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={[
-        styles.content,
-        {
-          paddingTop: isWeb ? 67 + 16 : insets.top + 16,
-          paddingBottom: isWeb ? 34 + 80 : 80 + insets.bottom,
-        },
-      ]}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.header}>
+    <Screen>
+      <View className="flex-row justify-between items-start mb-5">
         <View>
-          <Text style={styles.welcomeLabel}>WELCOME BACK</Text>
-          <Text style={styles.userName}>{firstName} 👋</Text>
+          <Text className="overline mb-1">WELCOME BACK</Text>
+          <Text className="heading-lg">{firstName} 👋</Text>
         </View>
-        <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={() => setShowNotifications(true)}>
+        <Button variant="outline" size="icon" className="icon-btn-circle" onPress={() => setShowNotifications(true)}>
           <Feather name="bell" size={22} color="#374151" />
           {activeLeaks.length > 0 && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{activeLeaks.length}</Text>
+            <View className="absolute top-1.5 right-1.5 bg-red-500 rounded-lg min-w-4 h-4 items-center justify-center px-[3px]">
+              <Text className="text-[10px] font-bold text-white">{activeLeaks.length}</Text>
             </View>
           )}
-        </TouchableOpacity>
+        </Button>
       </View>
 
-      <View style={styles.healthCard}>
-        <View style={styles.healthHeader}>
+      <View className="bg-white rounded-2xl p-[18px] mb-5 shadow-md">
+        <View className="flex-row items-center mb-4">
           <MaterialCommunityIcons name="star-four-points-outline" size={16} color="#7C3AED" />
-          <Text style={styles.healthTitle}> FINANCIAL HEALTH</Text>
-          <TouchableOpacity
+          <Text className="flex-1 overline-brand"> FINANCIAL HEALTH</Text>
+          <Button
+            variant="ghost"
+            size="icon"
             onPress={() => speak(`Your financial health score is ${healthScore} out of 100. You are ${healthLabel}. You have ${activeLeaks.length} active money leaks totalling R${totalLeaking.toFixed(2)} per month.`)}
-            style={styles.speakBtn}
+            className="p-1 min-h-0"
           >
             <MaterialCommunityIcons name="volume-high" size={16} color="#7C3AED" />
-          </TouchableOpacity>
+          </Button>
         </View>
-        <View style={styles.healthBody}>
+        <View className="flex-row items-center gap-6">
           <CircularProgress
             value={healthScore}
             max={100}
@@ -161,14 +153,14 @@ export default function HomeScreen() {
             label={String(healthScore)}
             sublabel={healthLabel}
           />
-          <View style={styles.healthStats}>
-            <View style={styles.statRow}>
-              <Text style={styles.statLabel}>Leaks Found</Text>
-              <Text style={[styles.statValue, { color: "#DC2626" }]}>{activeLeaks.length}</Text>
+          <View className="flex-1 gap-4">
+            <View>
+              <Text className="label-sm text-gray-500 mb-0.5">Leaks Found</Text>
+              <Text className="text-[22px] font-bold text-red-600">{activeLeaks.length}</Text>
             </View>
-            <View style={styles.statRow}>
-              <Text style={styles.statLabel}>Monthly Savings</Text>
-              <Text style={[styles.statValue, { color: "#16A34A" }]}>
+            <View>
+              <Text className="label-sm text-gray-500 mb-0.5">Monthly Savings</Text>
+              <Text className="text-[22px] font-bold text-green-600">
                 R{totalLeaking > 0 ? totalLeaking.toFixed(0) : "0"}
               </Text>
             </View>
@@ -176,188 +168,192 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <View style={styles.actionsRow}>
+      <View className="flex-row justify-between mb-6">
         {ACTIONS.map((action) => (
-          <TouchableOpacity
+          <Button
             key={action.id}
-            style={styles.actionBtn}
-            activeOpacity={0.75}
+            variant="ghost"
+            className="flex-col items-center flex-1 min-h-0"
             onPress={() => handleActionPress(action.id)}
           >
-            <View style={[styles.actionIcon, { backgroundColor: action.color }]}>
+            <View className={cn("w-14 h-14 rounded-2xl items-center justify-center mb-2", action.bgClass)}>
               <MaterialCommunityIcons name={action.icon as any} size={24} color="#FFFFFF" />
             </View>
-            <Text style={styles.actionLabel}>{action.label}</Text>
-          </TouchableOpacity>
+            <Text className="text-xs font-medium text-gray-700 text-center">{action.label}</Text>
+          </Button>
         ))}
       </View>
 
       {activeLeaks.length > 0 && (
         <>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Active Money Leaks</Text>
-            <View style={styles.leakBadge}>
-              <Text style={styles.leakBadgeText}>-R{totalLeaking.toFixed(2)}/mo</Text>
+          <View className="flex-row justify-between items-center mb-3">
+            <Text className="heading-md">Active Money Leaks</Text>
+            <View className="badge-danger">
+              <Text className="text-xs font-semibold text-red-600">-R{totalLeaking.toFixed(2)}/mo</Text>
             </View>
           </View>
 
           {activeLeaks.slice(0, 5).map((leak) => (
-            <TouchableOpacity
+            <Button
               key={leak.id}
-              style={styles.leakCard}
-              activeOpacity={0.7}
+              variant="ghost"
+              className="card-row"
               onPress={() => router.push("/(tabs)/sms-scan")}
             >
-              <View style={styles.leakIconBox}>
+              <View className="w-10 h-10 rounded-[10px] bg-brand-purple-light items-center justify-center mr-3">
                 <MaterialCommunityIcons
                   name={(leak.categoryIcon as any) ?? "credit-card-outline"}
                   size={20}
                   color="#7C3AED"
                 />
               </View>
-              <View style={styles.leakInfo}>
-                <Text style={styles.leakName} numberOfLines={1}>{leak.name}</Text>
-                <Text style={styles.leakCategory}>{leak.category}</Text>
+              <View className="flex-1">
+                <Text className="text-[15px] font-semibold text-gray-900 mb-0.5" numberOfLines={1}>{leak.name}</Text>
+                <Text className="body-text">{leak.category}</Text>
               </View>
-              <View style={styles.leakRight}>
-                <Text style={styles.leakAmount}>-R{leak.amountMonthly.toFixed(2)}</Text>
-                <Text style={styles.leakPeriod}>/month</Text>
+              <View className="items-end mr-1.5">
+                <Text className="text-[15px] font-bold text-red-600">-R{leak.amountMonthly.toFixed(2)}</Text>
+                <Text className="caption">/month</Text>
               </View>
               <Feather name="chevron-right" size={16} color="#9CA3AF" />
-            </TouchableOpacity>
+            </Button>
           ))}
         </>
       )}
 
       {activeLeaks.length === 0 && (
-        <TouchableOpacity
-          style={styles.scanPromptCard}
+        <Button
+          variant="outline"
+          className="flex-row items-center gap-3.5 bg-brand-purple-light rounded-[14px] p-[18px] mb-5"
           onPress={() => router.push("/sms-scanning")}
-          activeOpacity={0.85}
         >
           <MaterialCommunityIcons name="magnify-scan" size={28} color="#7C3AED" />
-          <View style={styles.scanPromptText}>
-            <Text style={styles.scanPromptTitle}>No leaks detected yet</Text>
-            <Text style={styles.scanPromptSub}>Tap to scan your SMS inbox and find money leaks</Text>
+          <View className="flex-1">
+            <Text className="text-[15px] font-semibold text-brand-purple-dark">No leaks detected yet</Text>
+            <Text className="text-[13px] font-sans text-brand-purple mt-0.5">Tap to scan your SMS inbox and find money leaks</Text>
           </View>
           <Feather name="chevron-right" size={18} color="#9CA3AF" />
-        </TouchableOpacity>
+        </Button>
       )}
 
-      <View style={styles.rewardsHeader}>
+      <View className="flex-row justify-between items-start mt-6 mb-3">
         <View>
-          <Text style={styles.sectionTitle}>Rewards & Perks</Text>
-          <Text style={styles.rewardsPts}>{rewardPoints} pts · Earned by stopping leaks</Text>
+          <Text className="heading-md">Rewards & Perks</Text>
+          <Text className="caption mt-0.5">{rewardPoints} pts · Earned by stopping leaks</Text>
         </View>
-        <View style={styles.ptsChip}>
+        <View className="chip-purple">
           <MaterialCommunityIcons name="star-circle" size={14} color="#7C3AED" />
-          <Text style={styles.ptsChipText}>{rewardPoints} pts</Text>
+          <Text className="text-xs font-bold text-brand-purple">{rewardPoints} pts</Text>
         </View>
       </View>
 
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.rewardsScroll}
-        style={styles.rewardsScrollWrap}
+        className="-mx-[18px]"
+        contentContainerClassName="px-[18px] gap-3 pb-1"
       >
         {REWARDS.map((r) => (
-          <View key={r.id} style={styles.rewardCard}>
-            <View style={[styles.rewardIconBox, { backgroundColor: r.color + "18" }]}>
+          <View key={r.id} className="w-[140px] bg-white rounded-2xl p-3.5 shadow-sm border border-gray-100">
+            <View className={cn("w-11 h-11 rounded-xl items-center justify-center mb-2.5", r.iconBg)}>
               <MaterialCommunityIcons name={r.icon as any} size={26} color={r.color} />
             </View>
-            <Text style={styles.rewardPartner}>{r.partner}</Text>
-            <Text style={styles.rewardOffer}>{r.offer}</Text>
-            <View style={styles.rewardPtsRow}>
+            <Text className="text-[13px] font-bold text-gray-900 mb-0.5">{r.partner}</Text>
+            <Text className="text-xs font-sans text-gray-700 mb-2 leading-4">{r.offer}</Text>
+            <View className="flex-row items-center gap-[3px] mb-2.5">
               <MaterialCommunityIcons name="star-circle-outline" size={12} color="#7C3AED" />
-              <Text style={styles.rewardPtsNeeded}>{r.ptsNeeded} pts</Text>
+              <Text className="text-[11px] font-medium text-brand-purple">{r.ptsNeeded} pts</Text>
             </View>
-            <TouchableOpacity
-              style={[styles.redeemBtn, rewardPoints < r.ptsNeeded && styles.redeemBtnDisabled]}
-              activeOpacity={0.7}
+            <Button
+              size="sm"
+              fullWidth
+              disabled={rewardPoints < r.ptsNeeded}
+              className="rounded-lg py-[7px]"
+              textClassName={cn(rewardPoints < r.ptsNeeded && "text-gray-400")}
             >
-              <Text style={[styles.redeemBtnText, rewardPoints < r.ptsNeeded && styles.redeemBtnTextDisabled]}>
-                {rewardPoints >= r.ptsNeeded ? "Redeem" : "Need more pts"}
-              </Text>
-            </TouchableOpacity>
+              {rewardPoints >= r.ptsNeeded ? "Redeem" : "Need more pts"}
+            </Button>
           </View>
         ))}
       </ScrollView>
 
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Recent Transactions</Text>
-        <TouchableOpacity onPress={() => router.push("/history")}>
-          <Text style={styles.seeAll}>See all</Text>
-        </TouchableOpacity>
+      <View className="flex-row justify-between items-center mb-3">
+        <Text className="heading-md">Recent Transactions</Text>
+        <Button variant="link" onPress={() => router.push("/history")}>
+          See all
+        </Button>
       </View>
 
       {SAMPLE_TRANSACTIONS.map((tx) => (
-        <View key={tx.id} style={styles.txCard}>
-          <View style={[styles.txIcon, tx.isLeak ? styles.txIconLeak : styles.txIconNormal]}>
+        <View key={tx.id} className="card-row">
+          <View className={cn("w-[38px] h-[38px] rounded-[10px] items-center justify-center mr-3", tx.isLeak ? "bg-red-100" : "bg-gray-100")}>
             {tx.isLeak ? (
               <Feather name="alert-triangle" size={16} color="#DC2626" />
             ) : (
               <Feather name="arrow-up-right" size={16} color="#6B7280" />
             )}
           </View>
-          <View style={styles.txInfo}>
-            <Text style={styles.txName}>{tx.name}</Text>
-            <Text style={styles.txDate}>{tx.date}</Text>
+          <View className="flex-1">
+            <Text className="text-sm font-semibold text-gray-900 mb-0.5">{tx.name}</Text>
+            <Text className="caption">{tx.date}</Text>
           </View>
-          <View style={styles.txRight}>
-            <Text style={styles.txAmount}>{tx.amount}</Text>
+          <View className="items-end gap-1">
+            <Text className="text-sm font-bold text-gray-900">{tx.amount}</Text>
             {tx.isLeak && (
-              <View style={styles.txLeakBadge}>
-                <Text style={styles.txLeakBadgeText}>Leak</Text>
+              <View className="badge-danger py-0.5">
+                <Text className="text-[11px] font-semibold text-red-600">Leak</Text>
               </View>
             )}
           </View>
         </View>
       ))}
-    </ScrollView>
+    </Screen>
 
     <Modal visible={showNotifications} transparent animationType="fade" onRequestClose={() => setShowNotifications(false)}>
-      <Pressable style={styles.modalOverlay} onPress={() => setShowNotifications(false)}>
-        <Pressable style={[styles.notifPanel, { paddingTop: isWeb ? 67 : insets.top + 12 }]} onPress={() => {}}>
-          <View style={styles.notifHeader}>
-            <Text style={styles.notifTitle}>Notifications</Text>
-            <TouchableOpacity onPress={() => setShowNotifications(false)} style={styles.notifClose}>
+      <Pressable className="flex-1 bg-black/40 justify-start" onPress={() => setShowNotifications(false)}>
+        <Pressable
+          className="bg-white px-5 pb-8 max-h-[75%] rounded-b-3xl shadow-xl"
+          style={{ paddingTop: topOffset }}
+          onPress={() => {}}
+        >
+          <View className="flex-row items-center py-4 border-b border-gray-100 mb-3">
+            <Text className="flex-1 text-lg font-bold text-gray-900">Notifications</Text>
+            <Button variant="ghost" size="icon" onPress={() => setShowNotifications(false)} className="w-[34px] h-[34px] rounded-full bg-gray-100 min-h-0">
               <Feather name="x" size={20} color="#6B7280" />
-            </TouchableOpacity>
+            </Button>
           </View>
 
           {activeLeaks.length === 0 ? (
-            <View style={styles.notifEmpty}>
+            <View className="items-center py-10 gap-3">
               <Feather name="bell-off" size={32} color="#D1D5DB" />
-              <Text style={styles.notifEmptyText}>No new alerts</Text>
+              <Text className="text-[15px] font-sans text-gray-400">No new alerts</Text>
             </View>
           ) : (
             <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={styles.notifSectionLabel}>ACTIVE MONEY LEAKS</Text>
+              <Text className="overline mb-3">ACTIVE MONEY LEAKS</Text>
               {activeLeaks.map((leak, i) => {
-                const sevColor = leak.severity === "High" ? "#DC2626" : leak.severity === "Medium" ? "#D97706" : "#CA8A04";
-                const sevBg = leak.severity === "High" ? "#FEE2E2" : "#FEF3C7";
+                const sev = getSeverityStyle(leak.severity);
                 return (
-                  <TouchableOpacity
+                  <Button
                     key={leak.id ?? i}
-                    style={styles.notifItem}
-                    activeOpacity={0.7}
+                    variant="ghost"
+                    className="flex-row items-center gap-3 py-3 border-b border-gray-50"
                     onPress={() => {
                       setShowNotifications(false);
                         router.push("/(tabs)/sms-scan");
                     }}
                   >
-                    <View style={[styles.notifDot, { backgroundColor: sevBg }]}>
-                      <MaterialCommunityIcons name={leak.categoryIcon as any ?? "alert"} size={16} color={sevColor} />
+                    <View className={cn("w-[38px] h-[38px] rounded-[10px] items-center justify-center shrink-0", sev.badge)}>
+                      <MaterialCommunityIcons name={leak.categoryIcon as any ?? "alert"} size={16} color={sev.icon} />
                     </View>
-                    <View style={styles.notifItemText}>
-                      <Text style={styles.notifItemTitle}>{leak.name}</Text>
-                      <Text style={styles.notifItemSub}>{leak.category} · R{leak.amountMonthly.toFixed(2)}/mo</Text>
+                    <View className="flex-1">
+                      <Text className="text-sm font-semibold text-gray-900 mb-0.5">{leak.name}</Text>
+                      <Text className="caption">{leak.category} · R{leak.amountMonthly.toFixed(2)}/mo</Text>
                     </View>
-                    <View style={[styles.notifSevBadge, { backgroundColor: sevBg }]}>
-                      <Text style={[styles.notifSevText, { color: sevColor }]}>{leak.severity}</Text>
+                    <View className={cn("px-2 py-[3px] rounded-md", sev.badge)}>
+                      <Text className={cn("text-[11px] font-semibold", sev.text)}>{leak.severity}</Text>
                     </View>
-                  </TouchableOpacity>
+                  </Button>
                 );
               })}
             </ScrollView>
@@ -368,216 +364,3 @@ export default function HomeScreen() {
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F7F6FB" },
-  content: { paddingHorizontal: 18 },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 20,
-  },
-  welcomeLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: "#6B7280",
-    letterSpacing: 1,
-    textTransform: "uppercase",
-    marginBottom: 4,
-  },
-  userName: { fontSize: 24, fontFamily: "Inter_700Bold", color: "#111827" },
-  bellBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  badge: {
-    position: "absolute",
-    top: 6,
-    right: 6,
-    backgroundColor: "#EF4444",
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 3,
-  },
-  badgeText: { fontSize: 10, fontFamily: "Inter_700Bold", color: "#FFFFFF" },
-  healthCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  healthHeader: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
-  healthTitle: { flex: 1, fontSize: 12, fontFamily: "Inter_600SemiBold", color: "#7C3AED", letterSpacing: 1 },
-  speakBtn: { padding: 4 },
-  healthBody: { flexDirection: "row", alignItems: "center", gap: 24 },
-  healthStats: { flex: 1, gap: 16 },
-  statRow: {},
-  statLabel: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#6B7280", marginBottom: 2 },
-  statValue: { fontSize: 22, fontFamily: "Inter_700Bold" },
-  actionsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 24,
-  },
-  actionBtn: { alignItems: "center", flex: 1 },
-  actionIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
-  },
-  actionLabel: { fontSize: 12, fontFamily: "Inter_500Medium", color: "#374151", textAlign: "center" },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  sectionTitle: { fontSize: 17, fontFamily: "Inter_700Bold", color: "#111827" },
-  leakBadge: {
-    backgroundColor: "#FEE2E2",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  leakBadgeText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: "#DC2626" },
-  seeAll: { fontSize: 14, fontFamily: "Inter_500Medium", color: "#7C3AED" },
-  leakCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  leakIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: "#EDE9FE",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  leakInfo: { flex: 1 },
-  leakName: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#111827", marginBottom: 2 },
-  leakCategory: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#6B7280" },
-  leakRight: { alignItems: "flex-end", marginRight: 6 },
-  leakAmount: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#DC2626" },
-  leakPeriod: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#6B7280" },
-  scanPromptCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    backgroundColor: "#EDE9FE",
-    borderRadius: 14,
-    padding: 18,
-    marginBottom: 20,
-  },
-  scanPromptText: { flex: 1 },
-  scanPromptTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#5B21B6" },
-  scanPromptSub: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#7C3AED", marginTop: 2 },
-  txCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  txIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  txIconLeak: { backgroundColor: "#FEE2E2" },
-  txIconNormal: { backgroundColor: "#F3F4F6" },
-  txInfo: { flex: 1 },
-  txName: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#111827", marginBottom: 2 },
-  txDate: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#6B7280" },
-  txRight: { alignItems: "flex-end", gap: 4 },
-  txAmount: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#111827" },
-  txLeakBadge: { backgroundColor: "#FEE2E2", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
-  txLeakBadgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#DC2626" },
-
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-start" },
-  notifPanel: {
-    backgroundColor: "#FFFFFF", paddingHorizontal: 20, paddingBottom: 32,
-    maxHeight: "75%",
-    borderBottomLeftRadius: 24, borderBottomRightRadius: 24,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 16, elevation: 10,
-  },
-  notifHeader: { flexDirection: "row", alignItems: "center", paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: "#F3F4F6", marginBottom: 12 },
-  notifTitle: { flex: 1, fontSize: 18, fontFamily: "Inter_700Bold", color: "#111827" },
-  notifClose: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" },
-  notifEmpty: { alignItems: "center", paddingVertical: 40, gap: 12 },
-  notifEmptyText: { fontSize: 15, fontFamily: "Inter_400Regular", color: "#9CA3AF" },
-  notifSectionLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#6B7280", letterSpacing: 1.2, marginBottom: 12 },
-  notifItem: {
-    flexDirection: "row", alignItems: "center", gap: 12,
-    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F9FAFB",
-  },
-  notifDot: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  notifItemText: { flex: 1 },
-  notifItemTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#111827", marginBottom: 2 },
-  notifItemSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#6B7280" },
-  notifSevBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  notifSevText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
-
-  rewardsHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginTop: 24, marginBottom: 12 },
-  rewardsPts: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#6B7280", marginTop: 2 },
-  ptsChip: {
-    flexDirection: "row", alignItems: "center", gap: 4,
-    backgroundColor: "#EDE9FE", paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
-  },
-  ptsChipText: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#7C3AED" },
-  rewardsScrollWrap: { marginHorizontal: -18 },
-  rewardsScroll: { paddingHorizontal: 18, gap: 12, paddingBottom: 4 },
-  rewardCard: {
-    width: 140, backgroundColor: "#FFFFFF", borderRadius: 16, padding: 14,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
-    borderWidth: 1, borderColor: "#F3F4F6",
-  },
-  rewardIconBox: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 10 },
-  rewardPartner: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#111827", marginBottom: 2 },
-  rewardOffer: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#374151", marginBottom: 8, lineHeight: 16 },
-  rewardPtsRow: { flexDirection: "row", alignItems: "center", gap: 3, marginBottom: 10 },
-  rewardPtsNeeded: { fontSize: 11, fontFamily: "Inter_500Medium", color: "#7C3AED" },
-  redeemBtn: { backgroundColor: "#7C3AED", borderRadius: 8, paddingVertical: 7, alignItems: "center" },
-  redeemBtnDisabled: { backgroundColor: "#F3F4F6" },
-  redeemBtnText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: "#FFFFFF" },
-  redeemBtnTextDisabled: { color: "#9CA3AF" },
-});
