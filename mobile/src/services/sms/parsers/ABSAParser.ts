@@ -1,5 +1,6 @@
 import { BankParser, BankParserResult, RawSMS } from '../sms.types';
 import {
+  canParseBankSms,
   parseAmount,
   parseDate,
   normaliseMerchant,
@@ -18,17 +19,27 @@ import {
 export const ABSAParser: BankParser = {
   bankName: 'ABSA',
   senderPatterns: [/^ABSA$/i, /^ABSA\s*BANK/i],
+  bodyPatterns: [/^Absa[:\s]/i],
 
   canParse(sms: RawSMS): boolean {
-    return this.senderPatterns.some((p) => p.test(sms.address.trim()));
+    return canParseBankSms(sms, this.senderPatterns, this.bodyPatterns);
   },
 
   parse(sms: RawSMS): BankParserResult {
-    const body = sms.body;
+    const body = sms.body.trim();
+
+    if (/locked|unlocked|Thank you for your patience/i.test(body) && !/(?:debited|credited)/i.test(body)) {
+      return { success: false, reason: 'Card alert, not a transaction' };
+    }
 
     const isCredit   = /credited/i.test(body);
     const isReversal = /reversal|reversed/i.test(body);
-    const type = isReversal ? 'reversal' : isCredit ? 'credit' : 'debit';
+    const isDebit    = /debited/i.test(body);
+    const type = isReversal ? 'reversal' : isCredit ? 'credit' : isDebit ? 'debit' : 'unknown';
+
+    if (type === 'unknown') {
+      return { success: false, reason: 'Not a debit/credit transaction' };
+    }
 
     // ── Amount ────────────────────────────────────────────────────────────────
     const amountMatch = body.match(/(?:debited|credited)\s+R\s*([\d\s,]+\.?\d*)/i);
@@ -55,6 +66,12 @@ export const ABSAParser: BankParser = {
     const refMatch = body.match(/[Rr]ef[:\s]+(\w+)/);
     const reference = refMatch?.[1];
 
+    const summary = isReversal
+      ? 'Transaction reversed'
+      : isCredit
+        ? 'Deposit received'
+        : 'Card purchase';
+
     const confidence = scoreConfidence(true, !!merchant, !!dateMatch, !!availableBalance);
 
     return {
@@ -65,6 +82,7 @@ export const ABSAParser: BankParser = {
         amount,
         currency: 'ZAR',
         merchant,
+        summary,
         reference,
         accountLast4,
         availableBalance,

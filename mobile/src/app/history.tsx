@@ -1,10 +1,12 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
   FlatList,
   TextInput,
   ActivityIndicator,
+  ScrollView,
+  Pressable,
 } from "react-native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Button } from "@/components/Button";
@@ -13,6 +15,12 @@ import { router, Stack } from "expo-router";
 import { useIngestion } from "@/context/SMSIngestionContext";
 import { ParsedTransaction, TransactionCategory } from "@/services/sms/sms.types";
 import { cn } from "@/lib/cn";
+import { getTransactionHeadline, getTransactionSummary } from "@/lib/transaction-display";
+import {
+  DATE_RANGE_OPTIONS,
+  DateRangeFilter,
+  filterTransactionsByDateRange,
+} from "@/lib/transaction-filters";
 
 type ListItem =
   | { type: "header"; key: string; label: string }
@@ -49,10 +57,17 @@ function formatDateLabel(date: Date): string {
 function buildListItems(transactions: ParsedTransaction[], search: string): ListItem[] {
   const filtered = search
     ? transactions.filter(
-        (tx) =>
-          (tx.merchant ?? "").toLowerCase().includes(search.toLowerCase()) ||
-          tx.bank.toLowerCase().includes(search.toLowerCase()) ||
-          tx.category.toLowerCase().includes(search.toLowerCase()),
+        (tx) => {
+          const headline = getTransactionHeadline(tx).toLowerCase();
+          const summary = getTransactionSummary(tx).toLowerCase();
+          const q = search.toLowerCase();
+          return (
+            headline.includes(q) ||
+            summary.includes(q) ||
+            tx.bank.toLowerCase().includes(q) ||
+            tx.category.toLowerCase().includes(q)
+          );
+        },
       )
     : transactions;
 
@@ -75,6 +90,7 @@ export default function HistoryScreen() {
   const { contentPadding } = useScreenInsets("compact");
   const [search, setSearch] = useState("");
   const [showLeaksOnly, setShowLeaksOnly] = useState(false);
+  const [dateRange, setDateRange] = useState<DateRangeFilter>("all");
 
   const { transactions, startListening, stopListening, isLoading, state } = useIngestion();
 
@@ -83,8 +99,16 @@ export default function HistoryScreen() {
     return () => stopListening();
   }, [startListening, stopListening]);
 
-  const filtered = showLeaksOnly ? transactions.filter((tx) => tx.type === "debit") : transactions;
+  const filtered = useMemo(() => {
+    let result = filterTransactionsByDateRange(transactions, dateRange);
+    if (showLeaksOnly) {
+      result = result.filter((tx) => tx.type === "debit");
+    }
+    return result;
+  }, [transactions, dateRange, showLeaksOnly]);
+
   const listItems = buildListItems(filtered, search);
+  const hasActiveFilters = dateRange !== "all" || showLeaksOnly || search.length > 0;
 
   const renderItem = useCallback(({ item }: { item: ListItem }) => {
     if (item.type === "header") {
@@ -113,8 +137,11 @@ export default function HistoryScreen() {
           />
         </View>
         <View className="flex-1 min-w-0">
-          <Text className="text-sm font-semibold text-gray-900 mb-1.5" numberOfLines={1}>
-            {tx.merchant ?? tx.bank}
+          <Text className="text-sm font-semibold text-gray-900 mb-0.5" numberOfLines={1}>
+            {getTransactionHeadline(tx)}
+          </Text>
+          <Text className="text-xs font-sans text-gray-500 mb-1.5" numberOfLines={2}>
+            {getTransactionSummary(tx)}
           </Text>
           <View className="flex-row gap-1.5 flex-wrap">
             <View className="bg-gray-100 px-2 py-0.5 rounded-md">
@@ -161,7 +188,7 @@ export default function HistoryScreen() {
         <View className="flex-1">
           <Text className="text-2xl font-bold text-gray-900 mb-0.5">Transaction History</Text>
           <Text className="text-sm font-sans text-gray-500">
-            {state.isListening ? "Live" : "Paused"} · {state.totalIngested} ingested
+            {state.isListening ? "Live" : "Paused"} · {filtered.length} of {state.totalIngested} shown
           </Text>
         </View>
         {state.isListening && (
@@ -172,7 +199,7 @@ export default function HistoryScreen() {
         )}
       </View>
 
-      <View className="flex-row gap-2.5 mb-5">
+      <View className="flex-row gap-2.5 mb-3">
         <View className="flex-1 flex-row items-center bg-white rounded-xl px-3 py-2.5 shadow-sm">
           <View className="mr-2">
             <Feather name="search" size={16} color="#9CA3AF" />
@@ -194,6 +221,36 @@ export default function HistoryScreen() {
           <Feather name="arrow-down-circle" size={18} color={showLeaksOnly ? "#DC2626" : "#6B7280"} />
         </Button>
       </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        className="-mx-[18px] mb-5"
+        contentContainerClassName="px-[18px] gap-2"
+      >
+        {DATE_RANGE_OPTIONS.map((option) => {
+          const active = dateRange === option.id;
+          return (
+            <Pressable
+              key={option.id}
+              onPress={() => setDateRange(option.id)}
+              className={cn(
+                "px-3.5 py-2 rounded-full border",
+                active ? "bg-brand-purple border-brand-purple" : "bg-white border-gray-200",
+              )}
+            >
+              <Text
+                className={cn(
+                  "text-[13px] font-semibold",
+                  active ? "text-white" : "text-gray-700",
+                )}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
     </>
   );
 
@@ -206,7 +263,9 @@ export default function HistoryScreen() {
     <View className="items-center py-[60px] gap-3.5">
       <MaterialCommunityIcons name="message-text-outline" size={40} color="#D1D5DB" />
       <Text className="text-sm font-sans text-gray-400 text-center leading-5">
-        {search ? "No matching transactions" : "No transactions yet.\nOpen the SMS scanner to import."}
+        {hasActiveFilters
+          ? "No transactions match your filters.\nTry a wider date range or clear search."
+          : "No transactions yet.\nOpen the SMS scanner to import."}
       </Text>
     </View>
   );

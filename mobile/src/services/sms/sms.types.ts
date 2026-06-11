@@ -34,6 +34,8 @@ export interface RawSMS {
     amount: number;                 // always positive
     currency: string;               // "ZAR"
     merchant?: string;
+    /** What happened, e.g. "Card purchase" or "Monthly admin fee". */
+    summary?: string;
     reference?: string;
     accountLast4?: string;
     availableBalance?: number;
@@ -54,7 +56,8 @@ export interface RawSMS {
   
   export interface BankParser {
     bankName: string;
-    senderPatterns: RegExp[];   // matches against SMS address
+    senderPatterns: RegExp[];   // matches against SMS address (short codes)
+    bodyPatterns: RegExp[];     // matches against SMS body (banks often send from phone numbers)
     canParse(sms: RawSMS): boolean;
     parse(sms: RawSMS): BankParserResult;
   }

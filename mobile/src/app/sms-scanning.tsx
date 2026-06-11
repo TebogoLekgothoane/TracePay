@@ -12,6 +12,7 @@ import { Screen } from "@/components/Screen";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useIngestion } from "@/context/SMSIngestionContext";
 import { cn } from "@/lib/cn";
+import { getTransactionHeadline, getTransactionSummary } from "@/lib/transaction-display";
 
 export default function SmsScanningScreen() {
   const params = useLocalSearchParams<{ fromOnboarding?: string }>();
@@ -211,7 +212,7 @@ export default function SmsScanningScreen() {
                   color={tx.type === "debit" ? "#DC2626" : "#16A34A"}
                 />
               </View>
-              <Text className="flex-1 text-[15px] font-semibold text-gray-900">{tx.bank}</Text>
+              <Text className="flex-1 text-[15px] font-semibold text-gray-900">{getTransactionHeadline(tx)}</Text>
               <Text className="caption">
                 {tx.timestamp instanceof Date
                   ? tx.timestamp.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })
@@ -219,7 +220,7 @@ export default function SmsScanningScreen() {
               </Text>
             </View>
             <Text className="text-sm font-sans text-gray-700 leading-5 mb-2" numberOfLines={2}>
-              {tx.merchant ?? tx.reference ?? tx.rawBody}
+              {getTransactionSummary(tx)}
             </Text>
             <View className="flex-row items-center gap-2">
               <Text className={cn("text-sm font-bold", tx.type === "debit" ? "text-red-600" : "text-green-600")}>

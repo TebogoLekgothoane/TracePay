@@ -1,5 +1,6 @@
 import { BankParser, BankParserResult, RawSMS } from '../sms.types';
 import {
+  canParseBankSms,
   parseAmount,
   parseDate,
   normaliseMerchant,
@@ -18,16 +19,25 @@ import {
  *   "FNB: ATM withdrawal of R500.00 on 08/06/2025. Card ending 1234.
  *    Available balance: R3 200.00. Ref: 987654321."
  */
+const FNB_NON_TRANSACTION =
+  /congratulations|pre-?approved|loan\s+offer|you\s+have\s+won|competition|ebucks|marketing|click\s+here|call\s+\d/i;
+
 export const FNBParser: BankParser = {
   bankName: 'FNB',
   senderPatterns: [/^FNB$/i, /^FNBSA$/i],
+  // Real FNB alerts always start with "FNB:" — avoid loose "first national bank" in promos/scams.
+  bodyPatterns: [/^FNB:/i],
 
   canParse(sms: RawSMS): boolean {
-    return this.senderPatterns.some((p) => p.test(sms.address.trim()));
+    return canParseBankSms(sms, this.senderPatterns, this.bodyPatterns);
   },
 
   parse(sms: RawSMS): BankParserResult {
-    const body = sms.body;
+    const body = sms.body.trim();
+
+    if (FNB_NON_TRANSACTION.test(body)) {
+      return { success: false, reason: 'Promotional or non-transaction message' };
+    }
 
     // ── Transaction type ────────────────────────────────────────────────────
     const isDebit    = /debited|debit|withdrawal|purchase/i.test(body);
@@ -35,6 +45,10 @@ export const FNBParser: BankParser = {
     const isReversal = /reversal|reversed/i.test(body);
 
     const type = isReversal ? 'reversal' : isCredit ? 'credit' : isDebit ? 'debit' : 'unknown';
+
+    if (type === 'unknown') {
+      return { success: false, reason: 'Not a debit/credit transaction' };
+    }
 
     // ── Amount ───────────────────────────────────────────────────────────────
     const amountMatch = body.match(/R\s*([\d\s,]+\.?\d*)/i);
@@ -64,6 +78,14 @@ export const FNBParser: BankParser = {
     const refMatch = body.match(/[Rr]ef[:\s#]+(\w+)/);
     const reference = refMatch?.[1];
 
+    const summary = isReversal
+      ? 'Transaction reversed'
+      : isCredit
+        ? 'Deposit received'
+        : /withdrawal/i.test(body)
+          ? 'ATM withdrawal'
+          : 'Card purchase';
+
     const confidence = scoreConfidence(true, !!merchant, !!dateMatch, !!availableBalance);
 
     return {
@@ -74,6 +96,7 @@ export const FNBParser: BankParser = {
         amount,
         currency: 'ZAR',
         merchant,
+        summary,
         reference,
         accountLast4,
         availableBalance,

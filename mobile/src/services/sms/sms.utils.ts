@@ -1,5 +1,19 @@
-import { TransactionCategory } from './sms.types';
+import { RawSMS, TransactionCategory } from './sms.types';
 import { CATEGORY_KEYWORDS, CURRENCY_PATTERNS } from './banks.constants';
+
+// ─── Bank SMS detection ───────────────────────────────────────────────────────
+// SA banks often send from numeric sender IDs; the bank name appears in the body.
+
+export function canParseBankSms(
+  sms: RawSMS,
+  senderPatterns: RegExp[],
+  bodyPatterns: RegExp[]
+): boolean {
+  const address = sms.address.trim();
+  const body = sms.body.trim();
+  if (senderPatterns.some((p) => p.test(address))) return true;
+  return bodyPatterns.some((p) => p.test(body));
+}
 
 // ─── Deterministic ID ─────────────────────────────────────────────────────────
 // Simple djb2 hash — no native crypto needed in RN

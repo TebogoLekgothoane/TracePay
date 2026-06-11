@@ -92,17 +92,50 @@ function getSmsModule(): SmsNativeModule {
 
 // ─── Raw SMS fetch ────────────────────────────────────────────────────────────
 
+const SMS_DEBUG = true;
+
+function smsLog(label: string, data?: unknown) {
+  if (!SMS_DEBUG) return;
+  if (data !== undefined) {
+    console.log(`[SMS] ${label}`, data);
+  } else {
+    console.log(`[SMS] ${label}`);
+  }
+}
+
 function fetchSMSFromDevice(filter: object): Promise<RawSMS[]> {
   const sms = getSmsModule();
+  const filterJson = JSON.stringify(filter);
+  smsLog('fetchSMSFromDevice → filter', filter);
 
   return new Promise((resolve, reject) => {
     sms.list(
-      JSON.stringify(filter),
-      (error: string) => reject(new Error(error)),
-      (_count: number, smsList: string) => {
+      filterJson,
+      (error: string) => {
+        smsLog('fetchSMSFromDevice ✗ native error', error);
+        reject(new Error(error));
+      },
+      (count: number, smsList: string) => {
+        smsLog('fetchSMSFromDevice ← native callback', {
+          reportedCount: count,
+          jsonLength: smsList?.length ?? 0,
+        });
         try {
-          resolve(JSON.parse(smsList) as RawSMS[]);
-        } catch {
+          const parsed = JSON.parse(smsList) as RawSMS[];
+          smsLog('fetchSMSFromDevice parsed', {
+            arrayLength: parsed.length,
+            sampleSenders: parsed.slice(0, 5).map((m) => ({
+              address: m.address,
+              date: m.date,
+              bodyPreview: m.body?.slice(0, 60),
+            })),
+          });
+          resolve(parsed);
+        } catch (err) {
+          smsLog('fetchSMSFromDevice ✗ JSON parse failed', {
+            error: (err as Error).message,
+            preview: smsList?.slice(0, 200),
+          });
           reject(new Error('Failed to parse SMS list JSON'));
         }
       }
@@ -136,10 +169,17 @@ const EMPTY_RESULT: IngestionResult = {
 };
 
 export async function ingestSMS(options: IngestOptions = {}): Promise<IngestionResult> {
-  // SMS inbox access is Android-only; return gracefully on other platforms.
-  if (Platform.OS !== 'android') return EMPTY_RESULT;
+  smsLog('ingestSMS start', { platform: Platform.OS, options });
 
-  if (!isSmsNativeModuleAvailable()) {
+  // SMS inbox access is Android-only; return gracefully on other platforms.
+  if (Platform.OS !== 'android') {
+    smsLog('ingestSMS abort — not Android');
+    return EMPTY_RESULT;
+  }
+
+  const nativeAvailable = isSmsNativeModuleAvailable();
+  smsLog('ingestSMS native module', { available: nativeAvailable });
+  if (!nativeAvailable) {
     throw new Error(
       'SMS scanning is not available in this build. Run "npx expo run:android" ' +
       'to create a dev build with SMS support — Expo Go cannot read SMS.'
@@ -147,6 +187,7 @@ export async function ingestSMS(options: IngestOptions = {}): Promise<IngestionR
   }
 
   const permission = await checkSMSPermission();
+  smsLog('ingestSMS permission', { permission });
   if (permission !== 'granted') {
     throw new Error(SMS_PERMISSION_BLOCKED_HELP);
   }
@@ -156,6 +197,15 @@ export async function ingestSMS(options: IngestOptions = {}): Promise<IngestionR
     existingTransactions = [],
     maxCount = SMS_FETCH_DEFAULTS.maxCount,
   } = options;
+
+  smsLog('ingestSMS config', {
+    sinceMs,
+    sinceDate: new Date(sinceMs).toISOString(),
+    lookbackDays: SYNC_LOOKBACK_DAYS,
+    maxCount,
+    existingCount: existingTransactions.length,
+    supportedBanks: parserRegistry.getSupportedBanks(),
+  });
 
   const result: IngestionResult = {
     total: 0,
@@ -179,15 +229,33 @@ export async function ingestSMS(options: IngestOptions = {}): Promise<IngestionR
   }
 
   result.total = rawMessages.length;
+  smsLog('ingestSMS step 1 — raw inbox', { total: result.total });
 
   // 2. Filter to bank SMS only
   const bankMessages = rawMessages.filter((sms) => parserRegistry.isBankSMS(sms));
   result.skipped = rawMessages.length - bankMessages.length;
 
+  const nonBankSenders = [...new Set(
+    rawMessages
+      .filter((sms) => !parserRegistry.isBankSMS(sms))
+      .map((sms) => sms.address)
+  )].slice(0, 15);
+
+  smsLog('ingestSMS step 2 — bank filter', {
+    bankMessages: bankMessages.length,
+    nonBankSkipped: result.skipped,
+    bankSenders: bankMessages.map((m) => m.address),
+    sampleNonBankSenders: nonBankSenders,
+  });
+
   // 3. Parse each bank SMS
   for (const sms of bankMessages) {
     const parser = parserRegistry.findParser(sms);
     if (!parser) {
+      smsLog('ingestSMS no parser for bank SMS', {
+        address: sms.address,
+        bodyPreview: sms.body?.slice(0, 80),
+      });
       result.skipped++;
       continue;
     }
@@ -196,6 +264,12 @@ export async function ingestSMS(options: IngestOptions = {}): Promise<IngestionR
       const parseResult = parser.parse(sms);
 
       if (!parseResult.success || !parseResult.transaction) {
+        smsLog('ingestSMS parse failed', {
+          bank: parser.bankName,
+          address: sms.address,
+          reason: parseResult.reason,
+          bodyPreview: sms.body?.slice(0, 120),
+        });
         result.failed++;
         result.errors.push({
           smsId: sms._id,
@@ -215,9 +289,20 @@ export async function ingestSMS(options: IngestOptions = {}): Promise<IngestionR
         category: inferCategory(tx.merchant),
       };
 
+      smsLog('ingestSMS parsed ✓', {
+        bank: parsed.bank,
+        type: parsed.type,
+        amount: parsed.amount,
+        merchant: parsed.merchant,
+        id: parsed.id,
+      });
       result.transactions.push(parsed);
       result.parsed++;
     } catch (err) {
+      smsLog('ingestSMS parse threw', {
+        address: sms.address,
+        error: (err as Error).message,
+      });
       result.failed++;
       result.errors.push({
         smsId: sms._id,
@@ -226,11 +311,24 @@ export async function ingestSMS(options: IngestOptions = {}): Promise<IngestionR
     }
   }
 
+  const beforeDedup = result.transactions.length;
+
   // 4. Deduplicate against existing transactions
   result.transactions = deduplicateTransactions(
     result.transactions,
     existingTransactions
   );
+
+  smsLog('ingestSMS done', {
+    total: result.total,
+    parsed: result.parsed,
+    skipped: result.skipped,
+    failed: result.failed,
+    beforeDedup,
+    afterDedup: result.transactions.length,
+    dedupedOut: beforeDedup - result.transactions.length,
+    errors: result.errors.slice(0, 5),
+  });
 
   return result;
 }

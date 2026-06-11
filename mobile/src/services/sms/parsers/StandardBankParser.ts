@@ -1,5 +1,6 @@
 import { BankParser, BankParserResult, RawSMS } from '../sms.types';
 import {
+  canParseBankSms,
   parseAmount,
   parseDate,
   normaliseMerchant,
@@ -18,9 +19,10 @@ import {
 export const StandardBankParser: BankParser = {
   bankName: 'STANDARD_BANK',
   senderPatterns: [/^STD\s*B(AN)?K$/i, /^STANDARDBANK$/i, /^SBSA$/i],
+  bodyPatterns: [/^Std\s*Bk[:\s]/i, /\bStandard\s*Bank\b/i],
 
   canParse(sms: RawSMS): boolean {
-    return this.senderPatterns.some((p) => p.test(sms.address.trim()));
+    return canParseBankSms(sms, this.senderPatterns, this.bodyPatterns);
   },
 
   parse(sms: RawSMS): BankParserResult {
@@ -58,6 +60,16 @@ export const StandardBankParser: BankParser = {
     const balanceMatch = body.match(/Avail\s+bal\s+R\s*([\d\s,]+\.?\d*)/i);
     const availableBalance = balanceMatch ? parseAmount(balanceMatch[1]) ?? undefined : undefined;
 
+    const summary = isReversal
+      ? 'Transaction reversed'
+      : isCredit
+        ? 'Payment received'
+        : /Purch/i.test(body)
+          ? 'Card purchase'
+          : /ATM/i.test(body)
+            ? 'ATM withdrawal'
+            : 'Transaction';
+
     const confidence = scoreConfidence(true, !!merchant, !!dateMatch, !!availableBalance);
 
     return {
@@ -68,6 +80,7 @@ export const StandardBankParser: BankParser = {
         amount,
         currency: 'ZAR',
         merchant,
+        summary,
         accountLast4,
         availableBalance,
         timestamp,

@@ -3,6 +3,7 @@ import { FNBParser } from './parsers/FNBParser';
 import { CapitecParser } from './parsers/CapitecParser';
 import { ABSAParser } from './parsers/ABSAParser';
 import { StandardBankParser } from './parsers/StandardBankParser';
+import { TymeBankParser } from './parsers/TymeBankParser';
 
 // ─── Register all parsers here ────────────────────────────────────────────────
 // Order matters: more specific matchers should come first.
@@ -12,6 +13,7 @@ const REGISTERED_PARSERS: BankParser[] = [
   CapitecParser,
   ABSAParser,
   StandardBankParser,
+  TymeBankParser,
 ];
 
 // ─── Registry API ─────────────────────────────────────────────────────────────
