@@ -94,6 +94,18 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen
+        name="rewards"
+        options={{
+          title: "Rewards",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="gift" tintColor={color} size={24} />
+            ) : (
+              <MaterialCommunityIcons name="gift" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",

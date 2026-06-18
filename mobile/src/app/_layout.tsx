@@ -1,4 +1,4 @@
-import "../../global.css";
+import "@/theme/global.css";
 
 import {
   Inter_400Regular,
@@ -19,6 +19,7 @@ import { View, ActivityIndicator } from "react-native";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useProfileStore } from "@/stores/profileStore";
 import { SMSIngestionProvider } from "@/context/SMSIngestionContext";
+import { ThemeProvider } from "@/context/theme-context";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -101,15 +102,17 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <SMSIngestionProvider>
-            <GestureHandlerRootView className="flex-1">
-              <KeyboardProvider>
-                <NavigationGuard>
-                  <RootLayoutNav />
-                </NavigationGuard>
-              </KeyboardProvider>
-            </GestureHandlerRootView>
-          </SMSIngestionProvider>
+          <ThemeProvider>
+            <SMSIngestionProvider>
+              <GestureHandlerRootView className="flex-1">
+                <KeyboardProvider>
+                  <NavigationGuard>
+                    <RootLayoutNav />
+                  </NavigationGuard>
+                </KeyboardProvider>
+              </GestureHandlerRootView>
+            </SMSIngestionProvider>
+          </ThemeProvider>
         </QueryClientProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
