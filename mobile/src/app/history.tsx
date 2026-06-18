@@ -13,7 +13,7 @@ import { Button } from "@/components/Button";
 import { useScreenInsets } from "@/hooks/useScreenInsets";
 import { router, Stack } from "expo-router";
 import { useIngestion } from "@/context/SMSIngestionContext";
-import { useTheme } from "@/context/theme-context";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { ParsedTransaction, TransactionCategory } from "@/services/sms/sms.types";
 import { cn } from "@/lib/cn";
 import { getTransactionHeadline, getTransactionSummary } from "@/lib/transaction-display";
@@ -89,7 +89,7 @@ function buildListItems(transactions: ParsedTransaction[], search: string): List
 
 export default function HistoryScreen() {
   const { contentPadding } = useScreenInsets("compact");
-  const { c } = useTheme();
+  const { colors } = useColorScheme();
   const [search, setSearch] = useState("");
   const [showLeaksOnly, setShowLeaksOnly] = useState(false);
   const [dateRange, setDateRange] = useState<DateRangeFilter>("all");
@@ -185,7 +185,7 @@ export default function HistoryScreen() {
           onPress={() => router.back()}
           className="back-btn mt-0.5"
         >
-          <Feather name="arrow-left" size={22} color={c.text} />
+          <Feather name="arrow-left" size={22} color={colors.foreground} />
         </Button>
         <View className="flex-1">
           <Text className="page-header-title mb-0.5">Transaction History</Text>
@@ -204,7 +204,7 @@ export default function HistoryScreen() {
       <View className="flex-row gap-2.5 mb-3">
         <View className="search-bar">
           <View className="mr-2">
-            <Feather name="search" size={16} color={c.textMuted} />
+            <Feather name="search" size={16} color={colors.mutedForeground} />
           </View>
           <TextInput
             className="flex-1 text-sm font-sans text-strong"

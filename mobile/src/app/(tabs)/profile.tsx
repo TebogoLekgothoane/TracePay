@@ -12,7 +12,7 @@ import { Screen } from "@/components/Screen";
 import { useProfileStore } from "@/stores/profileStore";
 import { useVoice } from "@/hooks/useVoice";
 import { useLeaksStore } from "@/stores/leaksStore";
-import { useTheme } from "@/context/theme-context";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { router } from "expo-router";
 import { cn } from "@/lib/cn";
 
@@ -28,7 +28,7 @@ export default function ProfileScreen() {
   } = useProfileStore();
   const { leaks } = useLeaksStore();
   const { speak } = useVoice();
-  const { isDark, toggle } = useTheme();
+  const { colors } = useColorScheme();
 
   const totalLeaking = leaks
     .filter((l) => l.status === "active")
@@ -117,7 +117,7 @@ export default function ProfileScreen() {
 
       <View className="card flex-row items-center mb-3">
           <View className="w-[60px] h-[60px] rounded-[14px] bg-brand-purple-light dark:bg-brand-purple-dark/40 items-center justify-center mr-3.5">
-            <MaterialCommunityIcons name="account-outline" size={32} color="#7C3AED" />
+            <MaterialCommunityIcons name="account-outline" size={32} color={colors.primary} />
           </View>
           <View className="flex-1">
             <Text className="heading-md mb-1">{name}</Text>
@@ -137,29 +137,13 @@ export default function ProfileScreen() {
             }
             className="p-2"
           >
-            <MaterialCommunityIcons name="volume-high" size={20} color="#7C3AED" />
+            <MaterialCommunityIcons name="volume-high" size={20} color={colors.primary} />
           </Button>
       </View>
 
       <View className="surface-panel flex-row items-center p-4 mb-3">
         <View className="w-[42px] h-[42px] rounded-[10px] bg-brand-purple-light dark:bg-brand-purple-dark/40 items-center justify-center mr-3">
-          <MaterialCommunityIcons name="moon-waning-crescent" size={20} color="#7C3AED" />
-        </View>
-        <View className="flex-1">
-          <Text className="text-[15px] font-semibold text-gray-900 dark:text-white mb-0.5">Dark Mode</Text>
-          <Text className="body-text">{isDark ? "On" : "Off"}</Text>
-        </View>
-        <Switch
-          value={isDark}
-          onValueChange={toggle}
-          trackColor={{ false: "#E5E7EB", true: "#7C3AED" }}
-          thumbColor="#FFFFFF"
-        />
-      </View>
-
-      <View className="surface-panel flex-row items-center p-4 mb-3">
-        <View className="w-[42px] h-[42px] rounded-[10px] bg-brand-purple-light dark:bg-brand-purple-dark/40 items-center justify-center mr-3">
-          <Ionicons name="volume-medium-outline" size={20} color="#7C3AED" />
+          <Ionicons name="volume-medium-outline" size={20} color={colors.primary} />
         </View>
         <View className="flex-1">
           <Text className="text-[15px] font-semibold text-gray-900 dark:text-white mb-0.5">Voice Narration</Text>
@@ -168,8 +152,8 @@ export default function ProfileScreen() {
         <Switch
           value={voiceEnabled}
           onValueChange={handleVoiceToggle}
-          trackColor={{ false: "#E5E7EB", true: "#7C3AED" }}
-          thumbColor="#FFFFFF"
+          trackColor={{ false: colors.border, true: colors.primary }}
+          thumbColor={colors.primaryForeground}
         />
       </View>
 

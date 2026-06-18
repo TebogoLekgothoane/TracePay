@@ -9,7 +9,8 @@ import {
   AppState,
 } from "react-native";
 import { Button } from "@/components/Button";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Card } from "@/components/Card";
+import { OnboardingHeader, ONBOARDING_STEPS } from "@/components/OnboardingHeader";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import Animated, {
@@ -20,6 +21,7 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { consentCopy as t } from "@/constants/consent-copy";
 import { useOnboardingStore } from "@/stores/onboardingStore";
@@ -36,15 +38,9 @@ const ROADMAP_ICONS: (keyof typeof Feather.glyphMap)[] = [
   "lock",
 ];
 
-const NAVY = "#0B1B3A";
-const STEP_OFF = "#E0E0E0";
-const STEP_BORDER_OFF = "#C0C0C0";
-
-const Spacing = {
-  "2xl": 24,
-  "4xl": 32,
-  "6xl": 48,
-};
+const PURPLE = "#7C3AED";
+const STEP_OFF = "#E5E7EB";
+const STEP_BORDER_OFF = "#D1D5DB";
 
 function RoadmapStep({
   index,
@@ -59,9 +55,9 @@ function RoadmapStep({
   const circleStyle = useAnimatedStyle(() => {
     const isFilled = filledSteps.value > index;
     return {
-      backgroundColor: isFilled ? NAVY : STEP_OFF,
+      backgroundColor: isFilled ? PURPLE : STEP_OFF,
       borderWidth: 2,
-      borderColor: isFilled ? NAVY : STEP_BORDER_OFF,
+      borderColor: isFilled ? PURPLE : STEP_BORDER_OFF,
     };
   });
 
@@ -104,25 +100,23 @@ function ConsentSection({
   delay: number;
 }) {
   return (
-    <Animated.View
-      entering={FadeInDown.delay(delay).springify()}
-      className="card mb-4"
-    >
-      <Text className="mb-3 text-base font-semibold text-strong">{title}</Text>
-      <View className="gap-2">
-        {items.map((item, index) => (
-          <View key={index} className="flex-row items-start">
-            <View className="mr-3 mt-2 h-1.5 w-1.5 rounded-full bg-blue-600" />
-                <Text className="flex-1 text-sm font-sans leading-5 text-gray-500 dark:text-gray-400">{item}</Text>
-          </View>
-        ))}
-      </View>
+    <Animated.View entering={FadeInDown.delay(delay).springify()}>
+      <Card className="mb-4 p-0">
+        <Text className="mb-3 text-base font-semibold text-foreground">{title}</Text>
+        <View className="gap-2">
+          {items.map((item, index) => (
+            <View key={index} className="flex-row items-start">
+              <View className="mr-3 mt-2 h-1.5 w-1.5 rounded-full bg-brand-purple" />
+              <Text className="flex-1 text-sm leading-5 text-muted-foreground">{item}</Text>
+            </View>
+          ))}
+        </View>
+      </Card>
     </Animated.View>
   );
 }
 
 export default function ConsentScreen() {
-  const insets = useSafeAreaInsets();
   const scrollViewRef = useRef<ScrollView>(null);
 
   const includeMomoData = useOnboardingStore((s) => s.includeMomoData);
@@ -177,6 +171,7 @@ export default function ConsentScreen() {
 
   const roadmapFillStyle = useAnimatedStyle(() => ({
     height: scrollProgress.value * roadmapHeight.value,
+    backgroundColor: PURPLE,
   }));
 
   const continueIfGranted = useCallback(async () => {
@@ -226,35 +221,39 @@ export default function ConsentScreen() {
     setLocalMomoSetting(value);
   };
 
-  const topPadding = insets.top + Spacing["6xl"];
-
   return (
-    <View className="screen">
+    <SafeAreaView className="flex-1 bg-background">
       <ScrollView
         ref={scrollViewRef}
         className="flex-1"
-        contentContainerClassName="px-4"
         contentContainerStyle={{
-          paddingTop: topPadding,
-          paddingBottom: insets.bottom + Spacing["4xl"],
+          paddingHorizontal: 24,
+          paddingBottom: 24,
         }}
         onScroll={handleScroll}
         scrollEventThrottle={24}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View entering={FadeInDown.delay(50).springify()} className="pb-4">
-          <Text className="heading-xl mb-2">{t.consentTitle}</Text>
-          <Text className="body-text text-[15px] mb-4">{t.consentSubtitle}</Text>
-          <Text className="body-text text-[15px] leading-[22px] text-strong mb-6">
+        <OnboardingHeader currentStep={ONBOARDING_STEPS.consent} />
+
+        <Animated.View entering={FadeInDown.delay(50).springify()} className="mb-6">
+          <Text className="text-[32px] font-bold leading-[38px] text-foreground">
+            Privacy &{" "}
+            <Text className="text-brand-purple">consent</Text>
+          </Text>
+          <Text className="mt-3 text-base leading-6 text-muted-foreground">
+            {t.consentSubtitle}
+          </Text>
+          <Text className="mt-3 text-[15px] leading-[22px] text-foreground">
             {t.consentIntro}
           </Text>
         </Animated.View>
 
-        <View className="mb-10 flex-row items-stretch" onLayout={handleCardsSectionLayout}>
+        <View className="mb-6 flex-row items-stretch" onLayout={handleCardsSectionLayout}>
           <View className="relative mr-1 min-h-[200px] w-14">
-            <View className="absolute bottom-0 left-5 top-0 w-1.5 overflow-hidden rounded-[3px] bg-gray-300 dark:bg-gray-600">
+            <View className="absolute bottom-0 left-5 top-0 w-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
               <Animated.View
-                className="absolute left-0 right-0 top-0 rounded-[3px] bg-navy"
+                className="absolute left-0 right-0 top-0 rounded-full"
                 style={roadmapFillStyle}
               />
             </View>
@@ -281,25 +280,24 @@ export default function ConsentScreen() {
               delay={100}
             />
 
-            <Animated.View
-              entering={FadeInDown.delay(150).springify()}
-              className="card mb-4 flex-row items-center justify-between"
-            >
-              <View className="mr-4 flex-1">
-                <Text className="mb-3 text-base font-semibold text-strong">
-                  {t.includeMomoData}
-                </Text>
-                <Text className="mt-1 text-[13px] font-sans leading-[18px] text-gray-500">
-                  {t.momoDescription}
-                </Text>
-              </View>
-              <Switch
-                value={localMomoSetting}
-                onValueChange={handleMomoToggle}
-                trackColor={{ false: "#E0E0E0", true: "#BF00FF" }}
-                thumbColor="#FFFFFF"
-                ios_backgroundColor="#E0E0E0"
-              />
+            <Animated.View entering={FadeInDown.delay(150).springify()}>
+              <Card className="mb-4 flex-row items-center justify-between p-0">
+                <View className="mr-4 flex-1">
+                  <Text className="text-base font-semibold text-foreground">
+                    {t.includeMomoData}
+                  </Text>
+                  <Text className="mt-2 text-sm leading-[18px] text-muted-foreground">
+                    {t.momoDescription}
+                  </Text>
+                </View>
+                <Switch
+                  value={localMomoSetting}
+                  onValueChange={handleMomoToggle}
+                  trackColor={{ false: "#E5E7EB", true: PURPLE }}
+                  thumbColor="#FFFFFF"
+                  ios_backgroundColor="#E5E7EB"
+                />
+              </Card>
             </Animated.View>
 
             <ConsentSection
@@ -326,42 +324,60 @@ export default function ConsentScreen() {
         </View>
 
         {permissionBlocked && (
-          <View className="mb-4 gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+          <View className="mb-4 gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-950/40">
             <View className="flex-row items-center gap-2">
               <Feather name="shield" size={20} color="#DC2626" />
-              <Text className="flex-1 text-base font-semibold text-red-800">
+              <Text className="flex-1 text-base font-semibold text-red-800 dark:text-red-300">
                 Android blocked SMS access
               </Text>
             </View>
-            <Text className="text-sm font-sans leading-5 text-red-900">
+            <Text className="text-sm leading-5 text-red-900 dark:text-red-200">
               Your phone showed a security warning instead of Allow/Deny. On newer Android this is
               normal for dev builds. Open Settings, go to Permissions → SMS, allow access for
               TracePay, then return here.
             </Text>
-            <Button variant="accent" fullWidth onPress={handleOpenSettings}>
+            <Button
+              size="lg"
+              fullWidth
+              className="h-12 rounded-[20px]"
+              onPress={handleOpenSettings}
+            >
               Open Settings
             </Button>
-            <Button variant="info" fullWidth onPress={continueIfGranted}>
+            <Button
+              variant="outline"
+              size="lg"
+              fullWidth
+              className="h-12 rounded-[20px]"
+              onPress={() => void continueIfGranted()}
+            >
               I&apos;ve enabled it — check again
             </Button>
           </View>
         )}
-
-        <View className="gap-3" style={{ paddingBottom: insets.bottom + Spacing["2xl"] }}>
-          <Button variant="accent" fullWidth onPress={handleAgree} testID="button-agree">
-            {permissionBlocked ? "Try SMS permission again" : t.agreeAndContinue}
-          </Button>
-          <Button
-            variant="info"
-            fullWidth
-            onPress={handleCancel}
-            testID="button-cancel"
-            className="mt-1"
-          >
-            {t.cancel}
-          </Button>
-        </View>
       </ScrollView>
-    </View>
+
+      <View className="border-t border-border bg-background px-6 pb-6 pt-4">
+        <Button
+          size="lg"
+          fullWidth
+          className="h-14 rounded-[24px]"
+          onPress={handleAgree}
+          testID="button-agree"
+        >
+          {permissionBlocked ? "Try SMS permission again" : t.agreeAndContinue}
+        </Button>
+        <Button
+          variant="outline"
+          size="lg"
+          fullWidth
+          className="mt-3 h-14 rounded-[24px]"
+          onPress={handleCancel}
+          testID="button-cancel"
+        >
+          {t.cancel}
+        </Button>
+      </View>
+    </SafeAreaView>
   );
 }

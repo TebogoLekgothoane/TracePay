@@ -1,25 +1,28 @@
 import React from "react";
-import { View, Text, Image } from "react-native";
+import { View, Text, Image, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
 import { Button } from "@/components/Button";
-import { TracePayLogo } from "@/components/TracePayLogo";
+import { OnboardingHeader, ONBOARDING_STEPS } from "@/components/OnboardingHeader";
 
 const robotSource = require("@/assets/images/herobot.png");
 
 export default function WelcomeScreen() {
   return (
     <SafeAreaView className="welcome-screen">
-      <View className="flex-1 px-6">
-        <TracePayLogo size={96} className="mt-5" wordmarkClassName="welcome-wordmark" />
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="grow px-6"
+        showsVerticalScrollIndicator={false}
+      >
+        <OnboardingHeader currentStep={ONBOARDING_STEPS.welcome} />
 
-        <View className="mt-9">
+        <View className="mt-6">
           <Text className="welcome-headline">Stop hidden money leaks.</Text>
-          <Text className="welcome-headline">Built for South Africa.</Text>
           <Text className="welcome-subheadline">
             TracePay scans your bank and mobile SMS for forgotten fees, airtime advances,
-            and subscriptions — then helps you freeze them and plan smarter.
+            and subscriptions then helps you freeze them and plan smarter.
           </Text>
         </View>
 
@@ -51,7 +54,7 @@ export default function WelcomeScreen() {
             Log In
           </Button>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

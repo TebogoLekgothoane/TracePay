@@ -9,7 +9,7 @@ import {
 } from "react-native";
 
 import { Button } from "@/components/Button";
-import { useTheme } from "@/context/theme-context";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { useScreenInsets } from "@/hooks/useScreenInsets";
 
 export type ErrorFallbackProps = {
@@ -19,7 +19,7 @@ export type ErrorFallbackProps = {
 
 export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
   const { insets, contentPadding } = useScreenInsets("compact");
-  const { c } = useTheme();
+  const { colors } = useColorScheme();
 
   const [isModalVisible, setIsModalVisible] = useState(false);
 
@@ -51,7 +51,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
             accessibilityLabel="View error details"
             className="icon-btn-circle w-11 h-11 rounded-lg"
           >
-            <Feather name="alert-circle" size={20} color={c.text} />
+            <Feather name="alert-circle" size={20} color={colors.foreground} />
           </Button>
         </View>
       ) : null}
@@ -90,7 +90,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
                   accessibilityLabel="Close error details"
                   className="w-11 h-11"
                 >
-                  <Feather name="x" size={24} color={c.text} />
+                  <Feather name="x" size={24} color={colors.foreground} />
                 </Button>
               </View>
 

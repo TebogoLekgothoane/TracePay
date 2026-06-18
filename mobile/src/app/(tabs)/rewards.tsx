@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useTheme } from "@/context/theme-context";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { useProfileStore } from "@/stores/profileStore";
 
 const EARN_METHODS = [
@@ -40,7 +40,7 @@ function getLevelInfo(pts: number) {
 }
 
 export default function RewardsScreen() {
-  const { c } = useTheme();
+  const { colors: c } = useColorScheme();
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
   const { rewardPoints, addRewardPoints } = useProfileStore();

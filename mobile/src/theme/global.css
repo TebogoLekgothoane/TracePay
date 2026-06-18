@@ -3,13 +3,49 @@
 @tailwind utilities;
 
 @layer base {
-  /* Default typography — applied via utility classes on Text */
+  :root {
+    --background: 247 246 251;
+    --foreground: 17 24 39;
+    --card: 255 255 255;
+    --card-foreground: 17 24 39;
+    --muted: 243 244 246;
+    --muted-foreground: 107 114 128;
+    --border: 229 231 235;
+    --input: 229 231 235;
+    --primary: 124 58 237;
+    --primary-foreground: 255 255 255;
+    --secondary: 243 244 246;
+    --secondary-foreground: 55 65 81;
+    --destructive: 239 68 68;
+    --accent: 167 139 250;
+    --navy: 11 27 58;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: 17 24 39;
+      --foreground: 249 250 251;
+      --card: 31 41 55;
+      --card-foreground: 249 250 251;
+      --muted: 31 41 55;
+      --muted-foreground: 156 163 175;
+      --border: 55 65 81;
+      --input: 55 65 81;
+      --primary: 167 139 250;
+      --primary-foreground: 255 255 255;
+      --secondary: 55 65 81;
+      --secondary-foreground: 209 213 219;
+      --destructive: 248 113 113;
+      --accent: 196 181 253;
+      --navy: 11 27 58;
+    }
+  }
 }
 
 @layer components {
   /* ── Layout ───────────────────────────────────────────── */
   .screen {
-    @apply flex-1 bg-app-bg dark:bg-gray-900;
+    @apply flex-1 bg-background;
   }
 
   .screen-content {
@@ -26,52 +62,52 @@
 
   /* ── Cards ───────────────────────────────────────────── */
   .card {
-    @apply rounded-2xl bg-white p-4 shadow-sm dark:bg-gray-800;
+    @apply rounded-2xl bg-card p-4 shadow-sm;
   }
 
   .card-lg {
-    @apply rounded-[20px] bg-white p-6 shadow-md dark:bg-gray-800;
+    @apply rounded-[20px] bg-card p-6 shadow-md;
   }
 
   .card-row {
-    @apply mb-2.5 flex-row items-center rounded-xl bg-white p-3.5 shadow-sm dark:bg-gray-800;
+    @apply mb-2.5 flex-row items-center rounded-xl bg-card p-3.5 shadow-sm;
   }
 
   .surface-panel {
-    @apply rounded-[14px] bg-white shadow-sm dark:bg-gray-800;
+    @apply rounded-[14px] bg-card shadow-sm;
   }
 
   .surface-divider {
-    @apply h-px bg-gray-100 dark:bg-gray-700;
+    @apply h-px bg-border;
   }
 
   /* ── Typography ──────────────────────────────────────── */
   .heading-xl {
-    @apply text-[28px] font-bold leading-[34px] text-gray-900 dark:text-white;
+    @apply text-[28px] font-bold leading-[34px] text-foreground;
   }
 
   .heading-lg {
-    @apply text-2xl font-bold text-gray-900 dark:text-white;
+    @apply text-2xl font-bold text-foreground;
   }
 
   .heading-md {
-    @apply text-lg font-bold text-gray-900 dark:text-white;
+    @apply text-lg font-bold text-foreground;
   }
 
   .body-text {
-    @apply text-sm font-sans leading-5 text-gray-500 dark:text-gray-400;
+    @apply text-sm font-sans leading-5 text-muted-foreground;
   }
 
   .label-sm {
-    @apply text-[13px] font-semibold text-gray-700 dark:text-gray-300;
+    @apply text-[13px] font-semibold text-secondary-foreground;
   }
 
   .caption {
-    @apply text-xs font-sans text-gray-400 dark:text-gray-500;
+    @apply text-xs font-sans text-muted-foreground;
   }
 
   .overline {
-    @apply text-[11px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400;
+    @apply text-[11px] font-semibold uppercase tracking-widest text-muted-foreground;
   }
 
   .overline-brand {
@@ -84,20 +120,28 @@
   }
 
   .field-label {
-    @apply mb-2 text-[13px] font-semibold text-gray-700 dark:text-gray-300;
+    @apply mb-2 text-[13px] font-semibold text-secondary-foreground;
   }
 
   .input-group {
-    @apply flex-row items-center gap-2.5 rounded-xl border-[1.5px] border-border bg-gray-50 px-3.5 py-3.5 dark:border-gray-600 dark:bg-gray-800;
+    @apply flex-row items-center gap-2.5 rounded-xl border-[1.5px] border-input bg-muted px-3.5 py-3.5;
   }
 
   .input-field {
-    @apply flex-1 text-[15px] font-sans text-gray-900 dark:text-white;
+    @apply flex-1 text-[15px] font-sans text-foreground;
   }
 
   /* ── Onboarding ──────────────────────────────────────── */
   .onboarding-header {
-    @apply flex-row items-center justify-between px-6 pb-3 pt-4;
+    @apply pb-4 pt-0;
+  }
+
+  .onboarding-header-logo {
+    @apply items-center pb-5 pt-0;
+  }
+
+  .onboarding-step-dots {
+    @apply flex-row items-center justify-center gap-[5px];
   }
 
   .onboarding-footer {
@@ -113,32 +157,85 @@
   }
 
   .step-dot {
-    @apply h-2 w-2 rounded bg-gray-200 dark:bg-gray-600;
+    @apply h-2 w-2 rounded-full bg-gray-300 dark:bg-gray-600;
   }
 
   .step-dot-active {
-    @apply w-6 bg-brand-purple;
+    @apply w-6 rounded-full bg-brand-purple dark:bg-brand-purple-dark;
   }
 
   .step-dot-done {
-    @apply bg-brand-purple-muted;
+    @apply bg-brand-purple-muted dark:bg-brand-purple-dark/70;
+  }
+
+  /* ── Language (onboarding) ──────────────────────────── */
+  .language-screen {
+    @apply flex-1 bg-white dark:bg-[#0D0D12];
+  }
+
+  .language-scroll {
+    @apply px-6 pb-4 pt-2;
+  }
+
+  .language-hero {
+    @apply mb-5 flex-row items-center gap-1;
+  }
+
+  .language-title {
+    @apply text-[26px] font-bold leading-[32px] text-foreground;
+  }
+
+  .language-subtitle {
+    @apply mt-2 text-[15px] leading-[22px] text-muted-foreground;
+  }
+
+  .language-hero-robot {
+    @apply h-[108px] w-[108px];
+  }
+
+  .language-card {
+    @apply flex-row items-center gap-3 rounded-2xl border-[1.5px] border-border bg-white p-3.5 shadow-sm dark:border-transparent dark:bg-[#1A1A24];
+  }
+
+  .language-card-selected {
+    @apply border-brand-purple bg-brand-purple-faint dark:border-brand-purple dark:bg-[#1A1A24];
+  }
+
+  .language-radio {
+    @apply h-[22px] w-[22px] items-center justify-center rounded-full border-2 border-gray-300 dark:border-gray-600;
+  }
+
+  .language-radio-selected {
+    @apply border-brand-purple bg-brand-purple;
+  }
+
+  .language-radio-dot {
+    @apply h-2 w-2 rounded-full bg-white;
+  }
+
+  .language-footer {
+    @apply gap-3 px-6 pb-8;
+  }
+
+  .language-footer-hint {
+    @apply text-center text-[13px] text-muted-foreground;
   }
 
   /* ── Welcome (onboarding) ───────────────────────────── */
   .welcome-screen {
-    @apply flex-1 bg-app-bg dark:bg-navy;
+    @apply flex-1 bg-background dark:bg-navy;
   }
 
   .welcome-wordmark {
-    @apply text-3xl font-bold tracking-wide text-gray-900 dark:text-white;
+    @apply text-3xl font-bold tracking-wide text-foreground;
   }
 
   .welcome-headline {
-    @apply text-4xl font-bold leading-tight tracking-tight text-gray-900 dark:text-white;
+    @apply text-4xl font-bold leading-tight tracking-tight text-foreground;
   }
 
   .welcome-subheadline {
-    @apply mt-3 text-lg font-sans leading-7 text-gray-500 dark:text-gray-400;
+    @apply mt-3 text-lg font-sans leading-7 text-muted-foreground;
   }
 
   .welcome-hero-wrap {
@@ -155,11 +252,11 @@
   }
 
   .icon-btn-circle {
-    @apply h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm dark:bg-gray-800;
+    @apply h-11 w-11 items-center justify-center rounded-full bg-card shadow-sm;
   }
 
   .back-btn {
-    @apply h-[38px] w-[38px] items-center justify-center rounded-[10px] bg-white shadow-sm dark:bg-gray-800;
+    @apply h-[38px] w-[38px] items-center justify-center rounded-[10px] bg-card shadow-sm;
   }
 
   /* ── Badges & chips ──────────────────────────────────── */
@@ -193,19 +290,19 @@
   }
 
   .text-strong {
-    @apply text-gray-900 dark:text-white;
+    @apply text-foreground;
   }
 
   .text-subtle {
-    @apply text-gray-700 dark:text-gray-300;
+    @apply text-secondary-foreground;
   }
 
   .search-bar {
-    @apply flex-1 flex-row items-center rounded-xl bg-white px-3 py-2.5 shadow-sm dark:bg-gray-800;
+    @apply flex-1 flex-row items-center rounded-xl bg-card px-3 py-2.5 shadow-sm;
   }
 
   .filter-chip {
-    @apply border border-gray-200 bg-white dark:border-gray-600 dark:bg-gray-800;
+    @apply border border-border bg-card;
   }
 
   .filter-chip-active {
@@ -213,14 +310,14 @@
   }
 
   .modal-sheet {
-    @apply rounded-t-[22px] bg-white p-5 pb-7 dark:bg-gray-800;
+    @apply rounded-t-[22px] bg-card p-5 pb-7;
   }
 
   .page-header-title {
-    @apply text-2xl font-bold text-gray-900 dark:text-white;
+    @apply text-2xl font-bold text-foreground;
   }
 
   .list-row-title {
-    @apply text-sm font-semibold text-gray-900 dark:text-white;
+    @apply text-sm font-semibold text-foreground;
   }
 }

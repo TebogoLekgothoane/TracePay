@@ -1,30 +1,33 @@
 import {
   View,
   Text,
-  SafeAreaView,
   ScrollView,
+  Image,
+  Pressable,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+
 import { Button } from "@/components/Button";
-import { TracePayLogo } from "@/components/TracePayLogo";
+import { OnboardingHeader, ONBOARDING_STEPS } from "@/components/OnboardingHeader";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import { useProfileStore } from "@/stores/profileStore";
 import { cn } from "@/lib/cn";
 
+const robotSource = require("@/assets/images/robothandup.png");
+
 const LANGUAGES = [
-  { code: "English", label: "English", sub: "South African English", pop: "Most widely used" },
-  { code: "isiZulu", label: "isiZulu", sub: "KwaZulu-Natal, Gauteng", pop: "~25% of SA" },
-  { code: "isiXhosa", label: "isiXhosa", sub: "Eastern Cape, Western Cape", pop: "~19% of SA" },
-  { code: "Afrikaans", label: "Afrikaans", sub: "Western Cape, Northern Cape", pop: "~13% of SA" },
-  { code: "Sesotho", label: "Sesotho", sub: "Free State, Gauteng", pop: "~8% of SA" },
-  { code: "Setswana", label: "Setswana", sub: "North West, Gauteng", pop: "~8% of SA" },
-  { code: "Sepedi", label: "Sepedi", sub: "Limpopo, Mpumalanga", pop: "~9% of SA" },
-  { code: "SiSwati", label: "SiSwati", sub: "Mpumalanga, Eswatini border", pop: "~3% of SA" },
-  { code: "Xitsonga", label: "Xitsonga", sub: "Limpopo", pop: "~4% of SA" },
-  { code: "Tshivenda", label: "Tshivenda", sub: "Limpopo", pop: "~2% of SA" },
-  { code: "isiNdebele", label: "isiNdebele", sub: "Mpumalanga, Limpopo", pop: "~2% of SA" },
+  { code: "English", label: "English", sub: "English" },
+  { code: "Afrikaans", label: "Afrikaans", sub: "Afrikaans" },
+  { code: "isiZulu", label: "isiZulu", sub: "isiZulu" },
+  { code: "isiXhosa", label: "isiXhosa", sub: "isiXhosa" },
+  { code: "Sesotho", label: "Sesotho", sub: "Sesotho" },
+  { code: "Setswana", label: "Setswana", sub: "Setswana" },
 ];
+
+function getFlagEmoji(code: string) {
+  return code === "English" ? "🇬🇧" : "🇿🇦";
+}
 
 export default function LanguageScreen() {
   const { selectedLanguage, setSelectedLanguage } = useOnboardingStore();
@@ -36,88 +39,104 @@ export default function LanguageScreen() {
   };
 
   return (
-    <SafeAreaView className="screen">
-
-      <View className="onboarding-header">
-        <TracePayLogo />
-        <View className="step-dots">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <View
-              key={i}
-              className={cn(
-                "step-dot",
-                i === 0 && "step-dot-active",
-              )}
-            />
-          ))}
-        </View>
-      </View>
-
+    <SafeAreaView className="flex-1 bg-background">
       <ScrollView
         className="flex-1"
-        contentContainerClassName="screen-scroll-onboarding"
+        contentContainerStyle={{
+          paddingHorizontal: 24,
+          paddingBottom: 24,
+        }}
         showsVerticalScrollIndicator={false}
       >
-        <Text className="overline-brand mb-2.5">
-          STEP 1 OF 5
-        </Text>
-        <Text className="heading-xl mb-2.5">
-          Choose your language
-        </Text>
-        <Text className="body-text text-[15px] leading-[22px] mb-6">
-          TracePay supports all 11 official South African languages.
-        </Text>
+        <OnboardingHeader currentStep={ONBOARDING_STEPS.language} />
 
-        <View className="gap-2.5">
+        {/* Hero */}
+        <View className="flex-row items-center mb-8">
+          <View className="flex-1 pr-2">
+            <Text className="text-4xl font-bold leading-[44px] text-foreground">
+              Choose your{"\n"}
+              ideal{" "}
+              <Text className="text-brand-purple">
+                language
+              </Text>
+            </Text>
+
+            <Text className="mt-3 text-base leading-6 text-muted-foreground">
+              Select the language you'd like to use TracePay in.
+            </Text>
+          </View>
+          
+
+          <Image
+            source={robotSource}
+            resizeMode="contain"
+            className="h-[200px] w-[200px]"
+          />
+          
+        </View>
+
+        {/* Language Cards */}
+        <View className="gap-3">
           {LANGUAGES.map((lang) => {
             const isSelected = selectedLanguage === lang.code;
+
             return (
-              <Button
+              <Pressable
                 key={lang.code}
-                variant="outline"
-                className={cn(
-                  "flex-row items-center gap-3 rounded-[14px] p-3.5",
-                  isSelected && "border-brand-purple bg-brand-purple-faint",
-                )}
                 onPress={() => setSelectedLanguage(lang.code)}
+                className={cn(
+                  "flex-row items-center rounded-[28px] border px-5 py-5 bg-card",
+                  isSelected
+                    ? "border-brand-purple bg-brand-purple/5"
+                    : "border-border"
+                )}
               >
-                <Text className="text-[22px]">🇿🇦</Text>
+                <Text className="mr-4 text-[28px]">
+                  {getFlagEmoji(lang.code)}
+                </Text>
+
                 <View className="flex-1">
-                  <Text
-                    className={cn(
-                      "text-[15px] font-semibold text-subtle mb-0.5",
-                      isSelected && "text-brand-purple",
-                    )}
-                  >
+                  <Text className="text-[17px] font-semibold text-foreground">
                     {lang.label}
                   </Text>
-                  <Text className="caption">
-                    {lang.sub} · {lang.pop}
+
+                  <Text className="mt-1 text-sm text-muted-foreground">
+                    {lang.sub}
                   </Text>
                 </View>
+
                 <View
                   className={cn(
-                    "w-[22px] h-[22px] rounded-full border-2 border-gray-300 items-center justify-center",
-                    isSelected && "border-brand-purple",
+                    "h-7 w-7 rounded-full border-2 items-center justify-center",
+                    isSelected
+                      ? "border-brand-purple"
+                      : "border-border"
                   )}
                 >
-                  {isSelected && <View className="w-2.5 h-2.5 rounded-full bg-brand-purple" />}
+                  {isSelected && (
+                    <View className="h-3 w-3 rounded-full bg-brand-purple" />
+                  )}
                 </View>
-              </Button>
+              </Pressable>
             );
           })}
         </View>
       </ScrollView>
 
-      <View className="onboarding-footer">
+      {/* Footer */}
+      <View className="border-t border-border bg-background px-6 pb-6 pt-4">
         <Button
           size="lg"
           fullWidth
+          className="h-14 rounded-[24px]"
           onPress={handleContinue}
-          iconRight={<MaterialCommunityIcons name="arrow-right" size={20} color="#fff" />}
         >
           Continue
         </Button>
+
+        <Text className="mt-5 text-center text-sm text-muted-foreground">
+           You can change this later in Settings
+        </Text>
       </View>
     </SafeAreaView>
   );

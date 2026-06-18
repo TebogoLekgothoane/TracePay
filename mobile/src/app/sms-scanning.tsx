@@ -11,7 +11,7 @@ import { Button } from "@/components/Button";
 import { Screen } from "@/components/Screen";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useIngestion } from "@/context/SMSIngestionContext";
-import { useTheme } from "@/context/theme-context";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { cn } from "@/lib/cn";
 import { getTransactionHeadline, getTransactionSummary } from "@/lib/transaction-display";
 
@@ -21,7 +21,7 @@ export default function SmsScanningScreen() {
 
   const { syncNow, isLoading, error, state, transactions, openPermissionSettings, refreshPermission } =
     useIngestion();
-  const { c } = useTheme();
+  const { colors } = useColorScheme();
 
   const [phase, setPhase] = useState<"preparing" | "reading" | "analysing" | "done" | "failed">("preparing");
   const [scanError, setScanError] = useState<string | null>(null);
@@ -128,7 +128,7 @@ export default function SmsScanningScreen() {
               onPress={() => router.back()}
               className="back-btn"
             >
-              <Feather name="arrow-left" size={22} color={c.text} />
+              <Feather name="arrow-left" size={22} color={colors.foreground} />
             </Button>
           ) : null}
           <View className="flex-1 min-w-[140px]">

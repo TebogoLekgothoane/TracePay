@@ -57,33 +57,33 @@ const variantClasses: Record<
   { container: string; text: string; spinnerColor: string }
 > = {
   primary: {
-    container: "bg-brand-purple shadow-md dark:bg-violet-400",
-    text: "text-white",
+    container: "bg-brand-purple shadow-md dark:bg-brand-purple-dark",
+    text: "text-primary-foreground",
     spinnerColor: "#FFFFFF",
   },
   secondary: {
-    container: "bg-gray-100 dark:bg-gray-800",
-    text: "text-gray-700 dark:text-gray-200",
+    container: "bg-secondary",
+    text: "text-secondary-foreground",
     spinnerColor: "#374151",
   },
   outline: {
-    container: "border-[1.5px] border-border bg-white shadow-sm dark:border-gray-600 dark:bg-gray-800",
-    text: "text-gray-500 dark:text-gray-300",
+    container: "border-[1.5px] border-border bg-card shadow-sm",
+    text: "text-muted-foreground",
     spinnerColor: "#6B7280",
   },
   ghost: {
     container: "bg-transparent",
-    text: "text-brand-purple",
+    text: "text-primary",
     spinnerColor: "#7C3AED",
   },
   destructive: {
-    container: "bg-red-600",
-    text: "text-white",
+    container: "bg-destructive",
+    text: "text-primary-foreground",
     spinnerColor: "#FFFFFF",
   },
   link: {
     container: "bg-transparent py-1 px-0 min-h-0",
-    text: "text-brand-purple font-semibold text-sm",
+    text: "text-primary font-semibold text-sm",
     spinnerColor: "#7C3AED",
   },
   accent: {

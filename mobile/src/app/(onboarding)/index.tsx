@@ -11,7 +11,7 @@ import {
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { Button } from "@/components/Button";
-import { TracePayLogo } from "@/components/TracePayLogo";
+import { OnboardingHeader, ONBOARDING_STEPS } from "@/components/OnboardingHeader";
 import { AuthError } from "@/lib/auth-errors";
 import { useProfileStore } from "@/stores/profileStore";
 import { cn } from "@/lib/cn";
@@ -69,10 +69,9 @@ export default function AuthScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <View className="items-center mb-8 gap-2">
-            <TracePayLogo size={96} layout="column" />
-            <Text className="body-text mt-1">Your money guardian</Text>
-          </View>
+          <OnboardingHeader currentStep={ONBOARDING_STEPS.auth} />
+
+          <Text className="body-text mb-8 mt-2 text-center">Your money guardian</Text>
 
           <View className="card-lg mb-5">
             <View className="flex-row bg-gray-100 dark:bg-gray-800 rounded-[10px] p-1 mb-6">

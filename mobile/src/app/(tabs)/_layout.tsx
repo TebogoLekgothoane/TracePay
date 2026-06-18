@@ -6,7 +6,7 @@ import { SymbolView } from "expo-symbols";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { Platform, View } from "react-native";
-import { useTheme } from "@/context/theme-context";
+import { useColorScheme } from "@/hooks/useColorScheme";
 
 function NativeTabLayout() {
   return (
@@ -28,21 +28,21 @@ function NativeTabLayout() {
 }
 
 function ClassicTabLayout() {
-  const { isDark, c } = useTheme();
+  const { isDarkColorScheme, colors } = useColorScheme();
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: "#7C3AED",
-        tabBarInactiveTintColor: "#9CA3AF",
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.mutedForeground,
         headerShown: false,
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: isIOS ? "transparent" : c.surface,
+          backgroundColor: isIOS ? "transparent" : colors.card,
           borderTopWidth: 1,
-          borderTopColor: c.borderSoft,
+          borderTopColor: colors.border,
           elevation: 0,
           height: isWeb ? 84 : 60,
           paddingBottom: isWeb ? 20 : 8,
@@ -55,11 +55,11 @@ function ClassicTabLayout() {
           isIOS ? (
             <BlurView
               intensity={100}
-              tint={isDark ? "dark" : "light"}
+              tint={isDarkColorScheme ? "dark" : "light"}
               className="absolute inset-0"
             />
           ) : isWeb ? (
-            <View className={isDark ? "absolute inset-0 bg-gray-900" : "absolute inset-0 bg-white"} />
+            <View className="absolute inset-0 bg-card" />
           ) : null,
       }}
     >
