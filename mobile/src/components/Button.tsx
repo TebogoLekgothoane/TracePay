@@ -128,7 +128,7 @@ export function Button({
       accessibilityLabel={accessibilityLabel ?? (isTextChild(children) ? children : undefined)}
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       className={cn(
-        "flex-row items-center justify-center gap-2 active:opacity-90 active:scale-[0.98]",
+        "flex-row items-center justify-center rounded-full gap-2 active:opacity-90 active:scale-[0.98]",
         sizeClasses[size],
         variantStyle.container,
         fullWidth && "w-full",

@@ -183,7 +183,7 @@ export default function ConsentScreen() {
     const status = await refreshPermission();
     if (status === "granted") {
       setPermissionBlocked(false);
-      router.push("/(onboarding)/connect-accounts");
+      router.push("/(onboarding)");
       return true;
     }
     setPermissionBlocked(true);
@@ -197,7 +197,7 @@ export default function ConsentScreen() {
 
     const status = await requestPermission();
     if (status === "granted") {
-      router.push("/(onboarding)/connect-accounts");
+      router.push("/(onboarding)");
       return;
     }
 

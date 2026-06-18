@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -10,14 +10,16 @@ import {
   ScrollView,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { router, useLocalSearchParams } from "expo-router";
 import { Button } from "@/components/Button";
 import { TracePayLogo } from "@/components/TracePayLogo";
 import { AuthError } from "@/lib/auth-errors";
 import { useProfileStore } from "@/stores/profileStore";
 import { cn } from "@/lib/cn";
 
-export default function WelcomeScreen() {
-  const [mode, setMode] = useState<"signup" | "signin">("signup");
+export default function AuthScreen() {
+  const { mode: modeParam } = useLocalSearchParams<{ mode?: string }>();
+  const [authMode, setAuthMode] = useState<"signup" | "signin">("signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
@@ -29,7 +31,11 @@ export default function WelcomeScreen() {
   const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
   const isValidPassword = password.length >= 6;
   const isValidPhone = phone.replace(/\s/g, "").length >= 9;
-  const isValid = isValidEmail && isValidPassword && (mode === "signin" || isValidPhone);
+  const isValid = isValidEmail && isValidPassword && (authMode === "signin" || isValidPhone);
+
+  useEffect(() => {
+    if (modeParam === "signin") setAuthMode("signin");
+  }, [modeParam]);
 
   const handleSubmit = async () => {
     if (!isValid) return;
@@ -40,12 +46,12 @@ export default function WelcomeScreen() {
         ? "+27" + phone.replace(/\s/g, "").slice(1)
         : phone.replace(/\s/g, "");
 
-      if (mode === "signup") {
+      if (authMode === "signup") {
         await signUp(normalizedEmail, password, cleanPhone);
       } else {
         await signIn(normalizedEmail, password);
       }
-      // NavigationGuard routes to onboarding or tabs based on onboardingComplete.
+      router.replace("/sms-scanning");
     } catch (e) {
       setError(e instanceof AuthError ? e.message : "Something went wrong. Please try again.");
     } finally {
@@ -76,15 +82,15 @@ export default function WelcomeScreen() {
                 variant="ghost"
                 className={cn(
                   "flex-1 py-2.5 rounded-lg items-center justify-center",
-                  mode === "signup" && "bg-white shadow-sm",
+                  authMode === "signup" && "bg-white shadow-sm",
                 )}
                 onPress={() => {
-                  setMode("signup");
+                  setAuthMode("signup");
                   setError("");
                 }}
                 textClassName={cn(
                   "text-sm font-medium text-gray-500",
-                  mode === "signup" && "text-gray-900 font-semibold",
+                  authMode === "signup" && "text-gray-900 font-semibold",
                 )}
               >
                 Create Account
@@ -93,15 +99,15 @@ export default function WelcomeScreen() {
                 variant="ghost"
                 className={cn(
                   "flex-1 py-2.5 rounded-lg items-center justify-center",
-                  mode === "signin" && "bg-white shadow-sm",
+                  authMode === "signin" && "bg-white shadow-sm",
                 )}
                 onPress={() => {
-                  setMode("signin");
+                  setAuthMode("signin");
                   setError("");
                 }}
                 textClassName={cn(
                   "text-sm font-medium text-gray-500",
-                  mode === "signin" && "text-gray-900 font-semibold",
+                  authMode === "signin" && "text-gray-900 font-semibold",
                 )}
               >
                 Sign In
@@ -109,10 +115,10 @@ export default function WelcomeScreen() {
             </View>
 
             <Text className="heading-lg mb-1.5">
-              {mode === "signup" ? "Create your account" : "Welcome back"}
+              {authMode === "signup" ? "Create your account" : "Welcome back"}
             </Text>
             <Text className="body-text leading-5 mb-6">
-              {mode === "signup"
+              {authMode === "signup"
                 ? "Use your email, password and phone number to create your TracePay account."
                 : "Use your email and password to sign back in."}
             </Text>
@@ -148,13 +154,13 @@ export default function WelcomeScreen() {
                   autoCapitalize="none"
                   autoCorrect={false}
                   secureTextEntry
-                  returnKeyType={mode === "signup" ? "next" : "done"}
-                  onSubmitEditing={mode === "signin" ? handleSubmit : undefined}
+                  returnKeyType={authMode === "signup" ? "next" : "done"}
+                  onSubmitEditing={authMode === "signin" ? handleSubmit : undefined}
                 />
               </View>
             </View>
 
-            {mode === "signup" && (
+            {authMode === "signup" && (
               <View className="field">
                 <Text className="field-label">SA phone number</Text>
                 <View className="input-group">
@@ -190,7 +196,7 @@ export default function WelcomeScreen() {
                 ) : undefined
               }
             >
-              {mode === "signup" ? "Create Account" : "Sign In"}
+              {authMode === "signup" ? "Create Account" : "Sign In"}
             </Button>
           </View>
 

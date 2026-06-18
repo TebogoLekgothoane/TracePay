@@ -40,21 +40,27 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
 
     const root = segments[0] as string | undefined;
     const inOnboarding = root === "(onboarding)";
-    const onWelcome = root === "welcome";
     const onBoot = !root || root === "index";
     const onSmsFlow = root === "sms-scanning" || root === "sms-results";
 
+    if (onBoot) {
+      if (!isAuthenticated) router.replace("/(onboarding)/language");
+      else if (!onboardingComplete) router.replace("/sms-scanning");
+      else router.replace("/(tabs)");
+      return;
+    }
+
     if (!isAuthenticated) {
-      if (!onWelcome) router.replace("/welcome");
+      if (!inOnboarding) router.replace("/(onboarding)/language");
       return;
     }
 
     if (!onboardingComplete) {
-      if (!inOnboarding && !onSmsFlow) router.replace("/(onboarding)/language");
+      if (!onSmsFlow) router.replace("/sms-scanning");
       return;
     }
 
-    if (inOnboarding || onWelcome || onBoot) {
+    if (inOnboarding || onBoot) {
       router.replace("/(tabs)");
     }
   }, [isLoaded, isAuthenticated, onboardingComplete, segments]);
@@ -72,7 +78,7 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
 function RootLayoutNav() {
   return (
     <Stack screenOptions={{ headerBackTitle: "Back" }}>
-      <Stack.Screen name="welcome" options={{ headerShown: false, animation: "none" }} />
+      <Stack.Screen name="index" options={{ headerShown: false, animation: "none" }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: "none" }} />
       <Stack.Screen name="(onboarding)" options={{ headerShown: false, animation: "none" }} />
       <Stack.Screen name="history" options={{ headerShown: false, presentation: "card" }} />

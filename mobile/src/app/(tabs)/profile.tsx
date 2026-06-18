@@ -85,7 +85,7 @@ export default function ProfileScreen() {
 
   const doSignOut = async () => {
     await signOut();
-    router.replace("/welcome");
+    router.replace("/(onboarding)/language");
   };
 
   const handleSignOut = () => {

@@ -116,6 +116,27 @@
     @apply bg-brand-purple-muted;
   }
 
+  /* ── Welcome (onboarding) ───────────────────────────── */
+  .welcome-screen {
+    @apply flex-1 bg-navy;
+  }
+
+  .welcome-headline {
+    @apply text-4xl font-bold text-white leading-tight tracking-tight;
+  }
+
+  .welcome-subheadline {
+    @apply mt-3 text-lg font-sans leading-7 text-gray-400;
+  }
+
+  .welcome-hero-wrap {
+    @apply my-2 min-h-0 flex-1 items-center justify-center;
+  }
+
+  .welcome-hero-image {
+    @apply h-full w-full max-h-80 max-w-md;
+  }
+
   /* ── Actions / buttons ───────────────────────────────── */
   .btn-freeze-apply {
     @apply rounded-xl items-center justify-center;

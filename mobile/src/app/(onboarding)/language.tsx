@@ -33,7 +33,7 @@ export default function LanguageScreen() {
 
   const handleContinue = () => {
     setLanguage(selectedLanguage);
-    router.push("/(onboarding)/features");
+    router.push("/(onboarding)/welcome");
   };
 
   return (
@@ -43,7 +43,7 @@ export default function LanguageScreen() {
       <View className="onboarding-header">
         <TracePayLogo />
         <View className="step-dots">
-          {[0, 1, 2, 3].map((i) => (
+          {[0, 1, 2, 3, 4].map((i) => (
             <View
               key={i}
               className={cn(
@@ -61,7 +61,7 @@ export default function LanguageScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text className="overline-brand mb-2.5">
-          STEP 1 OF 4
+          STEP 1 OF 5
         </Text>
         <Text className="heading-xl mb-2.5">
           Choose your language

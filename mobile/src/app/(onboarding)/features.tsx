@@ -50,13 +50,13 @@ export default function FeaturesScreen() {
       <View className="onboarding-header">
         <TracePayLogo />
         <View className="step-dots">
-          {[0, 1, 2, 3].map((i) => (
+          {[0, 1, 2, 3, 4].map((i) => (
             <View
               key={i}
               className={cn(
                 "step-dot",
-                i === 1 && "step-dot-active",
-                i < 1 && "step-dot-done",
+                i === 2 && "step-dot-active",
+                i < 2 && "step-dot-done",
               )}
             />
           ))}
@@ -69,7 +69,7 @@ export default function FeaturesScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text className="overline-brand mb-2.5">
-          STEP 2 OF 4
+          STEP 3 OF 5
         </Text>
         <Text className="heading-xl mb-2.5">
           What TracePay does
