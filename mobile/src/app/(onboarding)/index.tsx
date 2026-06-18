@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   SafeAreaView,
-  StatusBar,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -61,7 +60,6 @@ export default function AuthScreen() {
 
   return (
     <SafeAreaView className="screen">
-      <StatusBar barStyle="dark-content" />
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -77,12 +75,12 @@ export default function AuthScreen() {
           </View>
 
           <View className="card-lg mb-5">
-            <View className="flex-row bg-gray-100 rounded-[10px] p-1 mb-6">
+            <View className="flex-row bg-gray-100 dark:bg-gray-800 rounded-[10px] p-1 mb-6">
               <Button
                 variant="ghost"
                 className={cn(
                   "flex-1 py-2.5 rounded-lg items-center justify-center",
-                  authMode === "signup" && "bg-white shadow-sm",
+                  authMode === "signup" && "bg-white dark:bg-gray-700 shadow-sm",
                 )}
                 onPress={() => {
                   setAuthMode("signup");
@@ -90,7 +88,7 @@ export default function AuthScreen() {
                 }}
                 textClassName={cn(
                   "text-sm font-medium text-gray-500",
-                  authMode === "signup" && "text-gray-900 font-semibold",
+                  authMode === "signup" && "text-strong font-semibold",
                 )}
               >
                 Create Account
@@ -99,7 +97,7 @@ export default function AuthScreen() {
                 variant="ghost"
                 className={cn(
                   "flex-1 py-2.5 rounded-lg items-center justify-center",
-                  authMode === "signin" && "bg-white shadow-sm",
+                  authMode === "signin" && "bg-white dark:bg-gray-700 shadow-sm",
                 )}
                 onPress={() => {
                   setAuthMode("signin");
@@ -107,7 +105,7 @@ export default function AuthScreen() {
                 }}
                 textClassName={cn(
                   "text-sm font-medium text-gray-500",
-                  authMode === "signin" && "text-gray-900 font-semibold",
+                  authMode === "signin" && "text-strong font-semibold",
                 )}
               >
                 Sign In
@@ -164,7 +162,7 @@ export default function AuthScreen() {
               <View className="field">
                 <Text className="field-label">SA phone number</Text>
                 <View className="input-group">
-                  <Text className="text-[15px] font-medium text-gray-700">+27</Text>
+                  <Text className="text-[15px] font-medium text-subtle">+27</Text>
                   <TextInput
                     className="input-field"
                     placeholder="72 123 4567"

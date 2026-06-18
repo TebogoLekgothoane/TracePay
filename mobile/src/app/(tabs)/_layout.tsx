@@ -5,7 +5,8 @@ import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
-import { Platform, View, useColorScheme } from "react-native";
+import { Platform, View } from "react-native";
+import { useTheme } from "@/context/theme-context";
 
 function NativeTabLayout() {
   return (
@@ -27,8 +28,7 @@ function NativeTabLayout() {
 }
 
 function ClassicTabLayout() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { isDark, c } = useTheme();
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
 
@@ -40,9 +40,9 @@ function ClassicTabLayout() {
         headerShown: false,
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: isIOS ? "transparent" : "#FFFFFF",
+          backgroundColor: isIOS ? "transparent" : c.surface,
           borderTopWidth: 1,
-          borderTopColor: "#F3F4F6",
+          borderTopColor: c.borderSoft,
           elevation: 0,
           height: isWeb ? 84 : 60,
           paddingBottom: isWeb ? 20 : 8,
@@ -59,7 +59,7 @@ function ClassicTabLayout() {
               className="absolute inset-0"
             />
           ) : isWeb ? (
-            <View className="absolute inset-0 bg-white" />
+            <View className={isDark ? "absolute inset-0 bg-gray-900" : "absolute inset-0 bg-white"} />
           ) : null,
       }}
     >

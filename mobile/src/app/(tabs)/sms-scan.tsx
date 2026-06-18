@@ -48,7 +48,7 @@ export default function SmsScanScreen() {
             <MaterialCommunityIcons name="message-text-outline" size={20} color="#7C3AED" />
           </View>
           <View className="flex-1">
-            <Text className="text-[15px] font-semibold text-gray-900 mb-0.5">{source.name}</Text>
+            <Text className="text-[15px] font-semibold text-strong mb-0.5">{source.name}</Text>
             <Text className="body-text">{source.preview}</Text>
           </View>
         </View>

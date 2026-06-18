@@ -1,5 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { Appearance } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { colorScheme } from "nativewind";
+
 import { COLORS, ThemeColors } from "@/theme/theme";
 
 const STORAGE_KEY = "@tracepay:darkMode";
@@ -16,18 +19,27 @@ const ThemeContext = createContext<ThemeCtx>({
   c: COLORS.light,
 });
 
+function applyScheme(dark: boolean) {
+  const scheme = dark ? "dark" : "light";
+  colorScheme.set(scheme);
+  Appearance.setColorScheme(scheme);
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((v) => {
-      if (v === "1") setIsDark(true);
+      const dark = v === "1";
+      setIsDark(dark);
+      applyScheme(dark);
     });
   }, []);
 
   const toggle = async () => {
     const next = !isDark;
     setIsDark(next);
+    applyScheme(next);
     await AsyncStorage.setItem(STORAGE_KEY, next ? "1" : "0");
   };
 

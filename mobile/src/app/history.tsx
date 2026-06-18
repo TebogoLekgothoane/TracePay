@@ -13,6 +13,7 @@ import { Button } from "@/components/Button";
 import { useScreenInsets } from "@/hooks/useScreenInsets";
 import { router, Stack } from "expo-router";
 import { useIngestion } from "@/context/SMSIngestionContext";
+import { useTheme } from "@/context/theme-context";
 import { ParsedTransaction, TransactionCategory } from "@/services/sms/sms.types";
 import { cn } from "@/lib/cn";
 import { getTransactionHeadline, getTransactionSummary } from "@/lib/transaction-display";
@@ -88,6 +89,7 @@ function buildListItems(transactions: ParsedTransaction[], search: string): List
 
 export default function HistoryScreen() {
   const { contentPadding } = useScreenInsets("compact");
+  const { c } = useTheme();
   const [search, setSearch] = useState("");
   const [showLeaksOnly, setShowLeaksOnly] = useState(false);
   const [dateRange, setDateRange] = useState<DateRangeFilter>("all");
@@ -123,7 +125,7 @@ export default function HistoryScreen() {
     const isDebit = tx.type === "debit";
 
     return (
-      <View className="flex-row items-center bg-white rounded-xl p-3.5 mb-2 shadow-sm">
+      <View className="card-row">
         <View
           className={cn(
             "w-[38px] h-[38px] rounded-[10px] items-center justify-center mr-3",
@@ -137,18 +139,18 @@ export default function HistoryScreen() {
           />
         </View>
         <View className="flex-1 min-w-0">
-          <Text className="text-sm font-semibold text-gray-900 mb-0.5" numberOfLines={1}>
+          <Text className="list-row-title mb-0.5" numberOfLines={1}>
             {getTransactionHeadline(tx)}
           </Text>
           <Text className="text-xs font-sans text-gray-500 mb-1.5" numberOfLines={2}>
             {getTransactionSummary(tx)}
           </Text>
           <View className="flex-row gap-1.5 flex-wrap">
-            <View className="bg-gray-100 px-2 py-0.5 rounded-md">
-              <Text className="text-[11px] font-medium text-gray-700">{tx.bank}</Text>
+            <View className="bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-md">
+              <Text className="text-[11px] font-medium text-subtle">{tx.bank}</Text>
             </View>
-            <View className="bg-gray-100 px-2 py-0.5 rounded-md">
-              <Text className="text-[11px] font-medium text-gray-700">{tx.category}</Text>
+            <View className="bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-md">
+              <Text className="text-[11px] font-medium text-subtle">{tx.category}</Text>
             </View>
             {tx.confidence === "low" && (
               <View className="bg-yellow-100 px-2 py-0.5 rounded-md">
@@ -183,10 +185,10 @@ export default function HistoryScreen() {
           onPress={() => router.back()}
           className="back-btn mt-0.5"
         >
-          <Feather name="arrow-left" size={22} color="#111827" />
+          <Feather name="arrow-left" size={22} color={c.text} />
         </Button>
         <View className="flex-1">
-          <Text className="text-2xl font-bold text-gray-900 mb-0.5">Transaction History</Text>
+          <Text className="page-header-title mb-0.5">Transaction History</Text>
           <Text className="text-sm font-sans text-gray-500">
             {state.isListening ? "Live" : "Paused"} · {filtered.length} of {state.totalIngested} shown
           </Text>
@@ -200,12 +202,12 @@ export default function HistoryScreen() {
       </View>
 
       <View className="flex-row gap-2.5 mb-3">
-        <View className="flex-1 flex-row items-center bg-white rounded-xl px-3 py-2.5 shadow-sm">
+        <View className="search-bar">
           <View className="mr-2">
-            <Feather name="search" size={16} color="#9CA3AF" />
+            <Feather name="search" size={16} color={c.textMuted} />
           </View>
           <TextInput
-            className="flex-1 text-sm font-sans text-gray-900"
+            className="flex-1 text-sm font-sans text-strong"
             placeholder="Search merchant, bank, category…"
             placeholderTextColor="#9CA3AF"
             value={search}
@@ -236,13 +238,13 @@ export default function HistoryScreen() {
               onPress={() => setDateRange(option.id)}
               className={cn(
                 "px-3.5 py-2 rounded-full border",
-                active ? "bg-brand-purple border-brand-purple" : "bg-white border-gray-200",
+                active ? "filter-chip-active" : "filter-chip",
               )}
             >
               <Text
                 className={cn(
                   "text-[13px] font-semibold",
-                  active ? "text-white" : "text-gray-700",
+                  active ? "text-white" : "text-subtle",
                 )}
               >
                 {option.label}

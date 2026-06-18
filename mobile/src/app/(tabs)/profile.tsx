@@ -12,6 +12,7 @@ import { Screen } from "@/components/Screen";
 import { useProfileStore } from "@/stores/profileStore";
 import { useVoice } from "@/hooks/useVoice";
 import { useLeaksStore } from "@/stores/leaksStore";
+import { useTheme } from "@/context/theme-context";
 import { router } from "expo-router";
 import { cn } from "@/lib/cn";
 
@@ -27,6 +28,7 @@ export default function ProfileScreen() {
   } = useProfileStore();
   const { leaks } = useLeaksStore();
   const { speak } = useVoice();
+  const { isDark, toggle } = useTheme();
 
   const totalLeaking = leaks
     .filter((l) => l.status === "active")
@@ -114,7 +116,7 @@ export default function ProfileScreen() {
       <Text className="heading-xl mb-5">Profile</Text>
 
       <View className="card flex-row items-center mb-3">
-          <View className="w-[60px] h-[60px] rounded-[14px] bg-brand-purple-light items-center justify-center mr-3.5">
+          <View className="w-[60px] h-[60px] rounded-[14px] bg-brand-purple-light dark:bg-brand-purple-dark/40 items-center justify-center mr-3.5">
             <MaterialCommunityIcons name="account-outline" size={32} color="#7C3AED" />
           </View>
           <View className="flex-1">
@@ -139,12 +141,28 @@ export default function ProfileScreen() {
           </Button>
       </View>
 
-      <View className="flex-row items-center bg-white rounded-[14px] p-4 mb-3 shadow-sm">
-        <View className="w-[42px] h-[42px] rounded-[10px] bg-brand-purple-light items-center justify-center mr-3">
+      <View className="surface-panel flex-row items-center p-4 mb-3">
+        <View className="w-[42px] h-[42px] rounded-[10px] bg-brand-purple-light dark:bg-brand-purple-dark/40 items-center justify-center mr-3">
+          <MaterialCommunityIcons name="moon-waning-crescent" size={20} color="#7C3AED" />
+        </View>
+        <View className="flex-1">
+          <Text className="text-[15px] font-semibold text-gray-900 dark:text-white mb-0.5">Dark Mode</Text>
+          <Text className="body-text">{isDark ? "On" : "Off"}</Text>
+        </View>
+        <Switch
+          value={isDark}
+          onValueChange={toggle}
+          trackColor={{ false: "#E5E7EB", true: "#7C3AED" }}
+          thumbColor="#FFFFFF"
+        />
+      </View>
+
+      <View className="surface-panel flex-row items-center p-4 mb-3">
+        <View className="w-[42px] h-[42px] rounded-[10px] bg-brand-purple-light dark:bg-brand-purple-dark/40 items-center justify-center mr-3">
           <Ionicons name="volume-medium-outline" size={20} color="#7C3AED" />
         </View>
         <View className="flex-1">
-          <Text className="text-[15px] font-semibold text-gray-900 mb-0.5">Voice Narration</Text>
+          <Text className="text-[15px] font-semibold text-gray-900 dark:text-white mb-0.5">Voice Narration</Text>
           <Text className="body-text">Hear insights in {language}</Text>
         </View>
         <Switch
@@ -156,7 +174,7 @@ export default function ProfileScreen() {
       </View>
 
       {totalLeaking > 0 && (
-        <View className="flex-row items-center bg-red-50 rounded-xl p-3.5 mb-4 border border-red-200">
+        <View className="flex-row items-center rounded-xl border border-red-200 bg-red-50 p-3.5 mb-4 dark:border-red-800 dark:bg-red-900/30">
           <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#DC2626" />
           <Text className="text-sm font-sans text-gray-700 flex-1">
             {" "}<Text className="font-bold text-red-600">R{totalLeaking.toFixed(2)}/month</Text> leaking from {leaks.filter((l) => l.status === "active").length} active leaks
@@ -166,16 +184,16 @@ export default function ProfileScreen() {
 
       <Text className="label-sm mb-2.5">Connected Accounts</Text>
 
-      <View className="bg-white rounded-[14px] px-3.5 mb-5 shadow-sm">
+      <View className="surface-panel px-3.5 mb-5">
         {connectedList.map((acc, i) => (
           <View key={acc.id}>
-            {i > 0 && <View className="h-px bg-gray-100" />}
+            {i > 0 && <View className="surface-divider" />}
             <View className="flex-row items-center py-3.5">
               <View className={cn("w-[42px] h-[42px] rounded-[10px] items-center justify-center mr-3", acc.iconBg)}>
                 <MaterialCommunityIcons name={acc.iconName as any} size={20} color={acc.iconColor} />
               </View>
               <View className="flex-1">
-                <Text className="text-[15px] font-semibold text-gray-900 mb-0.5">{acc.name}</Text>
+                <Text className="text-[15px] font-semibold text-gray-900 dark:text-white mb-0.5">{acc.name}</Text>
                 <Text className="body-text">{acc.sub}</Text>
               </View>
               {acc.connected ? (
@@ -194,13 +212,13 @@ export default function ProfileScreen() {
         ))}
       </View>
 
-      <View className="bg-white rounded-[14px] px-3.5 mb-4 shadow-sm">
+      <View className="surface-panel px-3.5 mb-4">
         {menuItems.map((item, i) => (
           <View key={item.id}>
-            {i > 0 && <View className="h-px bg-gray-100" />}
+            {i > 0 && <View className="surface-divider" />}
             <Button variant="ghost" className="flex-row items-center py-3.5 gap-3" onPress={item.onPress}>
               <MaterialCommunityIcons name={item.icon as any} size={20} color="#374151" />
-              <Text className="flex-1 text-[15px] font-medium text-gray-900">{item.label}</Text>
+              <Text className="flex-1 text-[15px] font-medium text-gray-900 dark:text-white">{item.label}</Text>
               <View className="flex-row items-center gap-1.5">
                 {item.value ? <Text className="body-text">{item.value}</Text> : null}
                 {item.hasChevron && <Feather name="chevron-right" size={16} color="#9CA3AF" />}
@@ -210,7 +228,7 @@ export default function ProfileScreen() {
         ))}
       </View>
 
-      <View className="bg-brand-purple-light rounded-[14px] p-4 mb-4">
+      <View className="rounded-[14px] bg-brand-purple-light p-4 mb-4 dark:bg-brand-purple-dark/40">
         <View className="flex-row items-center mb-2">
           <MaterialCommunityIcons name="shield-lock-outline" size={18} color="#7C3AED" />
           <Text className="text-sm font-semibold text-brand-purple"> Your Data is Protected</Text>

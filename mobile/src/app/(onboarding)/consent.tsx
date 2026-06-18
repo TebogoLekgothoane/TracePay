@@ -106,14 +106,14 @@ function ConsentSection({
   return (
     <Animated.View
       entering={FadeInDown.delay(delay).springify()}
-      className="mb-4 rounded-xl bg-white p-4 shadow-sm"
+      className="card mb-4"
     >
-      <Text className="mb-3 text-base font-semibold text-gray-900">{title}</Text>
+      <Text className="mb-3 text-base font-semibold text-strong">{title}</Text>
       <View className="gap-2">
         {items.map((item, index) => (
           <View key={index} className="flex-row items-start">
             <View className="mr-3 mt-2 h-1.5 w-1.5 rounded-full bg-blue-600" />
-            <Text className="flex-1 text-sm font-sans leading-5 text-gray-500">{item}</Text>
+                <Text className="flex-1 text-sm font-sans leading-5 text-gray-500 dark:text-gray-400">{item}</Text>
           </View>
         ))}
       </View>
@@ -243,16 +243,16 @@ export default function ConsentScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Animated.View entering={FadeInDown.delay(50).springify()} className="pb-4">
-          <Text className="mb-2 text-[28px] font-bold text-gray-900">{t.consentTitle}</Text>
-          <Text className="mb-4 text-[15px] font-sans text-gray-500">{t.consentSubtitle}</Text>
-          <Text className="mb-6 text-[15px] font-sans leading-[22px] text-gray-900">
+          <Text className="heading-xl mb-2">{t.consentTitle}</Text>
+          <Text className="body-text text-[15px] mb-4">{t.consentSubtitle}</Text>
+          <Text className="body-text text-[15px] leading-[22px] text-strong mb-6">
             {t.consentIntro}
           </Text>
         </Animated.View>
 
         <View className="mb-10 flex-row items-stretch" onLayout={handleCardsSectionLayout}>
           <View className="relative mr-1 min-h-[200px] w-14">
-            <View className="absolute bottom-0 left-5 top-0 w-1.5 overflow-hidden rounded-[3px] bg-gray-300">
+            <View className="absolute bottom-0 left-5 top-0 w-1.5 overflow-hidden rounded-[3px] bg-gray-300 dark:bg-gray-600">
               <Animated.View
                 className="absolute left-0 right-0 top-0 rounded-[3px] bg-navy"
                 style={roadmapFillStyle}
@@ -283,10 +283,10 @@ export default function ConsentScreen() {
 
             <Animated.View
               entering={FadeInDown.delay(150).springify()}
-              className="mb-4 flex-row items-center justify-between rounded-xl bg-white p-4 shadow-sm"
+              className="card mb-4 flex-row items-center justify-between"
             >
               <View className="mr-4 flex-1">
-                <Text className="mb-3 text-base font-semibold text-gray-900">
+                <Text className="mb-3 text-base font-semibold text-strong">
                   {t.includeMomoData}
                 </Text>
                 <Text className="mt-1 text-[13px] font-sans leading-[18px] text-gray-500">

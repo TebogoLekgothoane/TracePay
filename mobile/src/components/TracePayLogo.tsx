@@ -36,7 +36,7 @@ export function TracePayLogo({
         accessibilityLabel="TracePay logo"
       />
       {showWordmark ? (
-        <Text className={cn("font-bold text-gray-900", isColumn ? "text-[28px]" : "text-lg", wordmarkClassName)}>
+        <Text className={cn("font-bold text-gray-900 dark:text-white", isColumn ? "text-[28px]" : "text-lg", wordmarkClassName)}>
           TracePay
         </Text>
       ) : null}

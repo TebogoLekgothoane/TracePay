@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, Image, StatusBar } from "react-native";
+import { View, Text, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
@@ -11,14 +11,8 @@ const robotSource = require("@/assets/images/herobot.png");
 export default function WelcomeScreen() {
   return (
     <SafeAreaView className="welcome-screen">
-      <StatusBar barStyle="light-content" />
-
       <View className="flex-1 px-6">
-        <TracePayLogo
-          size={96}
-          className="mt-5"
-          wordmarkClassName="text-white text-3xl font-bold tracking-wide"
-        />
+        <TracePayLogo size={96} className="mt-5" wordmarkClassName="welcome-wordmark" />
 
         <View className="mt-9">
           <Text className="welcome-headline">Stop hidden money leaks.</Text>

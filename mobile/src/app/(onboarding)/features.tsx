@@ -2,7 +2,6 @@ import {
   View,
   Text,
   SafeAreaView,
-  StatusBar,
   ScrollView,
 } from "react-native";
 import { router } from "expo-router";
@@ -45,7 +44,6 @@ const FEATURES = [
 export default function FeaturesScreen() {
   return (
     <SafeAreaView className="screen">
-      <StatusBar barStyle="dark-content" />
 
       <View className="onboarding-header">
         <TracePayLogo />
@@ -74,7 +72,7 @@ export default function FeaturesScreen() {
         <Text className="heading-xl mb-2.5">
           What TracePay does
         </Text>
-        <Text className="text-[15px] font-sans text-gray-500 leading-[22px] mb-7">
+        <Text className="body-text text-[15px] leading-[22px] mb-7">
           An AI-powered money guardian built for South Africans.
         </Text>
 
@@ -82,13 +80,13 @@ export default function FeaturesScreen() {
           {FEATURES.map((f, i) => (
             <View
               key={i}
-              className="flex-row items-start gap-3.5 bg-white rounded-[14px] p-4 border border-gray-100 shadow-sm"
+              className="card flex-row items-start gap-3.5 border border-gray-100 dark:border-gray-700"
             >
               <View className={cn("w-11 h-11 rounded-[11px] justify-center items-center shrink-0", f.iconBg)}>
                 <MaterialCommunityIcons name={f.icon} size={22} color={f.color} />
               </View>
               <View className="flex-1 pt-0.5">
-                <Text className="text-[15px] font-semibold text-gray-900 mb-1">{f.title}</Text>
+                <Text className="text-[15px] font-semibold text-strong mb-1">{f.title}</Text>
                 <Text className="body-text leading-[19px]">{f.desc}</Text>
               </View>
             </View>

@@ -18,8 +18,10 @@ import { View, ActivityIndicator } from "react-native";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useProfileStore } from "@/stores/profileStore";
+import { useTheme } from "@/context/theme-context";
 import { SMSIngestionProvider } from "@/context/SMSIngestionContext";
 import { ThemeProvider } from "@/context/theme-context";
+import { ThemeRoot } from "@/components/ThemeRoot";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -65,10 +67,12 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
     }
   }, [isLoaded, isAuthenticated, onboardingComplete, segments]);
 
+  const { c } = useTheme();
+
   if (!isLoaded) {
     return (
       <View className="screen items-center justify-center">
-        <ActivityIndicator size="large" color="#7C3AED" />
+        <ActivityIndicator size="large" color={c.primary} />
       </View>
     );
   }
@@ -109,15 +113,17 @@ export default function RootLayout() {
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <ThemeProvider>
-            <SMSIngestionProvider>
-              <GestureHandlerRootView className="flex-1">
-                <KeyboardProvider>
-                  <NavigationGuard>
-                    <RootLayoutNav />
-                  </NavigationGuard>
-                </KeyboardProvider>
-              </GestureHandlerRootView>
-            </SMSIngestionProvider>
+            <ThemeRoot>
+              <SMSIngestionProvider>
+                <GestureHandlerRootView className="flex-1">
+                  <KeyboardProvider>
+                    <NavigationGuard>
+                      <RootLayoutNav />
+                    </NavigationGuard>
+                  </KeyboardProvider>
+                </GestureHandlerRootView>
+              </SMSIngestionProvider>
+            </ThemeRoot>
           </ThemeProvider>
         </QueryClientProvider>
       </ErrorBoundary>

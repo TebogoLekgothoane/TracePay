@@ -78,7 +78,7 @@ export default function CircularProgress({
       </Svg>
       <View className="items-center justify-center">
         {label ? (
-          <Text className="text-[26px] font-bold text-gray-900 leading-[30px]">{label}</Text>
+          <Text className="text-[26px] font-bold text-strong leading-[30px]">{label}</Text>
         ) : null}
         {sublabel ? (
           <Text className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">

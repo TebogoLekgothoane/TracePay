@@ -69,8 +69,7 @@ const CATEGORY_ICONS: Record<TransactionCategory, string> = {
 };
 
 export default function SmsResultsScreen() {
-  const params = useLocalSearchParams<{ data?: string; fromOnboarding?: string }>();
-  const fromOnboarding = params.fromOnboarding === "1";
+  const params = useLocalSearchParams<{ data?: string }>();
   const completeOnboarding = useProfileStore((s) => s.completeOnboarding);
   const addLeaks = useLeaksStore((s) => s.addLeaks);
   const [expandedLeak, setExpandedLeak] = useState<number | null>(0);
@@ -107,6 +106,8 @@ export default function SmsResultsScreen() {
 
   const totalMonthly = rawLeaks.reduce((sum, l) => sum + l.amountMonthly, 0);
 
+  const onboardingComplete = useProfileStore((s) => s.onboardingComplete);
+
   const goToHome = async () => {
     if (rawLeaks.length > 0) {
       await addLeaks(
@@ -122,7 +123,9 @@ export default function SmsResultsScreen() {
         })),
       );
     }
-    await completeOnboarding();
+    if (!onboardingComplete) {
+      await completeOnboarding();
+    }
     router.replace("/(tabs)");
   };
 
@@ -130,26 +133,14 @@ export default function SmsResultsScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <Screen bottomInset="compact">
-        <View className="flex-row items-start gap-3 mb-[18px]">
-          {!fromOnboarding ? (
-            <Button
-              variant="outline"
-              size="icon"
-              onPress={() => router.back()}
-              className="back-btn mt-0.5"
-            >
-              <Feather name="arrow-left" size={22} color="#111827" />
-            </Button>
-          ) : null}
-          <View>
-            <View className="flex-row items-center mb-1">
-              <MaterialCommunityIcons name="message-text-outline" size={20} color="#7C3AED" />
-              <Text className="text-[22px] font-bold text-gray-900"> SMS Scan Results</Text>
-            </View>
-            <Text className="body-text">
-              AI found {rawLeaks.length} money leaks in your SMS history
-            </Text>
+        <View className="mb-[18px]">
+          <View className="flex-row items-center mb-1">
+            <MaterialCommunityIcons name="message-text-outline" size={20} color="#7C3AED" />
+            <Text className="page-header-title text-[22px]"> SMS Scan Results</Text>
           </View>
+          <Text className="body-text">
+            AI found {rawLeaks.length} money leaks in your SMS history
+          </Text>
         </View>
 
         {state.totalIngested > 0 && (
@@ -214,7 +205,7 @@ export default function SmsResultsScreen() {
             <View
               key={idx}
               className={cn(
-                "bg-white rounded-[14px] mb-2.5 overflow-hidden shadow-sm",
+                "card mb-2.5 overflow-hidden",
                 isExpanded && "border-[1.5px] border-brand-purple-muted",
               )}
             >
@@ -227,7 +218,7 @@ export default function SmsResultsScreen() {
                   <MaterialCommunityIcons name={leak.categoryIcon as any} size={18} color={sev.icon} />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-[15px] font-semibold text-gray-900 mb-1" numberOfLines={1}>
+                  <Text className="text-[15px] font-semibold text-strong mb-1" numberOfLines={1}>
                     {leak.name}
                   </Text>
                   <View className="flex-row items-center flex-wrap">
@@ -277,17 +268,15 @@ export default function SmsResultsScreen() {
           );
         })}
 
-        {fromOnboarding ? (
-          <Button
-            size="lg"
-            fullWidth
-            onPress={goToHome}
-            className="mt-4"
-            icon={<MaterialCommunityIcons name="home-outline" size={20} color="#fff" />}
-          >
-            Go to home
-          </Button>
-        ) : null}
+        <Button
+          size="lg"
+          fullWidth
+          onPress={goToHome}
+          className="mt-4"
+          icon={<MaterialCommunityIcons name="home-outline" size={20} color="#fff" />}
+        >
+          Go to home
+        </Button>
       </Screen>
     </>
   );

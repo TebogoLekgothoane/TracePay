@@ -2,7 +2,6 @@ import {
   View,
   Text,
   SafeAreaView,
-  StatusBar,
   ScrollView,
 } from "react-native";
 import { router } from "expo-router";
@@ -38,7 +37,6 @@ export default function LanguageScreen() {
 
   return (
     <SafeAreaView className="screen">
-      <StatusBar barStyle="dark-content" />
 
       <View className="onboarding-header">
         <TracePayLogo />
@@ -66,7 +64,7 @@ export default function LanguageScreen() {
         <Text className="heading-xl mb-2.5">
           Choose your language
         </Text>
-        <Text className="text-[15px] font-sans text-gray-500 leading-[22px] mb-6">
+        <Text className="body-text text-[15px] leading-[22px] mb-6">
           TracePay supports all 11 official South African languages.
         </Text>
 
@@ -87,7 +85,7 @@ export default function LanguageScreen() {
                 <View className="flex-1">
                   <Text
                     className={cn(
-                      "text-[15px] font-semibold text-gray-700 mb-0.5",
+                      "text-[15px] font-semibold text-subtle mb-0.5",
                       isSelected && "text-brand-purple",
                     )}
                   >

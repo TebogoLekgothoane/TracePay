@@ -57,18 +57,18 @@ const variantClasses: Record<
   { container: string; text: string; spinnerColor: string }
 > = {
   primary: {
-    container: "bg-brand-purple shadow-md",
+    container: "bg-brand-purple shadow-md dark:bg-violet-400",
     text: "text-white",
     spinnerColor: "#FFFFFF",
   },
   secondary: {
-    container: "bg-gray-100",
-    text: "text-gray-700",
+    container: "bg-gray-100 dark:bg-gray-800",
+    text: "text-gray-700 dark:text-gray-200",
     spinnerColor: "#374151",
   },
   outline: {
-    container: "bg-white border-[1.5px] border-border shadow-sm",
-    text: "text-gray-500",
+    container: "border-[1.5px] border-border bg-white shadow-sm dark:border-gray-600 dark:bg-gray-800",
+    text: "text-gray-500 dark:text-gray-300",
     spinnerColor: "#6B7280",
   },
   ghost: {

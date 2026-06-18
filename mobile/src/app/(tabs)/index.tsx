@@ -129,7 +129,7 @@ export default function HomeScreen() {
         </Button>
       </View>
 
-      <View className="bg-white rounded-2xl p-[18px] mb-5 shadow-md">
+      <View className="card p-[18px] mb-5 shadow-md">
         <View className="flex-row items-center mb-4">
           <MaterialCommunityIcons name="star-four-points-outline" size={16} color="#7C3AED" />
           <Text className="flex-1 overline-brand"> FINANCIAL HEALTH</Text>
@@ -208,7 +208,7 @@ export default function HomeScreen() {
                 />
               </View>
               <View className="flex-1">
-                <Text className="text-[15px] font-semibold text-gray-900 mb-0.5" numberOfLines={1}>{leak.name}</Text>
+                <Text className="text-[15px] font-semibold text-strong mb-0.5" numberOfLines={1}>{leak.name}</Text>
                 <Text className="body-text">{leak.category}</Text>
               </View>
               <View className="items-end mr-1.5">
@@ -254,11 +254,11 @@ export default function HomeScreen() {
         contentContainerClassName="px-[18px] gap-3 pb-1"
       >
         {REWARDS.map((r) => (
-          <View key={r.id} className="w-[140px] bg-white rounded-2xl p-3.5 shadow-sm border border-gray-100">
+          <View key={r.id} className="card w-[140px] border border-gray-100 dark:border-gray-700">
             <View className={cn("w-11 h-11 rounded-xl items-center justify-center mb-2.5", r.iconBg)}>
               <MaterialCommunityIcons name={r.icon as any} size={26} color={r.color} />
             </View>
-            <Text className="text-[13px] font-bold text-gray-900 mb-0.5">{r.partner}</Text>
+            <Text className="text-[13px] font-bold text-strong mb-0.5">{r.partner}</Text>
             <Text className="text-xs font-sans text-gray-700 mb-2 leading-4">{r.offer}</Text>
             <View className="flex-row items-center gap-[3px] mb-2.5">
               <MaterialCommunityIcons name="star-circle-outline" size={12} color="#7C3AED" />
@@ -294,11 +294,11 @@ export default function HomeScreen() {
             )}
           </View>
           <View className="flex-1">
-            <Text className="text-sm font-semibold text-gray-900 mb-0.5">{tx.name}</Text>
+            <Text className="list-row-title mb-0.5">{tx.name}</Text>
             <Text className="caption">{tx.date}</Text>
           </View>
           <View className="items-end gap-1">
-            <Text className="text-sm font-bold text-gray-900">{tx.amount}</Text>
+            <Text className="text-sm font-bold text-strong">{tx.amount}</Text>
             {tx.isLeak && (
               <View className="badge-danger py-0.5">
                 <Text className="text-[11px] font-semibold text-red-600">Leak</Text>
@@ -312,12 +312,12 @@ export default function HomeScreen() {
     <Modal visible={showNotifications} transparent animationType="fade" onRequestClose={() => setShowNotifications(false)}>
       <Pressable className="flex-1 bg-black/40 justify-start" onPress={() => setShowNotifications(false)}>
         <Pressable
-          className="bg-white px-5 pb-8 max-h-[75%] rounded-b-3xl shadow-xl"
+          className="surface-panel px-5 pb-8 max-h-[75%] rounded-b-3xl shadow-xl"
           style={{ paddingTop: topOffset }}
           onPress={() => {}}
         >
           <View className="flex-row items-center py-4 border-b border-gray-100 mb-3">
-            <Text className="flex-1 text-lg font-bold text-gray-900">Notifications</Text>
+            <Text className="flex-1 heading-md">Notifications</Text>
             <Button variant="ghost" size="icon" onPress={() => setShowNotifications(false)} className="w-[34px] h-[34px] rounded-full bg-gray-100 min-h-0">
               <Feather name="x" size={20} color="#6B7280" />
             </Button>
@@ -347,7 +347,7 @@ export default function HomeScreen() {
                       <MaterialCommunityIcons name={leak.categoryIcon as any ?? "alert"} size={16} color={sev.icon} />
                     </View>
                     <View className="flex-1">
-                      <Text className="text-sm font-semibold text-gray-900 mb-0.5">{leak.name}</Text>
+                      <Text className="list-row-title mb-0.5">{leak.name}</Text>
                       <Text className="caption">{leak.category} · R{leak.amountMonthly.toFixed(2)}/mo</Text>
                     </View>
                     <View className={cn("px-2 py-[3px] rounded-md", sev.badge)}>

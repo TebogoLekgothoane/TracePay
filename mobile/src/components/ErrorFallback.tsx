@@ -9,6 +9,7 @@ import {
 } from "react-native";
 
 import { Button } from "@/components/Button";
+import { useTheme } from "@/context/theme-context";
 import { useScreenInsets } from "@/hooks/useScreenInsets";
 
 export type ErrorFallbackProps = {
@@ -18,6 +19,7 @@ export type ErrorFallbackProps = {
 
 export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
   const { insets, contentPadding } = useScreenInsets("compact");
+  const { c } = useTheme();
 
   const [isModalVisible, setIsModalVisible] = useState(false);
 
@@ -47,9 +49,9 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
             size="icon"
             onPress={() => setIsModalVisible(true)}
             accessibilityLabel="View error details"
-            className="w-11 h-11 rounded-lg bg-white"
+            className="icon-btn-circle w-11 h-11 rounded-lg"
           >
-            <Feather name="alert-circle" size={20} color="#111827" />
+            <Feather name="alert-circle" size={20} color={c.text} />
           </Button>
         </View>
       ) : null}
@@ -76,9 +78,9 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           onRequestClose={() => setIsModalVisible(false)}
         >
           <View className="flex-1 bg-black/50 justify-end">
-            <View className="w-full h-[90%] rounded-t-2xl bg-white">
-              <View className="flex-row justify-between items-center px-4 pt-4 pb-3 border-b border-border">
-                <Text className="text-xl font-semibold text-gray-900">
+            <View className="modal-sheet h-[90%] rounded-t-2xl">
+              <View className="flex-row justify-between items-center px-4 pt-4 pb-3 border-b border-border dark:border-gray-700">
+                <Text className="heading-lg">
                   Error Details
                 </Text>
                 <Button
@@ -88,7 +90,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
                   accessibilityLabel="Close error details"
                   className="w-11 h-11"
                 >
-                  <Feather name="x" size={24} color="#111827" />
+                  <Feather name="x" size={24} color={c.text} />
                 </Button>
               </View>
 
@@ -98,8 +100,8 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
                 contentContainerStyle={{ paddingBottom: contentPadding.paddingBottom }}
                 showsVerticalScrollIndicator
               >
-                <View className="w-full rounded-lg overflow-hidden p-4 bg-gray-50">
-                  <Text className="text-xs leading-[18px] w-full text-gray-900 font-mono-error" selectable>
+                <View className="w-full rounded-lg overflow-hidden p-4 bg-gray-50 dark:bg-gray-900">
+                  <Text className="text-xs leading-[18px] w-full text-strong font-mono-error" selectable>
                     {formatErrorDetails()}
                   </Text>
                 </View>

@@ -9,7 +9,7 @@
 @layer components {
   /* ── Layout ───────────────────────────────────────────── */
   .screen {
-    @apply flex-1 bg-app-bg;
+    @apply flex-1 bg-app-bg dark:bg-gray-900;
   }
 
   .screen-content {
@@ -26,48 +26,56 @@
 
   /* ── Cards ───────────────────────────────────────────── */
   .card {
-    @apply bg-white rounded-2xl p-4 shadow-sm;
+    @apply rounded-2xl bg-white p-4 shadow-sm dark:bg-gray-800;
   }
 
   .card-lg {
-    @apply bg-white rounded-[20px] p-6 shadow-md;
+    @apply rounded-[20px] bg-white p-6 shadow-md dark:bg-gray-800;
   }
 
   .card-row {
-    @apply flex-row items-center bg-white rounded-xl p-3.5 mb-2.5 shadow-sm;
+    @apply mb-2.5 flex-row items-center rounded-xl bg-white p-3.5 shadow-sm dark:bg-gray-800;
+  }
+
+  .surface-panel {
+    @apply rounded-[14px] bg-white shadow-sm dark:bg-gray-800;
+  }
+
+  .surface-divider {
+    @apply h-px bg-gray-100 dark:bg-gray-700;
   }
 
   /* ── Typography ──────────────────────────────────────── */
   .heading-xl {
-    @apply text-[28px] font-bold text-gray-900 leading-[34px];
+    @apply text-[28px] font-bold leading-[34px] text-gray-900 dark:text-white;
   }
 
   .heading-lg {
-    @apply text-2xl font-bold text-gray-900;
+    @apply text-2xl font-bold text-gray-900 dark:text-white;
   }
 
   .heading-md {
-    @apply text-lg font-bold text-gray-900;
+    @apply text-lg font-bold text-gray-900 dark:text-white;
   }
 
   .body-text {
-    @apply text-sm font-sans text-gray-500 leading-5;
+    @apply text-sm font-sans leading-5 text-gray-500 dark:text-gray-400;
   }
 
   .label-sm {
-    @apply text-[13px] font-semibold text-gray-700;
+    @apply text-[13px] font-semibold text-gray-700 dark:text-gray-300;
   }
 
   .caption {
-    @apply text-xs font-sans text-gray-400;
+    @apply text-xs font-sans text-gray-400 dark:text-gray-500;
   }
 
   .overline {
-    @apply text-[11px] font-semibold text-gray-500 tracking-widest uppercase;
+    @apply text-[11px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400;
   }
 
   .overline-brand {
-    @apply text-[11px] font-semibold text-brand-purple tracking-wider uppercase;
+    @apply text-[11px] font-semibold uppercase tracking-wider text-brand-purple;
   }
 
   /* ── Forms ───────────────────────────────────────────── */
@@ -76,20 +84,20 @@
   }
 
   .field-label {
-    @apply text-[13px] font-semibold text-gray-700 mb-2;
+    @apply mb-2 text-[13px] font-semibold text-gray-700 dark:text-gray-300;
   }
 
   .input-group {
-    @apply flex-row items-center gap-2.5 bg-gray-50 rounded-xl border-[1.5px] border-border px-3.5 py-3.5;
+    @apply flex-row items-center gap-2.5 rounded-xl border-[1.5px] border-border bg-gray-50 px-3.5 py-3.5 dark:border-gray-600 dark:bg-gray-800;
   }
 
   .input-field {
-    @apply flex-1 text-[15px] font-sans text-gray-900;
+    @apply flex-1 text-[15px] font-sans text-gray-900 dark:text-white;
   }
 
   /* ── Onboarding ──────────────────────────────────────── */
   .onboarding-header {
-    @apply flex-row justify-between items-center px-6 pt-4 pb-3;
+    @apply flex-row items-center justify-between px-6 pb-3 pt-4;
   }
 
   .onboarding-footer {
@@ -97,7 +105,7 @@
   }
 
   .onboarding-footer-row {
-    @apply flex-row gap-3 px-6 pb-8 items-center;
+    @apply flex-row items-center gap-3 px-6 pb-8;
   }
 
   .step-dots {
@@ -105,7 +113,7 @@
   }
 
   .step-dot {
-    @apply w-2 h-2 rounded bg-gray-200;
+    @apply h-2 w-2 rounded bg-gray-200 dark:bg-gray-600;
   }
 
   .step-dot-active {
@@ -118,15 +126,19 @@
 
   /* ── Welcome (onboarding) ───────────────────────────── */
   .welcome-screen {
-    @apply flex-1 bg-navy;
+    @apply flex-1 bg-app-bg dark:bg-navy;
+  }
+
+  .welcome-wordmark {
+    @apply text-3xl font-bold tracking-wide text-gray-900 dark:text-white;
   }
 
   .welcome-headline {
-    @apply text-4xl font-bold text-white leading-tight tracking-tight;
+    @apply text-4xl font-bold leading-tight tracking-tight text-gray-900 dark:text-white;
   }
 
   .welcome-subheadline {
-    @apply mt-3 text-lg font-sans leading-7 text-gray-400;
+    @apply mt-3 text-lg font-sans leading-7 text-gray-500 dark:text-gray-400;
   }
 
   .welcome-hero-wrap {
@@ -139,28 +151,28 @@
 
   /* ── Actions / buttons ───────────────────────────────── */
   .btn-freeze-apply {
-    @apply rounded-xl items-center justify-center;
+    @apply items-center justify-center rounded-xl;
   }
 
   .icon-btn-circle {
-    @apply w-11 h-11 rounded-full items-center justify-center bg-white shadow-sm;
+    @apply h-11 w-11 items-center justify-center rounded-full bg-white shadow-sm dark:bg-gray-800;
   }
 
   .back-btn {
-    @apply w-[38px] h-[38px] rounded-[10px] bg-white items-center justify-center shadow-sm;
+    @apply h-[38px] w-[38px] items-center justify-center rounded-[10px] bg-white shadow-sm dark:bg-gray-800;
   }
 
   /* ── Badges & chips ──────────────────────────────────── */
   .badge-danger {
-    @apply bg-red-100 px-2.5 py-1 rounded-full;
+    @apply rounded-full bg-red-100 px-2.5 py-1 dark:bg-red-900/40;
   }
 
   .badge-success {
-    @apply bg-green-100 px-2.5 py-1 rounded-full;
+    @apply rounded-full bg-green-100 px-2.5 py-1 dark:bg-green-900/40;
   }
 
   .chip-purple {
-    @apply flex-row items-center gap-1 bg-brand-purple-light px-2.5 py-1 rounded-full;
+    @apply flex-row items-center gap-1 rounded-full bg-brand-purple-light px-2.5 py-1 dark:bg-brand-purple-dark/40;
   }
 
   /* ── Progress bars (width set inline when dynamic) ───── */
@@ -178,5 +190,37 @@
 
   .font-mono-error {
     font-family: Menlo, monospace;
+  }
+
+  .text-strong {
+    @apply text-gray-900 dark:text-white;
+  }
+
+  .text-subtle {
+    @apply text-gray-700 dark:text-gray-300;
+  }
+
+  .search-bar {
+    @apply flex-1 flex-row items-center rounded-xl bg-white px-3 py-2.5 shadow-sm dark:bg-gray-800;
+  }
+
+  .filter-chip {
+    @apply border border-gray-200 bg-white dark:border-gray-600 dark:bg-gray-800;
+  }
+
+  .filter-chip-active {
+    @apply border-brand-purple bg-brand-purple;
+  }
+
+  .modal-sheet {
+    @apply rounded-t-[22px] bg-white p-5 pb-7 dark:bg-gray-800;
+  }
+
+  .page-header-title {
+    @apply text-2xl font-bold text-gray-900 dark:text-white;
+  }
+
+  .list-row-title {
+    @apply text-sm font-semibold text-gray-900 dark:text-white;
   }
 }

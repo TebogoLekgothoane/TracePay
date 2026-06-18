@@ -351,7 +351,7 @@ export default function BudgetScreen() {
             <MaterialCommunityIcons name="calendar-today-outline" size={20} color="#7C3AED" />
           </View>
           <View className="flex-1">
-            <Text className="text-base font-bold text-gray-900 mb-0.5">Today</Text>
+            <Text className="text-base font-bold text-strong mb-0.5">Today</Text>
             <Text className="body-text">R{todaySpent} of R{plan.dailyLimit} used</Text>
           </View>
           <Text className="text-[15px] font-bold text-green-600">R{todayLeft} left</Text>
@@ -368,7 +368,7 @@ export default function BudgetScreen() {
         <View className="flex-row justify-between items-center mb-3.5">
           <View className="flex-row items-center">
             <MaterialCommunityIcons name="calendar-month-outline" size={20} color="#7C3AED" />
-            <Text className="text-base font-bold text-gray-900"> Upcoming Payments</Text>
+            <Text className="text-base font-bold text-strong"> Upcoming Payments</Text>
           </View>
           <View className="badge-danger rounded-xl">
             <Text className="text-xs font-semibold text-red-600">R{obligationsDue} due</Text>
@@ -385,7 +385,7 @@ export default function BudgetScreen() {
               <MaterialCommunityIcons name={ob.icon as any} size={18} color="#7C3AED" />
             </View>
             <View className="flex-1">
-              <Text className="text-sm font-semibold text-gray-900 mb-0.5">{ob.name}</Text>
+              <Text className="list-row-title mb-0.5">{ob.name}</Text>
               <Text className="caption">{ob.dueDate}</Text>
             </View>
             <Text className="text-[15px] font-bold text-red-600">R{ob.amount}</Text>
@@ -414,7 +414,7 @@ export default function BudgetScreen() {
                 <Text className="overline-brand mb-0.5">
                   {index === 0 ? "Best next action" : "More savings"}
                 </Text>
-                <Text className="text-base font-bold text-gray-900">{item.name}</Text>
+                <Text className="text-base font-bold text-strong">{item.name}</Text>
               </View>
               <View className="badge-success rounded-xl">
                 <Text className="text-xs font-bold text-green-600">+R{item.saving}/mo</Text>
@@ -444,9 +444,9 @@ export default function BudgetScreen() {
 
       <Modal visible={paymentModalVisible} transparent animationType="fade" onRequestClose={closePaymentModal}>
         <Pressable className="flex-1 bg-gray-900/45 justify-end" onPress={closePaymentModal}>
-          <Pressable className="bg-white rounded-t-[22px] p-5 pb-7" onPress={() => {}}>
+          <Pressable className="modal-sheet" onPress={() => {}}>
             <View className="flex-row items-center mb-[18px]">
-              <Text className="flex-1 text-xl font-bold text-gray-900">
+              <Text className="flex-1 heading-lg">
                 {editingPaymentIndex === null ? "Add payment" : "Update payment"}
               </Text>
               <Button variant="ghost" size="icon" className="w-9 h-9 rounded-full bg-gray-100 min-h-0" onPress={closePaymentModal}>

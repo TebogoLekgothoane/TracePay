@@ -11,6 +11,7 @@ import { Button } from "@/components/Button";
 import { Screen } from "@/components/Screen";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useIngestion } from "@/context/SMSIngestionContext";
+import { useTheme } from "@/context/theme-context";
 import { cn } from "@/lib/cn";
 import { getTransactionHeadline, getTransactionSummary } from "@/lib/transaction-display";
 
@@ -20,6 +21,7 @@ export default function SmsScanningScreen() {
 
   const { syncNow, isLoading, error, state, transactions, openPermissionSettings, refreshPermission } =
     useIngestion();
+  const { c } = useTheme();
 
   const [phase, setPhase] = useState<"preparing" | "reading" | "analysing" | "done" | "failed">("preparing");
   const [scanError, setScanError] = useState<string | null>(null);
@@ -126,11 +128,11 @@ export default function SmsScanningScreen() {
               onPress={() => router.back()}
               className="back-btn"
             >
-              <Feather name="arrow-left" size={22} color="#111827" />
+              <Feather name="arrow-left" size={22} color={c.text} />
             </Button>
           ) : null}
           <View className="flex-1 min-w-[140px]">
-            <Text className="text-[22px] font-bold text-gray-900 mb-0.5">Scanning SMS Inbox</Text>
+            <Text className="page-header-title text-[22px] mb-0.5">Scanning SMS Inbox</Text>
             <Text className="body-text">{phaseLabels[phase]}</Text>
           </View>
           {state.totalIngested > 0 && (
@@ -198,7 +200,7 @@ export default function SmsScanningScreen() {
         )}
 
         {recentTx.map((tx) => (
-          <View key={tx.id} className="bg-white rounded-[14px] p-3.5 mb-3 shadow-sm">
+          <View key={tx.id} className="card mb-3">
             <View className="flex-row items-center mb-2">
               <View
                 className={cn(
@@ -212,7 +214,7 @@ export default function SmsScanningScreen() {
                   color={tx.type === "debit" ? "#DC2626" : "#16A34A"}
                 />
               </View>
-              <Text className="flex-1 text-[15px] font-semibold text-gray-900">{getTransactionHeadline(tx)}</Text>
+              <Text className="flex-1 text-[15px] font-semibold text-strong">{getTransactionHeadline(tx)}</Text>
               <Text className="caption">
                 {tx.timestamp instanceof Date
                   ? tx.timestamp.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })
