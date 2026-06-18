@@ -1,24 +1,85 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
   TextInput,
-  SafeAreaView,
+  Image,
+  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StyleSheet,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
+
 import { Button } from "@/components/Button";
-import { OnboardingHeader, ONBOARDING_STEPS } from "@/components/OnboardingHeader";
 import { AuthError } from "@/lib/auth-errors";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { useProfileStore } from "@/stores/profileStore";
-import { cn } from "@/lib/cn";
+
+const robotSource = require("@/assets/images/robot.png");
+
+type AuthMode = "signup" | "signin";
+
+function AuthModeToggle({
+  value,
+  onChange,
+}: {
+  value: AuthMode;
+  onChange: (mode: AuthMode) => void;
+}) {
+  const { colors } = useColorScheme();
+
+  return (
+    <View style={[styles.segmentTrack, { backgroundColor: colors.muted }]}>
+      <TouchableOpacity
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityState={{ selected: value === "signup" }}
+        onPress={() => onChange("signup")}
+        style={[
+          styles.segmentButton,
+          value === "signup" && { backgroundColor: colors.card },
+        ]}
+      >
+        <Text
+          style={[
+            styles.segmentLabel,
+            { color: value === "signup" ? colors.foreground : colors.mutedForeground },
+          ]}
+        >
+          Create Account
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityState={{ selected: value === "signin" }}
+        onPress={() => onChange("signin")}
+        style={[
+          styles.segmentButton,
+          value === "signin" && { backgroundColor: colors.card },
+        ]}
+      >
+        <Text
+          style={[
+            styles.segmentLabel,
+            { color: value === "signin" ? colors.foreground : colors.mutedForeground },
+          ]}
+        >
+          Sign In
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 export default function AuthScreen() {
   const { mode: modeParam } = useLocalSearchParams<{ mode?: string }>();
-  const [authMode, setAuthMode] = useState<"signup" | "signin">("signup");
+  const [authMode, setAuthMode] = useState<AuthMode>("signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
@@ -58,74 +119,68 @@ export default function AuthScreen() {
     }
   };
 
+  const switchMode = useCallback((mode: AuthMode) => {
+    setAuthMode(mode);
+    setError("");
+  }, []);
+
   return (
-    <SafeAreaView className="screen">
+    <SafeAreaView className="flex-1 bg-background" edges={["left", "right", "bottom"]}>
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
       >
         <ScrollView
-          contentContainerClassName="screen-scroll"
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{
+            paddingHorizontal: 24,
+            paddingTop: 8,
+            paddingBottom: 24,
+          }}
         >
-          <OnboardingHeader currentStep={ONBOARDING_STEPS.auth} />
-
-          <Text className="body-text mb-8 mt-2 text-center">Your money guardian</Text>
-
-          <View className="card-lg mb-5">
-            <View className="flex-row bg-gray-100 dark:bg-gray-800 rounded-[10px] p-1 mb-6">
-              <Button
-                variant="ghost"
-                className={cn(
-                  "flex-1 py-2.5 rounded-lg items-center justify-center",
-                  authMode === "signup" && "bg-white dark:bg-gray-700 shadow-sm",
+          <View className="mb-4 flex-row items-center">
+            <View className="flex-1 pr-3">
+              <Text className="text-[28px] font-bold leading-[34px] text-foreground">
+                {authMode === "signup" ? (
+                  <>
+                    Create your{"\n"}
+                    <Text className="text-brand-purple">account</Text>
+                  </>
+                ) : (
+                  <>
+                    Welcome{"\n"}
+                    <Text className="text-brand-purple">back</Text>
+                  </>
                 )}
-                onPress={() => {
-                  setAuthMode("signup");
-                  setError("");
-                }}
-                textClassName={cn(
-                  "text-sm font-medium text-gray-500",
-                  authMode === "signup" && "text-strong font-semibold",
-                )}
-              >
-                Create Account
-              </Button>
-              <Button
-                variant="ghost"
-                className={cn(
-                  "flex-1 py-2.5 rounded-lg items-center justify-center",
-                  authMode === "signin" && "bg-white dark:bg-gray-700 shadow-sm",
-                )}
-                onPress={() => {
-                  setAuthMode("signin");
-                  setError("");
-                }}
-                textClassName={cn(
-                  "text-sm font-medium text-gray-500",
-                  authMode === "signin" && "text-strong font-semibold",
-                )}
-              >
-                Sign In
-              </Button>
+              </Text>
+              <Text className="mt-2 text-sm leading-5 text-muted-foreground">
+                {authMode === "signup"
+                  ? "Set up TracePay with your email, password and phone."
+                  : "Sign in to continue protecting your money."}
+              </Text>
             </View>
 
-            <Text className="heading-lg mb-1.5">
-              {authMode === "signup" ? "Create your account" : "Welcome back"}
-            </Text>
-            <Text className="body-text leading-5 mb-6">
-              {authMode === "signup"
-                ? "Use your email, password and phone number to create your TracePay account."
-                : "Use your email and password to sign back in."}
-            </Text>
+            <View className="h-[100px] w-[80px] shrink-0 items-center justify-center">
+              <Image
+                source={robotSource}
+                resizeMode="contain"
+                style={{ width: 100, height: 200 }}
+                accessibilityLabel="TracePay assistant"
+              />
+            </View>
+          </View>
 
-            <View className="field">
-              <Text className="field-label">Email address</Text>
-              <View className="input-group">
+          <AuthModeToggle value={authMode} onChange={switchMode} />
+
+          <View className="gap-3">
+            <View>
+              <Text className="mb-1.5 text-sm font-semibold text-foreground">Email address</Text>
+              <View className="flex-row items-center gap-2.5 rounded-2xl border border-border bg-card px-3.5 py-3">
                 <MaterialCommunityIcons name="email-outline" size={18} color="#9CA3AF" />
                 <TextInput
-                  className="input-field"
+                  className="flex-1 text-[15px] text-foreground"
                   placeholder="you@example.com"
                   placeholderTextColor="#9CA3AF"
                   value={email}
@@ -138,12 +193,12 @@ export default function AuthScreen() {
               </View>
             </View>
 
-            <View className="field">
-              <Text className="field-label">Password</Text>
-              <View className="input-group">
+            <View>
+              <Text className="mb-1.5 text-sm font-semibold text-foreground">Password</Text>
+              <View className="flex-row items-center gap-2.5 rounded-2xl border border-border bg-card px-3.5 py-3">
                 <MaterialCommunityIcons name="lock-outline" size={18} color="#9CA3AF" />
                 <TextInput
-                  className="input-field"
+                  className="flex-1 text-[15px] text-foreground"
                   placeholder="At least 6 characters"
                   placeholderTextColor="#9CA3AF"
                   value={password}
@@ -158,12 +213,12 @@ export default function AuthScreen() {
             </View>
 
             {authMode === "signup" && (
-              <View className="field">
-                <Text className="field-label">SA phone number</Text>
-                <View className="input-group">
-                  <Text className="text-[15px] font-medium text-subtle">+27</Text>
+              <View>
+                <Text className="mb-1.5 text-sm font-semibold text-foreground">SA phone number</Text>
+                <View className="flex-row items-center gap-2.5 rounded-2xl border border-border bg-card px-3.5 py-3">
+                  <Text className="text-[15px] font-medium text-muted-foreground">+27</Text>
                   <TextInput
-                    className="input-field"
+                    className="flex-1 text-[15px] text-foreground"
                     placeholder="72 123 4567"
                     placeholderTextColor="#9CA3AF"
                     value={phone}
@@ -177,50 +232,58 @@ export default function AuthScreen() {
             )}
 
             {error ? (
-              <Text className="text-[13px] font-sans text-red-600 mb-3">{error}</Text>
-            ) : null}
-
-            <Button
-              size="lg"
-              fullWidth
-              onPress={handleSubmit}
-              disabled={!isValid}
-              loading={loading}
-              className="mt-1"
-              iconRight={
-                !loading ? (
-                  <MaterialCommunityIcons name="arrow-right" size={20} color="#fff" />
-                ) : undefined
-              }
-            >
-              {authMode === "signup" ? "Create Account" : "Sign In"}
-            </Button>
-          </View>
-
-          <View className="flex-row items-center justify-center mb-6">
-            <MaterialCommunityIcons name="shield-lock-outline" size={13} color="#9CA3AF" />
-            <Text className="caption">
-              {" "}
-              POPIA compliant · Credentials stored on this device
-            </Text>
-          </View>
-
-          <View className="gap-3.5">
-            {[
-              { icon: "magnify-scan", text: "Detect hidden money leaks from your SMS inbox" },
-              { icon: "brain", text: "AI budget coach built for South Africa" },
-              { icon: "tag-heart-outline", text: "Earn retail discounts by stopping leaks" },
-            ].map((f, i) => (
-              <View key={i} className="flex-row items-center gap-3">
-                <View className="w-[34px] h-[34px] rounded-[10px] bg-brand-purple-light items-center justify-center shrink-0">
-                  <MaterialCommunityIcons name={f.icon as "magnify-scan"} size={16} color="#7C3AED" />
-                </View>
-                <Text className="flex-1 text-sm font-sans text-gray-700 leading-5">{f.text}</Text>
+              <View className="flex-row items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 dark:border-red-900/50 dark:bg-red-950/40">
+                <MaterialCommunityIcons name="alert-circle-outline" size={16} color="#DC2626" />
+                <Text className="flex-1 text-sm leading-5 text-red-700 dark:text-red-300">
+                  {error}
+                </Text>
               </View>
-            ))}
+            ) : null}
+          </View>
+
+          <Button
+            size="lg"
+            fullWidth
+            className="mt-5 h-14 rounded-[24px]"
+            onPress={handleSubmit}
+            disabled={!isValid}
+            loading={loading}
+            iconRight={
+              !loading ? (
+                <MaterialCommunityIcons name="arrow-right" size={20} color="#fff" />
+              ) : undefined
+            }
+          >
+            {authMode === "signup" ? "Create Account" : "Sign In"}
+          </Button>
+
+          <View className="mt-4 flex-row items-center justify-center">
+            <MaterialCommunityIcons name="shield-lock-outline" size={13} color="#9CA3AF" />
+            <Text className="ml-1.5 text-xs text-muted-foreground">
+              POPIA compliant · Stored securely on this device
+            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  segmentTrack: {
+    flexDirection: "row",
+    borderRadius: 16,
+    marginBottom: 16,
+    padding: 4,
+  },
+  segmentButton: {
+    flex: 1,
+    alignItems: "center",
+    borderRadius: 12,
+    paddingVertical: 10,
+  },
+  segmentLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+});

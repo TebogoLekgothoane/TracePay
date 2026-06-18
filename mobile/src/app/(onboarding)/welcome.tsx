@@ -4,20 +4,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
 import { Button } from "@/components/Button";
-import { OnboardingHeader, ONBOARDING_STEPS } from "@/components/OnboardingHeader";
 
 const robotSource = require("@/assets/images/herobot.png");
 
 export default function WelcomeScreen() {
   return (
-    <SafeAreaView className="welcome-screen">
+    <SafeAreaView className="welcome-screen" edges={["left", "right", "bottom"]}>
       <ScrollView
         className="flex-1"
         contentContainerClassName="grow px-6"
         showsVerticalScrollIndicator={false}
       >
-        <OnboardingHeader currentStep={ONBOARDING_STEPS.welcome} />
-
         <View className="mt-6">
           <Text className="welcome-headline">Stop hidden money leaks.</Text>
           <Text className="welcome-subheadline">

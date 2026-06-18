@@ -19,6 +19,18 @@ export type OnboardingHeaderProps = {
   totalSteps?: number;
 };
 
+const ROUTE_TO_STEP: Record<string, number> = {
+  language: ONBOARDING_STEPS.language,
+  welcome: ONBOARDING_STEPS.welcome,
+  features: ONBOARDING_STEPS.features,
+  consent: ONBOARDING_STEPS.consent,
+  index: ONBOARDING_STEPS.auth,
+};
+
+export function getOnboardingStepFromRoute(routeName: string): number | null {
+  return ROUTE_TO_STEP[routeName] ?? null;
+}
+
 export function OnboardingHeader({
   currentStep,
   totalSteps = ONBOARDING_TOTAL_STEPS,

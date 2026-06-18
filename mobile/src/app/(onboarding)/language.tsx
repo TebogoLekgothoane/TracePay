@@ -9,7 +9,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
 import { Button } from "@/components/Button";
-import { OnboardingHeader, ONBOARDING_STEPS } from "@/components/OnboardingHeader";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import { useProfileStore } from "@/stores/profileStore";
 import { cn } from "@/lib/cn";
@@ -25,10 +24,6 @@ const LANGUAGES = [
   { code: "Setswana", label: "Setswana", sub: "Setswana" },
 ];
 
-function getFlagEmoji(code: string) {
-  return code === "English" ? "🇬🇧" : "🇿🇦";
-}
-
 export default function LanguageScreen() {
   const { selectedLanguage, setSelectedLanguage } = useOnboardingStore();
   const setLanguage = useProfileStore((s) => s.setLanguage);
@@ -39,7 +34,7 @@ export default function LanguageScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
+    <SafeAreaView className="flex-1 bg-background" edges={["left", "right", "bottom"]}>
       <ScrollView
         className="flex-1"
         contentContainerStyle={{
@@ -48,8 +43,6 @@ export default function LanguageScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <OnboardingHeader currentStep={ONBOARDING_STEPS.language} />
-
         {/* Hero */}
         <View className="flex-row items-center mb-8">
           <View className="flex-1 pr-2">
@@ -70,7 +63,7 @@ export default function LanguageScreen() {
           <Image
             source={robotSource}
             resizeMode="contain"
-            className="h-[200px] w-[200px]"
+            className="h-[200px] w-[180px]"
           />
           
         </View>
@@ -85,15 +78,12 @@ export default function LanguageScreen() {
                 key={lang.code}
                 onPress={() => setSelectedLanguage(lang.code)}
                 className={cn(
-                  "flex-row items-center rounded-[28px] border px-5 py-5 bg-card",
+                  "flex-row items-center rounded-[28px] px-5 py-5 bg-card",
                   isSelected
                     ? "border-brand-purple bg-brand-purple/5"
-                    : "border-border"
+                    : ""
                 )}
               >
-                <Text className="mr-4 text-[28px]">
-                  {getFlagEmoji(lang.code)}
-                </Text>
 
                 <View className="flex-1">
                   <Text className="text-[17px] font-semibold text-foreground">
@@ -110,7 +100,7 @@ export default function LanguageScreen() {
                     "h-7 w-7 rounded-full border-2 items-center justify-center",
                     isSelected
                       ? "border-brand-purple"
-                      : "border-border"
+                      : ""
                   )}
                 >
                   {isSelected && (
@@ -124,7 +114,7 @@ export default function LanguageScreen() {
       </ScrollView>
 
       {/* Footer */}
-      <View className="border-t border-border bg-background px-6 pb-6 pt-4">
+      <View className=" bg-background px-6 pb-6 pt-4">
         <Button
           size="lg"
           fullWidth

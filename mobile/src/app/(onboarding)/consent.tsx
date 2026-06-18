@@ -10,7 +10,6 @@ import {
 } from "react-native";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
-import { OnboardingHeader, ONBOARDING_STEPS } from "@/components/OnboardingHeader";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import Animated, {
@@ -222,7 +221,7 @@ export default function ConsentScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
+    <SafeAreaView className="flex-1 bg-background" edges={["left", "right", "bottom"]}>
       <ScrollView
         ref={scrollViewRef}
         className="flex-1"
@@ -234,8 +233,6 @@ export default function ConsentScreen() {
         scrollEventThrottle={24}
         showsVerticalScrollIndicator={false}
       >
-        <OnboardingHeader currentStep={ONBOARDING_STEPS.consent} />
-
         <Animated.View entering={FadeInDown.delay(50).springify()} className="mb-6">
           <Text className="text-[32px] font-bold leading-[38px] text-foreground">
             Privacy &{" "}

@@ -7,10 +7,6 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { Button } from "@/components/Button";
 import { IconCard } from "@/components/Card";
-import {
-  OnboardingHeader,
-  ONBOARDING_STEPS,
-} from "@/components/OnboardingHeader";
 import { cn } from "@/lib/cn";
 
 const FEATURES = [
@@ -43,7 +39,7 @@ const FEATURES = [
 
 export default function FeaturesScreen() {
   return (
-    <SafeAreaView className="flex-1 bg-background">
+    <SafeAreaView className="flex-1 bg-background" edges={["left", "right", "bottom"]}>
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}
@@ -52,8 +48,6 @@ export default function FeaturesScreen() {
           paddingBottom: 32,
         }}
       >
-        <OnboardingHeader currentStep={ONBOARDING_STEPS.features} />
-
         {/* Hero */}
         <View className="mb-8 mt-2">
           <Text className="text-[35px] font-bold leading-[46px] text-foreground">
@@ -137,13 +131,6 @@ export default function FeaturesScreen() {
             size="lg"
             className="h-14 flex-1 rounded-[24px]"
             onPress={() => router.push("/(onboarding)/consent")}
-            iconRight={
-              <MaterialCommunityIcons
-                name="arrow-right"
-                size={20}
-                color="#FFFFFF"
-              />
-            }
           >
             Protect My Money
           </Button>

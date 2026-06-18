@@ -133,11 +133,11 @@
 
   /* ── Onboarding ──────────────────────────────────────── */
   .onboarding-header {
-    @apply pb-4 pt-0;
+    @apply pb-2 pt-0;
   }
 
   .onboarding-header-logo {
-    @apply items-center pb-5 pt-0;
+    @apply items-center pb-3 pt-0;
   }
 
   .onboarding-step-dots {
