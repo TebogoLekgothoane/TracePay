@@ -15,6 +15,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Button } from "@/components/Button";
 import { GlassInput } from "@/components/GlassInput";
 import { AppText } from "@/components/Typography";
+import { AuthErrorBanner } from "@/components/AuthErrorBanner";
 import { AuthError } from "@/lib/auth-errors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useProfileStore } from "@/stores/profileStore";
@@ -22,17 +23,6 @@ import { useProfileStore } from "@/stores/profileStore";
 const robotSource = require("@/assets/images/robot.png");
 
 type Step = "email" | "reset" | "success";
-
-function AuthErrorBanner({ message }: { message: string }) {
-  return (
-    <View className="flex-row items-start gap-2 rounded-2xl border border-red-200 bg-red-50 px-3.5 py-2.5 dark:border-red-900/50 dark:bg-red-950/40">
-      <MaterialCommunityIcons name="alert-circle-outline" size={16} color="#DC2626" />
-      <AppText variant="bodySm" className="flex-1 text-red-700 dark:text-red-300">
-        {message}
-      </AppText>
-    </View>
-  );
-}
 
 export default function ForgotPasswordScreen() {
   const { email: emailParam } = useLocalSearchParams<{ email?: string }>();

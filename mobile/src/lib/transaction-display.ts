@@ -185,6 +185,10 @@ export function getTransactionHeadline(tx: ParsedTransaction): string {
 
 export function getTransactionSummary(tx: ParsedTransaction): string {
   const enriched = enrichParsedTransaction(tx);
+  return buildTransactionSummary(enriched);
+}
+
+function buildTransactionSummary(enriched: ParsedTransaction): string {
   const parts: string[] = [TYPE_LABELS[enriched.type]];
 
   if (enriched.summary) {
@@ -199,6 +203,14 @@ export function getTransactionSummary(tx: ParsedTransaction): string {
   }
 
   return parts.join(' · ');
+}
+
+export function getTransactionDisplay(tx: ParsedTransaction) {
+  const enriched = enrichParsedTransaction(tx);
+  return {
+    headline: enriched.merchant ?? enriched.summary ?? `${enriched.bank} ${TYPE_LABELS[enriched.type].toLowerCase()}`,
+    summary: buildTransactionSummary(enriched),
+  };
 }
 
 export function isValidStoredTransaction(tx: ParsedTransaction): boolean {

@@ -7,12 +7,13 @@ import { Platform, View } from "react-native";
 import { ProminentTabBar } from "@/components/ProminentTabBar";
 import { useColorScheme } from "@/hooks/useColorScheme";
 
-function TabLayoutContent() {
+export default function TabLayout() {
   const { isDarkColorScheme, colors } = useColorScheme();
   const isIOS = Platform.OS === "ios";
 
   return (
-    <Tabs
+    <View className={isDarkColorScheme ? "flex-1 bg-transparent" : "flex-1 bg-background"}>
+      <Tabs
       tabBar={(props) => <ProminentTabBar {...props} />}
       screenOptions={{
         tabBarActiveTintColor: colors.primary,
@@ -96,15 +97,6 @@ function TabLayoutContent() {
         }}
       />
     </Tabs>
-  );
-}
-
-export default function TabLayout() {
-  const { isDarkColorScheme } = useColorScheme();
-
-  return (
-    <View className={isDarkColorScheme ? "flex-1 bg-transparent" : "flex-1 bg-background"}>
-      <TabLayoutContent />
     </View>
   );
 }

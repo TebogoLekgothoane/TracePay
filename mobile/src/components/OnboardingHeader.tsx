@@ -2,7 +2,6 @@ import { Pressable, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
 
-import { TracePayLogo } from "@/components/TracePayLogo";
 import { cn } from "@/lib/cn";
 
 export const ONBOARDING_TOTAL_STEPS = 5;

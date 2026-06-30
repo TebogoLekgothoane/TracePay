@@ -15,9 +15,27 @@ const RANGE_DAYS: Record<Exclude<DateRangeFilter, 'all'>, number> = {
   '90d': 90,
 };
 
+export function getTransactionDate(tx: ParsedTransaction): Date {
+  return tx.timestamp instanceof Date ? tx.timestamp : new Date(tx.timestamp);
+}
+
 export function getTransactionTime(tx: ParsedTransaction): number {
-  const ts = tx.timestamp instanceof Date ? tx.timestamp : new Date(tx.timestamp);
-  return ts.getTime();
+  return getTransactionDate(tx).getTime();
+}
+
+export function formatDateLabel(date: Date): string {
+  const now = new Date();
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  now.setHours(0, 0, 0, 0);
+  const diff = now.getTime() - d.getTime();
+  if (diff === 0) return "Today";
+  if (diff === 86_400_000) return "Yesterday";
+  return date.toLocaleDateString("en-ZA", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
 }
 
 export function filterTransactionsByDateRange(

@@ -62,13 +62,16 @@ const SMS_LEAK_RULES: {
   },
 ];
 
+/** Canonical demo leaks used for SMS scan results and first-run seeding. */
+export const DEMO_LEAKS: SimulatedLeak[] = [
+  SMS_LEAK_RULES[0].leak,
+  SMS_LEAK_RULES[1].leak,
+  SMS_LEAK_RULES[2].leak,
+];
+
 /** Always returns exactly three demo leaks for the SMS scan flow. */
 export function simulateSmsAnalysis(_messages: string[]) {
-  const leaks: SimulatedLeak[] = [
-    SMS_LEAK_RULES[0].leak,
-    SMS_LEAK_RULES[1].leak,
-    SMS_LEAK_RULES[2].leak,
-  ];
+  const leaks = DEMO_LEAKS;
 
   const totalMonthly = leaks.reduce((sum, l) => sum + l.amountMonthly, 0);
   return { leaks, totalMonthly: Math.round(totalMonthly * 100) / 100 };

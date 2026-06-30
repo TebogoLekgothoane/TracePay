@@ -7,6 +7,7 @@ import { Screen } from "@/components/Screen";
 import { AppText } from "@/components/Typography";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useProfileStore } from "@/stores/profileStore";
+import { PARTNERS } from "@/constants/partners";
 import { cn } from "@/lib/cn";
 
 const EARN_METHODS = [
@@ -15,15 +16,6 @@ const EARN_METHODS = [
   { icon: "account-plus-outline" as const, label: "Invite a Friend", sub: "Share TracePay with someone", pts: "+200", color: "#16A34A", iconBg: "bg-green-100 dark:bg-green-900/40" },
   { icon: "brain" as const, label: "Use AI Budget", sub: "Generate a weekly plan", pts: "+20", color: "#D97706", iconBg: "bg-amber-100 dark:bg-amber-900/40" },
   { icon: "receipt" as const, label: "Pay a Bill", sub: "Via linked account", pts: "+50", color: "#DC2626", iconBg: "bg-red-100 dark:bg-red-900/40" },
-];
-
-const PARTNERS = [
-  { id: "shoprite", name: "Shoprite", offer: "5% off groceries", pts: 150, color: "#DC2626" },
-  { id: "pnp", name: "Pick n Pay", offer: "R20 voucher", pts: 200, color: "#16A34A" },
-  { id: "checkers", name: "Checkers", offer: "3% cashback", pts: 180, color: "#0085C7" },
-  { id: "clicks", name: "Clicks", offer: "R15 off", pts: 100, color: "#7C3AED" },
-  { id: "mrprice", name: "Mr Price", offer: "10% off", pts: 120, color: "#D97706" },
-  { id: "woolworths", name: "Woolworths", offer: "8% off food", pts: 160, color: "#111827" },
 ];
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];

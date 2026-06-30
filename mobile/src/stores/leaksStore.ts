@@ -44,6 +44,18 @@ interface LeaksState {
   resetLeaks: () => void;
 }
 
+export const DEFAULT_MONTHLY_INCOME = 8500;
+
+export function getActiveLeaks(leaks: Leak[]) {
+  return leaks.filter((l) => l.status === "active");
+}
+
+export function getActiveLeakStats(leaks: Leak[]) {
+  const activeLeaks = getActiveLeaks(leaks);
+  const totalMonthly = activeLeaks.reduce((sum, l) => sum + l.amountMonthly, 0);
+  return { activeLeaks, count: activeLeaks.length, totalMonthly };
+}
+
 export const useLeaksStore = create<LeaksState>((set, get) => ({
   leaks: [],
   isLoading: false,

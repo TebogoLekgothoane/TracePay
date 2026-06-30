@@ -7,7 +7,7 @@ import { Screen } from "@/components/Screen";
 import { AppText } from "@/components/Typography";
 import { useProfileStore } from "@/stores/profileStore";
 import { useVoice } from "@/hooks/useVoice";
-import { useLeaksStore } from "@/stores/leaksStore";
+import { useLeaksStore, getActiveLeakStats } from "@/stores/leaksStore";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { router } from "expo-router";
 import { cn } from "@/lib/cn";
@@ -26,9 +26,7 @@ export default function ProfileScreen() {
   const { speak } = useVoice();
   const { colors } = useColorScheme();
 
-  const totalLeaking = leaks
-    .filter((l) => l.status === "active")
-    .reduce((sum, l) => sum + l.amountMonthly, 0);
+  const { count: activeLeakCount, totalMonthly: totalLeaking } = getActiveLeakStats(leaks);
 
   const connectedList = [
     {
@@ -72,7 +70,7 @@ export default function ProfileScreen() {
       setTimeout(
         () =>
           speak(
-            `Voice narration enabled. You have ${leaks.filter((l) => l.status === "active").length} active money leaks totalling R${totalLeaking.toFixed(2)} per month.`,
+            `Voice narration enabled. You have ${activeLeakCount} active money leaks totalling R${totalLeaking.toFixed(2)} per month.`,
           ),
         300,
       );
@@ -148,7 +146,7 @@ export default function ProfileScreen() {
           size="icon"
           onPress={() =>
             speak(
-              `Hello ${name.split(" ")[0]}. You have ${leaks.filter((l) => l.status === "active").length} active leaks.`,
+              `Hello ${name.split(" ")[0]}. You have ${activeLeakCount} active leaks.`,
             )
           }
           className="min-h-0 p-2"
@@ -184,7 +182,7 @@ export default function ProfileScreen() {
           <MaterialCommunityIcons name="alert-circle-outline" size={18} color={colors.destructive} />
           <AppText variant="bodySm" className="flex-1">
             R{totalLeaking.toFixed(2)}/month leaking from{" "}
-            {leaks.filter((l) => l.status === "active").length} active leaks
+            {activeLeakCount} active leaks
           </AppText>
         </Card>
       ) : null}

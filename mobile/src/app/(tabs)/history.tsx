@@ -17,56 +17,30 @@ import { useScreenInsets } from "@/hooks/useScreenInsets";
 import { router } from "expo-router";
 import { useIngestion } from "@/context/SMSIngestionContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
-import { ParsedTransaction, TransactionCategory } from "@/services/sms/sms.types";
+import { ParsedTransaction } from "@/services/sms/sms.types";
 import { cn } from "@/lib/cn";
-import { getTransactionHeadline, getTransactionSummary } from "@/lib/transaction-display";
+import { getTransactionDisplay } from "@/lib/transaction-display";
+import { CATEGORY_ICONS } from "@/constants/category-icons";
 import {
   DATE_RANGE_OPTIONS,
   DateRangeFilter,
   filterTransactionsByDateRange,
+  formatDateLabel,
+  getTransactionDate,
 } from "@/lib/transaction-filters";
 
 type ListItem =
   | { type: "header"; key: string; label: string }
   | { type: "transaction"; key: string; tx: ParsedTransaction };
 
-const CATEGORY_ICONS: Record<TransactionCategory, string> = {
-  groceries: "cart-outline",
-  fuel: "gas-station-outline",
-  dining: "food-outline",
-  entertainment: "television-play",
-  utilities: "lightning-bolt-outline",
-  transfer: "bank-transfer",
-  atm: "cash",
-  online: "web",
-  medical: "hospital-box-outline",
-  other: "dots-horizontal",
-};
-
-function formatDateLabel(date: Date): string {
-  const now = new Date();
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  now.setHours(0, 0, 0, 0);
-  const diff = now.getTime() - d.getTime();
-  if (diff === 0) return "Today";
-  if (diff === 86_400_000) return "Yesterday";
-  return date.toLocaleDateString("en-ZA", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
-}
-
 function buildListItems(transactions: ParsedTransaction[], search: string): ListItem[] {
   const filtered = search
     ? transactions.filter((tx) => {
-        const headline = getTransactionHeadline(tx).toLowerCase();
-        const summary = getTransactionSummary(tx).toLowerCase();
+        const { headline, summary } = getTransactionDisplay(tx);
         const q = search.toLowerCase();
         return (
-          headline.includes(q) ||
-          summary.includes(q) ||
+          headline.toLowerCase().includes(q) ||
+          summary.toLowerCase().includes(q) ||
           tx.bank.toLowerCase().includes(q) ||
           tx.category.toLowerCase().includes(q)
         );
@@ -77,9 +51,7 @@ function buildListItems(transactions: ParsedTransaction[], search: string): List
   let lastLabel = "";
 
   for (const tx of filtered) {
-    const label = formatDateLabel(
-      tx.timestamp instanceof Date ? tx.timestamp : new Date(tx.timestamp),
-    );
+    const label = formatDateLabel(getTransactionDate(tx));
     if (label !== lastLabel) {
       items.push({ type: "header", key: `header-${label}-${tx.id}`, label });
       lastLabel = label;
@@ -92,7 +64,7 @@ function buildListItems(transactions: ParsedTransaction[], search: string): List
 
 export default function HistoryScreen() {
   const { contentPadding } = useScreenInsets("tab");
-  const { colors, isDarkColorScheme } = useColorScheme();
+  const { colors } = useColorScheme();
   const [search, setSearch] = useState("");
   const [showLeaksOnly, setShowLeaksOnly] = useState(false);
   const [dateRange, setDateRange] = useState<DateRangeFilter>("all");
@@ -127,6 +99,7 @@ export default function HistoryScreen() {
 
       const { tx } = item;
       const isDebit = tx.type === "debit";
+      const { headline, summary } = getTransactionDisplay(tx);
 
       return (
         <Card className="mb-2.5" contentClassName="flex-row items-start gap-3">
@@ -144,10 +117,10 @@ export default function HistoryScreen() {
           </View>
           <View className="min-w-0 flex-1">
             <AppText variant="title" numberOfLines={1}>
-              {getTransactionHeadline(tx)}
+              {headline}
             </AppText>
             <AppText variant="bodySm" className="mt-0.5" numberOfLines={2}>
-              {getTransactionSummary(tx)}
+              {summary}
             </AppText>
             <View className="mt-2 flex-row flex-wrap gap-1.5">
               <View className="rounded-md bg-muted px-2 py-0.5 dark:bg-white/10">
@@ -175,10 +148,10 @@ export default function HistoryScreen() {
               {isDebit ? "-" : "+"}R{tx.amount.toFixed(2)}
             </AppText>
             <AppText variant="caption">
-              {(tx.timestamp instanceof Date ? tx.timestamp : new Date(tx.timestamp)).toLocaleTimeString(
-                "en-ZA",
-                { hour: "2-digit", minute: "2-digit" },
-              )}
+              {getTransactionDate(tx).toLocaleTimeString("en-ZA", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
             </AppText>
           </View>
         </Card>
@@ -291,7 +264,6 @@ export default function HistoryScreen() {
     <ScreenFrame>
       <FlatList
         className="flex-1 bg-transparent"
-        style={isDarkColorScheme ? { backgroundColor: "transparent" } : undefined}
         contentContainerClassName="screen-content"
         contentContainerStyle={contentPadding}
         data={listItems}

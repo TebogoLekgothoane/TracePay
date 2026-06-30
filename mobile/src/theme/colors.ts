@@ -39,20 +39,6 @@ export interface ThemePalette {
   purpleGradientStart: string;
   purpleGradientEnd: string;
   tint: string;
-  /** @deprecated use `background` */
-  bg: string;
-  /** @deprecated use `background` */
-  bgAlt: string;
-  /** @deprecated use `card` */
-  surface: string;
-  /** @deprecated use `muted` */
-  surfaceAlt: string;
-  /** @deprecated use `foreground` */
-  text: string;
-  /** @deprecated use `mutedForeground` */
-  textMuted: string;
-  /** @deprecated use `secondaryForeground` */
-  textSub: string;
 }
 
 const light: ThemePalette = {
@@ -88,13 +74,6 @@ const light: ThemePalette = {
   purpleGradientStart: "#7C3AED",
   purpleGradientEnd: "#A855F7",
   tint: "#7C3AED",
-  bg: "#F7F6FB",
-  bgAlt: "#F7F6FB",
-  surface: "#FFFFFF",
-  surfaceAlt: "#F3F4F6",
-  text: "#111827",
-  textMuted: "#6B7280",
-  textSub: "#4B5563",
 };
 
 /** Liquid-glass dark palette — matches premium violet mesh reference UI. */
@@ -131,13 +110,6 @@ const dark: ThemePalette = {
   purpleGradientStart: "#4C1D95",
   purpleGradientEnd: "#A855F7",
   tint: "#A855F7",
-  bg: "#05010A",
-  bgAlt: "#0A0118",
-  surface: "rgba(255, 255, 255, 0.05)",
-  surfaceAlt: "rgba(255, 255, 255, 0.08)",
-  text: "#FFFFFF",
-  textMuted: "rgba(255, 255, 255, 0.60)",
-  textSub: "rgba(255, 255, 255, 0.85)",
 };
 
 /** Shared glass tokens for components (dark mode). */

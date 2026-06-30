@@ -15,27 +15,12 @@ import { Screen } from "@/components/Screen";
 import { AppText } from "@/components/Typography";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useProfileStore } from "@/stores/profileStore";
-import { useLeaksStore } from "@/stores/leaksStore";
+import { useLeaksStore, getActiveLeakStats, DEFAULT_MONTHLY_INCOME } from "@/stores/leaksStore";
 import { useVoice } from "@/hooks/useVoice";
 import { cn } from "@/lib/cn";
 import { getSeverityStyle } from "@/lib/severity";
-
-const SAMPLE_TRANSACTIONS = [
-  { id: "1", name: "MTN Airtime Advance", date: "20 Apr · MTN Advance", amount: "-R11", isLeak: true },
-  { id: "2", name: "Cash Payment - S. Nkosi", date: "20 Apr · S. Nkosi", amount: "-R350", isLeak: true },
-  { id: "3", name: "ATM Withdrawal - Capitec", date: "19 Apr · Capitec ATM", amount: "-R300", isLeak: true },
-  { id: "4", name: "Woolworths Groceries", date: "18 Apr · Woolworths", amount: "-R425", isLeak: false },
-  { id: "5", name: "Taxi Fare - Mdantsane", date: "18 Apr · MoMo Transfer", amount: "-R25", isLeak: false },
-];
-
-const REWARDS = [
-  { id: "shoprite", partner: "Shoprite", offer: "5% off groceries", icon: "cart-outline", color: "#DC2626", iconBg: "bg-red-100 dark:bg-red-900/40", ptsNeeded: 150 },
-  { id: "pnp", partner: "Pick n Pay", offer: "R20 voucher", icon: "shopping-outline", color: "#16A34A", iconBg: "bg-green-100 dark:bg-green-900/40", ptsNeeded: 200 },
-  { id: "checkers", partner: "Checkers", offer: "3% cashback", icon: "cash-check", color: "#0085C7", iconBg: "bg-blue-100 dark:bg-blue-900/40", ptsNeeded: 180 },
-  { id: "mrprice", partner: "Mr Price", offer: "10% off clothing", icon: "hanger", color: "#D97706", iconBg: "bg-amber-100 dark:bg-amber-900/40", ptsNeeded: 120 },
-  { id: "clicks", partner: "Clicks", offer: "R15 off pharmacy", icon: "medical-bag", color: "#7C3AED", iconBg: "bg-brand-purple-light dark:bg-primary/20", ptsNeeded: 100 },
-  { id: "woolworths", partner: "Woolworths", offer: "8% off food", icon: "food-apple-outline", color: "#111827", iconBg: "bg-gray-100 dark:bg-white/10", ptsNeeded: 160 },
-];
+import { DEMO_LEAKS } from "@/lib/simulate";
+import { PARTNERS } from "@/constants/partners";
 
 const ACTIONS = [
   { id: "freeze", label: "Freeze\nLeaks", icon: "snowflake", bgClass: "bg-brand-purple" },
@@ -47,7 +32,7 @@ const ACTIONS = [
 export default function HomeScreen() {
   const { topOffset } = useScreenInsets();
   const { colors, isDarkColorScheme } = useColorScheme();
-  const { name, monthlyIncome, rewardPoints } = useProfileStore();
+  const { monthlyIncome, rewardPoints } = useProfileStore();
   const { leaks, fetchLeaks } = useLeaksStore();
   const { speak } = useVoice();
   const [showNotifications, setShowNotifications] = useState(false);
@@ -57,45 +42,24 @@ export default function HomeScreen() {
       await fetchLeaks();
       const { leaks: current, addLeaks } = useLeaksStore.getState();
       if (current.length === 0) {
-        await addLeaks([
-          {
-            name: "iflix Subscription",
-            category: "Zombie Subscription",
-            categoryIcon: "television-play",
-            amountMonthly: 49.99,
-            severity: "Medium",
+        await addLeaks(
+          DEMO_LEAKS.map((l) => ({
+            name: l.name,
+            category: l.category,
+            categoryIcon: l.categoryIcon,
+            amountMonthly: l.amountMonthly,
+            severity: l.severity,
             status: "active",
-            sourceSms: "MTN: R49.99 deducted for iflix subscription.",
-            advice: "Dial *141*9# on your MTN SIM to cancel iflix and stop the R49.99 monthly charge.",
-          },
-          {
-            name: "Capitec Loan Interest",
-            category: "Loan Interest",
-            categoryIcon: "cash",
-            amountMonthly: 87.50,
-            severity: "High",
-            status: "active",
-            sourceSms: "Capitec: R350.00 deducted. Loan repayment + R87.50 interest. Acc ...4821",
-            advice: "Visit Capitec and request a loan restructure — a shorter term reduces total interest by up to 40%.",
-          },
-          {
-            name: "MTN Caller Tune",
-            category: "Zombie Subscription",
-            categoryIcon: "phone",
-            amountMonthly: 39.96,
-            severity: "Low",
-            status: "active",
-            sourceSms: "MTN: Caller Tune subscription renewed. R39.96 deducted.",
-            advice: "Dial *135*5# on your MTN SIM to cancel Caller Tune and save R39.96 every month.",
-          },
-        ]);
+            sourceSms: l.sourceSms,
+            advice: l.advice,
+          })),
+        );
       }
     })();
   }, [fetchLeaks]);
 
-  const activeLeaks = leaks.filter((l) => l.status === "active");
-  const totalLeaking = activeLeaks.reduce((sum, l) => sum + l.amountMonthly, 0);
-  const estimatedIncome = monthlyIncome > 0 ? monthlyIncome : 8500;
+  const { activeLeaks, totalMonthly: totalLeaking } = getActiveLeakStats(leaks);
+  const estimatedIncome = monthlyIncome > 0 ? monthlyIncome : DEFAULT_MONTHLY_INCOME;
   const healthScore = Math.max(0, 100 - Math.round((totalLeaking / estimatedIncome) * 100));
   const healthColor =
     healthScore >= 70 ? colors.success : healthScore >= 40 ? colors.warning : colors.destructive;
@@ -113,8 +77,6 @@ export default function HomeScreen() {
       router.push("/(tabs)/sms-scanning");
     }
   };
-
-  const firstName = name.split(" ")[0] ?? name;
 
   return (
     <>
@@ -304,13 +266,13 @@ export default function HomeScreen() {
           className="-mx-[18px]"
           contentContainerClassName="gap-3 px-[18px] pb-1"
         >
-          {REWARDS.map((r) => (
+          {PARTNERS.map((r) => (
             <Card key={r.id} className="w-[140px]" contentClassName="gap-0">
               <View className={cn("mb-2.5 h-11 w-11 items-center justify-center rounded-xl", r.iconBg)}>
                 <MaterialCommunityIcons name={r.icon as any} size={26} color={r.color} />
               </View>
               <AppText variant="label" className="mb-0.5">
-                {r.partner}
+                {r.name}
               </AppText>
               <AppText variant="caption" className="mb-2 leading-4">
                 {r.offer}
@@ -318,61 +280,21 @@ export default function HomeScreen() {
               <View className="mb-2.5 flex-row items-center gap-[3px]">
                 <MaterialCommunityIcons name="star-circle-outline" size={12} color={colors.primary} />
                 <AppText variant="caption" className="text-brand-purple dark:text-primary">
-                  {r.ptsNeeded} pts
+                  {r.pts} pts
                 </AppText>
               </View>
               <Button
                 size="sm"
                 fullWidth
-                disabled={rewardPoints < r.ptsNeeded}
+                disabled={rewardPoints < r.pts}
                 className="rounded-lg py-[7px]"
-                textClassName={cn(rewardPoints < r.ptsNeeded && "text-muted-foreground")}
+                textClassName={cn(rewardPoints < r.pts && "text-muted-foreground")}
               >
-                {rewardPoints >= r.ptsNeeded ? "Redeem" : "Need more pts"}
+                {rewardPoints >= r.pts ? "Redeem" : "Need more pts"}
               </Button>
             </Card>
           ))}
         </ScrollView>
-
-        <View className="mb-3 flex-row items-center justify-between">
-          <AppText variant="title">Recent transactions</AppText>
-          <Button variant="link" onPress={() => router.push("/(tabs)/history")}>
-            See all
-          </Button>
-        </View>
-
-        {SAMPLE_TRANSACTIONS.map((tx) => (
-          <Card key={tx.id} className="mb-2.5" contentClassName="flex-row items-center gap-3">
-            <View
-              className={cn(
-                "h-[38px] w-[38px] items-center justify-center rounded-[10px]",
-                tx.isLeak ? "bg-red-100 dark:bg-red-900/40" : "bg-muted dark:bg-white/10",
-              )}
-            >
-              {tx.isLeak ? (
-                <Feather name="alert-triangle" size={16} color={colors.destructive} />
-              ) : (
-                <Feather name="arrow-up-right" size={16} color={colors.mutedForeground} />
-              )}
-            </View>
-            <View className="flex-1">
-              <AppText variant="label" className="mb-0.5">
-                {tx.name}
-              </AppText>
-              <AppText variant="caption">{tx.date}</AppText>
-            </View>
-            <View className="items-end gap-1">
-              <AppText variant="label">{tx.amount}</AppText>
-              {tx.isLeak ? (
-                <View className="badge-danger py-0.5">
-                  <AppText variant="caption" className="font-semibold text-red-600 dark:text-red-400">
-                    Leak
-                  </AppText>
-                </View>
-              ) : null}
-            </View>
-          </Card>
-        ))}
       </Screen>
 
       <Modal

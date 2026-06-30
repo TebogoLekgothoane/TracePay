@@ -13,60 +13,10 @@ import { useColorScheme } from "@/hooks/useColorScheme";
 import { TransactionCategory } from "@/services/sms/sms.types";
 import { cn } from "@/lib/cn";
 import { getSeverityStyle } from "@/lib/severity";
+import { DEMO_LEAKS, type SimulatedLeak } from "@/lib/simulate";
+import { CATEGORY_ICONS } from "@/constants/category-icons";
 
-interface LeakResult {
-  name: string;
-  category: string;
-  categoryIcon: string;
-  severity: "High" | "Medium" | "Low";
-  amountMonthly: number;
-  detail?: string;
-  sourceSms?: string;
-  advice?: string;
-}
-
-const FALLBACK_LEAKS: LeakResult[] = [
-  {
-    name: "iflix Subscription",
-    category: "Zombie Subscription",
-    categoryIcon: "television-play",
-    severity: "Medium",
-    amountMonthly: 49.99,
-    sourceSms: "MTN: R49.99 deducted for iflix subscription.",
-    advice: "Dial *141*9# on your MTN SIM right now to cancel iflix — you'll stop the R49.99 deduction before your next billing cycle.",
-  },
-  {
-    name: "Capitec Loan Interest",
-    category: "Loan Interest",
-    categoryIcon: "cash",
-    severity: "High",
-    amountMonthly: 87.50,
-    sourceSms: "Capitec: R350.00 deducted. Loan repayment + R87.50 interest. Acc ...4821",
-    advice: "Visit your nearest Capitec branch to restructure this loan — requesting a shorter term reduces total interest paid by up to 40%.",
-  },
-  {
-    name: "Vodacom Airtime Advance Fee",
-    category: "Airtime Advance Fee",
-    categoryIcon: "phone",
-    severity: "High",
-    amountMonthly: 32.4,
-    sourceSms: "Vodacom: Airtime advance of R30.00 approved. Fee: R5.40. Repayable on recharge.",
-    advice: "Buy a R30 Vodacom data bundle in advance via the MyVodacom app — you avoid the 18% advance fee and the bundle lasts longer.",
-  },
-];
-
-const CATEGORY_ICONS: Record<TransactionCategory, string> = {
-  groceries: "cart-outline",
-  fuel: "gas-station-outline",
-  dining: "food-outline",
-  entertainment: "television-play",
-  utilities: "lightning-bolt-outline",
-  transfer: "bank-transfer",
-  atm: "cash",
-  online: "web",
-  medical: "hospital-box-outline",
-  other: "dots-horizontal",
-};
+type LeakResult = SimulatedLeak & { detail?: string };
 
 type LeakCardProps = {
   leak: LeakResult;
@@ -178,7 +128,7 @@ export default function SmsResultsScreen() {
       })()
     : null;
 
-  const rawLeaks: LeakResult[] = parsedData?.leaks?.length ? parsedData.leaks : FALLBACK_LEAKS;
+  const rawLeaks: LeakResult[] = parsedData?.leaks?.length ? parsedData.leaks : DEMO_LEAKS;
   const totalMonthly = rawLeaks.reduce((sum, l) => sum + l.amountMonthly, 0);
   const onboardingComplete = useProfileStore((s) => s.onboardingComplete);
 

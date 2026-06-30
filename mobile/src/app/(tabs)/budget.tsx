@@ -14,7 +14,7 @@ import { GlassInput } from "@/components/GlassInput";
 import { Screen } from "@/components/Screen";
 import { AppText } from "@/components/Typography";
 import { useProfileStore } from "@/stores/profileStore";
-import { useLeaksStore } from "@/stores/leaksStore";
+import { useLeaksStore, getActiveLeaks, DEFAULT_MONTHLY_INCOME } from "@/stores/leaksStore";
 import { useVoice } from "@/hooks/useVoice";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { simulateBudgetGenerate } from "@/lib/simulate";
@@ -221,8 +221,8 @@ export default function BudgetScreen() {
     if (generating) return;
     setGenerating(true);
     try {
-      const activeLeaks = leaks.filter((l) => l.status === "active");
-      const income = monthlyIncome > 0 ? monthlyIncome : 8500;
+      const activeLeaks = getActiveLeaks(leaks);
+      const income = monthlyIncome > 0 ? monthlyIncome : DEFAULT_MONTHLY_INCOME;
       const data = simulateBudgetGenerate(
         income,
         activeLeaks.map((l) => ({
