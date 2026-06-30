@@ -1,177 +1,150 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
-  Text,
   ScrollView,
   Switch,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
+  Pressable,
+  Linking,
   AppState,
+  Image,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { router } from "expo-router";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
-import { router } from "expo-router";
-import { Feather } from "@expo/vector-icons";
-import Animated, {
-  FadeInDown,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-  type SharedValue,
-} from "react-native-reanimated";
-import * as Haptics from "expo-haptics";
-import { SafeAreaView } from "react-native-safe-area-context";
-
+import { AppText } from "@/components/Typography";
 import { consentCopy as t } from "@/constants/consent-copy";
+import { cn } from "@/lib/cn";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import { useIngestion } from "@/context/SMSIngestionContext";
 
-const ROADMAP_STEPS = 6;
+const PURPLE = "#A855F7";
+const privacyIconSource = require("@/assets/privacy-icon.png");
 
-const ROADMAP_ICONS: (keyof typeof Feather.glyphMap)[] = [
-  "database",
-  "smartphone",
-  "target",
-  "shield",
-  "check-circle",
-  "lock",
-];
-
-const PURPLE = "#7C3AED";
-const STEP_OFF = "#E5E7EB";
-const STEP_BORDER_OFF = "#D1D5DB";
-
-function RoadmapStep({
-  index,
-  filledSteps,
-  icon,
-}: {
-  index: number;
-  total: number;
-  filledSteps: SharedValue<number>;
-  icon: keyof typeof Feather.glyphMap;
-}) {
-  const circleStyle = useAnimatedStyle(() => {
-    const isFilled = filledSteps.value > index;
-    return {
-      backgroundColor: isFilled ? PURPLE : STEP_OFF,
-      borderWidth: 2,
-      borderColor: isFilled ? PURPLE : STEP_BORDER_OFF,
-    };
-  });
-
-  const filledIconStyle = useAnimatedStyle(() => ({
-    opacity: filledSteps.value > index ? 1 : 0,
-  }));
-
-  const unfilledIconStyle = useAnimatedStyle(() => ({
-    opacity: filledSteps.value > index ? 0 : 1,
-  }));
-
-  return (
-    <Animated.View
-      className="h-11 w-11 items-center justify-center rounded-full"
-      style={circleStyle}
-    >
-      <Animated.View
-        className="absolute inset-0 items-center justify-center"
-        style={unfilledIconStyle}
-      >
-        <Feather name={icon} size={18} color="#6B7280" />
-      </Animated.View>
-      <Animated.View
-        className="absolute inset-0 items-center justify-center"
-        style={filledIconStyle}
-      >
-        <Feather name={icon} size={18} color="#FFFFFF" />
-      </Animated.View>
-    </Animated.View>
-  );
-}
-
-function ConsentSection({
-  title,
-  items,
-  delay,
-}: {
+type AccordionCardProps = {
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  iconColor?: string;
   title: string;
-  items: string[];
-  delay: number;
-}) {
+  summary: string;
+  details?: readonly string[];
+  expanded: boolean;
+  onToggle: () => void;
+  trailing?: React.ReactNode;
+};
+
+function AccordionCard({
+  icon,
+  iconColor = PURPLE,
+  title,
+  summary,
+  details,
+  expanded,
+  onToggle,
+  trailing,
+}: AccordionCardProps) {
   return (
-    <Animated.View entering={FadeInDown.delay(delay).springify()}>
-      <Card className="mb-4 p-0">
-        <Text className="mb-3 text-base font-semibold text-foreground">{title}</Text>
-        <View className="gap-2">
-          {items.map((item, index) => (
-            <View key={index} className="flex-row items-start">
-              <View className="mr-3 mt-2 h-1.5 w-1.5 rounded-full bg-brand-purple" />
-              <Text className="flex-1 text-sm leading-5 text-muted-foreground">{item}</Text>
+    <Card contentClassName="gap-0">
+      <View className="flex-row items-start gap-4">
+        <Pressable
+          onPress={onToggle}
+          className="min-w-0 flex-1 flex-row items-start gap-4 active:opacity-90"
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+        >
+          <View className="shrink-0">
+            <MaterialCommunityIcons name={icon} size={28} color={iconColor} />
+          </View>
+
+          <View className="min-w-0 flex-1">
+            <AppText variant="title">{title}</AppText>
+            <AppText variant="lead" className="mt-2">
+              {summary}
+            </AppText>
+          </View>
+        </Pressable>
+
+        {trailing}
+
+        <Pressable
+          onPress={onToggle}
+          hitSlop={8}
+          className="shrink-0 pt-1"
+          accessibilityRole="button"
+          accessibilityLabel={expanded ? "Collapse section" : "Expand section"}
+        >
+          <Feather
+            name="chevron-down"
+            size={20}
+            color="#FFFFFF"
+            style={{ transform: [{ rotate: expanded ? "180deg" : "0deg" }] }}
+          />
+        </Pressable>
+      </View>
+
+      {expanded && details && details.length > 0 ? (
+        <View className="mt-4 gap-2 border-t border-white/10 pt-4">
+          {details.map((item, index) => (
+            <View key={index} className="flex-row items-start gap-2">
+              <View className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+              <AppText variant="bodySm" className="flex-1">
+                {item}
+              </AppText>
             </View>
           ))}
         </View>
-      </Card>
-    </Animated.View>
+      ) : null}
+    </Card>
+  );
+}
+
+type ConsentCheckboxProps = {
+  checked: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+};
+
+function ConsentCheckbox({ checked, onToggle, children }: ConsentCheckboxProps) {
+  return (
+    <Pressable
+      onPress={onToggle}
+      className="flex-row items-start gap-3 active:opacity-90"
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+    >
+      <View
+        className={cn(
+          "mt-0.5 h-5 w-5 shrink-0 items-center justify-center rounded-md border",
+          checked
+            ? "border-primary bg-primary"
+            : "border-white/25 bg-transparent",
+        )}
+      >
+        {checked ? <Feather name="check" size={14} color="#FFFFFF" /> : null}
+      </View>
+      <AppText variant="bodySm" className="flex-1 leading-5 text-foreground">
+        {children}
+      </AppText>
+    </Pressable>
   );
 }
 
 export default function ConsentScreen() {
-  const scrollViewRef = useRef<ScrollView>(null);
-
   const includeMomoData = useOnboardingStore((s) => s.includeMomoData);
   const setIncludeMomoData = useOnboardingStore((s) => s.setIncludeMomoData);
   const setConsentGiven = useOnboardingStore((s) => s.setConsentGiven);
-  const { requestPermission, refreshPermission, openPermissionSettings } = useIngestion();
+  const { requestPermission, refreshPermission, openPermissionSettings } =
+    useIngestion();
 
   const [localMomoSetting, setLocalMomoSetting] = useState(includeMomoData);
   const [permissionBlocked, setPermissionBlocked] = useState(false);
-  const scrollProgress = useSharedValue(0);
-  const filledSteps = useSharedValue(0);
-  const roadmapHeight = useSharedValue(0);
-  const [cardsSectionY, setCardsSectionY] = useState(0);
-  const [cardsSectionHeight, setCardsSectionHeight] = useState(0);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [privacyPolicyChecked, setPrivacyPolicyChecked] = useState(false);
+  const [dataProcessingChecked, setDataProcessingChecked] = useState(false);
 
-  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, layoutMeasurement } = e.nativeEvent;
-    const scrollY = contentOffset.y;
-    const viewport = layoutMeasurement.height;
-    if (cardsSectionHeight <= 0) return;
-
-    const cardsScrollStart = cardsSectionY;
-    const cardsScrollEnd = cardsSectionY + cardsSectionHeight - viewport;
-    const range = Math.max(1, cardsScrollEnd - cardsScrollStart);
-    const rawProgress = Math.max(0, Math.min(1, (scrollY - cardsScrollStart) / range));
-
-    let fillProgress: number;
-    if (rawProgress >= 0.85) {
-      fillProgress = 0.7 + ((rawProgress - 0.85) / 0.15) * 0.3;
-    } else {
-      fillProgress = Math.pow(rawProgress, 1.2) * 0.82;
-    }
-    fillProgress = Math.min(1, fillProgress);
-
-    scrollProgress.value = withTiming(fillProgress, { duration: 200 });
-
-    let step = Math.floor(rawProgress * ROADMAP_STEPS);
-    if (rawProgress >= 0.9 || step >= ROADMAP_STEPS - 1) {
-      step = ROADMAP_STEPS - 1;
-    }
-    filledSteps.value = withTiming(step + 1, { duration: 150 });
-  };
-
-  const handleCardsSectionLayout = (e: {
-    nativeEvent: { layout: { height: number; y: number } };
-  }) => {
-    const { height, y } = e.nativeEvent.layout;
-    setCardsSectionY(y);
-    setCardsSectionHeight(height);
-    roadmapHeight.value = height;
-  };
-
-  const roadmapFillStyle = useAnimatedStyle(() => ({
-    height: scrollProgress.value * roadmapHeight.value,
-    backgroundColor: PURPLE,
-  }));
+  const canContinue = privacyPolicyChecked && dataProcessingChecked;
 
   const continueIfGranted = useCallback(async () => {
     const status = await refreshPermission();
@@ -185,6 +158,8 @@ export default function ConsentScreen() {
   }, [refreshPermission]);
 
   const handleAgree = async () => {
+    if (!canContinue) return;
+
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIncludeMomoData(localMomoSetting);
     setConsentGiven(true);
@@ -220,160 +195,207 @@ export default function ConsentScreen() {
     setLocalMomoSetting(value);
   };
 
-  return (
-    <SafeAreaView className="flex-1 bg-background" edges={["left", "right", "bottom"]}>
-      <ScrollView
-        ref={scrollViewRef}
-        className="flex-1"
-        contentContainerStyle={{
-          paddingHorizontal: 24,
-          paddingBottom: 24,
-        }}
-        onScroll={handleScroll}
-        scrollEventThrottle={24}
-        showsVerticalScrollIndicator={false}
-      >
-        <Animated.View entering={FadeInDown.delay(50).springify()} className="mb-6">
-          <Text className="text-[32px] font-bold leading-[38px] text-foreground">
-            Privacy &{" "}
-            <Text className="text-brand-purple">consent</Text>
-          </Text>
-          <Text className="mt-3 text-base leading-6 text-muted-foreground">
-            {t.consentSubtitle}
-          </Text>
-          <Text className="mt-3 text-[15px] leading-[22px] text-foreground">
-            {t.consentIntro}
-          </Text>
-        </Animated.View>
+  const toggleAccordion = (id: string) => {
+    setExpandedId((current) => (current === id ? null : id));
+  };
 
-        <View className="mb-6 flex-row items-stretch" onLayout={handleCardsSectionLayout}>
-          <View className="relative mr-1 min-h-[200px] w-14">
-            <View className="absolute bottom-0 left-5 top-0 w-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-              <Animated.View
-                className="absolute left-0 right-0 top-0 rounded-full"
-                style={roadmapFillStyle}
+  const togglePrivacyPolicy = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setPrivacyPolicyChecked((value) => !value);
+  };
+
+  const toggleDataProcessing = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setDataProcessingChecked((value) => !value);
+  };
+
+  const openPrivacyPolicy = () => {
+    void Linking.openURL("https://tracepay.co.za/privacy");
+  };
+
+  return (
+    <SafeAreaView
+      className="flex-1 bg-background dark:bg-transparent"
+      edges={["left", "right", "bottom"]}
+    >
+      <View className="flex-1">
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{
+            paddingHorizontal: 24,
+            paddingBottom: 16,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View className="relative mb-6 mt-2">
+            <View className="absolute -right-1 top-0 z-0">
+              <Image
+                source={privacyIconSource}
+                className="h-20 w-[80px]"
+                resizeMode="contain"
+                accessibilityLabel="Privacy and security"
               />
             </View>
-            {Array.from({ length: ROADMAP_STEPS }).map((_, i) => (
-              <View
-                key={i}
-                className="absolute left-0 -mt-[22px]"
-                style={{ top: `${(i / (ROADMAP_STEPS - 1)) * 100}%` }}
+
+            <View className="relative z-10 pr-[84px]">
+              <AppText variant="titleLg">
+                Privacy &{" "}
+                <AppText variant="titleLg" className="text-brand-purple">
+                  consent
+                </AppText>
+              </AppText>
+              <AppText
+                variant="bodyMuted"
+                className="mt-2 text-[15px] leading-[22px]"
               >
-                <RoadmapStep
-                  index={i}
-                  total={ROADMAP_STEPS}
-                  filledSteps={filledSteps}
-                  icon={ROADMAP_ICONS[i]}
-                />
-              </View>
-            ))}
+                {t.consentSubtitle}
+              </AppText>
+            </View>
           </View>
 
-          <View className="min-w-0 flex-1">
-            <ConsentSection
+          <View className="gap-4">
+            <AccordionCard
+              icon="database-outline"
               title={t.dataAccessTitle}
-              items={[t.dataAccess1, t.dataAccess2]}
-              delay={100}
+              summary={t.dataAccessSummary}
+              details={t.dataAccessDetails}
+              expanded={expandedId === "data"}
+              onToggle={() => toggleAccordion("data")}
             />
 
-            <Animated.View entering={FadeInDown.delay(150).springify()}>
-              <Card className="mb-4 flex-row items-center justify-between p-0">
-                <View className="mr-4 flex-1">
-                  <Text className="text-base font-semibold text-foreground">
-                    {t.includeMomoData}
-                  </Text>
-                  <Text className="mt-2 text-sm leading-[18px] text-muted-foreground">
-                    {t.momoDescription}
-                  </Text>
-                </View>
+            <AccordionCard
+              icon="cellphone"
+              iconColor="#8B5CF6"
+              title={t.includeMomoData}
+              summary={t.momoDescription}
+              details={[
+                "Includes Vodacom, MTN, Cell C and Telkom MoMo SMS.",
+                "You can turn this off at any time in settings.",
+              ]}
+              expanded={expandedId === "momo"}
+              onToggle={() => toggleAccordion("momo")}
+              trailing={
                 <Switch
                   value={localMomoSetting}
                   onValueChange={handleMomoToggle}
-                  trackColor={{ false: "#E5E7EB", true: PURPLE }}
+                  trackColor={{ false: "#3F3F46", true: PURPLE }}
                   thumbColor="#FFFFFF"
-                  ios_backgroundColor="#E5E7EB"
+                  ios_backgroundColor="#3F3F46"
                 />
-              </Card>
-            </Animated.View>
+              }
+            />
 
-            <ConsentSection
+            <AccordionCard
+              icon="crosshairs-gps"
+              iconColor="#3B82F6"
               title={t.whyWeNeedTitle}
-              items={[t.whyWeNeed1, t.whyWeNeed2, t.whyWeNeed3]}
-              delay={200}
+              summary={t.whyWeNeedSummary}
+              details={t.whyWeNeedDetails}
+              expanded={expandedId === "why"}
+              onToggle={() => toggleAccordion("why")}
             />
-            <ConsentSection
+
+            <AccordionCard
+              icon="shield-off-outline"
+              iconColor="#22C55E"
               title={t.whatWeDoNotTitle}
-              items={[t.whatWeDoNot1, t.whatWeDoNot2, t.whatWeDoNot3]}
-              delay={250}
-            />
-            <ConsentSection
-              title={t.yourRightsTitle}
-              items={[t.yourRights1, t.yourRights2, t.yourRights3]}
-              delay={300}
-            />
-            <ConsentSection
-              title={t.importantTitle}
-              items={[t.important1, t.important2, t.important3]}
-              delay={350}
+              summary={t.whatWeDoNotSummary}
+              details={t.whatWeDoNotDetails}
+              expanded={expandedId === "not"}
+              onToggle={() => toggleAccordion("not")}
             />
           </View>
-        </View>
 
-        {permissionBlocked && (
-          <View className="mb-4 gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-950/40">
-            <View className="flex-row items-center gap-2">
-              <Feather name="shield" size={20} color="#DC2626" />
-              <Text className="flex-1 text-base font-semibold text-red-800 dark:text-red-300">
-                Android blocked SMS access
-              </Text>
+          <Card className="mt-4">
+            <AppText variant="title" className="mb-4">
+              {t.yourConsentTitle}
+            </AppText>
+
+            <View className="gap-4">
+              <ConsentCheckbox
+                checked={privacyPolicyChecked}
+                onToggle={togglePrivacyPolicy}
+              >
+                {t.privacyPolicyConsent}{" "}
+                <AppText
+                  variant="bodySm"
+                  className="text-brand-purple underline"
+                  onPress={openPrivacyPolicy}
+                >
+                  {t.privacyPolicyLink}
+                </AppText>
+                .
+              </ConsentCheckbox>
+
+              <ConsentCheckbox
+                checked={dataProcessingChecked}
+                onToggle={toggleDataProcessing}
+              >
+                {t.dataProcessingConsent}
+              </ConsentCheckbox>
             </View>
-            <Text className="text-sm leading-5 text-red-900 dark:text-red-200">
-              Your phone showed a security warning instead of Allow/Deny. On newer Android this is
-              normal for dev builds. Open Settings, go to Permissions → SMS, allow access for
-              TracePay, then return here.
-            </Text>
-            <Button
-              size="lg"
-              fullWidth
-              className="h-12 rounded-[20px]"
-              onPress={handleOpenSettings}
-            >
-              Open Settings
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              fullWidth
-              className="h-12 rounded-[20px]"
-              onPress={() => void continueIfGranted()}
-            >
-              I&apos;ve enabled it — check again
-            </Button>
-          </View>
-        )}
-      </ScrollView>
+          </Card>
 
-      <View className="border-t border-border bg-background px-6 pb-6 pt-4">
-        <Button
-          size="lg"
-          fullWidth
-          className="h-14 rounded-[24px]"
-          onPress={handleAgree}
-          testID="button-agree"
-        >
-          {permissionBlocked ? "Try SMS permission again" : t.agreeAndContinue}
-        </Button>
-        <Button
-          variant="outline"
-          size="lg"
-          fullWidth
-          className="mt-3 h-14 rounded-[24px]"
-          onPress={handleCancel}
-          testID="button-cancel"
-        >
-          {t.cancel}
-        </Button>
+          {permissionBlocked ? (
+            <View className="mt-4 gap-3 rounded-[20px] border border-red-500/30 bg-red-500/10 p-4">
+              <View className="flex-row items-center gap-2">
+                <Feather name="shield" size={20} color="#F87171" />
+                <AppText variant="title" className="flex-1 text-base text-red-300">
+                  Android blocked SMS access
+                </AppText>
+              </View>
+              <AppText variant="bodySm" className="text-red-200">
+                Your phone showed a security warning instead of Allow/Deny. On
+                newer Android this is normal for dev builds. Open Settings, go
+                to Permissions → SMS, allow access for TracePay, then return
+                here.
+              </AppText>
+              <Button
+                size="lg"
+                fullWidth
+                className="h-12 rounded-[20px]"
+                onPress={handleOpenSettings}
+              >
+                Open Settings
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                fullWidth
+                className="h-12 rounded-[20px]"
+                onPress={() => void continueIfGranted()}
+              >
+                I&apos;ve enabled it — check again
+              </Button>
+            </View>
+          ) : null}
+        </ScrollView>
+
+        <View className="z-10 border-t border-border bg-background px-6 pb-6 pt-4 dark:border-white/10 dark:bg-transparent">
+          <Button
+            size="lg"
+            fullWidth
+            className="h-14 rounded-[24px]"
+            onPress={handleAgree}
+            disabled={!canContinue && !permissionBlocked}
+            testID="button-agree"
+            iconRight={
+              <Feather name="arrow-right" size={18} color="#FFFFFF" />
+            }
+          >
+            {permissionBlocked ? "Try SMS permission again" : t.agreeAndContinue}
+          </Button>
+          <Button
+            variant="outline"
+            size="lg"
+            fullWidth
+            className="mt-3 h-14 rounded-[24px]"
+            onPress={handleCancel}
+            testID="button-cancel"
+          >
+            {t.cancel}
+          </Button>
+        </View>
       </View>
     </SafeAreaView>
   );

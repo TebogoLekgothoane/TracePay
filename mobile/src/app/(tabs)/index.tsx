@@ -254,7 +254,7 @@ export default function HomeScreen() {
         contentContainerClassName="px-[18px] gap-3 pb-1"
       >
         {REWARDS.map((r) => (
-          <View key={r.id} className="card w-[140px] border border-gray-100 dark:border-gray-700">
+          <View key={r.id} className="card w-[140px] dark:border-0 border border-gray-100">
             <View className={cn("w-11 h-11 rounded-xl items-center justify-center mb-2.5", r.iconBg)}>
               <MaterialCommunityIcons name={r.icon as any} size={26} color={r.color} />
             </View>

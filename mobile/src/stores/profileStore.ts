@@ -26,6 +26,8 @@ interface ProfileState {
   setConnectedAccounts: (accounts: Record<string, boolean>) => void;
   signUp: (email: string, password: string, phone?: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
+  accountExistsForEmail: (email: string) => Promise<boolean>;
+  resetPassword: (email: string, newPassword: string) => Promise<void>;
   signOut: () => Promise<void>;
   addRewardPoints: (pts: number) => void;
   completeOnboarding: () => Promise<void>;
@@ -137,6 +139,31 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     await AsyncStorage.setItem(AUTH_KEYS.isAuthenticated, "true");
     set({ isAuthenticated: true, email: storedEmail.toLowerCase() });
     await get().loadFromStorage();
+  },
+
+  accountExistsForEmail: async (email) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    const [storedEmail, isAuth] = await Promise.all([
+      AsyncStorage.getItem(AUTH_KEYS.email),
+      AsyncStorage.getItem(AUTH_KEYS.isAuthenticated),
+    ]);
+
+    return isAuth === "true" && storedEmail?.toLowerCase() === normalizedEmail;
+  },
+
+  resetPassword: async (email, newPassword) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    const exists = await get().accountExistsForEmail(normalizedEmail);
+
+    if (!exists) {
+      throw new AuthError("No account found with this email.");
+    }
+
+    if (newPassword.length < 6) {
+      throw new AuthError("Password must be at least 6 characters.");
+    }
+
+    await AsyncStorage.setItem(AUTH_KEYS.password, newPassword);
   },
 
   signOut: async () => {

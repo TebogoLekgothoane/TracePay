@@ -8,12 +8,26 @@ export function useVoice() {
 
   const getLocale = useCallback(() => {
     switch (language) {
+      case "Afrikaans":
+        return "af-ZA";
+      case "isiNdebele":
+        return "nr-ZA";
       case "isiXhosa":
         return "xh-ZA";
       case "isiZulu":
         return "zu-ZA";
+      case "Sepedi":
+        return "nso-ZA";
       case "Sesotho":
         return "st-ZA";
+      case "Setswana":
+        return "tn-ZA";
+      case "siSwati":
+        return "ss-ZA";
+      case "Tshivenda":
+        return "ve-ZA";
+      case "Xitsonga":
+        return "ts-ZA";
       default:
         return "en-ZA";
     }

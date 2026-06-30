@@ -1,27 +1,58 @@
 import React from "react";
-import { View, Text, type ViewProps } from "react-native";
+import { View, type ViewProps } from "react-native";
 
+import { AppText } from "@/components/Typography";
+import { GlassSurface } from "@/components/GlassSurface";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { cn } from "@/lib/cn";
+import type { TextVariant } from "@/theme/typography";
 
 export type CardProps = ViewProps & {
   className?: string;
+  contentClassName?: string;
+  variant?: "default" | "elevated";
+  glass?: boolean;
 };
 
-export function Card({ className, children, ...props }: CardProps) {
+export function Card({
+  className,
+  contentClassName,
+  children,
+  variant = "default",
+  glass = true,
+  ...props
+}: CardProps) {
+  const { isDarkColorScheme } = useColorScheme();
+
+  if (isDarkColorScheme && glass) {
+    return (
+      <GlassSurface
+        variant={variant === "elevated" ? "elevated" : "default"}
+        className={cn("p-5", className)}
+        contentClassName={contentClassName}
+        {...props}
+      >
+        {children}
+      </GlassSurface>
+    );
+  }
+
   return (
     <View
-      className={cn("rounded-[32px] bg-transparent p-5", className)}
+      className={cn("rounded-[20px] bg-card p-5 shadow-sm", className)}
       {...props}
     >
-      {children}
+      <View className={cn("w-full", contentClassName)}>{children}</View>
     </View>
   );
 }
 
 export type IconCardProps = Omit<CardProps, "children"> & {
   icon: React.ReactNode;
-  title: string;
+  title?: string;
   description: string;
+  descriptionVariant?: TextVariant;
+  descriptionClassName?: string;
   contentClassName?: string;
 };
 
@@ -29,18 +60,29 @@ export function IconCard({
   icon,
   title,
   description,
+  descriptionVariant = "lead",
+  descriptionClassName,
   className,
   contentClassName,
   ...props
 }: IconCardProps) {
   return (
-    <Card className={cn("flex-row", className)} {...props}>
-      {icon}
-      <View className={cn("ml-4 flex-1", contentClassName)}>
-        <Text className="text-[17px] font-semibold text-foreground">{title}</Text>
-        <Text className="mt-2 text-sm leading-6 text-muted-foreground">
+    <Card
+      className={className}
+      contentClassName={cn("flex-row items-start gap-4", contentClassName)}
+      {...props}
+    >
+      <View className="shrink-0">{icon}</View>
+      <View className="min-w-0 flex-1">
+        {title ? (
+          <AppText variant="title">{title}</AppText>
+        ) : null}
+        <AppText
+          variant={descriptionVariant}
+          className={cn(title && "mt-2", descriptionClassName)}
+        >
           {description}
-        </Text>
+        </AppText>
       </View>
     </Card>
   );

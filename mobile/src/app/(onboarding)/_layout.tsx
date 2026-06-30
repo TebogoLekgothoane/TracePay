@@ -2,21 +2,30 @@ import { View } from "react-native";
 import { Stack, useSegments } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { GlassBackground } from "@/components/GlassBackground";
 import {
   getOnboardingStepFromRoute,
   OnboardingHeader,
 } from "@/components/OnboardingHeader";
+import { useColorScheme } from "@/hooks/useColorScheme";
 
 export default function OnboardingLayout() {
   const segments = useSegments();
   const routeName = segments[segments.length - 1] ?? "";
   const currentStep = getOnboardingStepFromRoute(routeName);
+  const { isDarkColorScheme } = useColorScheme();
 
-  return (
-    <View className="flex-1 bg-background">
+  const content = (
+    <View className={isDarkColorScheme ? "flex-1 bg-transparent" : "flex-1 bg-background"}>
       {currentStep !== null && (
-        <SafeAreaView edges={["top"]} className="bg-background">
-          <OnboardingHeader currentStep={currentStep} />
+        <SafeAreaView
+          edges={["top"]}
+          className={isDarkColorScheme ? "bg-transparent" : "bg-background"}
+        >
+          <OnboardingHeader
+            currentStep={currentStep}
+            showBack={currentStep > 0}
+          />
         </SafeAreaView>
       )}
 
@@ -30,8 +39,15 @@ export default function OnboardingLayout() {
           <Stack.Screen name="features" />
           <Stack.Screen name="consent" />
           <Stack.Screen name="index" />
+          <Stack.Screen name="forgot-password" />
         </Stack>
       </View>
     </View>
   );
+
+  if (isDarkColorScheme) {
+    return <GlassBackground>{content}</GlassBackground>;
+  }
+
+  return content;
 }

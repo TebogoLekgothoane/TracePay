@@ -1,135 +1,100 @@
-
 import React from "react";
-import { View, Text, ScrollView } from "react-native";
+import { View, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { Button } from "@/components/Button";
 import { IconCard } from "@/components/Card";
-import { cn } from "@/lib/cn";
+import { AppText } from "@/components/Typography";
 
 const FEATURES = [
   {
-    icon: "water-outline",
+    id: "leaks",
+    icon: "water-outline" as const,
     color: "#EF4444",
-    title: "Spot Money Leaks",
     desc: "Uncover hidden subscriptions, airtime advances and unnecessary charges.",
   },
   {
-    icon: "brain",
+    id: "budget",
+    icon: "brain" as const,
     color: "#8B5CF6",
-    title: "Smart Budgeting",
     desc: "Get personalised spending insights and weekly guidance.",
   },
   {
-    icon: "chart-line",
+    id: "spending",
+    icon: "chart-line" as const,
     color: "#3B82F6",
-    title: "Understand Your Spending",
     desc: "See where every rand goes with clear transaction history.",
   },
   {
-    icon: "shield-check-outline",
+    id: "control",
+    icon: "shield-check-outline" as const,
     color: "#22C55E",
-    title: "Take Control",
     desc: "Receive simple actions to improve your financial health.",
   },
 ];
 
-
 export default function FeaturesScreen() {
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["left", "right", "bottom"]}>
-      <ScrollView
-        className="flex-1"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingHorizontal: 24,
-          paddingBottom: 32,
-        }}
-      >
-        {/* Hero */}
-        <View className="mb-8 mt-2">
-          <Text className="text-[35px] font-bold leading-[46px] text-foreground">
-            Meet your{"\n"}
-            money{" "}
-            <Text className="text-brand-purple">
-              guardian
-            </Text>
-          </Text>
+    <SafeAreaView
+      className="flex-1 bg-background dark:bg-transparent"
+      edges={["left", "right", "bottom"]}
+    >
+      <View className="flex-1">
+        <ScrollView
+          className="flex-1"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            paddingHorizontal: 24,
+            paddingBottom: 16,
+          }}
+        >
+          <View className="mb-8 mt-2">
+            <AppText variant="display">
+              Meet your{"\n"}
+              money <AppText variant="displayAccent">guardian</AppText>
+            </AppText>
 
-          <Text className="mt-3 text-base leading-6 text-muted-foreground">
-            TracePay helps you understand, protect and grow your money with
-            insights built for South Africans.
-          </Text>
-        </View>
-
-        {/* Feature cards */}
-        <View className="gap-4 align">
-          {FEATURES.map((feature) => (
-            <IconCard
-              key={feature.title}
-              title={feature.title}
-              description={feature.desc}
-              icon={
-                <View
-                  className={cn(
-                    "h-14 w-14 items-center justify-center rounded-2xl",
-                    feature.iconBg,
-                  )}
-                >
-                  <MaterialCommunityIcons
-                    name={feature.icon}
-                    size={26}
-                    color={feature.color}
-                  />
-                </View>
-              }
-            />
-          ))}
-        </View>
-
-        {/* Privacy section */}
-        <View className="mt-10 items-center">
-          <View className="h-14 w-14 items-center justify-center rounded-full bg-muted">
-            <MaterialCommunityIcons
-              name="shield-lock-outline"
-              size={22}
-              color="#7C3AED"
-            />
+            <AppText variant="lead" className="mt-3">
+              TracePay helps you understand, protect and grow your money with
+              insights built for South Africans.
+            </AppText>
           </View>
 
-          <Text className="mt-4 text-base font-semibold text-foreground">
-            Your privacy comes first
-          </Text>
+          <View className="gap-4">
+            {FEATURES.map((feature) => (
+              <IconCard
+                key={feature.id}
+                description={feature.desc}
+                icon={
+                  <MaterialCommunityIcons
+                    name={feature.icon}
+                    size={28}
+                    color={feature.color}
+                  />
+                }
+              />
+            ))}
+          </View>
 
-          <Text className="mt-3 px-6 text-center text-sm leading-6 text-muted-foreground">
-            TracePay never sells your data. SMS access is read-only and your
-            information stays protected and POPIA compliant.
-          </Text>
-        </View>
-      </ScrollView>
+          <View className="mt-10 items-center">
+            <AppText variant="title" className="mt-4 text-center">
+              Your privacy comes first
+            </AppText>
 
-      {/* Footer */}
-      <View className=" bg-background px-6 pb-6 pt-4">
-        <View className="flex-row items-center gap-3">
+            <AppText variant="lead" className="mt-3 px-6 text-center">
+              TracePay never sells your data. SMS access is read-only and your
+              information stays protected and POPIA compliant.
+            </AppText>
+          </View>
+        </ScrollView>
+
+        <View className="z-10 bg-background px-6 pb-6 pt-4 dark:bg-transparent">
           <Button
-            variant="outline"
-            size="icon"
-            className="h-[54px] w-[54px] rounded-2xl"
-            onPress={() => router.back()}
-          >
-            <MaterialCommunityIcons
-              name="arrow-left"
-              size={20}
-              color="#6B7280"
-            />
-          </Button>
-
-          <Button
-            flex
             size="lg"
-            className="h-14 flex-1 rounded-[24px]"
+            fullWidth
+            className="h-14 rounded-[24px]"
             onPress={() => router.push("/(onboarding)/consent")}
           >
             Protect My Money
@@ -139,4 +104,3 @@ export default function FeaturesScreen() {
     </SafeAreaView>
   );
 }
-

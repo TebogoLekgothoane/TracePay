@@ -40,9 +40,9 @@ function ClassicTabLayout() {
         headerShown: false,
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: isIOS ? "transparent" : colors.card,
-          borderTopWidth: 1,
-          borderTopColor: colors.border,
+          backgroundColor: isIOS || isDarkColorScheme ? "transparent" : colors.card,
+          borderTopWidth: isDarkColorScheme ? 0 : 1,
+          borderTopColor: isDarkColorScheme ? "transparent" : colors.border,
           elevation: 0,
           height: isWeb ? 84 : 60,
           paddingBottom: isWeb ? 20 : 8,
@@ -52,14 +52,22 @@ function ClassicTabLayout() {
           fontFamily: "Inter_500Medium",
         },
         tabBarBackground: () =>
-          isIOS ? (
+          isIOS || isDarkColorScheme ? (
             <BlurView
-              intensity={100}
+              intensity={isDarkColorScheme ? 60 : 100}
               tint={isDarkColorScheme ? "dark" : "light"}
               className="absolute inset-0"
             />
           ) : isWeb ? (
-            <View className="absolute inset-0 bg-card" />
+            <View
+              className={
+                isDarkColorScheme
+                  ? "absolute inset-0 bg-white/5"
+                  : "absolute inset-0 bg-card"
+              }
+            />
+          ) : isDarkColorScheme ? (
+            <View className="absolute inset-0 bg-white/5" />
           ) : null,
       }}
     >

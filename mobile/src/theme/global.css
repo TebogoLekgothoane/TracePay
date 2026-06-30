@@ -23,21 +23,21 @@
 
   @media (prefers-color-scheme: dark) {
     :root {
-      --background: 17 24 39;
-      --foreground: 249 250 251;
-      --card: 31 41 55;
-      --card-foreground: 249 250 251;
-      --muted: 31 41 55;
-      --muted-foreground: 156 163 175;
-      --border: 55 65 81;
-      --input: 55 65 81;
-      --primary: 167 139 250;
+      --background: 5 1 10;
+      --foreground: 255 255 255;
+      --card: 255 255 255;
+      --card-foreground: 255 255 255;
+      --muted: 255 255 255;
+      --muted-foreground: 255 255 255;
+      --border: 255 255 255;
+      --input: 255 255 255;
+      --primary: 168 85 247;
       --primary-foreground: 255 255 255;
-      --secondary: 55 65 81;
-      --secondary-foreground: 209 213 219;
+      --secondary: 255 255 255;
+      --secondary-foreground: 255 255 255;
       --destructive: 248 113 113;
-      --accent: 196 181 253;
-      --navy: 11 27 58;
+      --accent: 168 85 247;
+      --navy: 5 1 10;
     }
   }
 }
@@ -62,26 +62,26 @@
 
   /* ── Cards ───────────────────────────────────────────── */
   .card {
-    @apply rounded-2xl bg-card p-4 shadow-sm;
+    @apply rounded-2xl bg-card p-4 shadow-sm dark:rounded-[26px] dark:bg-white/5 dark:shadow-none;
   }
 
   .card-lg {
-    @apply rounded-[20px] bg-card p-6 shadow-md;
+    @apply rounded-[20px] bg-card p-6 shadow-md dark:rounded-[26px] dark:bg-white/5 dark:shadow-none;
   }
 
   .card-row {
-    @apply mb-2.5 flex-row items-center rounded-xl bg-card p-3.5 shadow-sm;
+    @apply mb-2.5 flex-row items-center rounded-xl bg-card p-3.5 shadow-sm dark:rounded-[22px] dark:bg-white/5 dark:shadow-none;
   }
 
   .surface-panel {
-    @apply rounded-[14px] bg-card shadow-sm;
+    @apply rounded-[14px] bg-card shadow-sm dark:rounded-[26px] dark:bg-white/[0.08] dark:shadow-none;
   }
 
   .surface-divider {
-    @apply h-px bg-border;
+    @apply h-px bg-border dark:bg-white/10;
   }
 
-  /* ── Typography ──────────────────────────────────────── */
+  /* ── Typography (see src/theme/typography.ts + AppText) ─ */
   .heading-xl {
     @apply text-[28px] font-bold leading-[34px] text-foreground;
   }
@@ -95,7 +95,7 @@
   }
 
   .body-text {
-    @apply text-sm font-sans leading-5 text-muted-foreground;
+    @apply text-base font-sans leading-6 text-muted-foreground;
   }
 
   .label-sm {
@@ -124,7 +124,7 @@
   }
 
   .input-group {
-    @apply flex-row items-center gap-2.5 rounded-xl border-[1.5px] border-input bg-muted px-3.5 py-3.5;
+    @apply flex-row items-center gap-2.5 rounded-full border-[1.5px] border-input bg-muted px-3.5 py-3.5 dark:rounded-full dark:border-0 dark:bg-white/[0.08] dark:shadow-none;
   }
 
   .input-field {
@@ -133,7 +133,7 @@
 
   /* ── Onboarding ──────────────────────────────────────── */
   .onboarding-header {
-    @apply pb-2 pt-0;
+    @apply pb-4 pt-0;
   }
 
   .onboarding-header-logo {
@@ -157,20 +157,20 @@
   }
 
   .step-dot {
-    @apply h-2 w-2 rounded-full bg-gray-300 dark:bg-gray-600;
+    @apply h-2 w-2 rounded-full bg-gray-300 dark:bg-white/20;
   }
 
   .step-dot-active {
-    @apply w-6 rounded-full bg-brand-purple dark:bg-brand-purple-dark;
+    @apply w-6 rounded-full bg-brand-purple dark:bg-primary;
   }
 
   .step-dot-done {
-    @apply bg-brand-purple-muted dark:bg-brand-purple-dark/70;
+    @apply bg-brand-purple-muted dark:bg-primary/70;
   }
 
   /* ── Language (onboarding) ──────────────────────────── */
   .language-screen {
-    @apply flex-1 bg-white dark:bg-[#0D0D12];
+    @apply flex-1 bg-white dark:bg-transparent;
   }
 
   .language-scroll {
@@ -194,15 +194,15 @@
   }
 
   .language-card {
-    @apply flex-row items-center gap-3 rounded-2xl border-[1.5px] border-border bg-white p-3.5 shadow-sm dark:border-transparent dark:bg-[#1A1A24];
+    @apply flex-row items-center gap-3 rounded-2xl border-[1.5px] border-border bg-white p-3.5 shadow-sm dark:rounded-[22px] dark:border-0 dark:bg-white/5 dark:shadow-none;
   }
 
   .language-card-selected {
-    @apply border-brand-purple bg-brand-purple-faint dark:border-brand-purple dark:bg-[#1A1A24];
+    @apply border-brand-purple bg-brand-purple-faint dark:border-0 dark:bg-white/10;
   }
 
   .language-radio {
-    @apply h-[22px] w-[22px] items-center justify-center rounded-full border-2 border-gray-300 dark:border-gray-600;
+    @apply h-[22px] w-[22px] items-center justify-center rounded-full border-2 border-gray-300 dark:border-white/20;
   }
 
   .language-radio-selected {
@@ -252,11 +252,11 @@
   }
 
   .icon-btn-circle {
-    @apply h-11 w-11 items-center justify-center rounded-full bg-card shadow-sm;
+    @apply h-11 w-11 items-center justify-center rounded-full bg-card shadow-sm dark:bg-white/[0.08] dark:shadow-none;
   }
 
   .back-btn {
-    @apply h-[38px] w-[38px] items-center justify-center rounded-[10px] bg-card shadow-sm;
+    @apply h-[38px] w-[38px] items-center justify-center rounded-full bg-card shadow-sm dark:bg-white/[0.08] dark:shadow-none;
   }
 
   /* ── Badges & chips ──────────────────────────────────── */
@@ -298,19 +298,19 @@
   }
 
   .search-bar {
-    @apply flex-1 flex-row items-center rounded-xl bg-card px-3 py-2.5 shadow-sm;
+    @apply flex-1 flex-row items-center rounded-full bg-card px-3 py-2.5 shadow-sm dark:bg-white/[0.08] dark:shadow-none;
   }
 
   .filter-chip {
-    @apply border border-border bg-card;
+    @apply border border-border bg-card dark:rounded-full dark:border-0 dark:bg-white/[0.08];
   }
 
   .filter-chip-active {
-    @apply border-brand-purple bg-brand-purple;
+    @apply border-brand-purple bg-brand-purple dark:rounded-full dark:border-0 dark:bg-primary;
   }
 
   .modal-sheet {
-    @apply rounded-t-[22px] bg-card p-5 pb-7;
+    @apply rounded-t-[22px] bg-card p-5 pb-7 dark:bg-white/[0.08] dark:shadow-none;
   }
 
   .page-header-title {

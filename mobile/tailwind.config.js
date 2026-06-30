@@ -31,7 +31,7 @@ module.exports = {
         navy: "rgb(var(--navy) / <alpha-value>)",
         white: "#FFFFFF",
         purple: "#6D28D9",
-        "neon-purple": "#BF00FF",
+        "neon-purple": "#A855F7",
         blue: "#0B1B3A",
         bg: {
           DEFAULT: "#FFFFFF",
@@ -44,7 +44,7 @@ module.exports = {
         },
         brand: {
           purple: "#7C3AED",
-          "purple-dark": "#5B21B6",
+          "purple-dark": "#A855F7",
           "purple-light": "#EDE9FE",
           "purple-muted": "#C4B5FD",
           "purple-faint": "#FAFAFF",

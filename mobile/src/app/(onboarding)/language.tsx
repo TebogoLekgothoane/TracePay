@@ -1,6 +1,5 @@
 import {
   View,
-  Text,
   ScrollView,
   Image,
   Pressable,
@@ -9,24 +8,33 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
 import { Button } from "@/components/Button";
+import { AppText } from "@/components/Typography";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import { useProfileStore } from "@/stores/profileStore";
 import { cn } from "@/lib/cn";
 
 const robotSource = require("@/assets/images/robothandup.png");
 
+/** South Africa's 11 official languages. */
 const LANGUAGES = [
-  { code: "English", label: "English", sub: "English" },
-  { code: "Afrikaans", label: "Afrikaans", sub: "Afrikaans" },
-  { code: "isiZulu", label: "isiZulu", sub: "isiZulu" },
-  { code: "isiXhosa", label: "isiXhosa", sub: "isiXhosa" },
-  { code: "Sesotho", label: "Sesotho", sub: "Sesotho" },
-  { code: "Setswana", label: "Setswana", sub: "Setswana" },
+  "English",
+  "Afrikaans",
+  "isiNdebele",
+  "isiXhosa",
+  "isiZulu",
+  "Sepedi",
+  "Sesotho",
+  "Setswana",
+  "siSwati",
+  "Tshivenda",
+  "Xitsonga",
 ];
 
 export default function LanguageScreen() {
   const { selectedLanguage, setSelectedLanguage } = useOnboardingStore();
   const setLanguage = useProfileStore((s) => s.setLanguage);
+  const { isDarkColorScheme } = useColorScheme();
 
   const handleContinue = () => {
     setLanguage(selectedLanguage);
@@ -34,29 +42,30 @@ export default function LanguageScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["left", "right", "bottom"]}>
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{
-          paddingHorizontal: 24,
-          paddingBottom: 24,
-        }}
-        showsVerticalScrollIndicator={false}
-      >
+    <SafeAreaView
+      className="flex-1 bg-background dark:bg-transparent"
+      edges={["left", "right", "bottom"]}
+    >
+      <View className="flex-1">
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{
+            paddingHorizontal: 24,
+            paddingBottom: 16,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
         {/* Hero */}
         <View className="flex-row items-center mb-8">
           <View className="flex-1 pr-2">
-            <Text className="text-4xl font-bold leading-[44px] text-foreground">
+            <AppText variant="display">
               Choose your{"\n"}
-              ideal{" "}
-              <Text className="text-brand-purple">
-                language
-              </Text>
-            </Text>
+              ideal <AppText variant="displayAccent">language</AppText>
+            </AppText>
 
-            <Text className="mt-3 text-base leading-6 text-muted-foreground">
+            <AppText variant="lead" className="mt-3">
               Select the language you'd like to use TracePay in.
-            </Text>
+            </AppText>
           </View>
           
 
@@ -71,62 +80,63 @@ export default function LanguageScreen() {
         {/* Language Cards */}
         <View className="gap-3">
           {LANGUAGES.map((lang) => {
-            const isSelected = selectedLanguage === lang.code;
+            const isSelected = selectedLanguage === lang;
 
             return (
               <Pressable
-                key={lang.code}
-                onPress={() => setSelectedLanguage(lang.code)}
+                key={lang}
+                onPress={() => setSelectedLanguage(lang)}
                 className={cn(
-                  "flex-row items-center rounded-[28px] px-5 py-5 bg-card",
-                  isSelected
-                    ? "border-brand-purple bg-brand-purple/5"
-                    : ""
+                  "flex-row items-center rounded-[28px] px-5 py-5",
+                  isDarkColorScheme
+                    ? isSelected
+                      ? "border border-primary/40 bg-white/[0.12]"
+                      : "border border-white/10 bg-white/[0.08]"
+                    : isSelected
+                      ? "border border-brand-purple bg-brand-purple/5 bg-white"
+                      : "border border-border bg-white",
                 )}
+                style={({ pressed }) => (pressed ? { opacity: 0.92 } : undefined)}
               >
-
-                <View className="flex-1">
-                  <Text className="text-[17px] font-semibold text-foreground">
-                    {lang.label}
-                  </Text>
-
-                  <Text className="mt-1 text-sm text-muted-foreground">
-                    {lang.sub}
-                  </Text>
+                <View className="min-w-0 flex-1 pr-3">
+                  <AppText variant="body" className="font-semibold">
+                    {lang}
+                  </AppText>
                 </View>
 
                 <View
                   className={cn(
-                    "h-7 w-7 rounded-full border-2 items-center justify-center",
+                    "h-7 w-7 shrink-0 rounded-full border-2 items-center justify-center",
                     isSelected
-                      ? "border-brand-purple"
-                      : ""
+                      ? "border-brand-purple dark:border-primary"
+                      : "border-gray-300 dark:border-white/30",
                   )}
                 >
                   {isSelected && (
-                    <View className="h-3 w-3 rounded-full bg-brand-purple" />
+                    <View className="h-3 w-3 rounded-full bg-brand-purple dark:bg-primary" />
                   )}
                 </View>
               </Pressable>
             );
           })}
         </View>
-      </ScrollView>
+        </ScrollView>
 
-      {/* Footer */}
-      <View className=" bg-background px-6 pb-6 pt-4">
-        <Button
-          size="lg"
-          fullWidth
-          className="h-14 rounded-[24px]"
-          onPress={handleContinue}
-        >
-          Continue
-        </Button>
+        {/* Footer — pinned below scroll, above touch layer */}
+        <View className="z-10 bg-background px-6 pb-6 pt-4 dark:bg-transparent">
+          <Button
+            size="lg"
+            fullWidth
+            className="h-14 rounded-[24px]"
+            onPress={handleContinue}
+          >
+            Continue
+          </Button>
 
-        <Text className="mt-5 text-center text-sm text-muted-foreground">
-           You can change this later in Settings
-        </Text>
+          <AppText variant="bodyMuted" className="mt-5 text-center">
+            You can change this later in Settings
+          </AppText>
+        </View>
       </View>
     </SafeAreaView>
   );
