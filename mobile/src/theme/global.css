@@ -45,7 +45,7 @@
 @layer components {
   /* ── Layout ───────────────────────────────────────────── */
   .screen {
-    @apply flex-1 bg-background;
+    @apply flex-1 bg-background dark:bg-transparent;
   }
 
   .screen-content {

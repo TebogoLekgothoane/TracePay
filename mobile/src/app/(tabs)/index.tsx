@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
   View,
-  Text,
   ScrollView,
   Modal,
   Pressable,
@@ -10,8 +9,11 @@ import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useScreenInsets } from "@/hooks/useScreenInsets";
 import { router } from "expo-router";
 import { Button } from "@/components/Button";
+import { Card } from "@/components/Card";
 import CircularProgress from "@/components/CircularProgress";
 import { Screen } from "@/components/Screen";
+import { AppText } from "@/components/Typography";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { useProfileStore } from "@/stores/profileStore";
 import { useLeaksStore } from "@/stores/leaksStore";
 import { useVoice } from "@/hooks/useVoice";
@@ -27,12 +29,12 @@ const SAMPLE_TRANSACTIONS = [
 ];
 
 const REWARDS = [
-  { id: "shoprite", partner: "Shoprite", offer: "5% off groceries", icon: "cart-outline", color: "#DC2626", iconBg: "bg-red-100", ptsNeeded: 150 },
-  { id: "pnp", partner: "Pick n Pay", offer: "R20 voucher", icon: "shopping-outline", color: "#16A34A", iconBg: "bg-green-100", ptsNeeded: 200 },
-  { id: "checkers", partner: "Checkers", offer: "3% cashback", icon: "cash-check", color: "#0085C7", iconBg: "bg-blue-100", ptsNeeded: 180 },
-  { id: "mrprice", partner: "Mr Price", offer: "10% off clothing", icon: "hanger", color: "#D97706", iconBg: "bg-amber-100", ptsNeeded: 120 },
-  { id: "clicks", partner: "Clicks", offer: "R15 off pharmacy", icon: "medical-bag", color: "#7C3AED", iconBg: "bg-brand-purple-light", ptsNeeded: 100 },
-  { id: "woolworths", partner: "Woolworths", offer: "8% off food", icon: "food-apple-outline", color: "#111827", iconBg: "bg-gray-100", ptsNeeded: 160 },
+  { id: "shoprite", partner: "Shoprite", offer: "5% off groceries", icon: "cart-outline", color: "#DC2626", iconBg: "bg-red-100 dark:bg-red-900/40", ptsNeeded: 150 },
+  { id: "pnp", partner: "Pick n Pay", offer: "R20 voucher", icon: "shopping-outline", color: "#16A34A", iconBg: "bg-green-100 dark:bg-green-900/40", ptsNeeded: 200 },
+  { id: "checkers", partner: "Checkers", offer: "3% cashback", icon: "cash-check", color: "#0085C7", iconBg: "bg-blue-100 dark:bg-blue-900/40", ptsNeeded: 180 },
+  { id: "mrprice", partner: "Mr Price", offer: "10% off clothing", icon: "hanger", color: "#D97706", iconBg: "bg-amber-100 dark:bg-amber-900/40", ptsNeeded: 120 },
+  { id: "clicks", partner: "Clicks", offer: "R15 off pharmacy", icon: "medical-bag", color: "#7C3AED", iconBg: "bg-brand-purple-light dark:bg-primary/20", ptsNeeded: 100 },
+  { id: "woolworths", partner: "Woolworths", offer: "8% off food", icon: "food-apple-outline", color: "#111827", iconBg: "bg-gray-100 dark:bg-white/10", ptsNeeded: 160 },
 ];
 
 const ACTIONS = [
@@ -44,6 +46,7 @@ const ACTIONS = [
 
 export default function HomeScreen() {
   const { topOffset } = useScreenInsets();
+  const { colors, isDarkColorScheme } = useColorScheme();
   const { name, monthlyIncome, rewardPoints } = useProfileStore();
   const { leaks, fetchLeaks } = useLeaksStore();
   const { speak } = useVoice();
@@ -94,18 +97,20 @@ export default function HomeScreen() {
   const totalLeaking = activeLeaks.reduce((sum, l) => sum + l.amountMonthly, 0);
   const estimatedIncome = monthlyIncome > 0 ? monthlyIncome : 8500;
   const healthScore = Math.max(0, 100 - Math.round((totalLeaking / estimatedIncome) * 100));
-  const healthColor = healthScore >= 70 ? "#16A34A" : healthScore >= 40 ? "#D97706" : "#DC2626";
+  const healthColor =
+    healthScore >= 70 ? colors.success : healthScore >= 40 ? colors.warning : colors.destructive;
   const healthLabel = healthScore >= 70 ? "HEALTHY" : healthScore >= 40 ? "FAIR" : "AT RISK";
+  const trackColor = isDarkColorScheme ? "rgba(255, 255, 255, 0.12)" : colors.border;
 
   const handleActionPress = (id: string) => {
     if (id === "history") {
-      router.push("/history");
+      router.push("/(tabs)/history");
     } else if (id === "budget") {
       router.push("/(tabs)/budget");
     } else if (id === "freeze") {
       router.push("/(tabs)/sms-scan");
     } else if (id === "scan") {
-      router.push("/sms-scanning");
+      router.push("/(tabs)/sms-scanning");
     }
   };
 
@@ -113,254 +118,348 @@ export default function HomeScreen() {
 
   return (
     <>
-    <Screen>
-      <View className="flex-row justify-between items-start mb-5">
-        <View>
-          <Text className="overline mb-1">WELCOME BACK</Text>
-          <Text className="heading-lg">{firstName} 👋</Text>
-        </View>
-        <Button variant="outline" size="icon" className="icon-btn-circle" onPress={() => setShowNotifications(true)}>
-          <Feather name="bell" size={22} color="#374151" />
-          {activeLeaks.length > 0 && (
-            <View className="absolute top-1.5 right-1.5 bg-red-500 rounded-lg min-w-4 h-4 items-center justify-center px-[3px]">
-              <Text className="text-[10px] font-bold text-white">{activeLeaks.length}</Text>
-            </View>
-          )}
-        </Button>
-      </View>
-
-      <View className="card p-[18px] mb-5 shadow-md">
-        <View className="flex-row items-center mb-4">
-          <MaterialCommunityIcons name="star-four-points-outline" size={16} color="#7C3AED" />
-          <Text className="flex-1 overline-brand"> FINANCIAL HEALTH</Text>
+      <Screen>
+        <View className="mb-5 flex-row items-start justify-between">
+          <View>
+            <AppText variant="overline" className="mb-1">
+              Welcome back
+            </AppText>
+            <AppText variant="titleMd">{firstName} 👋</AppText>
+          </View>
           <Button
-            variant="ghost"
+            variant="outline"
             size="icon"
-            onPress={() => speak(`Your financial health score is ${healthScore} out of 100. You are ${healthLabel}. You have ${activeLeaks.length} active money leaks totalling R${totalLeaking.toFixed(2)} per month.`)}
-            className="p-1 min-h-0"
+            className="icon-btn-circle"
+            onPress={() => setShowNotifications(true)}
           >
-            <MaterialCommunityIcons name="volume-high" size={16} color="#7C3AED" />
+            <Feather name="bell" size={22} color={colors.foreground} />
+            {activeLeaks.length > 0 ? (
+              <View className="absolute right-1.5 top-1.5 min-h-4 min-w-4 items-center justify-center rounded-lg bg-red-500 px-[3px]">
+                <AppText className="text-[10px] font-bold text-white">
+                  {activeLeaks.length}
+                </AppText>
+              </View>
+            ) : null}
           </Button>
         </View>
-        <View className="flex-row items-center gap-6">
-          <CircularProgress
-            value={healthScore}
-            max={100}
-            size={110}
-            strokeWidth={9}
-            color={healthColor}
-            trackColor="#E5E7EB"
-            label={String(healthScore)}
-            sublabel={healthLabel}
-          />
-          <View className="flex-1 gap-4">
-            <View>
-              <Text className="label-sm text-gray-500 mb-0.5">Leaks Found</Text>
-              <Text className="text-[22px] font-bold text-red-600">{activeLeaks.length}</Text>
-            </View>
-            <View>
-              <Text className="label-sm text-gray-500 mb-0.5">Monthly Savings</Text>
-              <Text className="text-[22px] font-bold text-green-600">
-                R{totalLeaking > 0 ? totalLeaking.toFixed(0) : "0"}
-              </Text>
-            </View>
-          </View>
-        </View>
-      </View>
 
-      <View className="flex-row justify-between mb-6">
-        {ACTIONS.map((action) => (
-          <Button
-            key={action.id}
-            variant="ghost"
-            className="flex-col items-center flex-1 min-h-0"
-            onPress={() => handleActionPress(action.id)}
-          >
-            <View className={cn("w-14 h-14 rounded-2xl items-center justify-center mb-2", action.bgClass)}>
-              <MaterialCommunityIcons name={action.icon as any} size={24} color="#FFFFFF" />
-            </View>
-            <Text className="text-xs font-medium text-gray-700 text-center">{action.label}</Text>
-          </Button>
-        ))}
-      </View>
-
-      {activeLeaks.length > 0 && (
-        <>
-          <View className="flex-row justify-between items-center mb-3">
-            <Text className="heading-md">Active Money Leaks</Text>
-            <View className="badge-danger">
-              <Text className="text-xs font-semibold text-red-600">-R{totalLeaking.toFixed(2)}/mo</Text>
-            </View>
-          </View>
-
-          {activeLeaks.slice(0, 5).map((leak) => (
+        <Card className="mb-5" contentClassName="gap-4">
+          <View className="flex-row items-center">
+            <MaterialCommunityIcons name="star-four-points-outline" size={16} color={colors.primary} />
+            <AppText variant="overlineBrand" className="ml-1 flex-1">
+              Financial health
+            </AppText>
             <Button
-              key={leak.id}
               variant="ghost"
-              className="card-row"
-              onPress={() => router.push("/(tabs)/sms-scan")}
+              size="icon"
+              onPress={() =>
+                speak(
+                  `Your financial health score is ${healthScore} out of 100. You are ${healthLabel}. You have ${activeLeaks.length} active money leaks totalling R${totalLeaking.toFixed(2)} per month.`,
+                )
+              }
+              className="min-h-0 p-1"
             >
-              <View className="w-10 h-10 rounded-[10px] bg-brand-purple-light items-center justify-center mr-3">
-                <MaterialCommunityIcons
-                  name={(leak.categoryIcon as any) ?? "credit-card-outline"}
-                  size={20}
-                  color="#7C3AED"
-                />
+              <MaterialCommunityIcons name="volume-high" size={16} color={colors.primary} />
+            </Button>
+          </View>
+
+          <View className="flex-row items-center gap-6">
+            <CircularProgress
+              value={healthScore}
+              max={100}
+              size={112}
+              strokeWidth={9}
+              color={healthColor}
+              trackColor={trackColor}
+              label={String(healthScore)}
+              sublabel={healthLabel}
+            />
+            <View className="flex-1 gap-4">
+              <View>
+                <AppText variant="label" className="mb-0.5 text-muted-foreground">
+                  Leaks found
+                </AppText>
+                <AppText variant="titleMd" className="text-red-600 dark:text-red-400">
+                  {activeLeaks.length}
+                </AppText>
               </View>
-              <View className="flex-1">
-                <Text className="text-[15px] font-semibold text-strong mb-0.5" numberOfLines={1}>{leak.name}</Text>
-                <Text className="body-text">{leak.category}</Text>
+              <View>
+                <AppText variant="label" className="mb-0.5 text-muted-foreground">
+                  Monthly savings
+                </AppText>
+                <AppText variant="titleMd" className="text-green-600 dark:text-green-400">
+                  R{totalLeaking > 0 ? totalLeaking.toFixed(0) : "0"}
+                </AppText>
               </View>
-              <View className="items-end mr-1.5">
-                <Text className="text-[15px] font-bold text-red-600">-R{leak.amountMonthly.toFixed(2)}</Text>
-                <Text className="caption">/month</Text>
+            </View>
+          </View>
+        </Card>
+
+        <View className="mb-6 flex-row justify-between">
+          {ACTIONS.map((action) => (
+            <Button
+              key={action.id}
+              variant="ghost"
+              className="min-h-0 flex-1 flex-col items-center"
+              onPress={() => handleActionPress(action.id)}
+            >
+              <View
+                className={cn(
+                  "mb-2 h-14 w-14 items-center justify-center rounded-2xl",
+                  action.bgClass,
+                )}
+              >
+                <MaterialCommunityIcons name={action.icon as any} size={24} color="#FFFFFF" />
               </View>
-              <Feather name="chevron-right" size={16} color="#9CA3AF" />
+              <AppText variant="caption" className="text-center font-medium text-foreground">
+                {action.label}
+              </AppText>
             </Button>
           ))}
-        </>
-      )}
-
-      {activeLeaks.length === 0 && (
-        <Button
-          variant="outline"
-          className="flex-row items-center gap-3.5 bg-brand-purple-light rounded-[14px] p-[18px] mb-5"
-          onPress={() => router.push("/sms-scanning")}
-        >
-          <MaterialCommunityIcons name="magnify-scan" size={28} color="#7C3AED" />
-          <View className="flex-1">
-            <Text className="text-[15px] font-semibold text-brand-purple-dark">No leaks detected yet</Text>
-            <Text className="text-[13px] font-sans text-brand-purple mt-0.5">Tap to scan your SMS inbox and find money leaks</Text>
-          </View>
-          <Feather name="chevron-right" size={18} color="#9CA3AF" />
-        </Button>
-      )}
-
-      <View className="flex-row justify-between items-start mt-6 mb-3">
-        <View>
-          <Text className="heading-md">Rewards & Perks</Text>
-          <Text className="caption mt-0.5">{rewardPoints} pts · Earned by stopping leaks</Text>
         </View>
-        <View className="chip-purple">
-          <MaterialCommunityIcons name="star-circle" size={14} color="#7C3AED" />
-          <Text className="text-xs font-bold text-brand-purple">{rewardPoints} pts</Text>
-        </View>
-      </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        className="-mx-[18px]"
-        contentContainerClassName="px-[18px] gap-3 pb-1"
-      >
-        {REWARDS.map((r) => (
-          <View key={r.id} className="card w-[140px] dark:border-0 border border-gray-100">
-            <View className={cn("w-11 h-11 rounded-xl items-center justify-center mb-2.5", r.iconBg)}>
-              <MaterialCommunityIcons name={r.icon as any} size={26} color={r.color} />
-            </View>
-            <Text className="text-[13px] font-bold text-strong mb-0.5">{r.partner}</Text>
-            <Text className="text-xs font-sans text-gray-700 mb-2 leading-4">{r.offer}</Text>
-            <View className="flex-row items-center gap-[3px] mb-2.5">
-              <MaterialCommunityIcons name="star-circle-outline" size={12} color="#7C3AED" />
-              <Text className="text-[11px] font-medium text-brand-purple">{r.ptsNeeded} pts</Text>
-            </View>
-            <Button
-              size="sm"
-              fullWidth
-              disabled={rewardPoints < r.ptsNeeded}
-              className="rounded-lg py-[7px]"
-              textClassName={cn(rewardPoints < r.ptsNeeded && "text-gray-400")}
-            >
-              {rewardPoints >= r.ptsNeeded ? "Redeem" : "Need more pts"}
-            </Button>
-          </View>
-        ))}
-      </ScrollView>
-
-      <View className="flex-row justify-between items-center mb-3">
-        <Text className="heading-md">Recent Transactions</Text>
-        <Button variant="link" onPress={() => router.push("/history")}>
-          See all
-        </Button>
-      </View>
-
-      {SAMPLE_TRANSACTIONS.map((tx) => (
-        <View key={tx.id} className="card-row">
-          <View className={cn("w-[38px] h-[38px] rounded-[10px] items-center justify-center mr-3", tx.isLeak ? "bg-red-100" : "bg-gray-100")}>
-            {tx.isLeak ? (
-              <Feather name="alert-triangle" size={16} color="#DC2626" />
-            ) : (
-              <Feather name="arrow-up-right" size={16} color="#6B7280" />
-            )}
-          </View>
-          <View className="flex-1">
-            <Text className="list-row-title mb-0.5">{tx.name}</Text>
-            <Text className="caption">{tx.date}</Text>
-          </View>
-          <View className="items-end gap-1">
-            <Text className="text-sm font-bold text-strong">{tx.amount}</Text>
-            {tx.isLeak && (
-              <View className="badge-danger py-0.5">
-                <Text className="text-[11px] font-semibold text-red-600">Leak</Text>
+        {activeLeaks.length > 0 ? (
+          <>
+            <View className="mb-3 flex-row items-center justify-between">
+              <AppText variant="title">Active money leaks</AppText>
+              <View className="badge-danger">
+                <AppText variant="caption" className="font-semibold text-red-600 dark:text-red-400">
+                  -R{totalLeaking.toFixed(2)}/mo
+                </AppText>
               </View>
-            )}
+            </View>
+
+            {activeLeaks.slice(0, 5).map((leak) => (
+              <Pressable
+                key={leak.id}
+                onPress={() => router.push("/(tabs)/sms-scan")}
+                className="mb-2.5 active:opacity-90"
+              >
+                <Card contentClassName="flex-row items-center gap-3">
+                  <View className="h-10 w-10 items-center justify-center rounded-xl bg-brand-purple-light dark:bg-primary/20">
+                    <MaterialCommunityIcons
+                      name={(leak.categoryIcon as any) ?? "credit-card-outline"}
+                      size={20}
+                      color={colors.primary}
+                    />
+                  </View>
+                  <View className="min-w-0 flex-1">
+                    <AppText variant="title" numberOfLines={1}>
+                      {leak.name}
+                    </AppText>
+                    <AppText variant="bodySm">{leak.category}</AppText>
+                  </View>
+                  <View className="items-end">
+                    <AppText variant="label" className="text-red-600 dark:text-red-400">
+                      -R{leak.amountMonthly.toFixed(2)}
+                    </AppText>
+                    <AppText variant="caption">/month</AppText>
+                  </View>
+                  <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+                </Card>
+              </Pressable>
+            ))}
+          </>
+        ) : (
+          <Pressable
+            onPress={() => router.push("/(tabs)/sms-scanning")}
+            className="mb-5 active:opacity-90"
+          >
+            <Card
+              glass={false}
+              className="border border-brand-purple/20 bg-brand-purple-light dark:border-primary/30 dark:bg-primary/10"
+              contentClassName="flex-row items-center gap-3.5"
+            >
+              <MaterialCommunityIcons name="magnify-scan" size={28} color={colors.primary} />
+              <View className="flex-1">
+                <AppText variant="title" className="text-brand-purple dark:text-primary">
+                  No leaks detected yet
+                </AppText>
+                <AppText variant="bodySm" className="mt-0.5 text-brand-purple dark:text-primary/80">
+                  Tap to scan your SMS inbox and find money leaks
+                </AppText>
+              </View>
+              <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+            </Card>
+          </Pressable>
+        )}
+
+        <View className="mb-3 mt-6 flex-row items-start justify-between">
+          <View>
+            <AppText variant="title">Rewards & perks</AppText>
+            <AppText variant="caption" className="mt-0.5">
+              {rewardPoints} pts · Earned by stopping leaks
+            </AppText>
+          </View>
+          <View className="chip-purple">
+            <MaterialCommunityIcons name="star-circle" size={14} color={colors.primary} />
+            <AppText variant="caption" className="font-bold text-brand-purple dark:text-primary">
+              {rewardPoints} pts
+            </AppText>
           </View>
         </View>
-      ))}
-    </Screen>
 
-    <Modal visible={showNotifications} transparent animationType="fade" onRequestClose={() => setShowNotifications(false)}>
-      <Pressable className="flex-1 bg-black/40 justify-start" onPress={() => setShowNotifications(false)}>
-        <Pressable
-          className="surface-panel px-5 pb-8 max-h-[75%] rounded-b-3xl shadow-xl"
-          style={{ paddingTop: topOffset }}
-          onPress={() => {}}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          className="-mx-[18px]"
+          contentContainerClassName="gap-3 px-[18px] pb-1"
         >
-          <View className="flex-row items-center py-4 border-b border-gray-100 mb-3">
-            <Text className="flex-1 heading-md">Notifications</Text>
-            <Button variant="ghost" size="icon" onPress={() => setShowNotifications(false)} className="w-[34px] h-[34px] rounded-full bg-gray-100 min-h-0">
-              <Feather name="x" size={20} color="#6B7280" />
-            </Button>
-          </View>
+          {REWARDS.map((r) => (
+            <Card key={r.id} className="w-[140px]" contentClassName="gap-0">
+              <View className={cn("mb-2.5 h-11 w-11 items-center justify-center rounded-xl", r.iconBg)}>
+                <MaterialCommunityIcons name={r.icon as any} size={26} color={r.color} />
+              </View>
+              <AppText variant="label" className="mb-0.5">
+                {r.partner}
+              </AppText>
+              <AppText variant="caption" className="mb-2 leading-4">
+                {r.offer}
+              </AppText>
+              <View className="mb-2.5 flex-row items-center gap-[3px]">
+                <MaterialCommunityIcons name="star-circle-outline" size={12} color={colors.primary} />
+                <AppText variant="caption" className="text-brand-purple dark:text-primary">
+                  {r.ptsNeeded} pts
+                </AppText>
+              </View>
+              <Button
+                size="sm"
+                fullWidth
+                disabled={rewardPoints < r.ptsNeeded}
+                className="rounded-lg py-[7px]"
+                textClassName={cn(rewardPoints < r.ptsNeeded && "text-muted-foreground")}
+              >
+                {rewardPoints >= r.ptsNeeded ? "Redeem" : "Need more pts"}
+              </Button>
+            </Card>
+          ))}
+        </ScrollView>
 
-          {activeLeaks.length === 0 ? (
-            <View className="items-center py-10 gap-3">
-              <Feather name="bell-off" size={32} color="#D1D5DB" />
-              <Text className="text-[15px] font-sans text-gray-400">No new alerts</Text>
+        <View className="mb-3 flex-row items-center justify-between">
+          <AppText variant="title">Recent transactions</AppText>
+          <Button variant="link" onPress={() => router.push("/(tabs)/history")}>
+            See all
+          </Button>
+        </View>
+
+        {SAMPLE_TRANSACTIONS.map((tx) => (
+          <Card key={tx.id} className="mb-2.5" contentClassName="flex-row items-center gap-3">
+            <View
+              className={cn(
+                "h-[38px] w-[38px] items-center justify-center rounded-[10px]",
+                tx.isLeak ? "bg-red-100 dark:bg-red-900/40" : "bg-muted dark:bg-white/10",
+              )}
+            >
+              {tx.isLeak ? (
+                <Feather name="alert-triangle" size={16} color={colors.destructive} />
+              ) : (
+                <Feather name="arrow-up-right" size={16} color={colors.mutedForeground} />
+              )}
             </View>
-          ) : (
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <Text className="overline mb-3">ACTIVE MONEY LEAKS</Text>
-              {activeLeaks.map((leak, i) => {
-                const sev = getSeverityStyle(leak.severity);
-                return (
-                  <Button
-                    key={leak.id ?? i}
-                    variant="ghost"
-                    className="flex-row items-center gap-3 py-3 border-b border-gray-50"
-                    onPress={() => {
-                      setShowNotifications(false);
+            <View className="flex-1">
+              <AppText variant="label" className="mb-0.5">
+                {tx.name}
+              </AppText>
+              <AppText variant="caption">{tx.date}</AppText>
+            </View>
+            <View className="items-end gap-1">
+              <AppText variant="label">{tx.amount}</AppText>
+              {tx.isLeak ? (
+                <View className="badge-danger py-0.5">
+                  <AppText variant="caption" className="font-semibold text-red-600 dark:text-red-400">
+                    Leak
+                  </AppText>
+                </View>
+              ) : null}
+            </View>
+          </Card>
+        ))}
+      </Screen>
+
+      <Modal
+        visible={showNotifications}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowNotifications(false)}
+      >
+        <Pressable
+          className="flex-1 justify-start bg-black/40"
+          onPress={() => setShowNotifications(false)}
+        >
+          <Pressable
+            className="surface-panel max-h-[75%] rounded-b-3xl px-5 pb-8 shadow-xl"
+            style={{ paddingTop: topOffset }}
+            onPress={() => {}}
+          >
+            <View className="mb-3 flex-row items-center border-b border-border py-4 dark:border-white/10">
+              <AppText variant="title" className="flex-1">
+                Notifications
+              </AppText>
+              <Button
+                variant="ghost"
+                size="icon"
+                onPress={() => setShowNotifications(false)}
+                className="min-h-0 h-[34px] w-[34px] rounded-full bg-muted dark:bg-white/10"
+              >
+                <Feather name="x" size={20} color={colors.mutedForeground} />
+              </Button>
+            </View>
+
+            {activeLeaks.length === 0 ? (
+              <View className="items-center gap-3 py-10">
+                <Feather name="bell-off" size={32} color={colors.mutedForeground} />
+                <AppText variant="bodyMuted">No new alerts</AppText>
+              </View>
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <AppText variant="overline" className="mb-3">
+                  Active money leaks
+                </AppText>
+                {activeLeaks.map((leak, i) => {
+                  const sev = getSeverityStyle(leak.severity);
+                  return (
+                    <Button
+                      key={leak.id ?? i}
+                      variant="ghost"
+                      className="min-h-0 flex-row items-center gap-3 border-b border-border py-3 dark:border-white/10"
+                      onPress={() => {
+                        setShowNotifications(false);
                         router.push("/(tabs)/sms-scan");
-                    }}
-                  >
-                    <View className={cn("w-[38px] h-[38px] rounded-[10px] items-center justify-center shrink-0", sev.badge)}>
-                      <MaterialCommunityIcons name={leak.categoryIcon as any ?? "alert"} size={16} color={sev.icon} />
-                    </View>
-                    <View className="flex-1">
-                      <Text className="list-row-title mb-0.5">{leak.name}</Text>
-                      <Text className="caption">{leak.category} · R{leak.amountMonthly.toFixed(2)}/mo</Text>
-                    </View>
-                    <View className={cn("px-2 py-[3px] rounded-md", sev.badge)}>
-                      <Text className={cn("text-[11px] font-semibold", sev.text)}>{leak.severity}</Text>
-                    </View>
-                  </Button>
-                );
-              })}
-            </ScrollView>
-          )}
+                      }}
+                    >
+                      <View
+                        className={cn(
+                          "h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[10px]",
+                          sev.badge,
+                        )}
+                      >
+                        <MaterialCommunityIcons
+                          name={(leak.categoryIcon as any) ?? "alert"}
+                          size={16}
+                          color={sev.icon}
+                        />
+                      </View>
+                      <View className="flex-1">
+                        <AppText variant="label" className="mb-0.5">
+                          {leak.name}
+                        </AppText>
+                        <AppText variant="caption">
+                          {leak.category} · R{leak.amountMonthly.toFixed(2)}/mo
+                        </AppText>
+                      </View>
+                      <View className={cn("rounded-md px-2 py-[3px]", sev.badge)}>
+                        <AppText variant="caption" className={cn("font-semibold", sev.text)}>
+                          {leak.severity}
+                        </AppText>
+                      </View>
+                    </Button>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </Pressable>
         </Pressable>
-      </Pressable>
-    </Modal>
+      </Modal>
     </>
   );
 }

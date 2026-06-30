@@ -1,23 +1,20 @@
 import React, { useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Platform,
-} from "react-native";
+import { View, ScrollView, Pressable } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Button } from "@/components/Button";
+import { Card } from "@/components/Card";
+import { Screen } from "@/components/Screen";
+import { AppText } from "@/components/Typography";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useProfileStore } from "@/stores/profileStore";
+import { cn } from "@/lib/cn";
 
 const EARN_METHODS = [
-  { icon: "radar" as const, label: "Scan SMS Inbox", sub: "Analyse for new leaks", pts: "+50", color: "#7C3AED", bg: "#F5F3FF" },
-  { icon: "snowflake" as const, label: "Freeze a Leak", sub: "Stop an active money leak", pts: "+30", color: "#0284C7", bg: "#F0F9FF" },
-  { icon: "account-plus-outline" as const, label: "Invite a Friend", sub: "Share TracePay with someone", pts: "+200", color: "#16A34A", bg: "#F0FDF4" },
-  { icon: "brain" as const, label: "Use AI Budget", sub: "Generate a weekly plan", pts: "+20", color: "#D97706", bg: "#FFFBEB" },
-  { icon: "receipt" as const, label: "Pay a Bill", sub: "Via linked account", pts: "+50", color: "#DC2626", bg: "#FEF2F2" },
+  { icon: "radar" as const, label: "Scan SMS Inbox", sub: "Analyse for new leaks", pts: "+50", color: "#7C3AED", iconBg: "bg-violet-100 dark:bg-primary/20" },
+  { icon: "snowflake" as const, label: "Freeze a Leak", sub: "Stop an active money leak", pts: "+30", color: "#0284C7", iconBg: "bg-blue-100 dark:bg-blue-900/40" },
+  { icon: "account-plus-outline" as const, label: "Invite a Friend", sub: "Share TracePay with someone", pts: "+200", color: "#16A34A", iconBg: "bg-green-100 dark:bg-green-900/40" },
+  { icon: "brain" as const, label: "Use AI Budget", sub: "Generate a weekly plan", pts: "+20", color: "#D97706", iconBg: "bg-amber-100 dark:bg-amber-900/40" },
+  { icon: "receipt" as const, label: "Pay a Bill", sub: "Via linked account", pts: "+50", color: "#DC2626", iconBg: "bg-red-100 dark:bg-red-900/40" },
 ];
 
 const PARTNERS = [
@@ -33,16 +30,14 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const CHECKED_DAYS = [0, 1, 2, 3];
 
 function getLevelInfo(pts: number) {
-  if (pts >= 15000) return { name: "Platinum", next: null, nextPts: 15000, color: "#9CA3AF", progress: 1 };
-  if (pts >= 5000) return { name: "Gold", next: "Platinum", nextPts: 15000, color: "#D97706", progress: (pts - 5000) / 10000 };
-  if (pts >= 1000) return { name: "Silver", next: "Gold", nextPts: 5000, color: "#94A3B8", progress: (pts - 1000) / 4000 };
-  return { name: "Bronze", next: "Silver", nextPts: 1000, color: "#92400E", progress: pts / 1000 };
+  if (pts >= 15000) return { name: "Platinum", next: null, nextPts: 15000, progress: 1 };
+  if (pts >= 5000) return { name: "Gold", next: "Platinum", nextPts: 15000, progress: (pts - 5000) / 10000 };
+  if (pts >= 1000) return { name: "Silver", next: "Gold", nextPts: 5000, progress: (pts - 1000) / 4000 };
+  return { name: "Bronze", next: "Silver", nextPts: 1000, progress: pts / 1000 };
 }
 
 export default function RewardsScreen() {
-  const { colors: c } = useColorScheme();
-  const insets = useSafeAreaInsets();
-  const isWeb = Platform.OS === "web";
+  const { colors } = useColorScheme();
   const { rewardPoints, addRewardPoints } = useProfileStore();
   const level = getLevelInfo(rewardPoints);
   const [checkedIn, setCheckedIn] = useState(false);
@@ -55,234 +50,191 @@ export default function RewardsScreen() {
   };
 
   return (
-    <View style={[styles.root, { backgroundColor: c.bgAlt }]}>
-      <View style={[styles.headerBar, { paddingTop: isWeb ? 67 + 16 : insets.top + 16, backgroundColor: c.bg, borderBottomColor: c.borderSoft }]}>
-        <Text style={[styles.screenTitle, { color: c.text }]}>Rewards & Perks</Text>
-        <Text style={[styles.screenSub, { color: c.textMuted }]}>Earn points by improving your finances</Text>
+    <Screen>
+      <View className="mb-5">
+        <AppText variant="titleLg">Rewards & perks</AppText>
+        <AppText variant="bodySm" className="mt-0.5">
+          Earn points by improving your finances
+        </AppText>
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[styles.body, { paddingBottom: isWeb ? 100 : 80 + insets.bottom }]}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.pointsCard}>
-          <View style={styles.pcRing1} />
-          <View style={styles.pcRing2} />
-          <View style={styles.pcTop}>
-            <View>
-              <Text style={styles.pcLabel}>YOUR POINTS</Text>
-              <Text style={styles.pcPoints}>{rewardPoints.toLocaleString()}</Text>
-            </View>
-            <View style={[styles.levelBadge, { backgroundColor: "rgba(255,255,255,0.2)" }]}>
-              <MaterialCommunityIcons name="medal" size={14} color="#FCD34D" />
-              <Text style={styles.levelBadgeText}>{level.name}</Text>
-            </View>
+      <Card glass={false} className="relative mb-5 overflow-hidden border-0 bg-brand-purple">
+        <View className="absolute -right-10 -top-10 h-[140px] w-[140px] rounded-full border border-white/10" />
+        <View className="absolute -bottom-5 -left-5 h-[100px] w-[100px] rounded-full border border-white/[0.08]" />
+
+        <View className="mb-4 flex-row items-start justify-between">
+          <View>
+            <AppText variant="overline" className="mb-1 text-white/70">
+              Your points
+            </AppText>
+            <AppText variant="display" className="text-white">
+              {rewardPoints.toLocaleString()}
+            </AppText>
           </View>
-          {level.next && (
-            <View style={styles.pcProgress}>
-              <View style={styles.pcProgressTrack}>
-                <View style={[styles.pcProgressFill, { width: `${Math.round(level.progress * 100)}%` }]} />
-              </View>
-              <Text style={styles.pcProgressLabel}>
-                {(level.nextPts - rewardPoints).toLocaleString()} pts to {level.next}
-              </Text>
-            </View>
-          )}
-          <View style={styles.pcStats}>
-            <View style={styles.pcStat}>
-              <Text style={styles.pcStatVal}>4</Text>
-              <Text style={styles.pcStatLbl}>Leaks frozen</Text>
-            </View>
-            <View style={styles.pcStatDivider} />
-            <View style={styles.pcStat}>
-              <Text style={styles.pcStatVal}>R685</Text>
-              <Text style={styles.pcStatLbl}>Saved</Text>
-            </View>
-            <View style={styles.pcStatDivider} />
-            <View style={styles.pcStat}>
-              <Text style={styles.pcStatVal}>12</Text>
-              <Text style={styles.pcStatLbl}>Days streak</Text>
-            </View>
+          <View className="flex-row items-center gap-1.5 rounded-full bg-white/20 px-3 py-1.5">
+            <MaterialCommunityIcons name="medal" size={14} color="#FCD34D" />
+            <AppText variant="label" className="text-[#FCD34D]">
+              {level.name}
+            </AppText>
           </View>
         </View>
 
-        <View style={[styles.section, { backgroundColor: c.surface, borderColor: c.borderSoft }]}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: c.text }]}>Daily Check-in</Text>
-            <Text style={[styles.sectionSub, { color: c.textMuted }]}>+10 pts per day</Text>
-          </View>
-          <View style={styles.daysRow}>
-            {DAYS.map((day, i) => {
-              const done = CHECKED_DAYS.includes(i) || (i === 4 && checkedIn);
-              const isToday = i === 4;
-              return (
-                <TouchableOpacity
-                  key={day}
-                  style={[
-                    styles.dayChip,
-                    done ? { backgroundColor: c.primary } : { backgroundColor: c.surfaceAlt, borderColor: c.border, borderWidth: 1 },
-                  ]}
-                  onPress={isToday ? handleCheckIn : undefined}
-                  activeOpacity={isToday && !checkedIn ? 0.75 : 1}
-                >
-                  <Text style={[styles.dayLabel, { color: done ? "#fff" : c.textMuted }]}>{day}</Text>
-                  {done && <MaterialCommunityIcons name="check" size={10} color="#fff" />}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-          {!checkedIn && (
-            <TouchableOpacity
-              style={[styles.checkInBtn, { backgroundColor: c.primaryXSoft, borderColor: c.primarySoft }]}
-              onPress={handleCheckIn}
-              activeOpacity={0.8}
-            >
-              <MaterialCommunityIcons name="calendar-check" size={16} color={c.primary} />
-              <Text style={[styles.checkInText, { color: c.primary }]}>Check in today (+10 pts)</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <Text style={[styles.listLabel, { color: c.textMuted }]}>MORE WAYS TO EARN</Text>
-        <View style={[styles.section, { backgroundColor: c.surface, borderColor: c.borderSoft }]}>
-          {EARN_METHODS.map((m, i) => (
-            <View key={m.label}>
-              {i > 0 && <View style={[styles.divider, { backgroundColor: c.borderSoft }]} />}
-              <TouchableOpacity style={styles.earnRow} activeOpacity={0.7}>
-                <View style={[styles.earnIcon, { backgroundColor: m.bg }]}>
-                  <MaterialCommunityIcons name={m.icon} size={20} color={m.color} />
-                </View>
-                <View style={styles.earnInfo}>
-                  <Text style={[styles.earnLabel, { color: c.text }]}>{m.label}</Text>
-                  <Text style={[styles.earnSub, { color: c.textMuted }]}>{m.sub}</Text>
-                </View>
-                <View style={[styles.ptsBadge, { backgroundColor: c.primaryXSoft }]}>
-                  <Text style={[styles.ptsBadgeText, { color: c.primary }]}>{m.pts}</Text>
-                </View>
-              </TouchableOpacity>
+        {level.next ? (
+          <View className="mb-5">
+            <View className="mb-1.5 h-1.5 overflow-hidden rounded-full bg-white/20">
+              <View
+                className="h-full rounded-full bg-white"
+                style={{ width: `${Math.round(level.progress * 100)}%` }}
+              />
             </View>
-          ))}
-        </View>
+            <AppText variant="caption" className="text-white/70">
+              {(level.nextPts - rewardPoints).toLocaleString()} pts to {level.next}
+            </AppText>
+          </View>
+        ) : null}
 
-        <Text style={[styles.listLabel, { color: c.textMuted }]}>PARTNER DEALS</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.partnersScroll}
-          style={styles.partnersWrap}
-        >
-          {PARTNERS.map((p) => {
-            const canRedeem = rewardPoints >= p.pts;
+        <View className="flex-row justify-around">
+          <View className="items-center">
+            <AppText variant="title" className="text-white">
+              4
+            </AppText>
+            <AppText variant="caption" className="text-white/65">
+              Leaks frozen
+            </AppText>
+          </View>
+          <View className="w-px bg-white/15" />
+          <View className="items-center">
+            <AppText variant="title" className="text-white">
+              R685
+            </AppText>
+            <AppText variant="caption" className="text-white/65">
+              Saved
+            </AppText>
+          </View>
+          <View className="w-px bg-white/15" />
+          <View className="items-center">
+            <AppText variant="title" className="text-white">
+              12
+            </AppText>
+            <AppText variant="caption" className="text-white/65">
+              Days streak
+            </AppText>
+          </View>
+        </View>
+      </Card>
+
+      <Card className="mb-4">
+        <View className="mb-3.5 flex-row items-center justify-between">
+          <AppText variant="title">Daily check-in</AppText>
+          <AppText variant="caption">+10 pts per day</AppText>
+        </View>
+        <View className="mb-3 flex-row gap-1.5">
+          {DAYS.map((day, i) => {
+            const done = CHECKED_DAYS.includes(i) || (i === 4 && checkedIn);
+            const isToday = i === 4;
             return (
-              <View key={p.id} style={[styles.partnerCard, { backgroundColor: c.surface, borderColor: c.borderSoft }]}>
-                <View style={[styles.partnerIconBox, { backgroundColor: p.color + "18" }]}>
-                  <Text style={[styles.partnerInitial, { color: p.color }]}>{p.name[0]}</Text>
-                </View>
-                <Text style={[styles.partnerName, { color: c.text }]}>{p.name}</Text>
-                <Text style={[styles.partnerOffer, { color: c.textSub }]}>{p.offer}</Text>
-                <View style={styles.partnerPtsRow}>
-                  <MaterialCommunityIcons name="star-circle-outline" size={12} color={c.primary} />
-                  <Text style={[styles.partnerPts, { color: c.primary }]}>{p.pts} pts</Text>
-                </View>
-                <TouchableOpacity
-                  style={[styles.redeemBtn, canRedeem ? { backgroundColor: c.primary } : { backgroundColor: c.surfaceAlt, borderColor: c.border, borderWidth: 1 }]}
-                  activeOpacity={0.75}
-                >
-                  <Text style={[styles.redeemText, { color: canRedeem ? "#fff" : c.textMuted }]}>
-                    {canRedeem ? "Redeem" : "Need more"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              <Pressable
+                key={day}
+                onPress={isToday && !checkedIn ? handleCheckIn : undefined}
+                className={cn(
+                  "flex-1 items-center gap-0.5 rounded-[10px] py-2",
+                  done ? "bg-primary" : "border border-border bg-muted dark:border-white/10 dark:bg-white/5",
+                )}
+              >
+                <AppText variant="caption" className={cn("font-semibold", done ? "text-white" : "")}>
+                  {day}
+                </AppText>
+                {done ? <MaterialCommunityIcons name="check" size={10} color="#fff" /> : null}
+              </Pressable>
             );
           })}
-        </ScrollView>
+        </View>
+        {!checkedIn ? (
+          <Button
+            variant="outline"
+            fullWidth
+            onPress={handleCheckIn}
+            className="rounded-xl border-primary/30 bg-primary/10 py-3"
+            textClassName="text-primary"
+            icon={<MaterialCommunityIcons name="calendar-check" size={16} color={colors.primary} />}
+          >
+            Check in today (+10 pts)
+          </Button>
+        ) : null}
+      </Card>
+
+      <AppText variant="overline" className="mb-2.5">
+        More ways to earn
+      </AppText>
+      <Card className="mb-4" contentClassName="gap-0 px-0 py-0">
+        {EARN_METHODS.map((m, i) => (
+          <View key={m.label}>
+            {i > 0 ? <View className="surface-divider mx-4" /> : null}
+            <Pressable className="flex-row items-center gap-3 px-4 py-3 active:opacity-90">
+              <View className={cn("h-11 w-11 items-center justify-center rounded-xl", m.iconBg)}>
+                <MaterialCommunityIcons name={m.icon} size={20} color={m.color} />
+              </View>
+              <View className="flex-1">
+                <AppText variant="label">{m.label}</AppText>
+                <AppText variant="caption" className="mt-0.5">
+                  {m.sub}
+                </AppText>
+              </View>
+              <View className="rounded-[10px] bg-brand-purple-light px-2.5 py-1 dark:bg-primary/20">
+                <AppText variant="label" className="text-brand-purple dark:text-primary">
+                  {m.pts}
+                </AppText>
+              </View>
+            </Pressable>
+          </View>
+        ))}
+      </Card>
+
+      <AppText variant="overline" className="mb-2.5">
+        Partner deals
+      </AppText>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        className="-mx-[18px] mb-4"
+        contentContainerClassName="gap-3 px-[18px]"
+      >
+        {PARTNERS.map((p) => {
+          const canRedeem = rewardPoints >= p.pts;
+          return (
+            <Card key={p.id} className="w-[140px]" contentClassName="items-center gap-1.5">
+              <View
+                className="h-12 w-12 items-center justify-center rounded-[14px]"
+                style={{ backgroundColor: `${p.color}18` }}
+              >
+                <AppText variant="title" style={{ color: p.color }}>
+                  {p.name[0]}
+                </AppText>
+              </View>
+              <AppText variant="label">{p.name}</AppText>
+              <AppText variant="caption" className="text-center">
+                {p.offer}
+              </AppText>
+              <View className="flex-row items-center gap-1">
+                <MaterialCommunityIcons name="star-circle-outline" size={12} color={colors.primary} />
+                <AppText variant="caption" className="text-brand-purple dark:text-primary">
+                  {p.pts} pts
+                </AppText>
+              </View>
+              <Button
+                size="sm"
+                fullWidth
+                disabled={!canRedeem}
+                className="mt-1 rounded-[10px] py-2"
+                variant={canRedeem ? "primary" : "outline"}
+                textClassName={cn(!canRedeem && "text-muted-foreground")}
+              >
+                {canRedeem ? "Redeem" : "Need more"}
+              </Button>
+            </Card>
+          );
+        })}
       </ScrollView>
-    </View>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1 },
-  headerBar: { paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: 1 },
-  screenTitle: { fontSize: 28, fontFamily: "Inter_700Bold", marginBottom: 4 },
-  screenSub: { fontSize: 13, fontFamily: "Inter_400Regular" },
-
-  scroll: { flex: 1 },
-  body: { paddingHorizontal: 18, paddingTop: 16 },
-
-  pointsCard: {
-    backgroundColor: "#7C3AED", borderRadius: 20, padding: 22,
-    marginBottom: 18, overflow: "hidden", position: "relative",
-  },
-  pcRing1: {
-    position: "absolute", top: -40, right: -40,
-    width: 140, height: 140, borderRadius: 70,
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.12)",
-  },
-  pcRing2: {
-    position: "absolute", bottom: -20, left: -20,
-    width: 100, height: 100, borderRadius: 50,
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
-  },
-  pcTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 },
-  pcLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "rgba(255,255,255,0.7)", letterSpacing: 1, marginBottom: 4 },
-  pcPoints: { fontSize: 42, fontFamily: "Inter_700Bold", color: "#FFFFFF", lineHeight: 48 },
-  levelBadge: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  levelBadgeText: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#FCD34D" },
-
-  pcProgress: { marginBottom: 20 },
-  pcProgressTrack: { height: 6, backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 3, overflow: "hidden", marginBottom: 6 },
-  pcProgressFill: { height: 6, backgroundColor: "#FFFFFF", borderRadius: 3 },
-  pcProgressLabel: { fontSize: 12, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.7)" },
-
-  pcStats: { flexDirection: "row", justifyContent: "space-around" },
-  pcStat: { alignItems: "center" },
-  pcStatVal: { fontSize: 18, fontFamily: "Inter_700Bold", color: "#FFFFFF", marginBottom: 2 },
-  pcStatLbl: { fontSize: 11, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.65)" },
-  pcStatDivider: { width: 1, backgroundColor: "rgba(255,255,255,0.15)" },
-
-  section: {
-    borderRadius: 16, padding: 16, marginBottom: 16,
-    borderWidth: 1,
-  },
-  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
-  sectionTitle: { fontSize: 15, fontFamily: "Inter_700Bold" },
-  sectionSub: { fontSize: 12, fontFamily: "Inter_400Regular" },
-
-  daysRow: { flexDirection: "row", gap: 6, marginBottom: 12 },
-  dayChip: { flex: 1, alignItems: "center", paddingVertical: 8, borderRadius: 10, gap: 3 },
-  dayLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
-
-  checkInBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    borderRadius: 12, paddingVertical: 12, borderWidth: 1.5,
-  },
-  checkInText: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
-
-  listLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", letterSpacing: 0.8, marginBottom: 10 },
-
-  divider: { height: 1 },
-  earnRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12 },
-  earnIcon: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  earnInfo: { flex: 1 },
-  earnLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold", marginBottom: 2 },
-  earnSub: { fontSize: 12, fontFamily: "Inter_400Regular" },
-  ptsBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
-  ptsBadgeText: { fontSize: 13, fontFamily: "Inter_700Bold" },
-
-  partnersWrap: { marginBottom: 16 },
-  partnersScroll: { gap: 12, paddingRight: 4 },
-  partnerCard: {
-    width: 140, borderRadius: 16, padding: 14, borderWidth: 1,
-    alignItems: "center", gap: 6,
-  },
-  partnerIconBox: { width: 48, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  partnerInitial: { fontSize: 20, fontFamily: "Inter_700Bold" },
-  partnerName: { fontSize: 13, fontFamily: "Inter_700Bold" },
-  partnerOffer: { fontSize: 12, fontFamily: "Inter_400Regular", textAlign: "center" },
-  partnerPtsRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  partnerPts: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
-  redeemBtn: { borderRadius: 10, paddingVertical: 8, paddingHorizontal: 16, marginTop: 4 },
-  redeemText: { fontSize: 12, fontFamily: "Inter_700Bold" },
-});

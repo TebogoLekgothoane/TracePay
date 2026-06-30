@@ -1,14 +1,10 @@
 import React from "react";
-import {
-  View,
-  Text,
-  Switch,
-  Platform,
-  Alert,
-} from "react-native";
+import { View, Switch, Platform, Alert } from "react-native";
 import { Feather, MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import { Button } from "@/components/Button";
+import { Card } from "@/components/Card";
 import { Screen } from "@/components/Screen";
+import { AppText } from "@/components/Typography";
 import { useProfileStore } from "@/stores/profileStore";
 import { useVoice } from "@/hooks/useVoice";
 import { useLeaksStore } from "@/stores/leaksStore";
@@ -40,8 +36,10 @@ export default function ProfileScreen() {
       name: "Bank Account",
       sub: connectedAccounts.bank ? "Connected" : "Not connected",
       iconName: "bank-outline",
-      iconBg: connectedAccounts.bank ? "bg-green-100" : "bg-gray-100",
-      iconColor: connectedAccounts.bank ? "#16A34A" : "#6B7280",
+      iconBg: connectedAccounts.bank
+        ? "bg-green-100 dark:bg-green-900/40"
+        : "bg-muted dark:bg-white/10",
+      iconColor: connectedAccounts.bank ? colors.success : colors.mutedForeground,
       connected: connectedAccounts.bank,
     },
     {
@@ -49,8 +47,10 @@ export default function ProfileScreen() {
       name: "Mobile Money",
       sub: connectedAccounts.mobile ? "MTN MoMo / Vodacom" : "Not connected",
       iconName: "cellphone",
-      iconBg: connectedAccounts.mobile ? "bg-green-100" : "bg-gray-100",
-      iconColor: connectedAccounts.mobile ? "#16A34A" : "#6B7280",
+      iconBg: connectedAccounts.mobile
+        ? "bg-green-100 dark:bg-green-900/40"
+        : "bg-muted dark:bg-white/10",
+      iconColor: connectedAccounts.mobile ? colors.success : colors.mutedForeground,
       connected: connectedAccounts.mobile,
     },
     {
@@ -58,8 +58,10 @@ export default function ProfileScreen() {
       name: "SASSA Grant",
       sub: connectedAccounts.sassa ? "Connected" : "Not connected",
       iconName: "shield-outline",
-      iconBg: connectedAccounts.sassa ? "bg-green-100" : "bg-gray-100",
-      iconColor: connectedAccounts.sassa ? "#16A34A" : "#6B7280",
+      iconBg: connectedAccounts.sassa
+        ? "bg-green-100 dark:bg-green-900/40"
+        : "bg-muted dark:bg-white/10",
+      iconColor: connectedAccounts.sassa ? colors.success : colors.mutedForeground,
       connected: connectedAccounts.sassa,
     },
   ];
@@ -70,9 +72,9 @@ export default function ProfileScreen() {
       setTimeout(
         () =>
           speak(
-            `Voice narration enabled. You have ${leaks.filter((l) => l.status === "active").length} active money leaks totalling R${totalLeaking.toFixed(2)} per month.`
+            `Voice narration enabled. You have ${leaks.filter((l) => l.status === "active").length} active money leaks totalling R${totalLeaking.toFixed(2)} per month.`,
           ),
-        300
+        300,
       );
     }
   };
@@ -81,7 +83,7 @@ export default function ProfileScreen() {
     Alert.alert(
       "Export Data",
       `Your data summary:\n• ${leaks.length} leaks\n• R${totalLeaking.toFixed(2)}/mo total leaking\n\nIn a production app, this would download a CSV file.`,
-      [{ text: "OK" }]
+      [{ text: "OK" }],
     );
   };
 
@@ -104,50 +106,66 @@ export default function ProfileScreen() {
   };
 
   const menuItems = [
-    { id: "lang", icon: "web", label: "Language", value: language, hasChevron: true, onPress: () => {} },
-    { id: "privacy", icon: "lock-outline", label: "Privacy & Consent", value: "Active", hasChevron: true, onPress: () => {} },
-    { id: "rescan", icon: "message-processing-outline", label: "Rescan SMS Inbox", value: "Run", hasChevron: true, onPress: () => router.push("/sms-scanning") },
-    { id: "export", icon: "file-document-outline", label: "Export My Data", value: "CSV", hasChevron: true, onPress: handleExportData },
-    { id: "help", icon: "help-circle-outline", label: "Help & Support", value: "", hasChevron: true, onPress: () => {} },
+    { id: "lang", icon: "web", label: "Language", value: language, onPress: () => {} },
+    { id: "privacy", icon: "lock-outline", label: "Privacy & Consent", value: "Active", onPress: () => {} },
+    {
+      id: "rescan",
+      icon: "message-processing-outline",
+      label: "Rescan SMS Inbox",
+      value: "Run",
+      onPress: () => router.push("/(tabs)/sms-scanning"),
+    },
+    { id: "export", icon: "file-document-outline", label: "Export My Data", value: "CSV", onPress: handleExportData },
+    { id: "help", icon: "help-circle-outline", label: "Help & Support", value: "", onPress: () => {} },
   ];
 
   return (
     <Screen>
-      <Text className="heading-xl mb-5">Profile</Text>
+      <AppText variant="titleLg" className="mb-5">
+        Profile
+      </AppText>
 
-      <View className="card flex-row items-center mb-3">
-          <View className="w-[60px] h-[60px] rounded-[14px] bg-brand-purple-light dark:bg-brand-purple-dark/40 items-center justify-center mr-3.5">
-            <MaterialCommunityIcons name="account-outline" size={32} color={colors.primary} />
+      <Card className="mb-3" contentClassName="flex-row items-center gap-3.5">
+        <View className="h-[60px] w-[60px] items-center justify-center rounded-[14px] bg-brand-purple-light dark:bg-primary/20">
+          <MaterialCommunityIcons name="account-outline" size={32} color={colors.primary} />
+        </View>
+        <View className="flex-1">
+          <AppText variant="title" className="mb-1">
+            {name}
+          </AppText>
+          <AppText variant="bodySm" className="mb-1.5">
+            {email || "Email verified"}
+          </AppText>
+          <View className="flex-row items-center">
+            <View className="mr-1.5 h-2 w-2 rounded-full bg-green-600 dark:bg-green-400" />
+            <AppText variant="caption" className="font-semibold text-green-600 dark:text-green-400">
+              POPIA compliant
+            </AppText>
           </View>
-          <View className="flex-1">
-            <Text className="heading-md mb-1">{name}</Text>
-            <Text className="body-text mb-1.5">{email || "Email verified"}</Text>
-            <View className="flex-row items-center">
-              <View className="w-2 h-2 rounded-full bg-green-600 mr-1.5" />
-              <Text className="text-xs font-semibold text-green-600">POPIA Compliant</Text>
-            </View>
-          </View>
-          <Button
-            variant="ghost"
-            size="icon"
-            onPress={() =>
-              speak(
-                `Hello ${name.split(" ")[0]}. You have ${leaks.filter((l) => l.status === "active").length} active leaks.`
-              )
-            }
-            className="p-2"
-          >
-            <MaterialCommunityIcons name="volume-high" size={20} color={colors.primary} />
-          </Button>
-      </View>
+        </View>
+        <Button
+          variant="ghost"
+          size="icon"
+          onPress={() =>
+            speak(
+              `Hello ${name.split(" ")[0]}. You have ${leaks.filter((l) => l.status === "active").length} active leaks.`,
+            )
+          }
+          className="min-h-0 p-2"
+        >
+          <MaterialCommunityIcons name="volume-high" size={20} color={colors.primary} />
+        </Button>
+      </Card>
 
-      <View className="surface-panel flex-row items-center p-4 mb-3">
-        <View className="w-[42px] h-[42px] rounded-[10px] bg-brand-purple-light dark:bg-brand-purple-dark/40 items-center justify-center mr-3">
+      <Card className="mb-3" contentClassName="flex-row items-center gap-3">
+        <View className="h-[42px] w-[42px] items-center justify-center rounded-[10px] bg-brand-purple-light dark:bg-primary/20">
           <Ionicons name="volume-medium-outline" size={20} color={colors.primary} />
         </View>
         <View className="flex-1">
-          <Text className="text-[15px] font-semibold text-gray-900 dark:text-white mb-0.5">Voice Narration</Text>
-          <Text className="body-text">Hear insights in {language}</Text>
+          <AppText variant="title">Voice narration</AppText>
+          <AppText variant="bodySm" className="mt-0.5">
+            Hear insights in {language}
+          </AppText>
         </View>
         <Switch
           value={voiceEnabled}
@@ -155,76 +173,103 @@ export default function ProfileScreen() {
           trackColor={{ false: colors.border, true: colors.primary }}
           thumbColor={colors.primaryForeground}
         />
-      </View>
+      </Card>
 
-      {totalLeaking > 0 && (
-        <View className="flex-row items-center rounded-xl border border-red-200 bg-red-50 p-3.5 mb-4 dark:border-red-800 dark:bg-red-900/30">
-          <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#DC2626" />
-          <Text className="text-sm font-sans text-gray-700 flex-1">
-            {" "}<Text className="font-bold text-red-600">R{totalLeaking.toFixed(2)}/month</Text> leaking from {leaks.filter((l) => l.status === "active").length} active leaks
-          </Text>
-        </View>
-      )}
+      {totalLeaking > 0 ? (
+        <Card
+          glass={false}
+          className="mb-4 border border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-900/20"
+          contentClassName="flex-row items-center gap-2"
+        >
+          <MaterialCommunityIcons name="alert-circle-outline" size={18} color={colors.destructive} />
+          <AppText variant="bodySm" className="flex-1">
+            R{totalLeaking.toFixed(2)}/month leaking from{" "}
+            {leaks.filter((l) => l.status === "active").length} active leaks
+          </AppText>
+        </Card>
+      ) : null}
 
-      <Text className="label-sm mb-2.5">Connected Accounts</Text>
+      <AppText variant="label" className="mb-2.5 text-muted-foreground">
+        Connected accounts
+      </AppText>
 
-      <View className="surface-panel px-3.5 mb-5">
+      <Card className="mb-5" contentClassName="gap-0 px-0 py-0">
         {connectedList.map((acc, i) => (
           <View key={acc.id}>
-            {i > 0 && <View className="surface-divider" />}
-            <View className="flex-row items-center py-3.5">
-              <View className={cn("w-[42px] h-[42px] rounded-[10px] items-center justify-center mr-3", acc.iconBg)}>
+            {i > 0 ? <View className="surface-divider mx-3.5" /> : null}
+            <View className="flex-row items-center px-3.5 py-3.5">
+              <View className={cn("mr-3 h-[42px] w-[42px] items-center justify-center rounded-[10px]", acc.iconBg)}>
                 <MaterialCommunityIcons name={acc.iconName as any} size={20} color={acc.iconColor} />
               </View>
               <View className="flex-1">
-                <Text className="text-[15px] font-semibold text-gray-900 dark:text-white mb-0.5">{acc.name}</Text>
-                <Text className="body-text">{acc.sub}</Text>
+                <AppText variant="title">{acc.name}</AppText>
+                <AppText variant="bodySm" className="mt-0.5">
+                  {acc.sub}
+                </AppText>
               </View>
               {acc.connected ? (
-                <MaterialCommunityIcons name="check-circle-outline" size={22} color="#16A34A" />
+                <MaterialCommunityIcons name="check-circle-outline" size={22} color={colors.success} />
               ) : (
                 <Button
                   variant="outline"
                   size="icon"
-                  className="w-[30px] h-[30px] rounded-full border-[1.5px] border-brand-purple min-h-0"
+                  className="h-[30px] w-[30px] min-h-0 rounded-full border-[1.5px] border-primary"
                 >
-                  <Feather name="plus" size={16} color="#7C3AED" />
+                  <Feather name="plus" size={16} color={colors.primary} />
                 </Button>
               )}
             </View>
           </View>
         ))}
-      </View>
+      </Card>
 
-      <View className="surface-panel px-3.5 mb-4">
+      <Card className="mb-4" contentClassName="gap-0 px-0 py-0">
         {menuItems.map((item, i) => (
           <View key={item.id}>
-            {i > 0 && <View className="surface-divider" />}
-            <Button variant="ghost" className="flex-row items-center py-3.5 gap-3" onPress={item.onPress}>
-              <MaterialCommunityIcons name={item.icon as any} size={20} color="#374151" />
-              <Text className="flex-1 text-[15px] font-medium text-gray-900 dark:text-white">{item.label}</Text>
+            {i > 0 ? <View className="surface-divider mx-3.5" /> : null}
+            <Button
+              variant="ghost"
+              className="min-h-0 flex-row items-center gap-3 px-3.5 py-3.5"
+              onPress={item.onPress}
+            >
+              <MaterialCommunityIcons name={item.icon as any} size={20} color={colors.foreground} />
+              <AppText variant="label" className="flex-1 font-medium">
+                {item.label}
+              </AppText>
               <View className="flex-row items-center gap-1.5">
-                {item.value ? <Text className="body-text">{item.value}</Text> : null}
-                {item.hasChevron && <Feather name="chevron-right" size={16} color="#9CA3AF" />}
+                {item.value ? <AppText variant="bodySm">{item.value}</AppText> : null}
+                <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
               </View>
             </Button>
           </View>
         ))}
-      </View>
+      </Card>
 
-      <View className="rounded-[14px] bg-brand-purple-light p-4 mb-4 dark:bg-brand-purple-dark/40">
-        <View className="flex-row items-center mb-2">
-          <MaterialCommunityIcons name="shield-lock-outline" size={18} color="#7C3AED" />
-          <Text className="text-sm font-semibold text-brand-purple"> Your Data is Protected</Text>
+      <Card
+        glass={false}
+        className="mb-4 border border-brand-purple/20 bg-brand-purple-light dark:border-primary/30 dark:bg-primary/10"
+      >
+        <View className="mb-2 flex-row items-center">
+          <MaterialCommunityIcons name="shield-lock-outline" size={18} color={colors.primary} />
+          <AppText variant="label" className="ml-1 text-brand-purple dark:text-primary">
+            Your data is protected
+          </AppText>
         </View>
-        <Text className="body-text text-gray-700 leading-[19px]">
-          TracePay only accesses data you explicitly consent to share. Your information is encrypted and never shared with third parties. You can revoke access anytime.
-        </Text>
-      </View>
+        <AppText variant="bodySm" className="leading-[19px]">
+          TracePay only accesses data you explicitly consent to share. Your information is encrypted
+          and never shared with third parties. You can revoke access anytime.
+        </AppText>
+      </Card>
 
-      <Button variant="outline" fullWidth onPress={handleSignOut} className="py-4 mb-2 shadow-sm">
-        <Feather name="log-out" size={16} color="#DC2626" />
-        <Text className="text-[15px] font-semibold text-red-600"> Sign Out</Text>
+      <Button
+        variant="outline"
+        fullWidth
+        onPress={handleSignOut}
+        className="mb-2 py-4"
+        icon={<Feather name="log-out" size={16} color={colors.destructive} />}
+        textClassName="text-destructive"
+      >
+        Sign out
       </Button>
     </Screen>
   );

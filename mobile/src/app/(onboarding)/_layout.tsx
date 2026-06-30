@@ -2,7 +2,6 @@ import { View } from "react-native";
 import { Stack, useSegments } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { GlassBackground } from "@/components/GlassBackground";
 import {
   getOnboardingStepFromRoute,
   OnboardingHeader,
@@ -15,7 +14,7 @@ export default function OnboardingLayout() {
   const currentStep = getOnboardingStepFromRoute(routeName);
   const { isDarkColorScheme } = useColorScheme();
 
-  const content = (
+  return (
     <View className={isDarkColorScheme ? "flex-1 bg-transparent" : "flex-1 bg-background"}>
       {currentStep !== null && (
         <SafeAreaView
@@ -44,10 +43,4 @@ export default function OnboardingLayout() {
       </View>
     </View>
   );
-
-  if (isDarkColorScheme) {
-    return <GlassBackground>{content}</GlassBackground>;
-  }
-
-  return content;
 }

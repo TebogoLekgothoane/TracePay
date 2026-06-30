@@ -38,6 +38,9 @@ function ClassicTabLayout() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.mutedForeground,
         headerShown: false,
+        sceneContainerStyle: {
+          backgroundColor: isDarkColorScheme ? "transparent" : colors.background,
+        },
         tabBarStyle: {
           position: "absolute",
           backgroundColor: isIOS || isDarkColorScheme ? "transparent" : colors.card,
@@ -90,6 +93,24 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen
+        name="history"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="sms-scanning"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="sms-results"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="budget"
         options={{
           title: "Budget",
@@ -130,8 +151,12 @@ function ClassicTabLayout() {
 }
 
 export default function TabLayout() {
-  if (isLiquidGlassAvailable()) {
-    return <NativeTabLayout />;
-  }
-  return <ClassicTabLayout />;
+  const { isDarkColorScheme } = useColorScheme();
+  const tabs = isLiquidGlassAvailable() ? <NativeTabLayout /> : <ClassicTabLayout />;
+
+  return (
+    <View className={isDarkColorScheme ? "flex-1 bg-transparent" : "flex-1 bg-background"}>
+      {tabs}
+    </View>
+  );
 }

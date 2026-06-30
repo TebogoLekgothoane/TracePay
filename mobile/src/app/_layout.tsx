@@ -19,6 +19,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { GlassBackground } from "@/components/GlassBackground";
 import { useProfileStore } from "@/stores/profileStore";
 import { SMSIngestionProvider } from "@/context/SMSIngestionContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
@@ -34,7 +35,7 @@ const queryClient = new QueryClient({
 function NavigationGuard({ children }: { children: React.ReactNode }) {
   const segments = useSegments();
   const { onboardingComplete, isAuthenticated, isLoaded, loadFromStorage } = useProfileStore();
-  const { colors } = useColorScheme();
+  const { colors, isDarkColorScheme } = useColorScheme();
 
   useEffect(() => {
     loadFromStorage();
@@ -44,13 +45,16 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
     if (!isLoaded) return;
 
     const root = segments[0] as string | undefined;
+    const tabRoute = segments[1] as string | undefined;
     const inOnboarding = root === "(onboarding)";
+    const inTabs = root === "(tabs)";
     const onBoot = !root || root === "index";
-    const onSmsFlow = root === "sms-scanning" || root === "sms-results";
+    const onSmsFlow =
+      inTabs && (tabRoute === "sms-scanning" || tabRoute === "sms-results");
 
     if (onBoot) {
       if (!isAuthenticated) router.replace("/(onboarding)/language");
-      else if (!onboardingComplete) router.replace("/sms-scanning");
+      else if (!onboardingComplete) router.replace("/(tabs)/sms-scanning");
       else router.replace("/(tabs)");
       return;
     }
@@ -61,7 +65,7 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
     }
 
     if (!onboardingComplete) {
-      if (!onSmsFlow) router.replace("/sms-scanning");
+      if (!onSmsFlow) router.replace("/(tabs)/sms-scanning");
       return;
     }
 
@@ -72,7 +76,7 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
 
   if (!isLoaded) {
     return (
-      <View className="screen items-center justify-center">
+      <View className={`flex-1 items-center justify-center ${isDarkColorScheme ? "bg-transparent" : "bg-background"}`}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
@@ -81,14 +85,20 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
 }
 
 function RootLayoutNav() {
+  const { isDarkColorScheme, colors } = useColorScheme();
+
   return (
-    <Stack screenOptions={{ headerBackTitle: "Back" }}>
+    <Stack
+      screenOptions={{
+        headerBackTitle: "Back",
+        contentStyle: {
+          backgroundColor: isDarkColorScheme ? "transparent" : colors.background,
+        },
+      }}
+    >
       <Stack.Screen name="index" options={{ headerShown: false, animation: "none" }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: "none" }} />
       <Stack.Screen name="(onboarding)" options={{ headerShown: false, animation: "none" }} />
-      <Stack.Screen name="history" options={{ headerShown: false, presentation: "card" }} />
-      <Stack.Screen name="sms-scanning" options={{ headerShown: false, presentation: "card" }} />
-      <Stack.Screen name="sms-results" options={{ headerShown: false, presentation: "card" }} />
     </Stack>
   );
 }
@@ -125,9 +135,11 @@ export default function RootLayout() {
               <GestureHandlerRootView className="flex-1 bg-background">
                 <StatusBar style={isDarkColorScheme ? "light" : "dark"} />
                 <KeyboardProvider>
-                  <NavigationGuard>
-                    <RootLayoutNav />
-                  </NavigationGuard>
+                  <GlassBackground>
+                    <NavigationGuard>
+                      <RootLayoutNav />
+                    </NavigationGuard>
+                  </GlassBackground>
                 </KeyboardProvider>
               </GestureHandlerRootView>
             </SMSIngestionProvider>

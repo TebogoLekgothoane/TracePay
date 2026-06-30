@@ -124,7 +124,7 @@ export default function AuthScreen() {
       } else {
         await signIn(normalizedEmail, password);
       }
-      router.replace("/sms-scanning");
+      router.replace({ pathname: "/(tabs)/sms-scanning", params: { fromOnboarding: "1" } });
     } catch (e) {
       setError(e instanceof AuthError ? e.message : "Something went wrong. Please try again.");
     } finally {

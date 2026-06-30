@@ -7,7 +7,6 @@ import {
   type ViewStyle,
 } from "react-native";
 
-import { GlassBackground } from "@/components/GlassBackground";
 import { type BottomInset, useScreenInsets } from "@/hooks/useScreenInsets";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { cn } from "@/lib/cn";
@@ -20,7 +19,7 @@ type ScreenProps = ScrollViewProps & {
   contentContainerStyle?: StyleProp<ViewStyle>;
 };
 
-/** Scrollable screen shell with optional violet mesh glass background in dark mode. */
+/** Scrollable screen shell — background comes from the route layout (GlassBackground). */
 export function Screen({
   className,
   contentClassName,
@@ -33,9 +32,13 @@ export function Screen({
   const { contentPadding } = useScreenInsets(bottomInset);
   const { isDarkColorScheme } = useColorScheme();
 
-  const scroll = (
+  return (
     <ScrollView
-      className={cn("screen", isDarkColorScheme && "bg-transparent", className)}
+      className={cn(
+        "flex-1",
+        isDarkColorScheme ? "bg-transparent" : "bg-background",
+        className,
+      )}
       contentContainerClassName={cn(padded && "screen-content", contentClassName)}
       contentContainerStyle={[contentPadding, contentContainerStyle]}
       showsVerticalScrollIndicator={false}
@@ -44,15 +47,9 @@ export function Screen({
       {children}
     </ScrollView>
   );
-
-  if (isDarkColorScheme) {
-    return <GlassBackground>{scroll}</GlassBackground>;
-  }
-
-  return scroll;
 }
 
-/** Non-scroll screen shell with glass background in dark mode. */
+/** Non-scroll screen shell — background comes from the route layout (GlassBackground). */
 export function ScreenFrame({
   className,
   children,
@@ -62,15 +59,15 @@ export function ScreenFrame({
 }) {
   const { isDarkColorScheme } = useColorScheme();
 
-  const frame = (
-    <View className={cn("flex-1 screen", isDarkColorScheme && "bg-transparent", className)}>
+  return (
+    <View
+      className={cn(
+        "flex-1",
+        isDarkColorScheme ? "bg-transparent" : "bg-background",
+        className,
+      )}
+    >
       {children}
     </View>
   );
-
-  if (isDarkColorScheme) {
-    return <GlassBackground>{frame}</GlassBackground>;
-  }
-
-  return frame;
 }
