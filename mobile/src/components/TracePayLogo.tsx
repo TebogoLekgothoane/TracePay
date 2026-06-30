@@ -2,13 +2,14 @@ import { Image, Text, View } from "react-native";
 
 import { cn } from "@/lib/cn";
 
-const logoSource = require("@/assets/images/tracepay-logo.png");
+const logoSource = require("@/assets/images/tracepay-logo__1_-removebg-preview.png");
 
 type TracePayLogoProps = {
   size?: number;
   showWordmark?: boolean;
   layout?: "row" | "column";
   className?: string;
+  wordmarkClassName?: string;
 };
 
 export function TracePayLogo({
@@ -16,6 +17,7 @@ export function TracePayLogo({
   showWordmark = true,
   layout = "row",
   className,
+  wordmarkClassName,
 }: TracePayLogoProps) {
   const isColumn = layout === "column";
 
@@ -34,7 +36,7 @@ export function TracePayLogo({
         accessibilityLabel="TracePay logo"
       />
       {showWordmark ? (
-        <Text className={cn("font-bold text-gray-900", isColumn ? "text-[28px]" : "text-lg")}>
+        <Text className={cn("font-bold text-gray-900 dark:text-white", isColumn ? "text-[28px]" : "text-lg", wordmarkClassName)}>
           TracePay
         </Text>
       ) : null}

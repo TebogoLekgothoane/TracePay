@@ -14,6 +14,10 @@ import {
   SMS_PERMISSION_BLOCKED_HELP,
 } from '../services/sms/SMSIngestionService';
 import { SMSListener } from '../services/sms/SMSListener';
+import {
+  enrichParsedTransaction,
+  isValidStoredTransaction,
+} from '../lib/transaction-display';
 
 const STORAGE_KEYS = {
   TRANSACTIONS: '@tracepay/transactions',
@@ -61,11 +65,14 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as ParsedTransaction[];
     // Rehydrate Date objects
-    return parsed.map((t) => ({
-      ...t,
-      timestamp: new Date(t.timestamp),
-      parsedAt: new Date(t.parsedAt),
-    }));
+    return parsed
+      .map((t) => ({
+        ...t,
+        timestamp: new Date(t.timestamp),
+        parsedAt: new Date(t.parsedAt),
+      }))
+      .filter(isValidStoredTransaction)
+      .map(enrichParsedTransaction);
   }, []);
 
   // ── Boot: restore state and check permission ──────────────────────────────
@@ -109,13 +116,16 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
   // ── Sync (batch ingest) ───────────────────────────────────────────────────
 
   const syncNow = useCallback(async (): Promise<boolean> => {
+    console.log('[SMS] syncNow start');
     setIsLoading(true);
     setError(null);
 
     try {
       let permission = await checkSMSPermission();
+      console.log('[SMS] syncNow permission (initial)', permission);
       if (permission !== 'granted') {
         permission = await requestSMSPermission();
+        console.log('[SMS] syncNow permission (after request)', permission);
         setServiceState((prev) => ({ ...prev, permissionStatus: permission }));
       }
       if (permission !== 'granted') {
@@ -123,28 +133,58 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
       }
 
       const current = await loadPersistedTransactions();
+      console.log('[SMS] syncNow persisted transactions', { count: current.length });
+
       const result = await ingestSMS({ existingTransactions: current });
+      const newTransactions = result.transactions
+        .filter(isValidStoredTransaction)
+        .map(enrichParsedTransaction);
 
-      if (result.transactions.length > 0) {
-        const merged = [
-          ...result.transactions,
-          ...current,
-        ].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      console.log('[SMS] syncNow ingest result', {
+        total: result.total,
+        parsed: result.parsed,
+        skipped: result.skipped,
+        failed: result.failed,
+        newTransactions: newTransactions.length,
+      });
 
-        setTransactions(merged);
-        await persistTransactions(merged);
-      }
+      const cleanedCurrent = current
+        .filter(isValidStoredTransaction)
+        .map(enrichParsedTransaction);
+
+      const existingIds = new Set(cleanedCurrent.map((t) => t.id));
+      const merged = [
+        ...newTransactions.filter((t) => !existingIds.has(t.id)),
+        ...cleanedCurrent,
+      ].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+      setTransactions(merged);
+      await persistTransactions(merged);
+      console.log('[SMS] syncNow saved merged transactions', {
+        count: merged.length,
+        newlyAdded: newTransactions.filter((t) => !existingIds.has(t.id)).length,
+        removedInvalid: current.length - cleanedCurrent.length,
+      });
 
       const now = new Date();
       await AsyncStorage.setItem(STORAGE_KEYS.LAST_SYNC, now.toISOString());
 
+      const totalIngested = merged.length;
+      console.log('[SMS] syncNow complete', {
+        totalIngested,
+        previousCount: current.length,
+        newlyAdded: newTransactions.filter((t) => !existingIds.has(t.id)).length,
+        removedInvalid: current.length - cleanedCurrent.length,
+      });
+
       setServiceState((prev) => ({
         ...prev,
         lastSyncAt: now,
-        totalIngested: current.length + result.transactions.length,
+        totalIngested,
       }));
       return true;
     } catch (err) {
+      console.error('[SMS] syncNow failed', (err as Error).message);
       setError((err as Error).message);
       return false;
     } finally {

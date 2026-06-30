@@ -1,5 +1,6 @@
 import { BankParser, BankParserResult, RawSMS } from '../sms.types';
 import {
+  canParseBankSms,
   parseAmount,
   parseDate,
   normaliseMerchant,
@@ -18,31 +19,50 @@ import {
 export const CapitecParser: BankParser = {
   bankName: 'CAPITEC',
   senderPatterns: [/^CAPITEC$/i, /^CAP\s*BANK/i],
+  bodyPatterns: [/^Capitec[:\s]/i],
 
   canParse(sms: RawSMS): boolean {
-    return this.senderPatterns.some((p) => p.test(sms.address.trim()));
+    return canParseBankSms(sms, this.senderPatterns, this.bodyPatterns);
   },
 
   parse(sms: RawSMS): BankParserResult {
-    const body = sms.body;
+    const body = sms.body.trim();
+
+    const headerMatch = body.match(/^Capitec:\s*([A-Za-z\s]+?)\s+R([\d,\s.]+)\s+(.+)$/i);
+    const kind = headerMatch?.[1]?.trim().toLowerCase() ?? '';
 
     // ── Transaction type ─────────────────────────────────────────────────────
-    const isCredit   = /^Capitec:\s*CR\b/i.test(body);
-    const isAtm      = /ATM\s*WD/i.test(body);
+    const isCredit   = kind === 'cr' || /^Capitec:\s*CR\b/i.test(body);
+    const isAtm      = kind === 'atm wd' || /ATM\s*WD/i.test(body);
     const isReversal = /reversal|REV\b/i.test(body);
     const type = isReversal ? 'reversal' : isCredit ? 'credit' : 'debit';
 
     // ── Amount ────────────────────────────────────────────────────────────────
-    const amountMatch = body.match(/R\s*([\d,]+\.?\d*)/i);
-    const amount = amountMatch ? parseAmount(amountMatch[1]) : null;
+    const amountRaw = headerMatch?.[2] ?? body.match(/R\s*([\d,\s.]+)/i)?.[1];
+    const amount = amountRaw ? parseAmount(amountRaw) : null;
     if (!amount) return { success: false, reason: 'No amount found' };
 
-    // ── Merchant ──────────────────────────────────────────────────────────────
-    // Capitec puts merchant AFTER the amount, before the date (ddMonyy)
-    const merchantMatch = body.match(
-      /R[\d,\s.]+\s+([A-Z][A-Z0-9\s#&*'.\-]+?)\s+\d{2}[A-Za-z]{3}\d{2}/i
-    );
-    const merchant = merchantMatch ? normaliseMerchant(merchantMatch[1]) : undefined;
+    // ── Merchant / description ────────────────────────────────────────────────
+    let merchant: string | undefined;
+    let summary: string | undefined;
+
+    if (headerMatch?.[3]) {
+      const detail = headerMatch[3]
+        .replace(/\s+\d{2}[A-Za-z]{3}\d{2}.*$/i, '')
+        .replace(/\s+Avail\b.*$/i, '')
+        .trim();
+
+      if (kind === 'purch' || kind === 'cr' || kind === 'atm wd') {
+        merchant = detail ? normaliseMerchant(detail) : undefined;
+        summary = kind === 'purch' ? 'Card purchase' : kind === 'cr' ? 'Deposit received' : 'ATM withdrawal';
+      } else if (kind === 'fee' || kind === 'notify') {
+        merchant = detail ? normaliseMerchant(detail) : 'Bank charge';
+        summary = kind === 'fee' ? 'Bank fee' : 'Notification charge';
+      } else if (detail) {
+        merchant = normaliseMerchant(detail);
+        summary = `${headerMatch[1].trim()} transaction`;
+      }
+    }
 
     // ── Date (ddMonyy) ────────────────────────────────────────────────────────
     const dateMatch = body.match(/(\d{2}[A-Za-z]{3}\d{2})/);
@@ -71,8 +91,9 @@ export const CapitecParser: BankParser = {
         amount,
         currency: 'ZAR',
         merchant,
+        summary,
         accountLast4: undefined,
-        availableBalance,   
+        availableBalance,
         timestamp,
         confidence,
         rawBody: body,

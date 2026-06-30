@@ -1,10 +1,12 @@
 import { Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { PROMINENT_TAB_CONTENT_INSET } from "@/components/ProminentTabBar";
+
 export type BottomInset = "tab" | "compact";
 
 function bottomPadding(insets: { bottom: number }, isWeb: boolean, mode: BottomInset) {
-  const extra = mode === "tab" ? 80 : 40;
+  const extra = mode === "tab" ? PROMINENT_TAB_CONTENT_INSET : 40;
   return isWeb ? 34 + extra : extra + insets.bottom;
 }
 

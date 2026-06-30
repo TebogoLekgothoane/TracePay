@@ -1,11 +1,11 @@
 import React from "react";
-import {
-  View,
-  Text,
-} from "react-native";
+import { View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Button } from "@/components/Button";
+import { Card } from "@/components/Card";
 import { Screen } from "@/components/Screen";
+import { AppText } from "@/components/Typography";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { router } from "expo-router";
 
 const SCAN_SOURCES = [
@@ -16,56 +16,69 @@ const SCAN_SOURCES = [
 ];
 
 export default function SmsScanScreen() {
+  const { colors } = useColorScheme();
+
   return (
     <Screen>
-      <Text className="heading-lg mb-1">Money Leak Scanner</Text>
-      <Text className="body-text mb-[18px]">
+      <AppText variant="titleMd" className="mb-1">
+        Money leak scanner
+      </AppText>
+      <AppText variant="lead" className="mb-5">
         Find out what is draining your airtime and money
-      </Text>
+      </AppText>
 
-      <View className="bg-brand-purple rounded-2xl p-5 mb-[22px] shadow-lg">
-        <View className="w-12 h-12 rounded-xl bg-white/20 items-center justify-center mb-3">
+      <Card glass={false} className="mb-6 border-0 bg-brand-purple">
+        <View className="mb-3 h-12 w-12 items-center justify-center rounded-xl bg-white/20">
           <MaterialCommunityIcons name="message-text" size={28} color="#FFFFFF" />
         </View>
-        <Text className="text-xl font-bold text-white mb-0.5">Bank SMS Analysis</Text>
-        <Text className="text-[13px] font-sans text-white/75 mb-3.5">Powered by TracePay AI</Text>
-        <Text className="text-[15px] font-sans text-white leading-[22px] mb-4">
-          TracePay scans your Capitec, ABSA, FNB, MTN and Vodacom notification SMSes to spot recurring fees, zombie subscriptions and hidden charges.
-        </Text>
-        <View className="flex-row items-center bg-white/20 px-3.5 py-2 rounded-full self-start">
+        <AppText variant="title" className="mb-0.5 text-white">
+          Bank SMS analysis
+        </AppText>
+        <AppText variant="caption" className="mb-3.5 text-white/75">
+          Powered by TracePay AI
+        </AppText>
+        <AppText variant="bodySm" className="mb-4 leading-[22px] text-white">
+          TracePay scans your Capitec, ABSA, FNB, MTN and Vodacom notification SMSes to spot
+          recurring fees, zombie subscriptions and hidden charges.
+        </AppText>
+        <View className="flex-row items-center self-start rounded-full bg-white/20 px-3.5 py-2">
           <MaterialCommunityIcons name="shield-check-outline" size={14} color="#FFFFFF" />
-          <Text className="text-[13px] font-medium text-white"> Read-only · Nothing is shared externally</Text>
+          <AppText variant="bodySm" className="ml-1 font-medium text-white">
+            Read-only · Nothing is shared externally
+          </AppText>
         </View>
-      </View>
+      </Card>
 
-      <Text className="overline mb-3">
-        WHAT WE WILL SCAN
-      </Text>
+      <AppText variant="overline" className="mb-3">
+        What we will scan
+      </AppText>
 
       {SCAN_SOURCES.map((source) => (
-        <View key={source.id} className="card-row">
-          <View className="w-10 h-10 rounded-[10px] bg-brand-purple-light items-center justify-center mr-3">
-            <MaterialCommunityIcons name="message-text-outline" size={20} color="#7C3AED" />
+        <Card key={source.id} className="mb-2.5" contentClassName="flex-row items-center gap-3">
+          <View className="h-10 w-10 items-center justify-center rounded-xl bg-brand-purple-light dark:bg-primary/20">
+            <MaterialCommunityIcons name="message-text-outline" size={20} color={colors.primary} />
           </View>
           <View className="flex-1">
-            <Text className="text-[15px] font-semibold text-gray-900 mb-0.5">{source.name}</Text>
-            <Text className="body-text">{source.preview}</Text>
+            <AppText variant="title" className="mb-0.5">
+              {source.name}
+            </AppText>
+            <AppText variant="bodySm">{source.preview}</AppText>
           </View>
-        </View>
+        </Card>
       ))}
 
-      <Text className="body-text text-center my-3">
+      <AppText variant="bodyMuted" className="my-3 text-center">
         + dozens more from your inbox...
-      </Text>
+      </AppText>
 
       <Button
         size="lg"
         fullWidth
-        onPress={() => router.push("/sms-scanning")}
-        className="mt-1 shadow-lg"
+        onPress={() => router.push("/(tabs)/sms-scanning")}
+        className="mt-1 h-14 rounded-[24px] shadow-lg"
         icon={<MaterialCommunityIcons name="lightning-bolt" size={20} color="#FFFFFF" />}
       >
-        Scan My SMS Inbox →
+        Scan my SMS inbox →
       </Button>
     </Screen>
   );

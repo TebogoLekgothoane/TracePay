@@ -2,13 +2,36 @@
 module.exports = {
   content: ["./src/**/*.{js,jsx,ts,tsx}"],
   presets: [require("nativewind/preset")],
+  darkMode: "media",
   theme: {
     extend: {
       colors: {
-        navy: "#0B1B3A",
+        background: "rgb(var(--background) / <alpha-value>)",
+        foreground: "rgb(var(--foreground) / <alpha-value>)",
+        card: {
+          DEFAULT: "rgb(var(--card) / <alpha-value>)",
+          foreground: "rgb(var(--card-foreground) / <alpha-value>)",
+        },
+        muted: {
+          DEFAULT: "rgb(var(--muted) / <alpha-value>)",
+          foreground: "rgb(var(--muted-foreground) / <alpha-value>)",
+        },
+        border: "rgb(var(--border) / <alpha-value>)",
+        input: "rgb(var(--input) / <alpha-value>)",
+        primary: {
+          DEFAULT: "rgb(var(--primary) / <alpha-value>)",
+          foreground: "rgb(var(--primary-foreground) / <alpha-value>)",
+        },
+        secondary: {
+          DEFAULT: "rgb(var(--secondary) / <alpha-value>)",
+          foreground: "rgb(var(--secondary-foreground) / <alpha-value>)",
+        },
+        destructive: "rgb(var(--destructive) / <alpha-value>)",
+        accent: "rgb(var(--accent) / <alpha-value>)",
+        navy: "rgb(var(--navy) / <alpha-value>)",
         white: "#FFFFFF",
         purple: "#6D28D9",
-        "neon-purple": "#BF00FF",
+        "neon-purple": "#A855F7",
         blue: "#0B1B3A",
         bg: {
           DEFAULT: "#FFFFFF",
@@ -19,19 +42,9 @@ module.exports = {
           DEFAULT: "#0B1B3A",
           muted: "rgba(11, 27, 58, 0.75)",
         },
-        accent: {
-          DEFAULT: "#BF00FF",
-          pressed: "#A800E6",
-        },
-        primary: "#6D28D9",
-        border: "#E5E7EB",
-        danger: "#DC2626",
-        warning: "#F59E0B",
-        success: "#10B981",
-        info: "#3B82F6",
         brand: {
           purple: "#7C3AED",
-          "purple-dark": "#5B21B6",
+          "purple-dark": "#A855F7",
           "purple-light": "#EDE9FE",
           "purple-muted": "#C4B5FD",
           "purple-faint": "#FAFAFF",
@@ -86,10 +99,10 @@ module.exports = {
           100: "#EDE9FE",
           400: "#A78BFA",
         },
-        blue: {
-          100: "#DBEAFE",
-          600: "#2563EB",
-        },
+        info: "#3B82F6",
+        success: "#10B981",
+        warning: "#F59E0B",
+        danger: "#DC2626",
       },
       fontFamily: {
         sans: ["Inter_400Regular"],

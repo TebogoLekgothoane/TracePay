@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { View, Text } from "react-native";
+import { View, StyleSheet } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import Animated, {
   useSharedValue,
@@ -7,6 +7,8 @@ import Animated, {
   useAnimatedProps,
   Easing,
 } from "react-native-reanimated";
+
+import { AppText } from "@/components/Typography";
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -34,13 +36,14 @@ export default function CircularProgress({
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
   const targetProgress = Math.min(value / max, 1);
+  const center = size / 2;
 
   const strokeDashoffset = useSharedValue(circumference);
 
   useEffect(() => {
     strokeDashoffset.value = withTiming(
       circumference - targetProgress * circumference,
-      { duration: 1200, easing: Easing.out(Easing.cubic) }
+      { duration: 1200, easing: Easing.out(Easing.cubic) },
     );
   }, [targetProgress, circumference, strokeDashoffset]);
 
@@ -48,15 +51,15 @@ export default function CircularProgress({
     strokeDashoffset: strokeDashoffset.value,
   }));
 
+  const labelSize = Math.round(size * 0.26);
+  const sublabelSize = Math.max(9, Math.round(size * 0.1));
+
   return (
-    <View
-      className="items-center justify-center relative"
-      style={{ width: size, height: size }}
-    >
-      <Svg width={size} height={size} className="absolute">
+    <View style={{ width: size, height: size }}>
+      <Svg width={size} height={size} style={StyleSheet.absoluteFill} pointerEvents="none">
         <Circle
-          cx={size / 2}
-          cy={size / 2}
+          cx={center}
+          cy={center}
           r={radius}
           stroke={trackColor}
           strokeWidth={strokeWidth}
@@ -64,26 +67,35 @@ export default function CircularProgress({
         />
         <AnimatedCircle
           animatedProps={animatedProps}
-          cx={size / 2}
-          cy={size / 2}
+          cx={center}
+          cy={center}
           r={radius}
           stroke={color}
           strokeWidth={strokeWidth}
           fill="transparent"
           strokeDasharray={`${circumference} ${circumference}`}
           strokeLinecap="round"
-          rotation="-90"
-          origin={`${size / 2}, ${size / 2}`}
+          transform={`rotate(-90 ${center} ${center})`}
         />
       </Svg>
-      <View className="items-center justify-center">
+
+      <View style={StyleSheet.absoluteFill} className="items-center justify-center px-2">
         {label ? (
-          <Text className="text-[26px] font-bold text-gray-900 leading-[30px]">{label}</Text>
+          <AppText
+            className="font-bold text-foreground"
+            style={{ fontSize: labelSize, lineHeight: labelSize + 2 }}
+          >
+            {label}
+          </AppText>
         ) : null}
         {sublabel ? (
-          <Text className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">
+          <AppText
+            variant="caption"
+            className="mt-0.5 text-center font-semibold uppercase tracking-wide text-muted-foreground"
+            style={{ fontSize: sublabelSize, lineHeight: sublabelSize + 2 }}
+          >
             {sublabel}
-          </Text>
+          </AppText>
         ) : null}
       </View>
     </View>
