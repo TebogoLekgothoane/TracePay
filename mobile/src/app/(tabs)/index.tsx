@@ -124,7 +124,6 @@ export default function HomeScreen() {
             <AppText variant="overline" className="mb-1">
               Welcome back
             </AppText>
-            <AppText variant="titleMd">{firstName} 👋</AppText>
           </View>
           <Button
             variant="outline"

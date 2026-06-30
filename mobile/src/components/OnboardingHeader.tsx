@@ -40,19 +40,19 @@ export function OnboardingHeader({
   showBack = false,
 }: OnboardingHeaderProps) {
   return (
-    <View className="onboarding-header px-6 pt-10">
+    <View className="onboarding-header px-6 pt-4">
       <View className="flex-row items-center">
         {showBack ? (
           <Pressable
             onPress={() => router.back()}
-            className="h-10 w-10 items-center justify-center rounded-full bg-white/[0.08] dark:bg-white/[0.08]"
+            className="h-9 w-9 items-center justify-center rounded-full bg-white/[0.08] dark:bg-white/[0.08]"
             accessibilityRole="button"
             accessibilityLabel="Go back"
           >
             <Feather name="chevron-left" size={22} color="#FFFFFF" />
           </Pressable>
         ) : (
-          <View className="h-10 w-10" />
+          <View className="h-9 w-9" />
         )}
 
         <View className="step-dots onboarding-step-dots flex-1">
@@ -68,7 +68,7 @@ export function OnboardingHeader({
           ))}
         </View>
 
-        <View className="h-10 w-10" />
+        <View className="h-9 w-9" />
       </View>
     </View>
   );

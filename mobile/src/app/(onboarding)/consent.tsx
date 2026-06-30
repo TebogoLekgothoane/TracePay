@@ -22,7 +22,6 @@ import { useOnboardingStore } from "@/stores/onboardingStore";
 import { useIngestion } from "@/context/SMSIngestionContext";
 
 const PURPLE = "#A855F7";
-const privacyIconSource = require("@/assets/privacy-icon.png");
 
 type AccordionCardProps = {
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
@@ -227,16 +226,7 @@ export default function ConsentScreen() {
           }}
           showsVerticalScrollIndicator={false}
         >
-          <View className="relative mb-6 mt-2">
-            <View className="absolute -right-1 top-0 z-0">
-              <Image
-                source={privacyIconSource}
-                className="h-20 w-[80px]"
-                resizeMode="contain"
-                accessibilityLabel="Privacy and security"
-              />
-            </View>
-
+          <View className="relative mb-6 mt-8">
             <View className="relative z-10 pr-[84px]">
               <AppText variant="titleLg">
                 Privacy &{" "}

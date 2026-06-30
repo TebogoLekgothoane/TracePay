@@ -133,7 +133,7 @@
 
   /* ── Onboarding ──────────────────────────────────────── */
   .onboarding-header {
-    @apply pb-4 pt-0;
+    @apply pb-2 pt-0;
   }
 
   .onboarding-header-logo {

@@ -1,39 +1,19 @@
-import { BlurView } from "expo-blur";
-import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
-import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { Platform, View } from "react-native";
+
+import { ProminentTabBar } from "@/components/ProminentTabBar";
 import { useColorScheme } from "@/hooks/useColorScheme";
 
-function NativeTabLayout() {
-  return (
-    <NativeTabs>
-      <NativeTabs.Trigger name="index">
-        <Icon sf={{ default: "house", selected: "house.fill" }} />
-        <Label>Home</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="budget">
-        <Icon sf={{ default: "chart.pie", selected: "chart.pie.fill" }} />
-        <Label>Budget</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="profile">
-        <Icon sf={{ default: "person", selected: "person.fill" }} />
-        <Label>Profile</Label>
-      </NativeTabs.Trigger>
-    </NativeTabs>
-  );
-}
-
-function ClassicTabLayout() {
+function TabLayoutContent() {
   const { isDarkColorScheme, colors } = useColorScheme();
   const isIOS = Platform.OS === "ios";
-  const isWeb = Platform.OS === "web";
 
   return (
     <Tabs
+      tabBar={(props) => <ProminentTabBar {...props} />}
       screenOptions={{
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.mutedForeground,
@@ -41,37 +21,6 @@ function ClassicTabLayout() {
         sceneContainerStyle: {
           backgroundColor: isDarkColorScheme ? "transparent" : colors.background,
         },
-        tabBarStyle: {
-          position: "absolute",
-          backgroundColor: isIOS || isDarkColorScheme ? "transparent" : colors.card,
-          borderTopWidth: isDarkColorScheme ? 0 : 1,
-          borderTopColor: isDarkColorScheme ? "transparent" : colors.border,
-          elevation: 0,
-          height: isWeb ? 84 : 60,
-          paddingBottom: isWeb ? 20 : 8,
-        },
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontFamily: "Inter_500Medium",
-        },
-        tabBarBackground: () =>
-          isIOS || isDarkColorScheme ? (
-            <BlurView
-              intensity={isDarkColorScheme ? 60 : 100}
-              tint={isDarkColorScheme ? "dark" : "light"}
-              className="absolute inset-0"
-            />
-          ) : isWeb ? (
-            <View
-              className={
-                isDarkColorScheme
-                  ? "absolute inset-0 bg-white/5"
-                  : "absolute inset-0 bg-card"
-              }
-            />
-          ) : isDarkColorScheme ? (
-            <View className="absolute inset-0 bg-white/5" />
-          ) : null,
       }}
     >
       <Tabs.Screen
@@ -87,30 +36,6 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="sms-scan"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="history"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="sms-scanning"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="sms-results"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
         name="budget"
         options={{
           title: "Budget",
@@ -120,6 +45,12 @@ function ClassicTabLayout() {
             ) : (
               <MaterialCommunityIcons name="chart-donut" size={22} color={color} />
             ),
+        }}
+      />
+      <Tabs.Screen
+        name="sms-scan"
+        options={{
+          title: "Scan SMS",
         }}
       />
       <Tabs.Screen
@@ -146,17 +77,34 @@ function ClassicTabLayout() {
             ),
         }}
       />
+      <Tabs.Screen
+        name="history"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="sms-scanning"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="sms-results"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }
 
 export default function TabLayout() {
   const { isDarkColorScheme } = useColorScheme();
-  const tabs = isLiquidGlassAvailable() ? <NativeTabLayout /> : <ClassicTabLayout />;
 
   return (
     <View className={isDarkColorScheme ? "flex-1 bg-transparent" : "flex-1 bg-background"}>
-      {tabs}
+      <TabLayoutContent />
     </View>
   );
 }
