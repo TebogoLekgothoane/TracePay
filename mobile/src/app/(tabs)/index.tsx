@@ -24,7 +24,7 @@ import { PARTNERS } from "@/constants/partners";
 import { useIngestion } from "@/context/SMSIngestionContext";
 import { getTransactionDisplay } from "@/lib/transaction-display";
 import { getTransactionDate } from "@/lib/transaction-filters";
-import { CATEGORY_ICONS } from "@/constants/category-icons";
+import { TransactionIcon } from "@/components/TransactionIcon";
 
 const ACTIONS = [
   { id: "freeze", label: "Freeze\nLeaks", icon: "snowflake", bgClass: "bg-brand-purple" },
@@ -331,18 +331,7 @@ export default function HomeScreen() {
                 className="mb-2.5 active:opacity-90"
               >
                 <Card contentClassName="flex-row items-start gap-3">
-                  <View
-                    className={cn(
-                      "h-10 w-10 items-center justify-center rounded-xl",
-                      isDebit ? "bg-red-100 dark:bg-red-900/40" : "bg-green-100 dark:bg-green-900/40",
-                    )}
-                  >
-                    <MaterialCommunityIcons
-                      name={CATEGORY_ICONS[tx.category] as any}
-                      size={18}
-                      color={isDebit ? colors.destructive : colors.success}
-                    />
-                  </View>
+                  <TransactionIcon tx={tx} />
                   <View className="min-w-0 flex-1">
                     <AppText variant="title" numberOfLines={1}>
                       {headline}

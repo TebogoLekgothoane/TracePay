@@ -20,7 +20,7 @@ import { useColorScheme } from "@/hooks/useColorScheme";
 import { ParsedTransaction } from "@/services/sms/sms.types";
 import { cn } from "@/lib/cn";
 import { getTransactionDisplay } from "@/lib/transaction-display";
-import { CATEGORY_ICONS } from "@/constants/category-icons";
+import { TransactionIcon } from "@/components/TransactionIcon";
 import {
   DATE_RANGE_OPTIONS,
   DateRangeFilter,
@@ -103,18 +103,7 @@ export default function HistoryScreen() {
 
       return (
         <Card className="mb-2.5" contentClassName="flex-row items-start gap-3">
-          <View
-            className={cn(
-              "h-10 w-10 items-center justify-center rounded-xl",
-              isDebit ? "bg-red-100 dark:bg-red-900/40" : "bg-green-100 dark:bg-green-900/40",
-            )}
-          >
-            <MaterialCommunityIcons
-              name={CATEGORY_ICONS[tx.category] as any}
-              size={18}
-              color={isDebit ? colors.destructive : colors.success}
-            />
-          </View>
+          <TransactionIcon tx={tx} />
           <View className="min-w-0 flex-1">
             <AppText variant="title" numberOfLines={1}>
               {headline}

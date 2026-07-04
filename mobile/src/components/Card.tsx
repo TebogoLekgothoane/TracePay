@@ -37,9 +37,15 @@ export function Card({
     );
   }
 
+  const hasCustomBackground = /\bbg-/.test(className ?? "");
+
   return (
     <View
-      className={cn("rounded-[20px] bg-card p-5 shadow-sm", className)}
+      className={cn(
+        "rounded-[20px] p-5 shadow-sm dark:shadow-none",
+        !hasCustomBackground && "bg-card dark:bg-white/5",
+        className,
+      )}
       {...props}
     >
       <View className={cn("w-full", contentClassName)}>{children}</View>

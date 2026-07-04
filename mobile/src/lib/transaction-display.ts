@@ -1,5 +1,6 @@
 import { ParsedTransaction, TransactionType } from '@/services/sms/sms.types';
 import { normaliseMerchant } from '@/services/sms/sms.utils';
+import { withLogoDomain } from '@/lib/merchant-logos';
 
 const TYPE_LABELS: Record<TransactionType, string> = {
   debit: 'Debit',
@@ -171,11 +172,12 @@ function describeFromRawBody(tx: ParsedTransaction): { headline?: string; summar
 /** Fill in headline/summary from raw SMS when older parses left them blank. */
 export function enrichParsedTransaction(tx: ParsedTransaction): ParsedTransaction {
   const derived = describeFromRawBody(tx);
-  return {
+  const withMerchant: ParsedTransaction = {
     ...tx,
     merchant: tx.merchant ?? derived.headline,
     summary: tx.summary ?? derived.summary,
   };
+  return withLogoDomain(withMerchant);
 }
 
 export function getTransactionHeadline(tx: ParsedTransaction): string {

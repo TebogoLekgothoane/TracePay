@@ -44,6 +44,8 @@ export interface RawSMS {
     rawBody: string;
     parsedAt: Date;
     confidence: 'high' | 'medium' | 'low';
+    /** Hunter logo domain resolved at parse/enrich time, e.g. "spotify.com". */
+    logoDomain?: string;
   }
   
   // ─── Parser contract ──────────────────────────────────────────────────────────

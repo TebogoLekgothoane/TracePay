@@ -9,6 +9,7 @@ import {
 import { SMS_FETCH_DEFAULTS, SYNC_LOOKBACK_DAYS } from './banks.constants';
 import { makeTransactionId, inferCategory } from './sms.utils';
 import { parserRegistry } from './ParserRegistry';
+import { enrichParsedTransaction } from '@/lib/transaction-display';
 
 // ─── SMS permission ───────────────────────────────────────────────────────────
 
@@ -281,13 +282,13 @@ export async function ingestSMS(options: IngestOptions = {}): Promise<IngestionR
       const tx = parseResult.transaction;
       const id = makeTransactionId(sms._id, sms.body);
 
-      const parsed: ParsedTransaction = {
+      const parsed = enrichParsedTransaction({
         ...tx,
         id,
         rawSmsId: sms._id,
         parsedAt: new Date(),
         category: inferCategory(tx.merchant),
-      };
+      });
 
       smsLog('ingestSMS parsed ✓', {
         bank: parsed.bank,
