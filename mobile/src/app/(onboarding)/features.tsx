@@ -2,7 +2,6 @@ import React from "react";
 import { View, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { Button } from "@/components/Button";
 import { IconCard } from "@/components/Card";
@@ -51,9 +50,9 @@ export default function FeaturesScreen() {
           }}
         >
           <View className="mb-8 mt-2">
-            <AppText variant="display">
-              Meet your{"\n"}
-              money <AppText variant="displayAccent">guardian</AppText>
+            <AppText variant="display">Meet your{"\n"}
+               money
+               <AppText variant="displayAccent"> guardian</AppText>
             </AppText>
 
             <AppText variant="lead" className="mt-3">
@@ -67,26 +66,10 @@ export default function FeaturesScreen() {
               <IconCard
                 key={feature.id}
                 description={feature.desc}
-                icon={
-                  <MaterialCommunityIcons
-                    name={feature.icon}
-                    size={28}
-                    color={feature.color}
-                  />
-                }
+                glass={false}
+                className="bg-transparent p-0 shadow-none"
               />
             ))}
-          </View>
-
-          <View className="mt-10 items-center">
-            <AppText variant="title" className="mt-4 text-center">
-              Your privacy comes first
-            </AppText>
-
-            <AppText variant="lead" className="mt-3 px-6 text-center">
-              TracePay never sells your data. SMS access is read-only and your
-              information stays protected and POPIA compliant.
-            </AppText>
           </View>
         </ScrollView>
 

@@ -34,38 +34,48 @@ const queryClient = new QueryClient({
 
 function NavigationGuard({ children }: { children: React.ReactNode }) {
   const segments = useSegments();
-  const { onboardingComplete, isAuthenticated, isLoaded, loadFromStorage } = useProfileStore();
+  const { onboardingComplete, isAuthenticated, isLoaded, initializeAuth } = useProfileStore();
   const { colors, isDarkColorScheme } = useColorScheme();
 
   useEffect(() => {
-    loadFromStorage();
-  }, [loadFromStorage]);
+    let unsubscribe: (() => void) | undefined;
+
+    void initializeAuth().then((cleanup) => {
+      unsubscribe = cleanup;
+    });
+
+    return () => unsubscribe?.();
+  }, [initializeAuth]);
 
   useEffect(() => {
     if (!isLoaded) return;
 
     const root = segments[0] as string | undefined;
+    const onboardingRoute = segments[1] as string | undefined;
     const tabRoute = segments[1] as string | undefined;
     const inOnboarding = root === "(onboarding)";
     const inTabs = root === "(tabs)";
     const onBoot = !root || root === "index";
+    const onAuthScreen = inOnboarding && !onboardingRoute;
+    const onRecoveryScreen = inOnboarding && onboardingRoute === "forgot-password";
+    const inPostAuthOnboarding = inOnboarding && Boolean(onboardingRoute) && onboardingRoute !== "forgot-password";
     const onSmsFlow =
       inTabs && (tabRoute === "sms-scanning" || tabRoute === "sms-results");
 
     if (onBoot) {
-      if (!isAuthenticated) router.replace("/(onboarding)/language");
-      else if (!onboardingComplete) router.replace("/(tabs)/sms-scanning");
+      if (!isAuthenticated) router.replace("/(onboarding)");
+      else if (!onboardingComplete) router.replace("/(onboarding)/language");
       else router.replace("/(tabs)");
       return;
     }
 
     if (!isAuthenticated) {
-      if (!inOnboarding) router.replace("/(onboarding)/language");
+      if (!onAuthScreen && !onRecoveryScreen) router.replace("/(onboarding)");
       return;
     }
 
     if (!onboardingComplete) {
-      if (!onSmsFlow) router.replace("/(tabs)/sms-scanning");
+      if (!inPostAuthOnboarding && !onSmsFlow) router.replace("/(onboarding)/language");
       return;
     }
 
@@ -99,6 +109,7 @@ function RootLayoutNav() {
       <Stack.Screen name="index" options={{ headerShown: false, animation: "none" }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: "none" }} />
       <Stack.Screen name="(onboarding)" options={{ headerShown: false, animation: "none" }} />
+      <Stack.Screen name="recovery-email" options={{ headerShown: false }} />
     </Stack>
   );
 }

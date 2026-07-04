@@ -8,19 +8,19 @@ import { ProminentTabBar } from "@/components/ProminentTabBar";
 import { useColorScheme } from "@/hooks/useColorScheme";
 
 export default function TabLayout() {
-  const { isDarkColorScheme, colors } = useColorScheme();
+  const { colors } = useColorScheme();
   const isIOS = Platform.OS === "ios";
 
   return (
-    <View className={isDarkColorScheme ? "flex-1 bg-transparent" : "flex-1 bg-background"}>
+    <View className="flex-1 bg-background">
       <Tabs
       tabBar={(props) => <ProminentTabBar {...props} />}
       screenOptions={{
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.mutedForeground,
         headerShown: false,
-        sceneContainerStyle: {
-          backgroundColor: isDarkColorScheme ? "transparent" : colors.background,
+        sceneStyle: {
+          backgroundColor: colors.background,
         },
       }}
     >

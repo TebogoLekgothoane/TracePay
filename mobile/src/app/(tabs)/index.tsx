@@ -21,6 +21,10 @@ import { cn } from "@/lib/cn";
 import { getSeverityStyle } from "@/lib/severity";
 import { DEMO_LEAKS } from "@/lib/simulate";
 import { PARTNERS } from "@/constants/partners";
+import { useIngestion } from "@/context/SMSIngestionContext";
+import { getTransactionDisplay } from "@/lib/transaction-display";
+import { getTransactionDate } from "@/lib/transaction-filters";
+import { CATEGORY_ICONS } from "@/constants/category-icons";
 
 const ACTIONS = [
   { id: "freeze", label: "Freeze\nLeaks", icon: "snowflake", bgClass: "bg-brand-purple" },
@@ -34,8 +38,11 @@ export default function HomeScreen() {
   const { colors, isDarkColorScheme } = useColorScheme();
   const { monthlyIncome, rewardPoints } = useProfileStore();
   const { leaks, fetchLeaks } = useLeaksStore();
+  const { transactions } = useIngestion();
   const { speak } = useVoice();
   const [showNotifications, setShowNotifications] = useState(false);
+
+  const recentTransactions = transactions.slice(0, 5);
 
   useEffect(() => {
     (async () => {
@@ -263,7 +270,7 @@ export default function HomeScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          className="-mx-[18px]"
+          className="-mx-[18px] mb-6"
           contentContainerClassName="gap-3 px-[18px] pb-1"
         >
           {PARTNERS.map((r) => (
@@ -295,6 +302,92 @@ export default function HomeScreen() {
             </Card>
           ))}
         </ScrollView>
+
+        <View className="mb-3 flex-row items-center justify-between">
+          <AppText variant="title">Recent transactions</AppText>
+          {transactions.length > 0 ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="min-h-0 px-0"
+              onPress={() => router.push("/(tabs)/history")}
+            >
+              <AppText variant="label" className="text-brand-purple dark:text-primary">
+                See all
+              </AppText>
+            </Button>
+          ) : null}
+        </View>
+
+        {recentTransactions.length > 0 ? (
+          recentTransactions.map((tx) => {
+            const isDebit = tx.type === "debit";
+            const { headline, summary } = getTransactionDisplay(tx);
+
+            return (
+              <Pressable
+                key={tx.id}
+                onPress={() => router.push("/(tabs)/history")}
+                className="mb-2.5 active:opacity-90"
+              >
+                <Card contentClassName="flex-row items-start gap-3">
+                  <View
+                    className={cn(
+                      "h-10 w-10 items-center justify-center rounded-xl",
+                      isDebit ? "bg-red-100 dark:bg-red-900/40" : "bg-green-100 dark:bg-green-900/40",
+                    )}
+                  >
+                    <MaterialCommunityIcons
+                      name={CATEGORY_ICONS[tx.category] as any}
+                      size={18}
+                      color={isDebit ? colors.destructive : colors.success}
+                    />
+                  </View>
+                  <View className="min-w-0 flex-1">
+                    <AppText variant="title" numberOfLines={1}>
+                      {headline}
+                    </AppText>
+                    <AppText variant="bodySm" className="mt-0.5" numberOfLines={1}>
+                      {summary}
+                    </AppText>
+                  </View>
+                  <View className="items-end gap-0.5">
+                    <AppText
+                      variant="label"
+                      className={cn(
+                        isDebit ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400",
+                      )}
+                    >
+                      {isDebit ? "-" : "+"}R{tx.amount.toFixed(2)}
+                    </AppText>
+                    <AppText variant="caption">
+                      {getTransactionDate(tx).toLocaleTimeString("en-ZA", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </AppText>
+                  </View>
+                </Card>
+              </Pressable>
+            );
+          })
+        ) : (
+          <Pressable
+            onPress={() => router.push("/(tabs)/sms-scanning")}
+            className="active:opacity-90"
+          >
+            <Card
+              glass={false}
+              className="border border-dashed border-border dark:border-white/15"
+              contentClassName="items-center gap-2 py-5"
+            >
+              <MaterialCommunityIcons name="message-text-outline" size={24} color={colors.mutedForeground} />
+              <AppText variant="bodySm" className="text-center text-muted-foreground">
+                No transactions yet. Scan your SMS inbox to import bank activity.
+              </AppText>
+            </Card>
+          </Pressable>
+        )}
       </Screen>
 
       <Modal

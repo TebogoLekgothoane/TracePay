@@ -148,7 +148,10 @@ export default function ConsentScreen() {
     const status = await refreshPermission();
     if (status === "granted") {
       setPermissionBlocked(false);
-      router.push("/(onboarding)");
+      router.push({
+        pathname: "/(tabs)/sms-scanning",
+        params: { fromOnboarding: "1" },
+      });
       return true;
     }
     setPermissionBlocked(true);
@@ -164,7 +167,10 @@ export default function ConsentScreen() {
 
     const status = await requestPermission();
     if (status === "granted") {
-      router.push("/(onboarding)");
+      router.push({
+        pathname: "/(tabs)/sms-scanning",
+        params: { fromOnboarding: "1" },
+      });
       return;
     }
 

@@ -1,8 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { User } from "@supabase/supabase-js";
 import { create } from "zustand";
 
-import { AuthError } from "@/lib/auth-errors";
+import { AuthError, mapSupabaseAuthError } from "@/lib/auth-errors";
 import { AUTH_KEYS, clearAllTracePayStorage } from "@/lib/auth-storage";
+import { isValidSaPhone, normalizeSaPhone } from "@/lib/phone";
+import { getSupabase } from "@/lib/supabase";
 import { useLeaksStore } from "@/stores/leaksStore";
 
 interface ProfileState {
@@ -17,6 +20,7 @@ interface ProfileState {
   isAuthenticated: boolean;
   email: string;
   phone: string;
+  recoveryEmail: string;
   rewardPoints: number;
   setName: (name: string) => void;
   setMonthlyIncome: (income: number) => void;
@@ -24,18 +28,106 @@ interface ProfileState {
   setVoiceEnabled: (enabled: boolean) => void;
   setConsentGiven: (given: boolean) => void;
   setConnectedAccounts: (accounts: Record<string, boolean>) => void;
-  signUp: (email: string, password: string, phone?: string) => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
-  accountExistsForEmail: (email: string) => Promise<boolean>;
-  resetPassword: (email: string, newPassword: string) => Promise<void>;
+  saveRecoveryEmail: (email: string) => Promise<void>;
+  sendPhoneCode: (phone: string) => Promise<void>;
+  verifyPhoneCode: (code: string) => Promise<void>;
+  resendPhoneCode: () => Promise<void>;
   signOut: () => Promise<void>;
   addRewardPoints: (pts: number) => void;
   completeOnboarding: () => Promise<void>;
   loadFromStorage: () => Promise<void>;
+  initializeAuth: () => Promise<() => void>;
   syncToApi: () => Promise<void>;
 }
 
 const defaultConnectedAccounts = { bank: false, mobile: false, sassa: false };
+
+let pendingPhoneAuth: { phone: string } | null = null;
+
+function applyUser(user: User | null): Partial<ProfileState> {
+  return {
+    isAuthenticated: Boolean(user),
+    email: user?.email?.toLowerCase() ?? "",
+    phone: user?.phone ?? "",
+  };
+}
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+async function clearLocalProfileData() {
+  await clearAllTracePayStorage();
+  useLeaksStore.getState().resetLeaks();
+}
+
+async function persistPhone(phone: string) {
+  if (phone) {
+    await AsyncStorage.setItem(AUTH_KEYS.phone, phone);
+  } else {
+    await AsyncStorage.removeItem(AUTH_KEYS.phone);
+  }
+}
+
+async function persistRecoveryEmail(email: string) {
+  if (email) {
+    await AsyncStorage.setItem(AUTH_KEYS.recoveryEmail, email);
+  } else {
+    await AsyncStorage.removeItem(AUTH_KEYS.recoveryEmail);
+  }
+}
+
+async function fetchRecoveryEmail(userId: string): Promise<string> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("recovery_email")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("Could not load recovery email from Supabase.", error);
+    return "";
+  }
+
+  return typeof data?.recovery_email === "string" ? data.recovery_email : "";
+}
+
+async function ensureProfileRow(userId: string) {
+  const supabase = getSupabase();
+  const { error } = await supabase.from("profiles").upsert(
+    { id: userId, updated_at: new Date().toISOString() },
+    { onConflict: "id" },
+  );
+
+  if (error) {
+    console.warn("Could not ensure Supabase profile row.", error);
+  }
+}
+
+async function syncSessionUser(user: User | null) {
+  if (!user) {
+    return {
+      isAuthenticated: false,
+      email: "",
+      phone: "",
+      recoveryEmail: "",
+    };
+  }
+
+  const nextPhone = user.phone ?? "";
+  const recoveryEmail = await fetchRecoveryEmail(user.id);
+
+  await AsyncStorage.setItem(AUTH_KEYS.userId, user.id);
+  await persistPhone(nextPhone);
+  await persistRecoveryEmail(recoveryEmail);
+
+  return {
+    ...applyUser(user),
+    phone: nextPhone,
+    recoveryEmail,
+  };
+}
 
 export const useProfileStore = create<ProfileState>((set, get) => ({
   name: "",
@@ -49,6 +141,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
   isAuthenticated: false,
   email: "",
   phone: "",
+  recoveryEmail: "",
   rewardPoints: 245,
 
   setName: (name) => {
@@ -76,99 +169,155 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     set({ connectedAccounts: accounts });
     AsyncStorage.setItem(AUTH_KEYS.accounts, JSON.stringify(accounts));
   },
+  saveRecoveryEmail: async (email) => {
+    if (!get().isAuthenticated) {
+      throw new AuthError("Sign in before updating your recovery email.");
+    }
 
-  signUp: async (email, password, phone) => {
     const normalizedEmail = email.trim().toLowerCase();
-    const storedEmail = (await AsyncStorage.getItem(AUTH_KEYS.email))?.toLowerCase();
-    const hasAccount = (await AsyncStorage.getItem(AUTH_KEYS.isAuthenticated)) === "true";
-
-    if (hasAccount && storedEmail === normalizedEmail) {
-      throw new AuthError("An account with this email already exists. Sign in instead.");
+    if (normalizedEmail && !isValidEmail(normalizedEmail)) {
+      throw new AuthError("Enter a valid email address.");
     }
 
-    if (hasAccount && storedEmail && storedEmail !== normalizedEmail) {
-      await clearAllTracePayStorage();
-      useLeaksStore.getState().resetLeaks();
+    const supabase = getSupabase();
+    const {
+      data: { user },
+      error: sessionError,
+    } = await supabase.auth.getUser();
+
+    if (sessionError || !user) {
+      throw new AuthError("Sign in before updating your recovery email.");
     }
 
-    await AsyncStorage.multiSet([
-      [AUTH_KEYS.isAuthenticated, "true"],
-      [AUTH_KEYS.email, normalizedEmail],
-      [AUTH_KEYS.password, password],
-      [AUTH_KEYS.onboardingComplete, "false"],
-    ]);
+    try {
+      const { error } = await supabase.from("profiles").upsert(
+        {
+          id: user.id,
+          recovery_email: normalizedEmail || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" },
+      );
 
-    const updates: Partial<ProfileState> = {
-      isAuthenticated: true,
-      email: normalizedEmail,
-      onboardingComplete: false,
-      name: "",
-      monthlyIncome: 0,
-      consentGiven: false,
-      connectedAccounts: { ...defaultConnectedAccounts },
-      rewardPoints: 245,
-    };
+      if (error) {
+        throw error;
+      }
 
-    if (phone) {
-      updates.phone = phone;
-      await AsyncStorage.setItem(AUTH_KEYS.phone, phone);
-    } else {
-      await AsyncStorage.removeItem(AUTH_KEYS.phone);
-      updates.phone = "";
+      await persistRecoveryEmail(normalizedEmail);
+      set({ recoveryEmail: normalizedEmail });
+    } catch (error) {
+      throw mapSupabaseAuthError(error as { message?: string; code?: string });
     }
-
-    set(updates);
   },
 
-  signIn: async (email, password) => {
-    const normalizedEmail = email.trim().toLowerCase();
-    const [storedEmail, storedPassword, isAuth] = await Promise.all([
-      AsyncStorage.getItem(AUTH_KEYS.email),
-      AsyncStorage.getItem(AUTH_KEYS.password),
-      AsyncStorage.getItem(AUTH_KEYS.isAuthenticated),
-    ]);
+  sendPhoneCode: async (phone) => {
+    const normalizedPhone = normalizeSaPhone(phone);
 
-    if (isAuth !== "true" || !storedEmail || !storedPassword) {
-      throw new AuthError("No account found. Create an account first.");
+    if (!isValidSaPhone(phone)) {
+      throw new AuthError("Enter a valid SA mobile number (9 digits after +27).");
     }
 
-    if (storedEmail.toLowerCase() !== normalizedEmail || storedPassword !== password) {
-      throw new AuthError("Incorrect email or password.");
-    }
+    const supabase = getSupabase();
 
-    await AsyncStorage.setItem(AUTH_KEYS.isAuthenticated, "true");
-    set({ isAuthenticated: true, email: storedEmail.toLowerCase() });
-    await get().loadFromStorage();
+    try {
+      await supabase.auth.signOut();
+      await clearLocalProfileData();
+
+      const { error } = await supabase.auth.signInWithOtp({ phone: normalizedPhone });
+      if (error) {
+        throw error;
+      }
+
+      pendingPhoneAuth = { phone: normalizedPhone };
+      set({
+        isAuthenticated: false,
+        email: "",
+        phone: normalizedPhone,
+        recoveryEmail: "",
+        onboardingComplete: false,
+      });
+    } catch (error) {
+      pendingPhoneAuth = null;
+      throw mapSupabaseAuthError(error as { message?: string; code?: string });
+    }
   },
 
-  accountExistsForEmail: async (email) => {
-    const normalizedEmail = email.trim().toLowerCase();
-    const [storedEmail, isAuth] = await Promise.all([
-      AsyncStorage.getItem(AUTH_KEYS.email),
-      AsyncStorage.getItem(AUTH_KEYS.isAuthenticated),
-    ]);
+  verifyPhoneCode: async (code) => {
+    if (!pendingPhoneAuth) {
+      throw new AuthError("Verification session expired. Please start again.");
+    }
 
-    return isAuth === "true" && storedEmail?.toLowerCase() === normalizedEmail;
+    const token = code.replace(/\s/g, "");
+    if (token.length < 6) {
+      throw new AuthError("Enter the 6-digit code from your SMS.");
+    }
+
+    const { phone } = pendingPhoneAuth;
+    const supabase = getSupabase();
+
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        phone,
+        token,
+        type: "sms",
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      const user = data.user;
+      if (!user) {
+        throw new AuthError("Could not complete sign-in. Please try again.");
+      }
+
+      const onboardingComplete =
+        (await AsyncStorage.getItem(AUTH_KEYS.onboardingComplete)) === "true";
+
+      pendingPhoneAuth = null;
+
+      await ensureProfileRow(user.id);
+      await AsyncStorage.multiSet([
+        [AUTH_KEYS.userId, user.id],
+        [AUTH_KEYS.onboardingComplete, String(onboardingComplete)],
+      ]);
+
+      const sessionState = await syncSessionUser(user);
+
+      set({
+        ...sessionState,
+        onboardingComplete,
+      });
+      await get().loadFromStorage();
+    } catch (error) {
+      throw mapSupabaseAuthError(error as { message?: string; code?: string });
+    }
   },
 
-  resetPassword: async (email, newPassword) => {
-    const normalizedEmail = email.trim().toLowerCase();
-    const exists = await get().accountExistsForEmail(normalizedEmail);
-
-    if (!exists) {
-      throw new AuthError("No account found with this email.");
+  resendPhoneCode: async () => {
+    if (!pendingPhoneAuth) {
+      throw new AuthError("Verification session expired. Please start again.");
     }
 
-    if (newPassword.length < 6) {
-      throw new AuthError("Password must be at least 6 characters.");
-    }
+    const supabase = getSupabase();
 
-    await AsyncStorage.setItem(AUTH_KEYS.password, newPassword);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: pendingPhoneAuth.phone,
+      });
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      throw mapSupabaseAuthError(error as { message?: string; code?: string });
+    }
   },
 
   signOut: async () => {
-    await clearAllTracePayStorage();
-    useLeaksStore.getState().resetLeaks();
+    pendingPhoneAuth = null;
+    await getSupabase().auth.signOut();
+    await clearLocalProfileData();
     set({
       name: "",
       monthlyIncome: 0,
@@ -180,6 +329,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       isAuthenticated: false,
       email: "",
       phone: "",
+      recoveryEmail: "",
       rewardPoints: 0,
       isLoaded: true,
     });
@@ -197,8 +347,44 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     await get().syncToApi();
   },
 
+  initializeAuth: async () => {
+    const supabase = getSupabase();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (session?.user) {
+      const sessionState = await syncSessionUser(session.user);
+      set(sessionState);
+    } else {
+      set(applyUser(null));
+    }
+
+    await get().loadFromStorage();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+      if (nextSession?.user) {
+        const sessionState = await syncSessionUser(nextSession.user);
+        set(sessionState);
+        return;
+      }
+
+      pendingPhoneAuth = null;
+      set({
+        isAuthenticated: false,
+        email: "",
+        phone: "",
+        recoveryEmail: "",
+      });
+    });
+
+    return () => subscription.unsubscribe();
+  },
+
   loadFromStorage: async () => {
-    const [complete, name, income, language, voice, consent, accounts, auth, email, phone, pts] =
+    const [complete, name, income, language, voice, consent, accounts, phone, recoveryEmail, pts] =
       await Promise.all([
         AsyncStorage.getItem(AUTH_KEYS.onboardingComplete),
         AsyncStorage.getItem(AUTH_KEYS.name),
@@ -207,11 +393,32 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
         AsyncStorage.getItem(AUTH_KEYS.voice),
         AsyncStorage.getItem(AUTH_KEYS.consent),
         AsyncStorage.getItem(AUTH_KEYS.accounts),
-        AsyncStorage.getItem(AUTH_KEYS.isAuthenticated),
-        AsyncStorage.getItem(AUTH_KEYS.email),
         AsyncStorage.getItem(AUTH_KEYS.phone),
+        AsyncStorage.getItem(AUTH_KEYS.recoveryEmail),
         AsyncStorage.getItem(AUTH_KEYS.rewardPoints),
       ]);
+
+    let sessionEmail = "";
+    let sessionPhone = phone || "";
+    let sessionRecoveryEmail = recoveryEmail || "";
+    let isAuthenticated = get().isAuthenticated;
+
+    const supabase = getSupabase();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user) {
+      const sessionState = applyUser(user);
+      isAuthenticated = sessionState.isAuthenticated ?? false;
+      sessionEmail = sessionState.email ?? "";
+      sessionPhone = sessionState.phone || phone || "";
+      sessionRecoveryEmail = await fetchRecoveryEmail(user.id);
+      await AsyncStorage.setItem(AUTH_KEYS.userId, user.id);
+      await persistPhone(sessionPhone);
+      await persistRecoveryEmail(sessionRecoveryEmail);
+    }
+
     set({
       onboardingComplete: complete === "true",
       name: name ?? "",
@@ -222,15 +429,16 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       connectedAccounts: accounts
         ? JSON.parse(accounts)
         : { ...defaultConnectedAccounts },
-      isAuthenticated: auth === "true",
-      email: email ?? "",
-      phone: phone ?? "",
+      isAuthenticated,
+      email: sessionEmail,
+      phone: sessionPhone || phone || "",
+      recoveryEmail: sessionRecoveryEmail,
       rewardPoints: pts ? parseInt(pts, 10) : 245,
       isLoaded: true,
     });
   },
 
   syncToApi: async () => {
-    // Profile is stored locally only (simulated mode — no backend persistence).
+    // Most preferences are still local-only; recovery email is synced via saveRecoveryEmail().
   },
 }));

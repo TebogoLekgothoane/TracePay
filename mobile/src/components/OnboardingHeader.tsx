@@ -7,11 +7,11 @@ import { cn } from "@/lib/cn";
 export const ONBOARDING_TOTAL_STEPS = 5;
 
 export const ONBOARDING_STEPS = {
-  language: 0,
-  welcome: 1,
-  features: 2,
-  consent: 3,
-  auth: 4,
+  auth: 0,
+  language: 1,
+  welcome: 2,
+  features: 3,
+  consent: 4,
 } as const;
 
 export type OnboardingHeaderProps = {

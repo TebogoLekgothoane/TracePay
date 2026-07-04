@@ -16,6 +16,8 @@ export default function ProfileScreen() {
   const {
     name,
     email,
+    phone,
+    recoveryEmail,
     language,
     voiceEnabled,
     setVoiceEnabled,
@@ -87,7 +89,7 @@ export default function ProfileScreen() {
 
   const doSignOut = async () => {
     await signOut();
-    router.replace("/(onboarding)/language");
+    router.replace("/(onboarding)");
   };
 
   const handleSignOut = () => {
@@ -104,6 +106,13 @@ export default function ProfileScreen() {
   };
 
   const menuItems = [
+    {
+      id: "recovery-email",
+      icon: "email-outline",
+      label: "Recovery Email",
+      value: recoveryEmail || "Add",
+      onPress: () => router.push("/recovery-email"),
+    },
     { id: "lang", icon: "web", label: "Language", value: language, onPress: () => {} },
     { id: "privacy", icon: "lock-outline", label: "Privacy & Consent", value: "Active", onPress: () => {} },
     {
@@ -132,7 +141,7 @@ export default function ProfileScreen() {
             {name}
           </AppText>
           <AppText variant="bodySm" className="mb-1.5">
-            {email || "Email verified"}
+            {email || phone || "Phone verified"}
           </AppText>
           <View className="flex-row items-center">
             <View className="mr-1.5 h-2 w-2 rounded-full bg-green-600 dark:bg-green-400" />

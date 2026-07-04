@@ -48,7 +48,7 @@ export function Card({
 }
 
 export type IconCardProps = Omit<CardProps, "children"> & {
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   title?: string;
   description: string;
   descriptionVariant?: TextVariant;
@@ -69,11 +69,14 @@ export function IconCard({
   return (
     <Card
       className={className}
-      contentClassName={cn("flex-row items-start gap-4", contentClassName)}
+      contentClassName={cn(
+        icon ? "flex-row items-start gap-4" : undefined,
+        contentClassName,
+      )}
       {...props}
     >
-      <View className="shrink-0">{icon}</View>
-      <View className="min-w-0 flex-1">
+      {icon ? <View className="shrink-0">{icon}</View> : null}
+      <View className={cn(icon ? "min-w-0 flex-1" : "w-full")}>
         {title ? (
           <AppText variant="title">{title}</AppText>
         ) : null}
