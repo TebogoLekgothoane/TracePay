@@ -78,7 +78,7 @@ export default function FeaturesScreen() {
             size="lg"
             fullWidth
             className="h-14 rounded-[24px]"
-            onPress={() => router.push("/(onboarding)/consent")}
+            onPress={() => router.push("/(onboarding)/create-account")}
           >
             Protect My Money
           </Button>

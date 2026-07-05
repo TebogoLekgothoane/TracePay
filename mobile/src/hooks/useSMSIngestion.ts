@@ -7,13 +7,14 @@ import {
   SMSServiceState,
 } from '../services/sms/sms.types';
 import {
-  requestSMSPermission,
   checkSMSPermission,
+  requestSMSPermission,
   ingestSMS,
   openAppPermissionSettings,
-  SMS_PERMISSION_BLOCKED_HELP,
-} from '../services/sms/SMSIngestionService';
-import { SMSListener } from '../services/sms/SMSListener';
+  getSmsPermissionBlockedHelp,
+  createSmsListener,
+  type SmsListenerInstance,
+} from '../services/sms/sms-module';
 import {
   enrichParsedTransaction,
   isValidStoredTransaction,
@@ -25,13 +26,10 @@ const STORAGE_KEYS = {
 } as const;
 
 interface UseSMSIngestionReturn {
-  // State
   transactions: ParsedTransaction[];
   state: SMSServiceState;
   isLoading: boolean;
   error: string | null;
-
-  // Actions
   requestPermission: () => Promise<PermissionStatus>;
   refreshPermission: () => Promise<PermissionStatus>;
   openPermissionSettings: () => Promise<void>;
@@ -52,7 +50,7 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
     totalIngested: 0,
   });
 
-  const listenerRef = useRef<SMSListener | null>(null);
+  const listenerRef = useRef<SmsListenerInstance | null>(null);
   const transactionsRef = useRef<ParsedTransaction[]>([]);
 
   useEffect(() => {
@@ -65,8 +63,6 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
     [],
   );
 
-  // ── Persist & restore ────────────────────────────────────────────────────────
-
   const persistTransactions = useCallback(async (txs: ParsedTransaction[]) => {
     await AsyncStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(txs));
   }, []);
@@ -75,7 +71,6 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
     const raw = await AsyncStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as ParsedTransaction[];
-    // Rehydrate Date objects
     return parsed
       .map((t) => ({
         ...t,
@@ -86,27 +81,37 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
       .map(enrichParsedTransaction);
   }, []);
 
-  // ── Boot: restore state and check permission ──────────────────────────────
-
   useEffect(() => {
-    (async () => {
-      const [stored, permission, lastSyncRaw] = await Promise.all([
-        loadPersistedTransactions(),
-        checkSMSPermission(),
-        AsyncStorage.getItem(STORAGE_KEYS.LAST_SYNC),
-      ]);
+    let cancelled = false;
 
-      setTransactions(stored);
-      setServiceState((prev) => ({
-        ...prev,
-        permissionStatus: permission,
-        lastSyncAt: lastSyncRaw ? new Date(lastSyncRaw) : null,
-        totalIngested: stored.length,
-      }));
+    void (async () => {
+      try {
+        const [stored, permission, lastSyncRaw] = await Promise.all([
+          loadPersistedTransactions(),
+          checkSMSPermission(),
+          AsyncStorage.getItem(STORAGE_KEYS.LAST_SYNC),
+        ]);
+
+        if (cancelled) return;
+
+        setTransactions(stored);
+        setServiceState((prev) => ({
+          ...prev,
+          permissionStatus: permission,
+          lastSyncAt: lastSyncRaw ? new Date(lastSyncRaw) : null,
+          totalIngested: stored.length,
+        }));
+      } catch (err) {
+        if (!cancelled) {
+          setError((err as Error).message);
+        }
+      }
     })();
-  }, [loadPersistedTransactions]);
 
-  // ── Permission ────────────────────────────────────────────────────────────
+    return () => {
+      cancelled = true;
+    };
+  }, [loadPersistedTransactions]);
 
   const requestPermission = useCallback(async (): Promise<PermissionStatus> => {
     const status = await requestSMSPermission();
@@ -124,8 +129,6 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
     await openAppPermissionSettings();
   }, []);
 
-  // ── Sync (batch ingest) ───────────────────────────────────────────────────
-
   const syncNow = useCallback(async (): Promise<boolean> => {
     setIsLoading(true);
     setError(null);
@@ -135,9 +138,9 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
       if (permission !== 'granted') {
         permission = await requestSMSPermission();
         setServiceState((prev) => ({ ...prev, permissionStatus: permission }));
-      }
+       }
       if (permission !== 'granted') {
-        throw new Error(SMS_PERMISSION_BLOCKED_HELP);
+        throw new Error(await getSmsPermissionBlockedHelp());
       }
 
       const current = normalizeTransactions(transactionsRef.current);
@@ -170,30 +173,35 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
     }
   }, [normalizeTransactions, persistTransactions]);
 
-  // ── Real-time listener ────────────────────────────────────────────────────
-
   const startListening = useCallback(() => {
     if (listenerRef.current?.isActive) return;
 
-    listenerRef.current = new SMSListener(
-      (tx) => {
-        setTransactions((prev) => {
-          const alreadyExists = prev.some((t) => t.id === tx.id);
-          if (alreadyExists) return prev;
-          const updated = [tx, ...prev];
-          persistTransactions(updated);
-          return updated;
-        });
-        setServiceState((prev) => ({
-          ...prev,
-          totalIngested: prev.totalIngested + 1,
-        }));
-      },
-      (err) => setError(err.message)
-    );
+    void (async () => {
+      try {
+        const listener = await createSmsListener(
+          (tx) => {
+            setTransactions((prev) => {
+              const alreadyExists = prev.some((t) => t.id === tx.id);
+              if (alreadyExists) return prev;
+              const updated = [tx, ...prev];
+              void persistTransactions(updated);
+              return updated;
+            });
+            setServiceState((prev) => ({
+              ...prev,
+              totalIngested: prev.totalIngested + 1,
+            }));
+          },
+          (err) => setError(err.message),
+        );
 
-    const started = listenerRef.current.start();
-    setServiceState((prev) => ({ ...prev, isListening: started }));
+        listenerRef.current = listener;
+        const started = listener.start();
+        setServiceState((prev) => ({ ...prev, isListening: started }));
+      } catch (err) {
+        setError((err as Error).message);
+      }
+    })();
   }, [persistTransactions]);
 
   const stopListening = useCallback(() => {
@@ -202,14 +210,11 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
     setServiceState((prev) => ({ ...prev, isListening: false }));
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       listenerRef.current?.stop();
     };
   }, []);
-
-  // ── Clear ─────────────────────────────────────────────────────────────────
 
   const clearTransactions = useCallback(async () => {
     await AsyncStorage.multiRemove([

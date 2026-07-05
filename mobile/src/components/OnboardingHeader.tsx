@@ -4,18 +4,20 @@ import { router } from "expo-router";
 
 import { cn } from "@/lib/cn";
 
-export const ONBOARDING_TOTAL_STEPS = 5;
+export const ONBOARDING_TOTAL_STEPS = 8;
 
 export const ONBOARDING_STEPS = {
-  auth: 0,
-  language: 1,
-  welcome: 2,
-  features: 3,
-  consent: 4,
+  language: 0,
+  welcome: 1,
+  features: 2,
+  "create-account": 3,
+  otp: 4,
+  biometrics: 5,
+  consent: 6,
+  "sms-permission": 7,
 } as const;
 
 export type OnboardingHeaderProps = {
-  /** Zero-based index of the current onboarding step */
   currentStep: number;
   totalSteps?: number;
   showBack?: boolean;
@@ -25,8 +27,11 @@ const ROUTE_TO_STEP: Record<string, number> = {
   language: ONBOARDING_STEPS.language,
   welcome: ONBOARDING_STEPS.welcome,
   features: ONBOARDING_STEPS.features,
+  "create-account": ONBOARDING_STEPS["create-account"],
+  otp: ONBOARDING_STEPS.otp,
+  biometrics: ONBOARDING_STEPS.biometrics,
   consent: ONBOARDING_STEPS.consent,
-  index: ONBOARDING_STEPS.auth,
+  "sms-permission": ONBOARDING_STEPS["sms-permission"],
 };
 
 export function getOnboardingStepFromRoute(routeName: string): number | null {

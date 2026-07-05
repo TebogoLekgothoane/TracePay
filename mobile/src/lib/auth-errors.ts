@@ -1,8 +1,15 @@
+export const PHONE_ALREADY_REGISTERED_MESSAGE =
+  "This phone number is already registered. Sign in instead.";
+
 export class AuthError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "AuthError";
   }
+}
+
+export function isPhoneAlreadyRegisteredError(error: unknown): boolean {
+  return error instanceof AuthError && error.message === PHONE_ALREADY_REGISTERED_MESSAGE;
 }
 
 type AuthLikeError = {
@@ -19,6 +26,15 @@ export function mapSupabaseAuthError(error: AuthLikeError): AuthError {
   const msg = readMessage(error);
   const code = typeof error.code === "string" ? error.code : "";
 
+  if (msg.includes("invalid login credentials") || code === "invalid_credentials") {
+    return new AuthError("Incorrect phone number or password.");
+  }
+  if (msg.includes("user already registered") || code === "user_already_exists") {
+    return new AuthError(PHONE_ALREADY_REGISTERED_MESSAGE);
+  }
+  if (msg.includes("password") && msg.includes("weak")) {
+    return new AuthError("Password is too weak. Use at least 8 characters.");
+  }
   if (msg.includes("invalid phone") || code === "phone_not_found") {
     return new AuthError("Enter a valid SA mobile number.");
   }

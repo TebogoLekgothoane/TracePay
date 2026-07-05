@@ -15,6 +15,8 @@ export const AUTH_KEYS = {
   accounts: `${TRACEPAY_STORAGE_PREFIX}accounts`,
   rewardPoints: `${TRACEPAY_STORAGE_PREFIX}rewardPoints`,
   userId: `${TRACEPAY_STORAGE_PREFIX}userId`,
+  biometricEnabled: `${TRACEPAY_STORAGE_PREFIX}biometricEnabled`,
+  pinEnabled: `${TRACEPAY_STORAGE_PREFIX}pinEnabled`,
 } as const;
 
 export async function clearAllTracePayStorage() {
