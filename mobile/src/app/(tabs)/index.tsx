@@ -10,6 +10,8 @@ import { useScreenInsets } from "@/hooks/useScreenInsets";
 import { router } from "expo-router";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
+import { EmptyState, EmptyStateIcon } from "@/components/EmptyState";
+import { FadeInItem, FadeInView } from "@/components/ContentTransition";
 import CircularProgress from "@/components/CircularProgress";
 import { Screen } from "@/components/Screen";
 import { AppText } from "@/components/Typography";
@@ -19,7 +21,6 @@ import { useLeaksStore, getActiveLeakStats, DEFAULT_MONTHLY_INCOME } from "@/sto
 import { useVoice } from "@/hooks/useVoice";
 import { cn } from "@/lib/cn";
 import { getSeverityStyle } from "@/lib/severity";
-import { DEMO_LEAKS } from "@/lib/simulate";
 import { PARTNERS } from "@/constants/partners";
 import { useIngestion } from "@/context/SMSIngestionContext";
 import { getTransactionDisplay } from "@/lib/transaction-display";
@@ -45,24 +46,7 @@ export default function HomeScreen() {
   const recentTransactions = transactions.slice(0, 5);
 
   useEffect(() => {
-    (async () => {
-      await fetchLeaks();
-      const { leaks: current, addLeaks } = useLeaksStore.getState();
-      if (current.length === 0) {
-        await addLeaks(
-          DEMO_LEAKS.map((l) => ({
-            name: l.name,
-            category: l.category,
-            categoryIcon: l.categoryIcon,
-            amountMonthly: l.amountMonthly,
-            severity: l.severity,
-            status: "active",
-            sourceSms: l.sourceSms,
-            advice: l.advice,
-          })),
-        );
-      }
-    })();
+    void fetchLeaks();
   }, [fetchLeaks]);
 
   const { activeLeaks, totalMonthly: totalLeaking } = getActiveLeakStats(leaks);
@@ -87,7 +71,8 @@ export default function HomeScreen() {
 
   return (
     <>
-      <Screen>
+      <FadeInView className="flex-1">
+        <Screen>
         <View className="mb-5 flex-row items-start justify-between">
           <View>
             <AppText variant="overline" className="mb-1">
@@ -122,7 +107,9 @@ export default function HomeScreen() {
               size="icon"
               onPress={() =>
                 speak(
-                  `Your financial health score is ${healthScore} out of 100. You are ${healthLabel}. You have ${activeLeaks.length} active money leaks totalling R${totalLeaking.toFixed(2)} per month.`,
+                  activeLeaks.length > 0
+                    ? `Your financial health score is ${healthScore} out of 100. You are ${healthLabel}. You have ${activeLeaks.length} active money leaks totalling R${totalLeaking.toFixed(2)} per month.`
+                    : `Your financial health score is ${healthScore} out of 100. You are ${healthLabel}. No money leaks detected yet. Scan your SMS inbox to import transactions.`,
                 )
               }
               className="min-h-0 p-1"
@@ -229,27 +216,19 @@ export default function HomeScreen() {
             ))}
           </>
         ) : (
-          <Pressable
+          <EmptyState
+            className="mb-5"
+            tone="brand"
+            title="No leaks detected yet"
+            description={
+              transactions.length > 0
+                ? "Your SMS transactions are imported. Leak analysis is coming soon — we'll flag recurring fees and hidden charges when ready."
+                : "Tap to scan your SMS inbox and import bank transactions."
+            }
+            actionLabel="Scan SMS inbox"
             onPress={() => router.push("/(tabs)/sms-scanning")}
-            className="mb-5 active:opacity-90"
-          >
-            <Card
-              glass={false}
-              className="border border-brand-purple/20 bg-brand-purple-light dark:border-primary/30 dark:bg-primary/10"
-              contentClassName="flex-row items-center gap-3.5"
-            >
-              <MaterialCommunityIcons name="magnify-scan" size={28} color={colors.primary} />
-              <View className="flex-1">
-                <AppText variant="title" className="text-brand-purple dark:text-primary">
-                  No leaks detected yet
-                </AppText>
-                <AppText variant="bodySm" className="mt-0.5 text-brand-purple dark:text-primary/80">
-                  Tap to scan your SMS inbox and find money leaks
-                </AppText>
-              </View>
-              <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
-            </Card>
-          </Pressable>
+            
+          />
         )}
 
         <View className="mb-3 mt-6 flex-row items-start justify-between">
@@ -320,64 +299,58 @@ export default function HomeScreen() {
         </View>
 
         {recentTransactions.length > 0 ? (
-          recentTransactions.map((tx) => {
+          recentTransactions.map((tx, index) => {
             const isDebit = tx.type === "debit";
             const { headline, summary } = getTransactionDisplay(tx);
 
             return (
-              <Pressable
-                key={tx.id}
-                onPress={() => router.push("/(tabs)/history")}
-                className="mb-2.5 active:opacity-90"
-              >
-                <Card contentClassName="flex-row items-start gap-3">
-                  <TransactionIcon tx={tx} />
-                  <View className="min-w-0 flex-1">
-                    <AppText variant="title" numberOfLines={1}>
-                      {headline}
-                    </AppText>
-                    <AppText variant="bodySm" className="mt-0.5" numberOfLines={1}>
-                      {summary}
-                    </AppText>
-                  </View>
-                  <View className="items-end gap-0.5">
-                    <AppText
-                      variant="label"
-                      className={cn(
-                        isDebit ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400",
-                      )}
-                    >
-                      {isDebit ? "-" : "+"}R{tx.amount.toFixed(2)}
-                    </AppText>
-                    <AppText variant="caption">
-                      {getTransactionDate(tx).toLocaleTimeString("en-ZA", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </AppText>
-                  </View>
-                </Card>
-              </Pressable>
+              <FadeInItem key={tx.id} index={index}>
+                <Pressable
+                  onPress={() => router.push("/(tabs)/history")}
+                  className="mb-2.5 active:opacity-90"
+                >
+                  <Card contentClassName="flex-row items-start gap-3">
+                    <TransactionIcon tx={tx} />
+                    <View className="min-w-0 flex-1">
+                      <AppText variant="title" numberOfLines={1}>
+                        {headline}
+                      </AppText>
+                      <AppText variant="bodySm" className="mt-0.5" numberOfLines={1}>
+                        {summary}
+                      </AppText>
+                    </View>
+                    <View className="items-end gap-0.5">
+                      <AppText
+                        variant="label"
+                        className={cn(
+                          isDebit ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400",
+                        )}
+                      >
+                        {isDebit ? "-" : "+"}R{tx.amount.toFixed(2)}
+                      </AppText>
+                      <AppText variant="caption">
+                        {getTransactionDate(tx).toLocaleTimeString("en-ZA", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </AppText>
+                    </View>
+                  </Card>
+                </Pressable>
+              </FadeInItem>
             );
           })
         ) : (
-          <Pressable
+          <EmptyState
+            description="No transactions yet. Scan your SMS inbox to import bank activity."
             onPress={() => router.push("/(tabs)/sms-scanning")}
-            className="active:opacity-90"
-          >
-            <Card
-              glass={false}
-              className="border border-dashed border-border dark:border-white/15"
-              contentClassName="items-center gap-2 py-5"
-            >
+            icon={
               <MaterialCommunityIcons name="message-text-outline" size={24} color={colors.mutedForeground} />
-              <AppText variant="bodySm" className="text-center text-muted-foreground">
-                No transactions yet. Scan your SMS inbox to import bank activity.
-              </AppText>
-            </Card>
-          </Pressable>
+            }
+          />
         )}
-      </Screen>
+        </Screen>
+      </FadeInView>
 
       <Modal
         visible={showNotifications}
@@ -409,10 +382,11 @@ export default function HomeScreen() {
             </View>
 
             {activeLeaks.length === 0 ? (
-              <View className="items-center gap-3 py-10">
-                <Feather name="bell-off" size={32} color={colors.mutedForeground} />
-                <AppText variant="bodyMuted">No new alerts</AppText>
-              </View>
+              <EmptyState
+                card={false}
+                description="No new alerts"
+                icon={<Feather name="bell-off" size={32} color={colors.mutedForeground} />}
+              />
             ) : (
               <ScrollView showsVerticalScrollIndicator={false}>
                 <AppText variant="overline" className="mb-3">

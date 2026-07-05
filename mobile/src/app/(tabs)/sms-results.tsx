@@ -3,23 +3,21 @@ import { View, Pressable } from "react-native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
+import { EmptyState, EmptyStateIcon } from "@/components/EmptyState";
 import { Screen } from "@/components/Screen";
 import { AppText } from "@/components/Typography";
-import { router, useLocalSearchParams } from "expo-router";
+import { router } from "expo-router";
 import { useProfileStore } from "@/stores/profileStore";
-import { useLeaksStore } from "@/stores/leaksStore";
+import { useLeaksStore, type Leak } from "@/stores/leaksStore";
 import { useIngestion } from "@/context/SMSIngestionContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { TransactionCategory } from "@/services/sms/sms.types";
 import { cn } from "@/lib/cn";
 import { getSeverityStyle } from "@/lib/severity";
-import { DEMO_LEAKS, type SimulatedLeak } from "@/lib/simulate";
 import { CATEGORY_ICONS } from "@/constants/category-icons";
 
-type LeakResult = SimulatedLeak & { detail?: string };
-
 type LeakCardProps = {
-  leak: LeakResult;
+  leak: Leak;
   expanded: boolean;
   onToggle: () => void;
 };
@@ -95,11 +93,11 @@ function LeakCard({ leak, expanded, onToggle }: LeakCardProps) {
 }
 
 export default function SmsResultsScreen() {
-  const params = useLocalSearchParams<{ data?: string }>();
   const { colors } = useColorScheme();
   const completeOnboarding = useProfileStore((s) => s.completeOnboarding);
+  const onboardingComplete = useProfileStore((s) => s.onboardingComplete);
   const addLeaks = useLeaksStore((s) => s.addLeaks);
-  const [expandedLeak, setExpandedLeak] = useState<number | null>(0);
+  const [expandedLeak, setExpandedLeak] = useState<number | null>(null);
 
   const { state, transactions } = useIngestion();
 
@@ -118,24 +116,13 @@ export default function SmsResultsScreen() {
     Object.entries(categoryBreakdown) as [TransactionCategory, { count: number; total: number }][]
   ).sort((a, b) => b[1].total - a[1].total);
 
-  const parsedData = params.data
-    ? (() => {
-        try {
-          return JSON.parse(decodeURIComponent(params.data));
-        } catch {
-          return null;
-        }
-      })()
-    : null;
-
-  const rawLeaks: LeakResult[] = parsedData?.leaks?.length ? parsedData.leaks : DEMO_LEAKS;
-  const totalMonthly = rawLeaks.reduce((sum, l) => sum + l.amountMonthly, 0);
-  const onboardingComplete = useProfileStore((s) => s.onboardingComplete);
+  const detectedLeaks: Leak[] = [];
+  const totalMonthly = 0;
 
   const goToHome = async () => {
-    if (rawLeaks.length > 0) {
+    if (detectedLeaks.length > 0) {
       await addLeaks(
-        rawLeaks.map((l) => ({
+        detectedLeaks.map((l) => ({
           name: l.name,
           category: l.category,
           categoryIcon: l.categoryIcon,
@@ -153,6 +140,8 @@ export default function SmsResultsScreen() {
     router.replace("/(tabs)");
   };
 
+  const hasTransactions = state.totalIngested > 0;
+
   return (
     <Screen>
       <View className="mb-6">
@@ -161,11 +150,13 @@ export default function SmsResultsScreen() {
           <AppText variant="titleLg">SMS Scan Results</AppText>
         </View>
         <AppText variant="lead">
-          AI found {rawLeaks.length} money leaks in your SMS history
+          {hasTransactions
+            ? `${state.totalIngested} transaction${state.totalIngested !== 1 ? "s" : ""} imported from your inbox`
+            : "Scan complete — review your results below"}
         </AppText>
       </View>
 
-      {state.totalIngested > 0 ? (
+      {hasTransactions ? (
         <Card className="mb-5">
           <View className="mb-3 flex-row items-center gap-2">
             <MaterialCommunityIcons name="check-circle-outline" size={18} color={colors.success} />
@@ -206,30 +197,50 @@ export default function SmsResultsScreen() {
         </Card>
       ) : null}
 
-      <Card glass={false} className="mb-6 border-0 bg-red-600">
-        <AppText variant="overline" className="text-white/75">
-          Total leaking monthly
-        </AppText>
-        <AppText variant="display" className="my-2 text-white">
-          R{totalMonthly.toFixed(2)}
-        </AppText>
-        <AppText variant="bodySm" className="text-white/80">
-          That is R{(totalMonthly * 12).toFixed(0)} lost every year
-        </AppText>
-      </Card>
+      {detectedLeaks.length > 0 ? (
+        <>
+          <Card glass={false} className="mb-6 border-0 bg-red-600">
+            <AppText variant="overline" className="text-white/75">
+              Total leaking monthly
+            </AppText>
+            <AppText variant="display" className="my-2 text-white">
+              R{totalMonthly.toFixed(2)}
+            </AppText>
+            <AppText variant="bodySm" className="text-white/80">
+              That is R{(totalMonthly * 12).toFixed(0)} lost every year
+            </AppText>
+          </Card>
 
-      <AppText variant="overline" className="mb-3">
-        Detected leaks
-      </AppText>
+          <AppText variant="overline" className="mb-3">
+            Detected leaks
+          </AppText>
 
-      {rawLeaks.map((leak, idx) => (
-        <LeakCard
-          key={idx}
-          leak={leak}
-          expanded={expandedLeak === idx}
-          onToggle={() => setExpandedLeak(expandedLeak === idx ? null : idx)}
+          {detectedLeaks.map((leak, idx) => (
+            <LeakCard
+              key={leak.id ?? idx}
+              leak={leak}
+              expanded={expandedLeak === idx}
+              onToggle={() => setExpandedLeak(expandedLeak === idx ? null : idx)}
+            />
+          ))}
+        </>
+      ) : (
+        <EmptyState
+          className="mb-6"
+          tone="brand"
+          title="No money leaks detected"
+          description={
+            state.totalIngested > 0
+              ? `We imported ${state.totalIngested} transaction${state.totalIngested !== 1 ? "s" : ""} from your SMS. Leak analysis is coming soon — we'll flag recurring fees, subscriptions, and hidden charges when ready.`
+              : "We couldn't find bank SMS messages to analyse yet. Make sure TracePay has SMS permission, then try scanning again."
+          }
+          icon={
+            <EmptyStateIcon size="lg">
+              <MaterialCommunityIcons name="shield-check-outline" size={32} color={colors.primary} />
+            </EmptyStateIcon>
+          }
         />
-      ))}
+      )}
 
       <Button
         size="lg"

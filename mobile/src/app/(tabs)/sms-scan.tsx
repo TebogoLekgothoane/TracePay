@@ -9,10 +9,10 @@ import { useColorScheme } from "@/hooks/useColorScheme";
 import { router } from "expo-router";
 
 const SCAN_SOURCES = [
-  { id: "1", name: "Capitec", preview: "R8.00 fee charged for ATM withdrawal..." },
-  { id: "2", name: "MTN", preview: "R49.99 deducted for iflix subscription..." },
-  { id: "3", name: "Vodacom", preview: "Airtime advance: R30.00 + R5.40 fee..." },
-  { id: "4", name: "ABSA", preview: "Debit order R199: Gym (unused 4 months)..." },
+  { id: "1", name: "Capitec", preview: "Purchases, withdrawals & balance alerts" },
+  { id: "2", name: "MTN", preview: "Airtime, data & subscription notifications" },
+  { id: "3", name: "Vodacom", preview: "Airtime, bundles & payment confirmations" },
+  { id: "4", name: "ABSA", preview: "Debit orders, transfers & account updates" },
 ];
 
 export default function SmsScanScreen() {

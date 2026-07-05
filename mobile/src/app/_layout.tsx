@@ -13,13 +13,15 @@ import { Stack, router, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
-import { Appearance, View, ActivityIndicator } from "react-native";
+import { Appearance } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { GlassBackground } from "@/components/GlassBackground";
+import { SkeletonBoot } from "@/components/ScreenSkeletons";
+import { SkeletonReveal } from "@/components/ContentTransition";
 import { useProfileStore } from "@/stores/profileStore";
 import { SMSIngestionProvider } from "@/context/SMSIngestionContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
@@ -35,7 +37,6 @@ const queryClient = new QueryClient({
 function NavigationGuard({ children }: { children: React.ReactNode }) {
   const segments = useSegments();
   const { onboardingComplete, isAuthenticated, isLoaded, initializeAuth } = useProfileStore();
-  const { colors, isDarkColorScheme } = useColorScheme();
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
@@ -84,14 +85,11 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
     }
   }, [isLoaded, isAuthenticated, onboardingComplete, segments]);
 
-  if (!isLoaded) {
-    return (
-      <View className={`flex-1 items-center justify-center ${isDarkColorScheme ? "bg-transparent" : "bg-background"}`}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
-  return <>{children}</>;
+  return (
+    <SkeletonReveal loading={!isLoaded} skeleton={<SkeletonBoot />} className="flex-1">
+      {children}
+    </SkeletonReveal>
+  );
 }
 
 function RootLayoutNav() {

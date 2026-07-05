@@ -79,14 +79,6 @@ const DEFAULT_PLAN: BudgetPlan = {
       actionText: "SWITCH",
       btnText: "Find nearest Shoprite",
     },
-    {
-      name: "Cancel iflix via MTN USSD",
-      category: "Savings",
-      saving: 50,
-      detail: "You're being charged R49.99/month for iflix. Dial *141*9# on your MTN SIM to cancel it.",
-      actionText: "CANCEL",
-      btnText: "Dial *141*9# to cancel",
-    },
   ],
 };
 
@@ -102,7 +94,6 @@ const DAY_SPEND_RATIO = 0.38;
 const ACTION_LINKS = {
   transport: "https://www.myciti.org.za/en/myconnect-fares/get-your-myconnect-card/",
   groceries: "https://www.google.com/maps/search/?api=1&query=Shoprite%20near%20me",
-  iflix: "tel:*141*9%23",
 };
 
 export default function BudgetScreen() {
@@ -191,9 +182,6 @@ export default function BudgetScreen() {
     }
     if (label.includes("shoprite") || label.includes("boxer") || label.includes("grocery")) {
       return ACTION_LINKS.groceries;
-    }
-    if (label.includes("iflix") || label.includes("*141*9")) {
-      return ACTION_LINKS.iflix;
     }
     return null;
   };

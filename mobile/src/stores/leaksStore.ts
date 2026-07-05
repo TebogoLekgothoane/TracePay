@@ -20,11 +20,28 @@ async function leaksStorageKey() {
   return `@tracepay:leaks:${userId}`;
 }
 
+/** Legacy demo leaks seeded in earlier builds — strip on load. */
+const LEGACY_DEMO_LEAK_NAMES = new Set([
+  "iflix Subscription",
+  "Capitec Loan Interest",
+  "Vodacom Airtime Advance Fee",
+  "Cross-Bank ATM Fee",
+]);
+
+function stripLegacyDemoLeaks(leaks: Leak[]) {
+  return leaks.filter((l) => !LEGACY_DEMO_LEAK_NAMES.has(l.name));
+}
+
 async function loadLeaks(): Promise<Leak[]> {
   const raw = await AsyncStorage.getItem(await leaksStorageKey());
   if (!raw) return [];
   try {
-    return JSON.parse(raw) as Leak[];
+    const parsed = JSON.parse(raw) as Leak[];
+    const cleaned = stripLegacyDemoLeaks(parsed);
+    if (cleaned.length !== parsed.length) {
+      await saveLeaks(cleaned);
+    }
+    return cleaned;
   } catch {
     return [];
   }
