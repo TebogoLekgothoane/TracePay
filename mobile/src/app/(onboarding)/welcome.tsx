@@ -49,7 +49,7 @@ export default function WelcomeScreen() {
               variant="outline"
               size="lg"
               fullWidth
-              onPress={() => router.push("/(onboarding)")}
+              onPress={() => router.push("/(auth)/sign-in")}
             >
               Log In
             </Button>

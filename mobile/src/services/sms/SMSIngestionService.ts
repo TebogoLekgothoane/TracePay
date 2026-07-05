@@ -1,4 +1,10 @@
-import { Linking, NativeModules, PermissionsAndroid, Platform } from 'react-native';
+import {
+  Linking,
+  NativeModules,
+  PermissionsAndroid,
+  Platform,
+  type Permission,
+} from 'react-native';
 
 import {
   RawSMS,
@@ -11,12 +17,11 @@ import { makeTransactionId, inferCategory } from './sms.utils';
 import { parserRegistry } from './ParserRegistry';
 import { enrichParsedTransaction } from '@/lib/transaction-display';
 
-// ─── SMS permission ───────────────────────────────────────────────────────────
-
-const SMS_PERMISSIONS = [
-  PermissionsAndroid.PERMISSIONS.READ_SMS,
-  PermissionsAndroid.PERMISSIONS.RECEIVE_SMS,
-] as const;
+// Static literals — avoids PermissionsAndroid.PERMISSIONS (undefined on web/iOS).
+const SMS_PERMISSIONS: Permission[] = [
+  'android.permission.READ_SMS',
+  'android.permission.RECEIVE_SMS',
+];
 
 export const SMS_PERMISSION_BLOCKED_HELP =
   'Android blocked SMS access for this app. Open Settings, tap Permissions → SMS, ' +
@@ -27,6 +32,8 @@ export async function openAppPermissionSettings(): Promise<void> {
 }
 
 async function areSmsPermissionsGranted(): Promise<boolean> {
+  if (Platform.OS !== 'android' || !PermissionsAndroid) return false;
+
   const results = await Promise.all(
     SMS_PERMISSIONS.map((p) => PermissionsAndroid.check(p))
   );
@@ -43,13 +50,15 @@ export async function requestSMSPermission(): Promise<PermissionStatus> {
   }
 
   try {
-    const results = await PermissionsAndroid.requestMultiple([...SMS_PERMISSIONS]);
+    if (!PermissionsAndroid) return 'denied';
+
+    const results = await PermissionsAndroid.requestMultiple(SMS_PERMISSIONS);
 
     const statuses = SMS_PERMISSIONS.map((p) => results[p]);
-    if (statuses.every((s) => s === PermissionsAndroid.RESULTS.GRANTED)) {
+    if (statuses.every((s) => s === 'granted')) {
       return 'granted';
     }
-    if (statuses.some((s) => s === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN)) {
+    if (statuses.some((s) => s === 'never_ask_again')) {
       return 'never_ask_again';
     }
     return 'denied';

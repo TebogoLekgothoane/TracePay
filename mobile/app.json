@@ -4,7 +4,7 @@
     "slug": "tracepay",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./src/assets/images/icon.png",
+    "icon": "./src/assets/images/app-icon.png",
     "scheme": "tracepay",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -12,7 +12,8 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSSpeechRecognitionUsageDescription": "Allow $(PRODUCT_NAME) to use speech recognition.",
-        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to use the microphone."
+        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to use the microphone.",
+        "NSFaceIDUsageDescription": "Allow TracePay to use Face ID for quick, secure unlock."
       }
     },
     "android": {
@@ -40,7 +41,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./src/assets/images/tracepay-logo.png",
+          "image": "./src/assets/images/splash-icon.png",
           "imageWidth": 280,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
@@ -51,7 +52,14 @@
       ],
       "expo-font",
       "expo-router",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow TracePay to use Face ID for quick, secure unlock."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

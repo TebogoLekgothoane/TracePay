@@ -4,7 +4,7 @@ import {
   Animated,
   AppState,
 } from "react-native";
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { Screen } from "@/components/Screen";
@@ -15,6 +15,8 @@ import { AppText } from "@/components/Typography";
 import { router, useLocalSearchParams } from "expo-router";
 import { useIngestion } from "@/context/SMSIngestionContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import { goBackOr } from "@/lib/navigation";
+import { useProfileStore } from "@/stores/profileStore";
 
 export default function SmsScanningScreen() {
   const params = useLocalSearchParams<{ fromOnboarding?: string }>();
@@ -23,6 +25,7 @@ export default function SmsScanningScreen() {
   const { syncNow, isLoading, error, state, transactions, openPermissionSettings, refreshPermission } =
     useIngestion();
   const { colors } = useColorScheme();
+  const completeOnboarding = useProfileStore((s) => s.completeOnboarding);
 
   const [phase, setPhase] = useState<"preparing" | "reading" | "analysing" | "done" | "failed">("preparing");
   const [scanError, setScanError] = useState<string | null>(null);
@@ -62,11 +65,12 @@ export default function SmsScanningScreen() {
     setPhase("done");
     await animateTo(1.0, 400);
 
-    router.replace({
-      pathname: "/(tabs)/sms-results",
-      params: fromOnboarding ? { fromOnboarding: "1" } : {},
-    });
-  }, [syncNow, animateTo, fromOnboarding, progressAnim]);
+    if (fromOnboarding) {
+      await completeOnboarding();
+    }
+
+    router.replace("/(tabs)");
+  }, [syncNow, animateTo, fromOnboarding, progressAnim, completeOnboarding]);
 
   const handleRetry = useCallback(() => {
     hasStarted.current = false;
@@ -123,7 +127,7 @@ export default function SmsScanningScreen() {
           <Button
             variant="outline"
             size="icon"
-            onPress={() => router.back()}
+            onPress={() => goBackOr("/(tabs)")}
             className="back-btn"
           >
             <Feather name="arrow-left" size={22} color={colors.foreground} />

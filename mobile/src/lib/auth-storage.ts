@@ -14,7 +14,12 @@ export const AUTH_KEYS = {
   consent: `${TRACEPAY_STORAGE_PREFIX}consent`,
   accounts: `${TRACEPAY_STORAGE_PREFIX}accounts`,
   rewardPoints: `${TRACEPAY_STORAGE_PREFIX}rewardPoints`,
+  lastDailyCheckInDate: `${TRACEPAY_STORAGE_PREFIX}lastDailyCheckInDate`,
+  pendingDailyCheckInDate: `${TRACEPAY_STORAGE_PREFIX}pendingDailyCheckInDate`,
+  dailyCheckInCelebrationDate: `${TRACEPAY_STORAGE_PREFIX}dailyCheckInCelebrationDate`,
   userId: `${TRACEPAY_STORAGE_PREFIX}userId`,
+  biometricEnabled: `${TRACEPAY_STORAGE_PREFIX}biometricEnabled`,
+  pinEnabled: `${TRACEPAY_STORAGE_PREFIX}pinEnabled`,
 } as const;
 
 export async function clearAllTracePayStorage() {

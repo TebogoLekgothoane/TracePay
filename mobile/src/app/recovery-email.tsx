@@ -8,13 +8,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
-import { router } from "expo-router";
 
 import { AuthErrorBanner } from "@/components/AuthErrorBanner";
 import { Button } from "@/components/Button";
 import { GlassInput } from "@/components/GlassInput";
 import { AppText } from "@/components/Typography";
 import { AuthError } from "@/lib/auth-errors";
+import { goBackOr } from "@/lib/navigation";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useProfileStore } from "@/stores/profileStore";
 
@@ -50,7 +50,7 @@ export default function RecoveryEmailScreen() {
     setLoading(true);
     try {
       await saveRecoveryEmail(trimmedEmail);
-      router.back();
+      goBackOr("/(tabs)/profile");
     } catch (e) {
       setError(e instanceof AuthError ? e.message : "Could not save recovery email.");
     } finally {
@@ -63,7 +63,7 @@ export default function RecoveryEmailScreen() {
     setLoading(true);
     try {
       await saveRecoveryEmail("");
-      router.back();
+      goBackOr("/(tabs)/profile");
     } catch (e) {
       setError(e instanceof AuthError ? e.message : "Could not remove recovery email.");
     } finally {
@@ -83,7 +83,7 @@ export default function RecoveryEmailScreen() {
       >
         <View className="flex-1 px-6 pb-6 pt-4">
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => goBackOr("/(tabs)/profile")}
             className={
               isDarkColorScheme
                 ? "mb-8 h-10 w-10 items-center justify-center rounded-full bg-white/[0.08]"

@@ -1,21 +1,23 @@
 import { Pressable, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { router } from "expo-router";
 
 import { cn } from "@/lib/cn";
+import { goBackOr } from "@/lib/navigation";
 
-export const ONBOARDING_TOTAL_STEPS = 5;
+export const ONBOARDING_TOTAL_STEPS = 8;
 
 export const ONBOARDING_STEPS = {
-  auth: 0,
-  language: 1,
-  welcome: 2,
-  features: 3,
-  consent: 4,
+  language: 0,
+  welcome: 1,
+  features: 2,
+  "create-account": 3,
+  otp: 4,
+  biometrics: 5,
+  consent: 6,
+  "sms-permission": 7,
 } as const;
 
 export type OnboardingHeaderProps = {
-  /** Zero-based index of the current onboarding step */
   currentStep: number;
   totalSteps?: number;
   showBack?: boolean;
@@ -25,9 +27,23 @@ const ROUTE_TO_STEP: Record<string, number> = {
   language: ONBOARDING_STEPS.language,
   welcome: ONBOARDING_STEPS.welcome,
   features: ONBOARDING_STEPS.features,
+  "create-account": ONBOARDING_STEPS["create-account"],
+  otp: ONBOARDING_STEPS.otp,
+  biometrics: ONBOARDING_STEPS.biometrics,
   consent: ONBOARDING_STEPS.consent,
-  index: ONBOARDING_STEPS.auth,
+  "sms-permission": ONBOARDING_STEPS["sms-permission"],
 };
+
+const BACK_FALLBACKS = [
+  "/(onboarding)/language",
+  "/(onboarding)/language",
+  "/(onboarding)/welcome",
+  "/(onboarding)/features",
+  "/(onboarding)/create-account",
+  "/(onboarding)/otp",
+  "/(onboarding)/biometrics",
+  "/(onboarding)/consent",
+] as const;
 
 export function getOnboardingStepFromRoute(routeName: string): number | null {
   return ROUTE_TO_STEP[routeName] ?? null;
@@ -43,7 +59,7 @@ export function OnboardingHeader({
       <View className="flex-row items-center">
         {showBack ? (
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => goBackOr(BACK_FALLBACKS[currentStep] ?? "/(onboarding)/language")}
             className="h-9 w-9 items-center justify-center rounded-full bg-white/[0.08] dark:bg-white/[0.08]"
             accessibilityRole="button"
             accessibilityLabel="Go back"

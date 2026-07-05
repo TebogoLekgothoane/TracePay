@@ -31,12 +31,16 @@ export default function OnboardingLayout() {
       <View className="flex-1">
         <Stack
           screenOptions={{ headerShown: false, animation: "slide_from_right" }}
-          initialRouteName="index"
+          initialRouteName="language"
         >
           <Stack.Screen name="language" />
           <Stack.Screen name="welcome" />
           <Stack.Screen name="features" />
+          <Stack.Screen name="create-account" />
+          <Stack.Screen name="otp" />
+          <Stack.Screen name="biometrics" />
           <Stack.Screen name="consent" />
+          <Stack.Screen name="sms-permission" />
           <Stack.Screen name="index" />
           <Stack.Screen name="forgot-password" />
         </Stack>
