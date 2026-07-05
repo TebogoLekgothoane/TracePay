@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, TextInput, ScrollView, Switch } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -17,7 +17,7 @@ import { useProfileStore } from "@/stores/profileStore";
 const PURPLE = "#A855F7";
 
 export default function BiometricsScreen() {
-  const { isAvailable, biometricType } = useBiometricAuth();
+  const { isReady, isAvailable, biometricType, authenticate } = useBiometricAuth();
   const { colors } = useColorScheme();
   const setBiometricEnabled = useDeviceAuthStore((s) => s.setBiometricEnabled);
   const setupPin = useDeviceAuthStore((s) => s.setupPin);
@@ -25,13 +25,38 @@ export default function BiometricsScreen() {
   const onboardingComplete = useProfileStore((s) => s.onboardingComplete);
   const consentGiven = useProfileStore((s) => s.consentGiven);
 
-  const [enableBio, setEnableBio] = useState(isAvailable);
+  const [enableBio, setEnableBio] = useState(false);
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (isReady && isAvailable) {
+      setEnableBio(true);
+    }
+  }, [isReady, isAvailable]);
+
   const pinValid = pin.length >= 4 && pin === confirmPin;
+
+  const handleBioToggle = async (value: boolean) => {
+    if (!value) {
+      setEnableBio(false);
+      return;
+    }
+    if (!isAvailable) {
+      setError(`${biometricType} is not available on this device.`);
+      return;
+    }
+    const ok = await authenticate(`Enable ${biometricType} for TracePay`);
+    if (!ok) {
+      setError(`${biometricType} verification failed. Try again or continue with PIN only.`);
+      setEnableBio(false);
+      return;
+    }
+    setEnableBio(true);
+    setError("");
+  };
 
   const handleContinue = async () => {
     if (!pinValid) {
@@ -70,25 +95,27 @@ export default function BiometricsScreen() {
           Enable {biometricType} for quick unlock and set a PIN as backup.
         </AppText>
 
-        <Card className="mt-6">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-1 pr-4">
-              <AppText variant="title">Enable {biometricType}</AppText>
-              <AppText variant="bodySm" className="mt-1">
-                {isAvailable
-                  ? "Unlock TracePay without entering your password each time."
-                  : "Biometrics not available on this device. PIN will be used instead."}
-              </AppText>
+        {isAvailable ? (
+          <Card className="mt-6">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-1 pr-4">
+                <AppText variant="title">Enable {biometricType}</AppText>
+                <AppText variant="bodySm" className="mt-1">
+                  {!isReady
+                    ? "Checking device biometrics..."
+                    : "Unlock TracePay without entering your password each time."}
+                </AppText>
+              </View>
+              <Switch
+                value={enableBio && isAvailable}
+                onValueChange={handleBioToggle}
+                disabled={!isReady || !isAvailable}
+                trackColor={{ false: "#3F3F46", true: PURPLE }}
+                thumbColor="#FFFFFF"
+              />
             </View>
-            <Switch
-              value={enableBio && isAvailable}
-              onValueChange={setEnableBio}
-              disabled={!isAvailable}
-              trackColor={{ false: "#3F3F46", true: PURPLE }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-        </Card>
+          </Card>
+        ) : null}
 
         <View className="mt-6 gap-4">
           <View>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -11,22 +11,26 @@ import { useColorScheme } from "@/hooks/useColorScheme";
 import { useDeviceAuthStore } from "@/stores/deviceAuthStore";
 
 export default function UnlockScreen() {
-  const { isAvailable, biometricType, authenticate } = useBiometricAuth();
+  const { isReady, isAvailable, biometricType, authenticate } = useBiometricAuth();
   const biometricEnabled = useDeviceAuthStore((s) => s.biometricEnabled);
   const pinEnabled = useDeviceAuthStore((s) => s.pinEnabled);
   const unlock = useDeviceAuthStore((s) => s.unlock);
   const { colors } = useColorScheme();
   const [error, setError] = useState("");
+  const promptedRef = useRef(false);
 
   useEffect(() => {
+    if (!isReady) return;
+    if (biometricEnabled && isAvailable) return;
     if (!biometricEnabled && pinEnabled) {
       router.replace("/(auth)/pin");
     }
-  }, [biometricEnabled, pinEnabled]);
+  }, [isReady, biometricEnabled, isAvailable, pinEnabled]);
 
   useEffect(() => {
-    if (!biometricEnabled || !isAvailable) return;
+    if (!isReady || !biometricEnabled || !isAvailable || promptedRef.current) return;
 
+    promptedRef.current = true;
     void (async () => {
       const ok = await authenticate(`Unlock with ${biometricType}`);
       if (ok) {
@@ -34,7 +38,7 @@ export default function UnlockScreen() {
         router.replace("/(tabs)");
       }
     })();
-  }, [authenticate, biometricEnabled, biometricType, isAvailable, unlock]);
+  }, [isReady, authenticate, biometricEnabled, biometricType, isAvailable, unlock]);
 
   const handleBiometric = async () => {
     setError("");
@@ -46,6 +50,16 @@ export default function UnlockScreen() {
     }
     setError("Authentication failed. Try again or use your PIN.");
   };
+
+  if (!isReady) {
+    return (
+      <SafeAreaView className="flex-1 bg-background px-6 dark:bg-transparent">
+        <View className="flex-1 items-center justify-center">
+          <AppText variant="lead">Checking biometrics…</AppText>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!biometricEnabled && pinEnabled) {
     return null;
@@ -66,7 +80,9 @@ export default function UnlockScreen() {
           <AppText variant="lead" className="mt-2 text-center">
             {isAvailable && biometricEnabled
               ? `Use ${biometricType} to unlock TracePay`
-              : "Unlock TracePay to continue"}
+              : biometricEnabled
+                ? `${biometricType} is not set up on this device. Use your PIN instead.`
+                : "Unlock TracePay to continue"}
           </AppText>
         </View>
 

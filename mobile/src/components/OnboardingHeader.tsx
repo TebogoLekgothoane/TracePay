@@ -1,8 +1,8 @@
 import { Pressable, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { router } from "expo-router";
 
 import { cn } from "@/lib/cn";
+import { goBackOr } from "@/lib/navigation";
 
 export const ONBOARDING_TOTAL_STEPS = 8;
 
@@ -34,6 +34,17 @@ const ROUTE_TO_STEP: Record<string, number> = {
   "sms-permission": ONBOARDING_STEPS["sms-permission"],
 };
 
+const BACK_FALLBACKS = [
+  "/(onboarding)/language",
+  "/(onboarding)/language",
+  "/(onboarding)/welcome",
+  "/(onboarding)/features",
+  "/(onboarding)/create-account",
+  "/(onboarding)/otp",
+  "/(onboarding)/biometrics",
+  "/(onboarding)/consent",
+] as const;
+
 export function getOnboardingStepFromRoute(routeName: string): number | null {
   return ROUTE_TO_STEP[routeName] ?? null;
 }
@@ -48,7 +59,7 @@ export function OnboardingHeader({
       <View className="flex-row items-center">
         {showBack ? (
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => goBackOr(BACK_FALLBACKS[currentStep] ?? "/(onboarding)/language")}
             className="h-9 w-9 items-center justify-center rounded-full bg-white/[0.08] dark:bg-white/[0.08]"
             accessibilityRole="button"
             accessibilityLabel="Go back"

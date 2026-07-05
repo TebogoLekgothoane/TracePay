@@ -1,7 +1,7 @@
 import React from "react";
 import { View, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 
 import { Button } from "@/components/Button";
@@ -9,7 +9,7 @@ import { AppText } from "@/components/Typography";
 import { useColorScheme } from "@/hooks/useColorScheme";
 
 export default function ForgotPasswordScreen() {
-  const { colors, isDarkColorScheme } = useColorScheme();
+  const { colors } = useColorScheme();
 
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-transparent" edges={["left", "right", "bottom", "top"]}>

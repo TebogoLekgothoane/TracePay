@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { View, TextInput, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 
 import { Button } from "@/components/Button";
@@ -62,7 +61,7 @@ export default function PinScreen() {
             Unlock
           </Button>
           <Pressable onPress={() => router.push("/(auth)/sign-in")} className="py-2">
-            <AppText variant="bodySm" className="text-center font-semibold text-brand-purple">
+            <AppText variant="bodySm" className="text-center font-semibold text-brand-purple dark:text-primary">
               Forgot PIN? Sign in with password
             </AppText>
           </Pressable>

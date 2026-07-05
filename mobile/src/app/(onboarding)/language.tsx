@@ -1,3 +1,4 @@
+import { Feather } from "@expo/vector-icons";
 import {
   View,
   ScrollView,
@@ -64,7 +65,7 @@ export default function LanguageScreen() {
             </AppText>
 
             <AppText variant="lead" className="mt-3">
-              Select the language you'd like to use TracePay in.
+              Select the language you&apos;d like to use TracePay in.
             </AppText>
           </View>
           
@@ -90,10 +91,10 @@ export default function LanguageScreen() {
                   "flex-row items-center rounded-[28px] px-5 py-5",
                   isDarkColorScheme
                     ? isSelected
-                      ? "border border-primary/40 bg-white/[0.12]"
+                      ? "border border-white/10 bg-white/[0.12]"
                       : "border border-white/10 bg-white/[0.08]"
                     : isSelected
-                      ? "border border-brand-purple bg-brand-purple/5 bg-white"
+                      ? "border border-border bg-white"
                       : "border border-border bg-white",
                 )}
                 style={({ pressed }) => (pressed ? { opacity: 0.92 } : undefined)}
@@ -106,15 +107,15 @@ export default function LanguageScreen() {
 
                 <View
                   className={cn(
-                    "h-7 w-7 shrink-0 rounded-full border-2 items-center justify-center",
+                    "h-7 w-7 shrink-0 items-center justify-center rounded-full",
                     isSelected
-                      ? "border-brand-purple dark:border-primary"
-                      : "border-gray-300 dark:border-white/30",
+                      ? "bg-brand-purple dark:bg-primary"
+                      : "border-2 border-gray-300 dark:border-white/30",
                   )}
                 >
-                  {isSelected && (
-                    <View className="h-3 w-3 rounded-full bg-brand-purple dark:bg-primary" />
-                  )}
+                  {isSelected ? (
+                    <Feather name="check" size={16} color="#FFFFFF" />
+                  ) : null}
                 </View>
               </Pressable>
             );

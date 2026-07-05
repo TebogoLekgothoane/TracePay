@@ -17,6 +17,7 @@ import { AppText } from "@/components/Typography";
 import { AuthErrorBanner } from "@/components/AuthErrorBanner";
 import { AuthError } from "@/lib/auth-errors";
 import { isValidSaPhone } from "@/lib/phone";
+import { goBackOr } from "@/lib/navigation";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useProfileStore } from "@/stores/profileStore";
 import { useDeviceAuthStore } from "@/stores/deviceAuthStore";
@@ -36,8 +37,6 @@ export default function SignInScreen() {
   const [error, setError] = useState("");
   const signInWithPassword = useProfileStore((s) => s.signInWithPassword);
   const { colors } = useColorScheme();
-  const canGoBack = router.canGoBack();
-
   const isValid = isValidSaPhone(phone) && password.length > 0;
 
   const handleSubmit = async () => {
@@ -71,24 +70,22 @@ export default function SignInScreen() {
       edges={["top", "left", "right", "bottom"]}
     >
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        {canGoBack ? (
-          <View className="px-6 pt-2">
-            <Pressable
-              onPress={() => router.back()}
-              className="h-10 w-10 items-center justify-center rounded-full bg-muted/60 dark:bg-white/10"
-              accessibilityRole="button"
-              accessibilityLabel="Go back"
-            >
-              <Feather name="chevron-left" size={22} color={colors.foreground} />
-            </Pressable>
-          </View>
-        ) : null}
+        <View className="px-6 pt-2">
+          <Pressable
+            onPress={() => goBackOr("/(auth)/unlock")}
+            className="h-10 w-10 items-center justify-center rounded-full bg-muted/60 dark:bg-white/10"
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
+            <Feather name="chevron-left" size={22} color={colors.foreground} />
+          </Pressable>
+        </View>
 
         <ScrollView
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{
             paddingHorizontal: 24,
-            paddingTop: canGoBack ? 8 : 24,
+            paddingTop: 8,
             paddingBottom: 16,
           }}
         >
@@ -135,7 +132,7 @@ export default function SignInScreen() {
                   <MaterialCommunityIcons
                     name={showPassword ? "eye-off-outline" : "eye-outline"}
                     size={18}
-                    color={colors.mutedForeground}
+                    color={colors.primary}
                   />
                 </Pressable>
               </GlassInput>

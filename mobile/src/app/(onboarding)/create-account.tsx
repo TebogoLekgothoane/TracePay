@@ -54,10 +54,10 @@ export default function CreateAccountScreen() {
       await signUpWithPassword(fullName, phone, password);
       const authed = useProfileStore.getState().isAuthenticated;
       router.push(authed ? "/(onboarding)/biometrics" : "/(onboarding)/otp");
-    } catch (e) {
+    } catch (e: unknown) {
       if (isPhoneAlreadyRegisteredError(e)) {
         setPhoneAlreadyRegistered(true);
-        setError(e.message);
+        setError(e instanceof Error ? e.message : "This phone number is already registered. Sign in instead.");
       } else {
         setError(e instanceof AuthError ? e.message : "Something went wrong. Please try again.");
       }
@@ -139,7 +139,7 @@ export default function CreateAccountScreen() {
                   <MaterialCommunityIcons
                     name={showPassword ? "eye-off-outline" : "eye-outline"}
                     size={18}
-                    color={colors.mutedForeground}
+                    color={colors.primary}
                   />
                 </Pressable>
               </GlassInput>
@@ -168,7 +168,7 @@ export default function CreateAccountScreen() {
               </Button>
             ) : (
               <Pressable onPress={goToSignIn} hitSlop={8}>
-                <AppText variant="bodySm" className="font-semibold text-brand-purple">
+                <AppText variant="bodySm" className="font-semibold text-brand-purple dark:text-primary">
                   Already have an account? Sign in
                 </AppText>
               </Pressable>

@@ -16,6 +16,7 @@ import { Card } from "@/components/Card";
 import { AppText } from "@/components/Typography";
 import { consentCopy as t } from "@/constants/consent-copy";
 import { cn } from "@/lib/cn";
+import { goBackOr } from "@/lib/navigation";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import { useProfileStore } from "@/stores/profileStore";
 
@@ -216,7 +217,7 @@ export default function ConsentScreen() {
           <Button size="lg" fullWidth className="h-14 rounded-[24px]" onPress={handleAgree} disabled={!canContinue}>
             {t.agreeAndContinue}
           </Button>
-          <Button variant="outline" size="lg" fullWidth className="mt-3 h-14 rounded-[24px]" onPress={() => router.back()}>
+          <Button variant="outline" size="lg" fullWidth className="mt-3 h-14 rounded-[24px]" onPress={() => goBackOr("/(onboarding)/biometrics")}>
             {t.cancel}
           </Button>
         </View>

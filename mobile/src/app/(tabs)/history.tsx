@@ -8,15 +8,13 @@ import {
 } from "react-native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Button } from "@/components/Button";
-import { Card } from "@/components/Card";
 import { EmptyState } from "@/components/EmptyState";
-import { FadeInItem, SkeletonPlaceholder } from "@/components/ContentTransition";
+import { SkeletonPlaceholder } from "@/components/ContentTransition";
 import { HistoryListSkeleton } from "@/components/ScreenSkeletons";
 import { GlassInput } from "@/components/GlassInput";
 import { ScreenFrame } from "@/components/Screen";
 import { AppText } from "@/components/Typography";
 import { useScreenInsets } from "@/hooks/useScreenInsets";
-import { router } from "expo-router";
 import { useIngestion } from "@/context/SMSIngestionContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { ParsedTransaction } from "@/services/sms/sms.types";
@@ -30,6 +28,7 @@ import {
   formatDateLabel,
   getTransactionDate,
 } from "@/lib/transaction-filters";
+import { goBackOr } from "@/lib/navigation";
 
 type ListItem =
   | { type: "header"; key: string; label: string }
@@ -90,24 +89,14 @@ export default function HistoryScreen() {
   const hasActiveFilters = dateRange !== "all" || showLeaksOnly || search.length > 0;
 
   const renderItem = useCallback(
-    ({ item, index }: { item: ListItem; index: number }) => {
+    ({ item }: { item: ListItem }) => {
       if (item.type === "header") {
-        return (
-          <FadeInItem index={index}>
-            <AppText variant="overline" className="mb-2.5 mt-3">
-              {item.label}
-            </AppText>
-          </FadeInItem>
-        );
+        return <AppText variant="overline" className="mb-2.5 mt-3">{item.label}</AppText>;
       }
 
       const { tx } = item;
 
-      return (
-        <FadeInItem index={index}>
-          <TransactionRow className="mb-2.5" tx={tx} showMeta />
-        </FadeInItem>
-      );
+      return <TransactionRow className="mb-2.5" tx={tx} showMeta />;
     },
     [],
   );
@@ -120,7 +109,7 @@ export default function HistoryScreen() {
         <Button
           variant="outline"
           size="icon"
-          onPress={() => router.back()}
+          onPress={() => goBackOr("/(tabs)")}
           className="back-btn"
         >
           <Feather name="arrow-left" size={22} color={colors.foreground} />
