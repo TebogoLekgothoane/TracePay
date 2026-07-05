@@ -37,9 +37,15 @@ export function Card({
     );
   }
 
+  const hasCustomBackground = /\bbg-/.test(className ?? "");
+
   return (
     <View
-      className={cn("rounded-[20px] bg-card p-5 shadow-sm", className)}
+      className={cn(
+        "rounded-[20px] p-5 shadow-sm dark:shadow-none",
+        !hasCustomBackground && "bg-card dark:bg-white/5",
+        className,
+      )}
       {...props}
     >
       <View className={cn("w-full", contentClassName)}>{children}</View>
@@ -48,7 +54,7 @@ export function Card({
 }
 
 export type IconCardProps = Omit<CardProps, "children"> & {
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   title?: string;
   description: string;
   descriptionVariant?: TextVariant;
@@ -69,11 +75,14 @@ export function IconCard({
   return (
     <Card
       className={className}
-      contentClassName={cn("flex-row items-start gap-4", contentClassName)}
+      contentClassName={cn(
+        icon ? "flex-row items-start gap-4" : undefined,
+        contentClassName,
+      )}
       {...props}
     >
-      <View className="shrink-0">{icon}</View>
-      <View className="min-w-0 flex-1">
+      {icon ? <View className="shrink-0">{icon}</View> : null}
+      <View className={cn(icon ? "min-w-0 flex-1" : "w-full")}>
         {title ? (
           <AppText variant="title">{title}</AppText>
         ) : null}

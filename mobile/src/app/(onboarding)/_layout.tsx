@@ -31,7 +31,7 @@ export default function OnboardingLayout() {
       <View className="flex-1">
         <Stack
           screenOptions={{ headerShown: false, animation: "slide_from_right" }}
-          initialRouteName="language"
+          initialRouteName="index"
         >
           <Stack.Screen name="language" />
           <Stack.Screen name="welcome" />

@@ -1,6 +1,5 @@
 import React from "react";
 import {
-  ActivityIndicator,
   Pressable,
   Text,
   View,
@@ -8,6 +7,7 @@ import {
 } from "react-native";
 
 import { GlassSurface } from "@/components/GlassSurface";
+import { Skeleton } from "@/components/Skeleton";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { cn } from "@/lib/cn";
 
@@ -57,47 +57,39 @@ const textSizeClasses: Record<ButtonSize, string> = {
 
 const lightVariantClasses: Record<
   ButtonVariant,
-  { container: string; text: string; spinnerColor: string }
+  { container: string; text: string }
 > = {
   primary: {
     container: "bg-brand-purple shadow-md",
     text: "text-primary-foreground",
-    spinnerColor: "#FFFFFF",
   },
   secondary: {
     container: "bg-secondary",
     text: "text-secondary-foreground",
-    spinnerColor: "#374151",
   },
   outline: {
     container: "border-[1.5px] border-border bg-card shadow-sm",
     text: "text-muted-foreground",
-    spinnerColor: "#6B7280",
   },
   ghost: {
     container: "bg-transparent",
     text: "text-primary",
-    spinnerColor: "#7C3AED",
   },
   destructive: {
     container: "bg-destructive",
     text: "text-primary-foreground",
-    spinnerColor: "#FFFFFF",
   },
   link: {
     container: "bg-transparent py-1 px-0 min-h-0",
     text: "text-primary font-semibold text-sm",
-    spinnerColor: "#7C3AED",
   },
   accent: {
     container: "bg-neon-purple rounded-full h-12 py-0",
     text: "text-white text-base",
-    spinnerColor: "#FFFFFF",
   },
   info: {
     container: "bg-info rounded-full h-12 py-0",
     text: "text-white text-base",
-    spinnerColor: "#FFFFFF",
   },
 };
 
@@ -106,53 +98,44 @@ const darkVariantClasses: Record<
   {
     container: string;
     text: string;
-    spinnerColor: string;
     glass?: "default" | "elevated" | "primary" | "input";
   }
 > = {
   primary: {
     container: "shadow-none",
     text: "text-white",
-    spinnerColor: "#FFFFFF",
     glass: "primary",
   },
   secondary: {
     container: "shadow-none",
     text: "text-white/85",
-    spinnerColor: "#FFFFFF",
     glass: "default",
   },
   outline: {
     container: "shadow-none",
     text: "text-white/70",
-    spinnerColor: "#A855F7",
     glass: "default",
   },
   ghost: {
     container: "bg-transparent shadow-none",
     text: "text-primary",
-    spinnerColor: "#A855F7",
   },
   destructive: {
     container: "bg-destructive/90 shadow-none",
     text: "text-white",
-    spinnerColor: "#FFFFFF",
   },
   link: {
     container: "bg-transparent py-1 px-0 min-h-0 shadow-none",
     text: "text-primary font-semibold text-sm",
-    spinnerColor: "#A855F7",
   },
   accent: {
     container: "shadow-none",
     text: "text-white text-base",
-    spinnerColor: "#FFFFFF",
     glass: "primary",
   },
   info: {
     container: "bg-info/90 shadow-none",
     text: "text-white text-base",
-    spinnerColor: "#FFFFFF",
   },
 };
 
@@ -183,7 +166,7 @@ export function Button({
   const useGlass = Boolean(glassVariant);
 
   const content = loading ? (
-    <ActivityIndicator color={variantStyle.spinnerColor} size="small" />
+    <Skeleton width={64} height={12} rounded="full" className="bg-white/35 dark:bg-white/25" />
   ) : (
     <>
       {icon}

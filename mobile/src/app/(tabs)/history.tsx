@@ -3,13 +3,15 @@ import {
   View,
   FlatList,
   TextInput,
-  ActivityIndicator,
   ScrollView,
   Pressable,
 } from "react-native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
+import { EmptyState } from "@/components/EmptyState";
+import { FadeInItem, SkeletonPlaceholder } from "@/components/ContentTransition";
+import { HistoryListSkeleton } from "@/components/ScreenSkeletons";
 import { GlassInput } from "@/components/GlassInput";
 import { ScreenFrame } from "@/components/Screen";
 import { AppText } from "@/components/Typography";
@@ -20,7 +22,7 @@ import { useColorScheme } from "@/hooks/useColorScheme";
 import { ParsedTransaction } from "@/services/sms/sms.types";
 import { cn } from "@/lib/cn";
 import { getTransactionDisplay } from "@/lib/transaction-display";
-import { CATEGORY_ICONS } from "@/constants/category-icons";
+import { TransactionRow } from "@/components/TransactionRow";
 import {
   DATE_RANGE_OPTIONS,
   DateRangeFilter,
@@ -36,8 +38,8 @@ type ListItem =
 function buildListItems(transactions: ParsedTransaction[], search: string): ListItem[] {
   const filtered = search
     ? transactions.filter((tx) => {
-        const { headline, summary } = getTransactionDisplay(tx);
         const q = search.toLowerCase();
+        const { headline, summary } = getTransactionDisplay(tx);
         return (
           headline.toLowerCase().includes(q) ||
           summary.toLowerCase().includes(q) ||
@@ -88,76 +90,26 @@ export default function HistoryScreen() {
   const hasActiveFilters = dateRange !== "all" || showLeaksOnly || search.length > 0;
 
   const renderItem = useCallback(
-    ({ item }: { item: ListItem }) => {
+    ({ item, index }: { item: ListItem; index: number }) => {
       if (item.type === "header") {
         return (
-          <AppText variant="overline" className="mb-2.5 mt-3">
-            {item.label}
-          </AppText>
+          <FadeInItem index={index}>
+            <AppText variant="overline" className="mb-2.5 mt-3">
+              {item.label}
+            </AppText>
+          </FadeInItem>
         );
       }
 
       const { tx } = item;
-      const isDebit = tx.type === "debit";
-      const { headline, summary } = getTransactionDisplay(tx);
 
       return (
-        <Card className="mb-2.5" contentClassName="flex-row items-start gap-3">
-          <View
-            className={cn(
-              "h-10 w-10 items-center justify-center rounded-xl",
-              isDebit ? "bg-red-100 dark:bg-red-900/40" : "bg-green-100 dark:bg-green-900/40",
-            )}
-          >
-            <MaterialCommunityIcons
-              name={CATEGORY_ICONS[tx.category] as any}
-              size={18}
-              color={isDebit ? colors.destructive : colors.success}
-            />
-          </View>
-          <View className="min-w-0 flex-1">
-            <AppText variant="title" numberOfLines={1}>
-              {headline}
-            </AppText>
-            <AppText variant="bodySm" className="mt-0.5" numberOfLines={2}>
-              {summary}
-            </AppText>
-            <View className="mt-2 flex-row flex-wrap gap-1.5">
-              <View className="rounded-md bg-muted px-2 py-0.5 dark:bg-white/10">
-                <AppText variant="caption">{tx.bank}</AppText>
-              </View>
-              <View className="rounded-md bg-muted px-2 py-0.5 dark:bg-white/10">
-                <AppText variant="caption">{tx.category}</AppText>
-              </View>
-              {tx.confidence === "low" ? (
-                <View className="rounded-md bg-yellow-100 px-2 py-0.5 dark:bg-yellow-900/40">
-                  <AppText variant="caption" className="text-yellow-800 dark:text-yellow-400">
-                    low confidence
-                  </AppText>
-                </View>
-              ) : null}
-            </View>
-          </View>
-          <View className="items-end gap-0.5">
-            <AppText
-              variant="label"
-              className={cn(
-                isDebit ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400",
-              )}
-            >
-              {isDebit ? "-" : "+"}R{tx.amount.toFixed(2)}
-            </AppText>
-            <AppText variant="caption">
-              {getTransactionDate(tx).toLocaleTimeString("en-ZA", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </AppText>
-          </View>
-        </Card>
+        <FadeInItem index={index}>
+          <TransactionRow className="mb-2.5" tx={tx} showMeta />
+        </FadeInItem>
       );
     },
-    [colors.destructive, colors.success],
+    [],
   );
 
   const keyExtractor = useCallback((item: ListItem) => item.key, []);
@@ -245,19 +197,21 @@ export default function HistoryScreen() {
   );
 
   const ListEmptyComponent = isLoading ? (
-    <View className="items-center gap-4 py-16">
-      <ActivityIndicator size="large" color={colors.primary} />
-      <AppText variant="bodyMuted">Loading transactions…</AppText>
-    </View>
+    <SkeletonPlaceholder>
+      <HistoryListSkeleton count={5} />
+    </SkeletonPlaceholder>
   ) : (
-    <View className="items-center gap-4 py-16">
-      <MaterialCommunityIcons name="message-text-outline" size={40} color={colors.mutedForeground} />
-      <AppText variant="bodyMuted" className="text-center leading-6">
-        {hasActiveFilters
-          ? "No transactions match your filters.\nTry a wider date range or clear search."
-          : "No transactions yet.\nOpen the SMS scanner to import."}
-      </AppText>
-    </View>
+    <EmptyState
+      card={false}
+      description={
+        hasActiveFilters
+          ? "No transactions match your filters. Try a wider date range or clear search."
+          : "No transactions yet. Open the SMS scanner to import."
+      }
+      icon={
+        <MaterialCommunityIcons name="message-text-outline" size={40} color={colors.mutedForeground} />
+      }
+    />
   );
 
   return (

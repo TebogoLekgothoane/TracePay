@@ -8,7 +8,6 @@ import {
 } from "react-native";
 
 import { type BottomInset, useScreenInsets } from "@/hooks/useScreenInsets";
-import { useColorScheme } from "@/hooks/useColorScheme";
 import { cn } from "@/lib/cn";
 
 type ScreenProps = ScrollViewProps & {
@@ -19,7 +18,7 @@ type ScreenProps = ScrollViewProps & {
   contentContainerStyle?: StyleProp<ViewStyle>;
 };
 
-/** Scrollable screen shell — background comes from the route layout (GlassBackground). */
+/** Scrollable screen shell with solid app background (no glass mesh bleed-through). */
 export function Screen({
   className,
   contentClassName,
@@ -30,13 +29,12 @@ export function Screen({
   ...props
 }: ScreenProps) {
   const { contentPadding } = useScreenInsets(bottomInset);
-  const { isDarkColorScheme } = useColorScheme();
 
   return (
     <ScrollView
       className={cn(
         "flex-1",
-        isDarkColorScheme ? "bg-transparent" : "bg-background",
+        "bg-background",
         className,
       )}
       contentContainerClassName={cn(padded && "screen-content", contentClassName)}
@@ -49,7 +47,7 @@ export function Screen({
   );
 }
 
-/** Non-scroll screen shell — background comes from the route layout (GlassBackground). */
+/** Non-scroll screen shell with solid app background. */
 export function ScreenFrame({
   className,
   children,
@@ -57,13 +55,11 @@ export function ScreenFrame({
   className?: string;
   children: React.ReactNode;
 }) {
-  const { isDarkColorScheme } = useColorScheme();
-
   return (
     <View
       className={cn(
         "flex-1",
-        isDarkColorScheme ? "bg-transparent" : "bg-background",
+        "bg-background",
         className,
       )}
     >

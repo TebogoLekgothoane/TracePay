@@ -4,10 +4,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 export const TRACEPAY_STORAGE_PREFIX = "@tracepay:";
 
 export const AUTH_KEYS = {
-  isAuthenticated: `${TRACEPAY_STORAGE_PREFIX}isAuthenticated`,
-  email: `${TRACEPAY_STORAGE_PREFIX}email`,
-  password: `${TRACEPAY_STORAGE_PREFIX}password`,
   phone: `${TRACEPAY_STORAGE_PREFIX}phone`,
+  recoveryEmail: `${TRACEPAY_STORAGE_PREFIX}recoveryEmail`,
   onboardingComplete: `${TRACEPAY_STORAGE_PREFIX}onboardingComplete`,
   name: `${TRACEPAY_STORAGE_PREFIX}name`,
   income: `${TRACEPAY_STORAGE_PREFIX}income`,

@@ -4,6 +4,7 @@ import AndroidSmsListener from 'react-native-android-sms-listener';
 import { ParsedTransaction, RawSMS } from './sms.types';
 import { makeTransactionId, inferCategory } from './sms.utils';
 import { parserRegistry } from './ParserRegistry';
+import { enrichParsedTransaction } from '@/lib/transaction-display';
 import { isSmsNativeModuleAvailable } from './SMSIngestionService';
 
 type OnTransactionCallback = (transaction: ParsedTransaction) => void;
@@ -70,13 +71,13 @@ export class SMSListener {
       if (!result.success || !result.transaction) return;
 
       const tx = result.transaction;
-      const transaction: ParsedTransaction = {
+      const transaction = enrichParsedTransaction({
         ...tx,
         id: makeTransactionId(sms._id, sms.body),
         rawSmsId: sms._id,
         parsedAt: new Date(),
         category: inferCategory(tx.merchant),
-      };
+      });
 
       this.onTransaction(transaction);
     } catch (err) {

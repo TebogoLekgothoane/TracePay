@@ -10,6 +10,8 @@ import { useScreenInsets } from "@/hooks/useScreenInsets";
 import { router } from "expo-router";
 import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
+import { EmptyState, EmptyStateIcon } from "@/components/EmptyState";
+import { FadeInItem, FadeInView } from "@/components/ContentTransition";
 import CircularProgress from "@/components/CircularProgress";
 import { Screen } from "@/components/Screen";
 import { AppText } from "@/components/Typography";
@@ -19,8 +21,10 @@ import { useLeaksStore, getActiveLeakStats, DEFAULT_MONTHLY_INCOME } from "@/sto
 import { useVoice } from "@/hooks/useVoice";
 import { cn } from "@/lib/cn";
 import { getSeverityStyle } from "@/lib/severity";
-import { DEMO_LEAKS } from "@/lib/simulate";
 import { PARTNERS } from "@/constants/partners";
+import { useIngestion } from "@/context/SMSIngestionContext";
+import { TransactionRow } from "@/components/TransactionRow";
+import { LEAK_ANALYSIS_HOME } from "@/constants/copy";
 
 const ACTIONS = [
   { id: "freeze", label: "Freeze\nLeaks", icon: "snowflake", bgClass: "bg-brand-purple" },
@@ -34,28 +38,14 @@ export default function HomeScreen() {
   const { colors, isDarkColorScheme } = useColorScheme();
   const { monthlyIncome, rewardPoints } = useProfileStore();
   const { leaks, fetchLeaks } = useLeaksStore();
+  const { transactions } = useIngestion();
   const { speak } = useVoice();
   const [showNotifications, setShowNotifications] = useState(false);
 
+  const recentTransactions = transactions.slice(0, 5);
+
   useEffect(() => {
-    (async () => {
-      await fetchLeaks();
-      const { leaks: current, addLeaks } = useLeaksStore.getState();
-      if (current.length === 0) {
-        await addLeaks(
-          DEMO_LEAKS.map((l) => ({
-            name: l.name,
-            category: l.category,
-            categoryIcon: l.categoryIcon,
-            amountMonthly: l.amountMonthly,
-            severity: l.severity,
-            status: "active",
-            sourceSms: l.sourceSms,
-            advice: l.advice,
-          })),
-        );
-      }
-    })();
+    void fetchLeaks();
   }, [fetchLeaks]);
 
   const { activeLeaks, totalMonthly: totalLeaking } = getActiveLeakStats(leaks);
@@ -80,7 +70,8 @@ export default function HomeScreen() {
 
   return (
     <>
-      <Screen>
+      <FadeInView className="flex-1">
+        <Screen>
         <View className="mb-5 flex-row items-start justify-between">
           <View>
             <AppText variant="overline" className="mb-1">
@@ -115,7 +106,9 @@ export default function HomeScreen() {
               size="icon"
               onPress={() =>
                 speak(
-                  `Your financial health score is ${healthScore} out of 100. You are ${healthLabel}. You have ${activeLeaks.length} active money leaks totalling R${totalLeaking.toFixed(2)} per month.`,
+                  activeLeaks.length > 0
+                    ? `Your financial health score is ${healthScore} out of 100. You are ${healthLabel}. You have ${activeLeaks.length} active money leaks totalling R${totalLeaking.toFixed(2)} per month.`
+                    : `Your financial health score is ${healthScore} out of 100. You are ${healthLabel}. No money leaks detected yet. Scan your SMS inbox to import transactions.`,
                 )
               }
               className="min-h-0 p-1"
@@ -222,27 +215,19 @@ export default function HomeScreen() {
             ))}
           </>
         ) : (
-          <Pressable
+          <EmptyState
+            className="mb-5"
+            tone="brand"
+            title="No leaks detected yet"
+            description={
+              transactions.length > 0
+                ? LEAK_ANALYSIS_HOME
+                : "Tap to scan your SMS inbox and import bank transactions."
+            }
+            actionLabel="Scan SMS inbox"
             onPress={() => router.push("/(tabs)/sms-scanning")}
-            className="mb-5 active:opacity-90"
-          >
-            <Card
-              glass={false}
-              className="border border-brand-purple/20 bg-brand-purple-light dark:border-primary/30 dark:bg-primary/10"
-              contentClassName="flex-row items-center gap-3.5"
-            >
-              <MaterialCommunityIcons name="magnify-scan" size={28} color={colors.primary} />
-              <View className="flex-1">
-                <AppText variant="title" className="text-brand-purple dark:text-primary">
-                  No leaks detected yet
-                </AppText>
-                <AppText variant="bodySm" className="mt-0.5 text-brand-purple dark:text-primary/80">
-                  Tap to scan your SMS inbox and find money leaks
-                </AppText>
-              </View>
-              <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
-            </Card>
-          </Pressable>
+            
+          />
         )}
 
         <View className="mb-3 mt-6 flex-row items-start justify-between">
@@ -263,7 +248,7 @@ export default function HomeScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          className="-mx-[18px]"
+          className="-mx-[18px] mb-6"
           contentContainerClassName="gap-3 px-[18px] pb-1"
         >
           {PARTNERS.map((r) => (
@@ -295,7 +280,44 @@ export default function HomeScreen() {
             </Card>
           ))}
         </ScrollView>
-      </Screen>
+
+        <View className="mb-3 flex-row items-center justify-between">
+          <AppText variant="title">Recent transactions</AppText>
+          {transactions.length > 0 ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="min-h-0 px-0"
+              onPress={() => router.push("/(tabs)/history")}
+            >
+              <AppText variant="label" className="text-brand-purple dark:text-primary">
+                See all
+              </AppText>
+            </Button>
+          ) : null}
+        </View>
+
+        {recentTransactions.length > 0 ? (
+          recentTransactions.map((tx, index) => (
+            <FadeInItem key={tx.id} index={index}>
+              <TransactionRow
+                className="mb-2.5"
+                tx={tx}
+                onPress={() => router.push("/(tabs)/history")}
+              />
+            </FadeInItem>
+          ))
+        ) : (
+          <EmptyState
+            description="No transactions yet. Scan your SMS inbox to import bank activity."
+            onPress={() => router.push("/(tabs)/sms-scanning")}
+            icon={
+              <MaterialCommunityIcons name="message-text-outline" size={24} color={colors.mutedForeground} />
+            }
+          />
+        )}
+        </Screen>
+      </FadeInView>
 
       <Modal
         visible={showNotifications}
@@ -327,10 +349,11 @@ export default function HomeScreen() {
             </View>
 
             {activeLeaks.length === 0 ? (
-              <View className="items-center gap-3 py-10">
-                <Feather name="bell-off" size={32} color={colors.mutedForeground} />
-                <AppText variant="bodyMuted">No new alerts</AppText>
-              </View>
+              <EmptyState
+                card={false}
+                description="No new alerts"
+                icon={<Feather name="bell-off" size={32} color={colors.mutedForeground} />}
+              />
             ) : (
               <ScrollView showsVerticalScrollIndicator={false}>
                 <AppText variant="overline" className="mb-3">
