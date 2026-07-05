@@ -8,7 +8,6 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { ThemeProvider } from "@react-navigation/native";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, router, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
@@ -29,10 +28,6 @@ import { useInitialAndroidBarSync } from "@/hooks/useInitialAndroidBarSync";
 import { NAV_THEME } from "@/theme/colors";
 
 SplashScreen.preventAutoHideAsync();
-
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 2, staleTime: 30_000 } },
-});
 
 function NavigationGuard({ children }: { children: React.ReactNode }) {
   const segments = useSegments();
@@ -138,22 +133,20 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <ThemeProvider value={NAV_THEME[colorScheme]}>
-            <SMSIngestionProvider>
-              <GestureHandlerRootView className="flex-1 bg-background">
-                <StatusBar style={isDarkColorScheme ? "light" : "dark"} />
-                <KeyboardProvider>
-                  <GlassBackground>
-                    <NavigationGuard>
-                      <RootLayoutNav />
-                    </NavigationGuard>
-                  </GlassBackground>
-                </KeyboardProvider>
-              </GestureHandlerRootView>
-            </SMSIngestionProvider>
-          </ThemeProvider>
-        </QueryClientProvider>
+        <ThemeProvider value={NAV_THEME[colorScheme]}>
+          <SMSIngestionProvider>
+            <GestureHandlerRootView className="flex-1 bg-background">
+              <StatusBar style={isDarkColorScheme ? "light" : "dark"} />
+              <KeyboardProvider>
+                <GlassBackground>
+                  <NavigationGuard>
+                    <RootLayoutNav />
+                  </NavigationGuard>
+                </GlassBackground>
+              </KeyboardProvider>
+            </GestureHandlerRootView>
+          </SMSIngestionProvider>
+        </ThemeProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
   );

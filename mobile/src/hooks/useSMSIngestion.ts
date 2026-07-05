@@ -53,6 +53,17 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
   });
 
   const listenerRef = useRef<SMSListener | null>(null);
+  const transactionsRef = useRef<ParsedTransaction[]>([]);
+
+  useEffect(() => {
+    transactionsRef.current = transactions;
+  }, [transactions]);
+
+  const normalizeTransactions = useCallback(
+    (txs: ParsedTransaction[]) =>
+      txs.filter(isValidStoredTransaction).map(enrichParsedTransaction),
+    [],
+  );
 
   // ── Persist & restore ────────────────────────────────────────────────────────
 
@@ -116,81 +127,48 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
   // ── Sync (batch ingest) ───────────────────────────────────────────────────
 
   const syncNow = useCallback(async (): Promise<boolean> => {
-    console.log('[SMS] syncNow start');
     setIsLoading(true);
     setError(null);
 
     try {
       let permission = await checkSMSPermission();
-      console.log('[SMS] syncNow permission (initial)', permission);
       if (permission !== 'granted') {
         permission = await requestSMSPermission();
-        console.log('[SMS] syncNow permission (after request)', permission);
         setServiceState((prev) => ({ ...prev, permissionStatus: permission }));
       }
       if (permission !== 'granted') {
         throw new Error(SMS_PERMISSION_BLOCKED_HELP);
       }
 
-      const current = await loadPersistedTransactions();
-      console.log('[SMS] syncNow persisted transactions', { count: current.length });
-
+      const current = normalizeTransactions(transactionsRef.current);
       const result = await ingestSMS({ existingTransactions: current });
-      const newTransactions = result.transactions
-        .filter(isValidStoredTransaction)
-        .map(enrichParsedTransaction);
+      const newTransactions = normalizeTransactions(result.transactions);
 
-      console.log('[SMS] syncNow ingest result', {
-        total: result.total,
-        parsed: result.parsed,
-        skipped: result.skipped,
-        failed: result.failed,
-        newTransactions: newTransactions.length,
-      });
-
-      const cleanedCurrent = current
-        .filter(isValidStoredTransaction)
-        .map(enrichParsedTransaction);
-
-      const existingIds = new Set(cleanedCurrent.map((t) => t.id));
+      const existingIds = new Set(current.map((t) => t.id));
       const merged = [
         ...newTransactions.filter((t) => !existingIds.has(t.id)),
-        ...cleanedCurrent,
+        ...current,
       ].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
       setTransactions(merged);
       await persistTransactions(merged);
-      console.log('[SMS] syncNow saved merged transactions', {
-        count: merged.length,
-        newlyAdded: newTransactions.filter((t) => !existingIds.has(t.id)).length,
-        removedInvalid: current.length - cleanedCurrent.length,
-      });
 
       const now = new Date();
       await AsyncStorage.setItem(STORAGE_KEYS.LAST_SYNC, now.toISOString());
 
-      const totalIngested = merged.length;
-      console.log('[SMS] syncNow complete', {
-        totalIngested,
-        previousCount: current.length,
-        newlyAdded: newTransactions.filter((t) => !existingIds.has(t.id)).length,
-        removedInvalid: current.length - cleanedCurrent.length,
-      });
-
       setServiceState((prev) => ({
         ...prev,
         lastSyncAt: now,
-        totalIngested,
+        totalIngested: merged.length,
       }));
       return true;
     } catch (err) {
-      console.error('[SMS] syncNow failed', (err as Error).message);
       setError((err as Error).message);
       return false;
     } finally {
       setIsLoading(false);
     }
-  }, [loadPersistedTransactions, persistTransactions]);
+  }, [normalizeTransactions, persistTransactions]);
 
   // ── Real-time listener ────────────────────────────────────────────────────
 

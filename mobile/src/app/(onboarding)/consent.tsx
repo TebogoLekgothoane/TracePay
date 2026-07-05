@@ -18,6 +18,7 @@ import { AppText } from "@/components/Typography";
 import { consentCopy as t } from "@/constants/consent-copy";
 import { cn } from "@/lib/cn";
 import { useOnboardingStore } from "@/stores/onboardingStore";
+import { useProfileStore } from "@/stores/profileStore";
 import { useIngestion } from "@/context/SMSIngestionContext";
 
 const PURPLE = "#A855F7";
@@ -132,7 +133,7 @@ function ConsentCheckbox({ checked, onToggle, children }: ConsentCheckboxProps) 
 export default function ConsentScreen() {
   const includeMomoData = useOnboardingStore((s) => s.includeMomoData);
   const setIncludeMomoData = useOnboardingStore((s) => s.setIncludeMomoData);
-  const setConsentGiven = useOnboardingStore((s) => s.setConsentGiven);
+  const setConsentGiven = useProfileStore((s) => s.setConsentGiven);
   const { requestPermission, refreshPermission, openPermissionSettings } =
     useIngestion();
 

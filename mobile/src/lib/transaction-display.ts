@@ -181,13 +181,11 @@ export function enrichParsedTransaction(tx: ParsedTransaction): ParsedTransactio
 }
 
 export function getTransactionHeadline(tx: ParsedTransaction): string {
-  const enriched = enrichParsedTransaction(tx);
-  return enriched.merchant ?? enriched.summary ?? `${enriched.bank} ${TYPE_LABELS[enriched.type].toLowerCase()}`;
+  return getTransactionDisplay(tx).headline;
 }
 
 export function getTransactionSummary(tx: ParsedTransaction): string {
-  const enriched = enrichParsedTransaction(tx);
-  return buildTransactionSummary(enriched);
+  return getTransactionDisplay(tx).summary;
 }
 
 function buildTransactionSummary(enriched: ParsedTransaction): string {

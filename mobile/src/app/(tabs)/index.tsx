@@ -23,9 +23,8 @@ import { cn } from "@/lib/cn";
 import { getSeverityStyle } from "@/lib/severity";
 import { PARTNERS } from "@/constants/partners";
 import { useIngestion } from "@/context/SMSIngestionContext";
-import { getTransactionDisplay } from "@/lib/transaction-display";
-import { getTransactionDate } from "@/lib/transaction-filters";
-import { TransactionIcon } from "@/components/TransactionIcon";
+import { TransactionRow } from "@/components/TransactionRow";
+import { LEAK_ANALYSIS_HOME } from "@/constants/copy";
 
 const ACTIONS = [
   { id: "freeze", label: "Freeze\nLeaks", icon: "snowflake", bgClass: "bg-brand-purple" },
@@ -222,7 +221,7 @@ export default function HomeScreen() {
             title="No leaks detected yet"
             description={
               transactions.length > 0
-                ? "Your SMS transactions are imported. Leak analysis is coming soon — we'll flag recurring fees and hidden charges when ready."
+                ? LEAK_ANALYSIS_HOME
                 : "Tap to scan your SMS inbox and import bank transactions."
             }
             actionLabel="Scan SMS inbox"
@@ -299,47 +298,15 @@ export default function HomeScreen() {
         </View>
 
         {recentTransactions.length > 0 ? (
-          recentTransactions.map((tx, index) => {
-            const isDebit = tx.type === "debit";
-            const { headline, summary } = getTransactionDisplay(tx);
-
-            return (
-              <FadeInItem key={tx.id} index={index}>
-                <Pressable
-                  onPress={() => router.push("/(tabs)/history")}
-                  className="mb-2.5 active:opacity-90"
-                >
-                  <Card contentClassName="flex-row items-start gap-3">
-                    <TransactionIcon tx={tx} />
-                    <View className="min-w-0 flex-1">
-                      <AppText variant="title" numberOfLines={1}>
-                        {headline}
-                      </AppText>
-                      <AppText variant="bodySm" className="mt-0.5" numberOfLines={1}>
-                        {summary}
-                      </AppText>
-                    </View>
-                    <View className="items-end gap-0.5">
-                      <AppText
-                        variant="label"
-                        className={cn(
-                          isDebit ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400",
-                        )}
-                      >
-                        {isDebit ? "-" : "+"}R{tx.amount.toFixed(2)}
-                      </AppText>
-                      <AppText variant="caption">
-                        {getTransactionDate(tx).toLocaleTimeString("en-ZA", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </AppText>
-                    </View>
-                  </Card>
-                </Pressable>
-              </FadeInItem>
-            );
-          })
+          recentTransactions.map((tx, index) => (
+            <FadeInItem key={tx.id} index={index}>
+              <TransactionRow
+                className="mb-2.5"
+                tx={tx}
+                onPress={() => router.push("/(tabs)/history")}
+              />
+            </FadeInItem>
+          ))
         ) : (
           <EmptyState
             description="No transactions yet. Scan your SMS inbox to import bank activity."

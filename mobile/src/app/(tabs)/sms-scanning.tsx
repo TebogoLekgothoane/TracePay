@@ -10,12 +10,11 @@ import { Card } from "@/components/Card";
 import { Screen } from "@/components/Screen";
 import { SmsScanningListSkeleton } from "@/components/ScreenSkeletons";
 import { FadeInItem, SkeletonPlaceholder } from "@/components/ContentTransition";
+import { TransactionRow } from "@/components/TransactionRow";
 import { AppText } from "@/components/Typography";
 import { router, useLocalSearchParams } from "expo-router";
 import { useIngestion } from "@/context/SMSIngestionContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
-import { cn } from "@/lib/cn";
-import { getTransactionHeadline, getTransactionSummary } from "@/lib/transaction-display";
 
 export default function SmsScanningScreen() {
   const params = useLocalSearchParams<{ fromOnboarding?: string }>();
@@ -201,52 +200,7 @@ export default function SmsScanningScreen() {
       ) : (
         recentTx.map((tx, index) => (
           <FadeInItem key={tx.id} index={index}>
-            <Card className="mb-3" contentClassName="gap-2">
-              <View className="flex-row items-center gap-2">
-                <View
-                  className={cn(
-                    "h-8 w-8 items-center justify-center rounded-lg",
-                    tx.type === "debit"
-                      ? "bg-red-100 dark:bg-red-900/40"
-                      : "bg-green-100 dark:bg-green-900/40",
-                  )}
-                >
-                  <MaterialCommunityIcons
-                    name="message-text-outline"
-                    size={16}
-                    color={tx.type === "debit" ? colors.destructive : colors.success}
-                  />
-                </View>
-                <AppText variant="title" className="flex-1" numberOfLines={1}>
-                  {getTransactionHeadline(tx)}
-                </AppText>
-                <AppText variant="caption">
-                  {tx.timestamp instanceof Date
-                    ? tx.timestamp.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })
-                    : ""}
-                </AppText>
-              </View>
-              <AppText variant="bodySm" numberOfLines={2}>
-                {getTransactionSummary(tx)}
-              </AppText>
-              <View className="flex-row items-center gap-2">
-                <AppText
-                  variant="label"
-                  className={cn(
-                    tx.type === "debit"
-                      ? "text-red-600 dark:text-red-400"
-                      : "text-green-600 dark:text-green-400",
-                  )}
-                >
-                  {tx.type === "debit" ? "-" : "+"}R{tx.amount.toFixed(2)}
-                </AppText>
-                <View className="rounded-md bg-brand-purple-light px-2 py-0.5 dark:bg-primary/20">
-                  <AppText variant="caption" className="text-brand-purple dark:text-primary">
-                    {tx.category}
-                  </AppText>
-                </View>
-              </View>
-            </Card>
+            <TransactionRow className="mb-3" tx={tx} showMeta />
           </FadeInItem>
         ))
       )}

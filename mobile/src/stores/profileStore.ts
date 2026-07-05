@@ -37,7 +37,6 @@ interface ProfileState {
   completeOnboarding: () => Promise<void>;
   loadFromStorage: () => Promise<void>;
   initializeAuth: () => Promise<() => void>;
-  syncToApi: () => Promise<void>;
 }
 
 const defaultConnectedAccounts = { bank: false, mobile: false, sassa: false };
@@ -159,7 +158,6 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
   setVoiceEnabled: (enabled) => {
     set({ voiceEnabled: enabled });
     AsyncStorage.setItem(AUTH_KEYS.voice, String(enabled));
-    get().syncToApi();
   },
   setConsentGiven: (given) => {
     set({ consentGiven: given });
@@ -344,7 +342,6 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
   completeOnboarding: async () => {
     await AsyncStorage.setItem(AUTH_KEYS.onboardingComplete, "true");
     set({ onboardingComplete: true });
-    await get().syncToApi();
   },
 
   initializeAuth: async () => {
@@ -436,9 +433,5 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       rewardPoints: pts ? parseInt(pts, 10) : 245,
       isLoaded: true,
     });
-  },
-
-  syncToApi: async () => {
-    // Most preferences are still local-only; recovery email is synced via saveRecoveryEmail().
   },
 }));

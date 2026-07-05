@@ -33,54 +33,24 @@ interface PlaybookItem {
 interface BudgetPlan {
   weeklyAmount: number;
   dailyLimit: number;
-  obligationsTotal: number;
   buffer: number;
-  billsPct: number;
-  bufferPct: number;
-  freePct: number;
-  riskLevel: string;
-  riskDescription: string;
   obligations: { name: string; dueDate: string; amount: number; icon: string }[];
   playbook: PlaybookItem[];
 }
 
 type Payment = BudgetPlan["obligations"][number];
 
-const DEFAULT_PLAN: BudgetPlan = {
-  weeklyAmount: 1522,
-  dailyLimit: 218,
-  obligationsTotal: 2969,
-  buffer: 1275,
-  billsPct: 35,
-  bufferPct: 15,
-  freePct: 50,
-  riskLevel: "Low",
-  riskDescription: "Your spending is stable with no high-risk leaks.",
-  obligations: [
-    { name: "Stokvel Contribution", dueDate: "Due 15 Apr", amount: 200, icon: "calendar-month-outline" },
-    { name: "Planet Fitness Debit", dueDate: "Due 01 Apr", amount: 199, icon: "calendar-month-outline" },
-    { name: "Groceries", dueDate: "Due Weekly", amount: 650, icon: "cart-outline" },
-    { name: "Transport Costs", dueDate: "Due Weekly", amount: 100, icon: "bus" },
-  ],
-  playbook: [
-    {
-      name: "Use MyCiTi or Rea Vaya for commute",
-      category: "Transport",
-      saving: 300,
-      detail: "A monthly public transport card can cost less than repeated metered trips. Put the first R300 aside for transport before weekend spending.",
-      actionText: "SWITCH",
-      btnText: "Get MyCiTi card",
-    },
-    {
-      name: "Shop at Shoprite instead of Checkers",
-      category: "Groceries",
-      saving: 200,
-      detail: "Moving one weekly essentials shop to Shoprite or Boxer can lower your grocery spend without changing the basics you buy.",
-      actionText: "SWITCH",
-      btnText: "Find nearest Shoprite",
-    },
-  ],
-};
+function createInitialPlan(income: number): BudgetPlan {
+  const weeklyAmount = Math.round(income / 4.33);
+  const dailyLimit = Math.round(weeklyAmount / 7);
+  return {
+    weeklyAmount,
+    dailyLimit,
+    buffer: Math.round(weeklyAmount * 0.15),
+    obligations: [],
+    playbook: [],
+  };
+}
 
 const CATEGORY_ICONS: Record<string, string> = {
   Savings: "piggy-bank",
@@ -89,22 +59,21 @@ const CATEGORY_ICONS: Record<string, string> = {
   Banking: "bank-outline",
 };
 
-const WEEK_SPEND_RATIO = 0.42;
-const DAY_SPEND_RATIO = 0.38;
 const ACTION_LINKS = {
   transport: "https://www.myciti.org.za/en/myconnect-fares/get-your-myconnect-card/",
   groceries: "https://www.google.com/maps/search/?api=1&query=Shoprite%20near%20me",
 };
 
 export default function BudgetScreen() {
-  const [plan, setPlan] = useState<BudgetPlan>(DEFAULT_PLAN);
+  const { monthlyIncome } = useProfileStore();
+  const income = monthlyIncome > 0 ? monthlyIncome : DEFAULT_MONTHLY_INCOME;
+  const [plan, setPlan] = useState(() => createInitialPlan(income));
   const [generating, setGenerating] = useState(false);
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [editingPaymentIndex, setEditingPaymentIndex] = useState<number | null>(null);
   const [paymentName, setPaymentName] = useState("");
   const [paymentDue, setPaymentDue] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("");
-  const { monthlyIncome } = useProfileStore();
   const { leaks } = useLeaksStore();
   const { speak } = useVoice();
   const { colors } = useColorScheme();
@@ -153,11 +122,7 @@ export default function BudgetScreen() {
       } else {
         obligations[editingPaymentIndex] = payment;
       }
-      return {
-        ...current,
-        obligations,
-        obligationsTotal: obligations.reduce((sum, item) => sum + item.amount, 0),
-      };
+      return { ...current, obligations };
     });
     closePaymentModal();
   };
@@ -166,11 +131,7 @@ export default function BudgetScreen() {
     if (editingPaymentIndex === null) return;
     setPlan((current) => {
       const obligations = current.obligations.filter((_, index) => index !== editingPaymentIndex);
-      return {
-        ...current,
-        obligations,
-        obligationsTotal: obligations.reduce((sum, item) => sum + item.amount, 0),
-      };
+      return { ...current, obligations };
     });
     closePaymentModal();
   };
@@ -228,15 +189,9 @@ export default function BudgetScreen() {
         btnText: p.btnText ?? "Hear action",
       }));
       setPlan((current) => ({
-        weeklyAmount: data.weeklyAmount ?? current.weeklyAmount,
-        dailyLimit: data.dailyLimit ?? current.dailyLimit,
-        obligationsTotal: current.obligations.reduce((sum, item) => sum + item.amount, 0),
-        buffer: data.buffer ?? current.buffer,
-        billsPct: data.billsPct ?? current.billsPct,
-        bufferPct: data.bufferPct ?? current.bufferPct,
-        freePct: data.freePct ?? current.freePct,
-        riskLevel: data.riskLevel ?? current.riskLevel,
-        riskDescription: data.riskDescription ?? current.riskDescription,
+        weeklyAmount: data.weeklyAmount,
+        dailyLimit: data.dailyLimit,
+        buffer: data.buffer,
         obligations: current.obligations,
         playbook: mergedPlaybook.length ? mergedPlaybook : current.playbook,
       }));
@@ -260,12 +215,6 @@ export default function BudgetScreen() {
     year: "numeric",
   })}`;
   const totalSavings = plan.playbook.reduce((s, p) => s + (p.saving ?? 0), 0);
-  const weekSpent = Math.round(plan.weeklyAmount * WEEK_SPEND_RATIO);
-  const weekLeft = Math.max(0, plan.weeklyAmount - weekSpent);
-  const weekUsedPct = Math.min(100, Math.round((weekSpent / Math.max(plan.weeklyAmount, 1)) * 100));
-  const todaySpent = Math.round(plan.dailyLimit * DAY_SPEND_RATIO);
-  const todayLeft = Math.max(0, plan.dailyLimit - todaySpent);
-  const todayUsedPct = Math.min(100, Math.round((todaySpent / Math.max(plan.dailyLimit, 1)) * 100));
   const obligationsDue = plan.obligations.reduce((s, o) => s + o.amount, 0);
   const actionItems = [...plan.playbook].sort((a, b) => b.saving - a.saving).slice(0, 3);
 
@@ -300,7 +249,7 @@ export default function BudgetScreen() {
                 </AppText>
               </View>
               <AppText variant="bodySm" className="text-white/85">
-                Left to spend this week
+                Weekly budget
               </AppText>
             </View>
             <Button
@@ -309,7 +258,7 @@ export default function BudgetScreen() {
               className="h-9 w-9 min-h-0 rounded-full bg-white/15"
               onPress={() =>
                 speak(
-                  `You have R${weekLeft.toFixed(2)} left this week. You have spent R${weekSpent} from a weekly budget of R${plan.weeklyAmount}.`,
+                  `You have R${plan.weeklyAmount.toFixed(2)} available this week, with a daily limit of R${plan.dailyLimit}.`,
                 )
               }
             >
@@ -319,22 +268,16 @@ export default function BudgetScreen() {
 
           <View className="mb-3.5 flex-row items-baseline">
             <AppText className="text-[38px] font-bold text-white">
-              R{weekLeft.toFixed(2)}
+              R{plan.weeklyAmount.toFixed(2)}
             </AppText>
             <AppText variant="title" className="ml-1 text-lg text-white/75">
-              left
+              weekly
             </AppText>
           </View>
 
-          <View className="mb-2 h-2 overflow-hidden rounded bg-white/25">
-            <View className="progress-fill progress-fill-green h-full" style={{ width: `${weekUsedPct}%` }} />
-          </View>
           <View className="mb-4 flex-row justify-between">
             <AppText variant="caption" className="text-white/75">
-              R{weekSpent} spent
-            </AppText>
-            <AppText variant="caption" className="text-white/75">
-              R{plan.weeklyAmount} budget
+              Tap Update to refresh from your latest scan
             </AppText>
           </View>
 
@@ -367,15 +310,12 @@ export default function BudgetScreen() {
             <View className="flex-1">
               <AppText variant="title">Today</AppText>
               <AppText variant="bodySm" className="mt-0.5">
-                R{todaySpent} of R{plan.dailyLimit} used
+                Daily spending limit
               </AppText>
             </View>
             <AppText variant="label" className="text-green-600 dark:text-green-400">
-              R{todayLeft} left
+              R{plan.dailyLimit}
             </AppText>
-          </View>
-          <View className="mb-2.5 h-[7px] overflow-hidden rounded bg-muted dark:bg-white/10">
-            <View className="progress-fill progress-fill-purple h-full" style={{ width: `${todayUsedPct}%` }} />
           </View>
           <AppText variant="bodySm" className="leading-[19px]">
             Keep the buffer for taxi changes, medicine, airtime or surprise debit orders.

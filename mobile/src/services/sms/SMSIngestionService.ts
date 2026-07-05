@@ -93,7 +93,7 @@ function getSmsModule(): SmsNativeModule {
 
 // ─── Raw SMS fetch ────────────────────────────────────────────────────────────
 
-const SMS_DEBUG = true;
+const SMS_DEBUG = __DEV__;
 
 function smsLog(label: string, data?: unknown) {
   if (!SMS_DEBUG) return;
