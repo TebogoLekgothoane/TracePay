@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiClient } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { getCachedData, setCachedData, isCacheFresh } from "@/lib/data-cache";
 
 export default function UsersPage() {
@@ -12,10 +13,20 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [skip, setSkip] = useState(0);
   const limit = 50;
+  const { user, loading: authLoading } = useAuth();
+
+  const isAdmin = user?.role === "admin" || user?.role === "stakeholder";
 
   useEffect(() => {
+    // Wait for auth to resolve, then only fetch admin-only data when authorized.
+    if (authLoading) return;
+    if (!isAdmin) {
+      setLoading(false);
+      return;
+    }
     void loadUsers();
-  }, [skip]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skip, authLoading, isAdmin]);
 
   async function loadUsers(force = false) {
     // Check cache first if not forcing refresh (only cache first page)
@@ -47,8 +58,34 @@ export default function UsersPage() {
     }
   }
 
-  if (loading) {
+  if (loading || authLoading) {
     return <div className="p-8 text-primary font-medium">Loading Data Logs...</div>;
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="p-8">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold">Forensic Data Log</h1>
+          <p className="text-muted-foreground">Detailed history of platform-wide data ingestion and monitoring</p>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Admin-only view</CardTitle>
+            <CardDescription>
+              Your account doesn’t have permission to access platform-wide user logs.
+              Sign in with an <span className="font-medium">admin</span> or <span className="font-medium">stakeholder</span> account.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm text-muted-foreground">
+              If you’re running locally, you can create/promote an admin user in the backend database and then re-login.
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (

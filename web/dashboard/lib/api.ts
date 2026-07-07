@@ -1,7 +1,16 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8001";
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "http://127.0.0.1:8001";
+const API_VERSION_PREFIX = "/v1";
 
 export interface ApiError {
-  detail: string;
+  detail?: string;
+  error?: {
+    code: string;
+    message: string;
+    details?: unknown;
+  };
 }
 
 export class ApiClient {
@@ -16,6 +25,7 @@ export class ApiClient {
       finalBase = finalBase.replace("localhost", "127.0.0.1");
     }
     this.baseUrl = finalBase.endsWith("/") ? finalBase.slice(0, -1) : finalBase;
+    this.baseUrl = this.baseUrl.replace(/\/v\d+$/, "");
 
     if (typeof window !== "undefined") {
       this.token = localStorage.getItem("auth_token");
@@ -39,7 +49,10 @@ export class ApiClient {
     timeoutMs: number = 15000 // Make timeout configurable
   ): Promise<T> {
     // Normalize endpoint
-    const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+    const rawEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+    const cleanEndpoint = /^\/v\d+(\/|$)/.test(rawEndpoint)
+      ? rawEndpoint
+      : `${API_VERSION_PREFIX}${rawEndpoint}`;
     const url = `${this.baseUrl}${cleanEndpoint}`;
 
     // Create a unique key for this request (include timeout in key to allow different timeouts for same endpoint)
@@ -89,7 +102,7 @@ export class ApiClient {
             };
           }
           console.error("[API Error]", response.status, url, errorData);
-          throw new Error(errorData.detail || "API request failed");
+          throw new Error(errorData.error?.message || errorData.detail || "API request failed");
         }
 
         const data = await response.json();
@@ -106,7 +119,7 @@ export class ApiClient {
           throw new Error(
             `Failed to fetch ${url}\n` +
             `→ Is backend running at ${this.baseUrl}?\n` +
-            `→ Check NEXT_PUBLIC_API_URL in .env.local / Vercel\n` +
+            `→ Check NEXT_PUBLIC_API_URL or NEXT_PUBLIC_BACKEND_URL in .env.local / Vercel\n` +
             `→ CORS / network / firewall issue?`
           );
         }
@@ -161,6 +174,7 @@ export class ApiClient {
       email: string;
       role: string;
       created_at: string;
+      email_verified: boolean;
     }>("/auth/me");
   }
 
@@ -175,6 +189,42 @@ export class ApiClient {
     });
     this.setToken(response.access_token);
     return response;
+  }
+
+  async requestPasswordReset(email: string) {
+    return this.request<{
+      message: string;
+    }>("/auth/password-reset/request", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  async confirmPasswordReset(token: string, newPassword: string) {
+    return this.request<{
+      message: string;
+    }>("/auth/password-reset/confirm", {
+      method: "POST",
+      body: JSON.stringify({ token, new_password: newPassword }),
+    });
+  }
+
+  async requestEmailVerification(email: string) {
+    return this.request<{
+      message: string;
+    }>("/auth/email-verification/request", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  async confirmEmailVerification(token: string) {
+    return this.request<{
+      message: string;
+    }>("/auth/email-verification/confirm", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    });
   }
 
   // Analysis endpoints
@@ -249,6 +299,8 @@ export class ApiClient {
       consent_id: string;
       status: string;
       authorization_url: string | null;
+      provider_mode: string;
+      is_sandbox: boolean;
     }>("/open-banking/consent", {
       method: "POST",
       body: JSON.stringify({
@@ -271,6 +323,8 @@ export class ApiClient {
         account_id: string;
         status: string;
         consent_id: string | null;
+        provider_mode: string;
+        is_sandbox: boolean;
       }>;
     }>("/open-banking/accounts");
   }
@@ -278,12 +332,9 @@ export class ApiClient {
   /** Use for Open Banking–linked accounts; runs fetch + forensics. Do not use syncAccount for OB accounts. */
   async fetchOpenBankingTransactions(accountId: number) {
     return this.request<{
+      job_id: string;
       status: string;
       message: string;
-      account_id: number;
-      new_transactions: number;
-      total_monitored: number;
-      health_score: number | null;
     }>(`/open-banking/fetch-transactions?account_id=${encodeURIComponent(accountId)}`, {
       method: "POST",
     });
@@ -291,6 +342,19 @@ export class ApiClient {
 
   async getOpenBankingConsent(consentId: string) {
     return this.request<Record<string, unknown>>(`/open-banking/consent/${consentId}`);
+  }
+
+  async getJob(jobId: string) {
+    return this.request<{
+      job_id: string;
+      type: string;
+      status: "pending" | "running" | "succeeded" | "failed" | string;
+      result: Record<string, unknown> | null;
+      error: string | null;
+      created_at: string;
+      started_at: string | null;
+      finished_at: string | null;
+    }>(`/jobs/${encodeURIComponent(jobId)}`, {}, 10000);
   }
 
   // Admin endpoints
@@ -342,6 +406,29 @@ export class ApiClient {
     }, 30000); // 30s timeout for stats endpoints
   }
 
+  async getMLFindings() {
+    return this.request<{
+      top_leak_categories: Array<{
+        category: string;
+        count: number;
+        growth: string;
+      }>;
+      anomaly_distribution: {
+        high_risk: number;
+        medium_risk: number;
+        low_risk: number;
+      };
+      predicted_savings_next_month: number;
+    }>("/admin/stats/ml-findings", {}, 30000);
+  }
+
+  async getProviderHealth() {
+    return this.request<{
+      status: string;
+      checks: Record<string, { status: string; detail?: string }>;
+    }>("/health/providers", {}, 30000);
+  }
+
   async listUsers(skip: number = 0, limit: number = 50) {
     return this.request<{
       users: Array<{
@@ -376,8 +463,38 @@ export class ApiClient {
         inclusion_delta: number;
         retail_velocity: number;
         summary: string;
+        open_banking_verified: boolean;
       }>
     >(`/admin/forensic-feed?limit=${limit}`);
+  }
+
+  async exportAnalysisPdf(analysisId: string) {
+    const url = `${this.baseUrl}${API_VERSION_PREFIX}/admin/analysis/${encodeURIComponent(analysisId)}/export.pdf`;
+    const headers: Record<string, string> = {};
+    if (this.token) {
+      headers["Authorization"] = `Bearer ${this.token}`;
+    }
+
+    const response = await fetch(url, {
+      headers,
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to export PDF: HTTP ${response.status}`);
+    }
+    return response.blob();
+  }
+
+  async requestAnalysisFollowUp(analysisId: string, note: string = "") {
+    return this.request<{
+      status: string;
+      analysis_id: number;
+      message: string;
+    }>(`/admin/analysis/${encodeURIComponent(analysisId)}/follow-up`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+    });
   }
 
   async syncAllData() {

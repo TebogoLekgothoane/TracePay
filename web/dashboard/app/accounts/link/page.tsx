@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { ExternalLink, Loader2 } from "lucide-react";
 import Link from "next/link";
 
@@ -10,10 +9,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { apiClient } from "@/lib/api";
 
 export default function LinkAccountPage() {
-  const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [authUrl, setAuthUrl] = useState<string | null>(null);
   const [consentId, setConsentId] = useState<string | null>(null);
+  const [providerMode, setProviderMode] = useState<string | null>(null);
+  const [isSandbox, setIsSandbox] = useState<boolean | null>(null);
+  const [checkingConsent, setCheckingConsent] = useState(false);
+  const [consentStatus, setConsentStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleCreateConsent = async () => {
@@ -21,6 +23,9 @@ export default function LinkAccountPage() {
     setError(null);
     setAuthUrl(null);
     setConsentId(null);
+    setProviderMode(null);
+    setIsSandbox(null);
+    setConsentStatus(null);
     try {
       const res = await apiClient.createOpenBankingConsent({
         permissions: [
@@ -33,6 +38,8 @@ export default function LinkAccountPage() {
       });
       setConsentId(res.consent_id);
       setAuthUrl(res.authorization_url ?? null);
+      setProviderMode(res.provider_mode);
+      setIsSandbox(res.is_sandbox);
       if (res.authorization_url) {
         window.open(res.authorization_url, "_blank", "noopener,noreferrer");
       }
@@ -43,28 +50,56 @@ export default function LinkAccountPage() {
     }
   };
 
+  const handleCheckConsent = async () => {
+    if (!consentId) return;
+    setCheckingConsent(true);
+    setError(null);
+    try {
+      const response = await apiClient.getOpenBankingConsent(consentId);
+      const provider = response.provider as Record<string, unknown> | undefined;
+      const localStatus = typeof response.local_status === "string" ? response.local_status : null;
+      const providerStatus =
+        typeof provider?.Status === "string"
+          ? provider.Status
+          : typeof provider?.status === "string"
+            ? provider.status
+            : null;
+      setConsentStatus(localStatus || providerStatus || "Status returned");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to check consent status");
+    } finally {
+      setCheckingConsent(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Link account (Open Banking)</h1>
           <p className="text-muted-foreground">
-            Create a consent and authorise in the bank’s page, then sync from Accounts.
+            Create a consent and authorise in the bank page, then sync from Accounts.
           </p>
         </div>
         <Button variant="outline" asChild>
-          <Link href="/accounts">← Back to accounts</Link>
+          <Link href="/accounts">Back to accounts</Link>
         </Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Consent &amp; authorisation</CardTitle>
+          <CardTitle>Consent and authorisation</CardTitle>
           <CardDescription>
-            1. Create consent below. 2. Complete authorisation in the opened tab. 3. Return to Accounts and use Sync.
+            Create consent, complete authorisation, then check the consent status or return to Accounts to sync.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {isSandbox !== null && (
+            <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+              Open Banking {isSandbox ? "Sandbox" : "Production"} mode
+              {providerMode ? ` (${providerMode})` : ""}.
+            </p>
+          )}
           {error && (
             <p className="rounded-md bg-destructive/10 p-3 text-destructive text-sm">{error}</p>
           )}
@@ -83,14 +118,36 @@ export default function LinkAccountPage() {
                 <ExternalLink className="mr-2 h-4 w-4" />
                 Open authorisation page
               </Button>
-              <span className="text-muted-foreground text-xs">Complete the flow in the bank’s page.</span>
+              <span className="text-muted-foreground text-xs">Complete the flow in the bank page.</span>
+            </div>
+          )}
+          {consentId && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCheckConsent}
+                disabled={checkingConsent}
+              >
+                {checkingConsent ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Checking...
+                  </>
+                ) : (
+                  "Check consent status"
+                )}
+              </Button>
+              {consentStatus && (
+                <span className="text-xs text-muted-foreground">Status: {consentStatus}</span>
+              )}
             </div>
           )}
           <Button onClick={handleCreateConsent} disabled={creating}>
             {creating ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating consent…
+                Creating consent...
               </>
             ) : (
               "Create consent and open authorisation"

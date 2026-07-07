@@ -3,7 +3,7 @@
 ## Backend Implementation
 
 ### Database & Models
-- **SQLite for dev, PostgreSQL for production** (via `DATABASE_URL` env var)
+- **PostgreSQL via `DATABASE_URL`** (Supabase-compatible)
 - **SQLAlchemy models** in `app/models_db.py`:
   - `User` - User accounts with roles (user, admin, stakeholder)
   - `LinkedAccount` - Bank/MoMo account connections
@@ -120,7 +120,7 @@ New detectors added:
 Create a `.env` file in `web/backend/`:
 
 ```env
-DATABASE_URL=sqlite:///./tracepay.db
+DATABASE_URL=postgresql://postgres:<PASSWORD>@db.<PROJECT-REF>.supabase.co:5432/postgres?sslmode=require
 SECRET_KEY=your-secret-key-change-in-production-min-32-chars
 CORS_ORIGINS=http://localhost:3000,http://localhost:3001
 OPEN_BANKING_CLIENT_ID=

@@ -1,1 +1,15 @@
+<<<<<<< Updated upstream
 .cursor/mcp.json
+=======
+.env
+.env.*
+!.env.example
+!*env.example
+
+mobile/.env
+mobile/.env.*
+web/backend/.env
+web/backend/.env.*
+web/dashboard/.env
+web/dashboard/.env.*
+>>>>>>> Stashed changes

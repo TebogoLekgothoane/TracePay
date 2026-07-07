@@ -141,3 +141,20 @@ export function isCacheFresh(key: string, ttl: number = DEFAULT_CACHE_TTL): bool
   return age !== null && age < ttl;
 }
 
+/**
+ * When the entry exists in localStorage, return the stored timestamp (ms since epoch).
+ */
+export function getCachedTimestamp(key: string): number | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const cached = localStorage.getItem(`${CACHE_PREFIX}${key}`);
+    if (!cached) return null;
+
+    const parsed: CachedData<unknown> = JSON.parse(cached);
+    return typeof parsed.timestamp === "number" ? parsed.timestamp : null;
+  } catch {
+    return null;
+  }
+}
+

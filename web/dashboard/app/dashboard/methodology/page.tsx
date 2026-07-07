@@ -5,21 +5,32 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 
 export default function MethodologyPage() {
-    return (
-        <div className="p-8">
-            <div className="mb-8">
-                <div className="flex items-center gap-3 mb-2">
-                    <BookOpen className="h-8 w-8 text-primary" />
-                    <h1 className="text-3xl font-bold tracking-tight">Methodology Guide</h1>
-                </div>
-                <p className="text-muted-foreground">
-                    Understanding how TracePay's Forensic Engine identifies money leaks and financial patterns
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="bg-gradient-to-br from-primary via-primary/90 to-primary/80 text-primary-foreground">
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-sm shrink-0">
+                <BookOpen className="h-7 w-7" />
+              </div>
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Methodology guide</h1>
+                <p className="text-primary-foreground/80 mt-1 max-w-2xl text-sm md:text-base">
+                  How TracePay finds money leaks and patterns—data flow, detectors, and scores explained in plain language.
                 </p>
+              </div>
             </div>
+            <Badge className="w-fit bg-white/20 text-primary-foreground border-white/30 hover:bg-white/25">
+              Technical reference
+            </Badge>
+          </div>
+        </div>
+      </div>
 
-            <div className="space-y-6">
+      <div className="max-w-7xl mx-auto px-6 py-8 space-y-6 pb-12">
                 {/* Overview */}
-                <Card>
+                <Card className="border-0 shadow-lg">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Zap className="h-5 w-5 text-primary" />
@@ -36,15 +47,15 @@ export default function MethodologyPage() {
                             transactions to surface patterns that drain money without your awareness.
                         </p>
                         <div className="grid gap-4 md:grid-cols-3 mt-4">
-                            <div className="p-4 bg-secondary/50 rounded-lg">
+                            <div className="p-4 bg-secondary/50 rounded-xl border border-border/60">
                                 <p className="text-xs font-bold uppercase text-muted-foreground mb-1">Data Sources</p>
                                 <p className="text-sm">Open Banking APIs, MNO Wallets</p>
                             </div>
-                            <div className="p-4 bg-secondary/50 rounded-lg">
+                            <div className="p-4 bg-secondary/50 rounded-xl border border-border/60">
                                 <p className="text-xs font-bold uppercase text-muted-foreground mb-1">Processing</p>
                                 <p className="text-sm">Pandas-based pattern detection</p>
                             </div>
-                            <div className="p-4 bg-secondary/50 rounded-lg">
+                            <div className="p-4 bg-secondary/50 rounded-xl border border-border/60">
                                 <p className="text-xs font-bold uppercase text-muted-foreground mb-1">Output</p>
                                 <p className="text-sm">Plain-language leak reports</p>
                             </div>
@@ -53,7 +64,7 @@ export default function MethodologyPage() {
                 </Card>
 
                 {/* Data Ingestion Pipeline */}
-                <Card>
+                <Card className="border-0 shadow-lg">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Database className="h-5 w-5 text-primary" />
@@ -118,7 +129,7 @@ export default function MethodologyPage() {
                 </Card>
 
                 {/* Detection Algorithms */}
-                <Card>
+                <Card className="border-0 shadow-lg">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Search className="h-5 w-5 text-primary" />
@@ -130,7 +141,7 @@ export default function MethodologyPage() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="space-y-4">
-                            <div className="p-4 border rounded-lg">
+                            <div className="p-4 border border-border/60 rounded-xl bg-card/30">
                                 <div className="flex items-start justify-between mb-2">
                                     <div>
                                         <h3 className="text-sm font-bold">Airtime Drains</h3>
@@ -152,7 +163,7 @@ export default function MethodologyPage() {
                                 </div>
                             </div>
 
-                            <div className="p-4 border rounded-lg">
+                            <div className="p-4 border border-border/60 rounded-xl bg-card/30">
                                 <div className="flex items-start justify-between mb-2">
                                     <div>
                                         <h3 className="text-sm font-bold">Debit Orders</h3>
@@ -174,7 +185,7 @@ export default function MethodologyPage() {
                                 </div>
                             </div>
 
-                            <div className="p-4 border rounded-lg">
+                            <div className="p-4 border border-border/60 rounded-xl bg-card/30">
                                 <div className="flex items-start justify-between mb-2">
                                     <div>
                                         <h3 className="text-sm font-bold">Subscription Traps</h3>
@@ -195,7 +206,7 @@ export default function MethodologyPage() {
                                 </div>
                             </div>
 
-                            <div className="p-4 border rounded-lg">
+                            <div className="p-4 border border-border/60 rounded-xl bg-card/30">
                                 <div className="flex items-start justify-between mb-2">
                                     <div>
                                         <h3 className="text-sm font-bold">VAS Charges</h3>
@@ -216,7 +227,7 @@ export default function MethodologyPage() {
                                 </div>
                             </div>
 
-                            <div className="p-4 border rounded-lg">
+                            <div className="p-4 border border-border/60 rounded-xl bg-card/30">
                                 <div className="flex items-start justify-between mb-2">
                                     <div>
                                         <h3 className="text-sm font-bold">Informal Loan Ratios</h3>
@@ -238,7 +249,7 @@ export default function MethodologyPage() {
                                 </div>
                             </div>
 
-                            <div className="p-4 border rounded-lg">
+                            <div className="p-4 border border-border/60 rounded-xl bg-card/30">
                                 <div className="flex items-start justify-between mb-2">
                                     <div>
                                         <h3 className="text-sm font-bold">Mailbox Effect</h3>
@@ -260,7 +271,7 @@ export default function MethodologyPage() {
                                 </div>
                             </div>
 
-                            <div className="p-4 border rounded-lg">
+                            <div className="p-4 border border-border/60 rounded-xl bg-card/30">
                                 <div className="flex items-start justify-between mb-2">
                                     <div>
                                         <h3 className="text-sm font-bold">Weekend Spending</h3>
@@ -285,7 +296,7 @@ export default function MethodologyPage() {
                 </Card>
 
                 {/* Health Score Calculation */}
-                <Card>
+                <Card className="border-0 shadow-lg">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <TrendingUp className="h-5 w-5 text-primary" />
@@ -331,7 +342,7 @@ export default function MethodologyPage() {
                 </Card>
 
                 {/* Regional Trends */}
-                <Card>
+                <Card className="border-0 shadow-lg">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <BarChart3 className="h-5 w-5 text-primary" />
@@ -382,7 +393,7 @@ export default function MethodologyPage() {
                 </Card>
 
                 {/* Machine Learning */}
-                <Card>
+                <Card className="border-0 shadow-lg">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Brain className="h-5 w-5 text-primary" />
@@ -398,14 +409,14 @@ export default function MethodologyPage() {
                             that may not be captured by standard detectors.
                         </p>
                         <div className="space-y-2 text-xs">
-                            <div className="p-3 bg-secondary/50 rounded">
+                            <div className="p-3 bg-secondary/50 rounded-xl border border-border/60">
                                 <p className="font-semibold mb-1">Anomaly Detection</p>
                                 <p className="text-muted-foreground">
                                     ML models analyze transaction sequences to identify unusual spending patterns, unexpected
                                     fee structures, or behavioral changes that may indicate financial stress.
                                 </p>
                             </div>
-                            <div className="p-3 bg-secondary/50 rounded">
+                            <div className="p-3 bg-secondary/50 rounded-xl border border-border/60">
                                 <p className="font-semibold mb-1">Explainability</p>
                                 <p className="text-muted-foreground">
                                     All ML findings are explained in plain language, with links back to the underlying transactions
@@ -417,7 +428,7 @@ export default function MethodologyPage() {
                 </Card>
 
                 {/* Transparency */}
-                <Card className="border-primary/20 bg-primary/5">
+                <Card className="border-0 shadow-lg border-primary/20 bg-primary/5">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Shield className="h-5 w-5 text-primary" />
@@ -438,8 +449,8 @@ export default function MethodologyPage() {
                         </ul>
                     </CardContent>
                 </Card>
-            </div>
-        </div>
-    );
+      </div>
+    </div>
+  );
 }
 

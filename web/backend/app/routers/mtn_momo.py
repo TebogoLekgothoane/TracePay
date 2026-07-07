@@ -3,11 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
+from ..audit import add_audit_event
 from ..database import get_db
 from ..models_db import LinkedAccount, User
 from ..mtn_momo_client import MTNMoMoClient
@@ -18,8 +19,10 @@ momo_client = MTNMoMoClient()
 
 
 class LinkMoMoRequest(BaseModel):
-    phone_number: str
-    pin: str  # In production, this would be handled securely
+    model_config = ConfigDict(extra="forbid")
+
+    phone_number: str = Field(pattern=r"^\+?[0-9]{8,15}$")
+    pin: str = Field(min_length=4, max_length=12)  # In production, this would be handled securely
 
 
 class LinkMoMoResponse(BaseModel):
@@ -32,6 +35,7 @@ class LinkMoMoResponse(BaseModel):
 @router.post("/link", response_model=LinkMoMoResponse, status_code=status.HTTP_201_CREATED)
 async def link_momo_account(
     req: LinkMoMoRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> LinkMoMoResponse:
@@ -54,9 +58,22 @@ async def link_momo_account(
         bank_name="MTN MoMo",
         account_id=link_result["account_id"],
         status="active",
-        metadata={"phone_number": req.phone_number, "linked_at": link_result["linked_at"]},
+        account_metadata={"phone_number": req.phone_number, "linked_at": link_result["linked_at"]},
     )
     db.add(account)
+    db.flush()
+    add_audit_event(
+        db,
+        "consent_changed",
+        actor=current_user,
+        target_user=current_user,
+        metadata={
+            "action": "mtn_momo_linked",
+            "linked_account_id": account.id,
+            "phone_number": req.phone_number,
+        },
+        request=request,
+    )
     db.commit()
     db.refresh(account)
 
@@ -70,7 +87,7 @@ async def link_momo_account(
 
 @router.get("/transactions")
 async def get_momo_transactions(
-    account_id: int,
+    account_id: int = Query(gt=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
@@ -94,7 +111,8 @@ async def get_momo_transactions(
 
 @router.post("/sync")
 async def sync_momo(
-    account_id: int,
+    request: Request,
+    account_id: int = Query(gt=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
@@ -118,6 +136,14 @@ async def sync_momo(
 
     # Update last_synced_at
     account.last_synced_at = datetime.utcnow()
+    add_audit_event(
+        db,
+        "consent_changed",
+        actor=current_user,
+        target_user=current_user,
+        metadata={"action": "mtn_momo_sync", "linked_account_id": account.id},
+        request=request,
+    )
     db.commit()
 
     return {

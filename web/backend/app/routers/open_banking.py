@@ -1,34 +1,77 @@
 from __future__ import annotations
 
-import os
 from datetime import datetime, timedelta
 from typing import Any, Dict
+from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 
 import httpx
-from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
+from ..audit import add_audit_event
+from ..background_jobs import (
+    JOB_OPEN_BANKING_FETCH,
+    JobAcceptedResponse,
+    enqueue_background_job,
+)
 from ..database import get_db
-from ..forensic_engine import ForensicEngine
-from ..models_db import AnalysisResult, LinkedAccount, Transaction, User
+from ..models_db import LinkedAccount, User
 from ..open_banking_client import OpenBankingSandboxClient, SandboxConfig
-
-load_dotenv()
+from ..settings import settings
 
 router = APIRouter(prefix="/open-banking", tags=["open banking"])
 
-client_id = os.getenv("OPEN_BANKING_CLIENT_ID", "")
-client_secret = os.getenv("OPEN_BANKING_CLIENT_SECRET", "")
 
-sandbox_config = SandboxConfig(
-    client_id=client_id,
-    client_secret=client_secret,
-)
-ob_client = OpenBankingSandboxClient(sandbox_config)
-forensic_engine = ForensicEngine()
+def _open_banking_mode() -> str:
+    return "production" if settings.open_banking_mode == "production" else "sandbox"
+
+
+def _is_sandbox() -> bool:
+    return _open_banking_mode() != "production"
+
+
+def _open_banking_client() -> OpenBankingSandboxClient:
+    return OpenBankingSandboxClient(
+        SandboxConfig(
+            base_url=settings.open_banking_base_url,
+            client_id=settings.open_banking_client_id,
+            client_secret=settings.open_banking_client_secret,
+        )
+    )
+
+
+def _open_banking_not_configured_detail() -> str:
+    mode = _open_banking_mode()
+    return (
+        f"Open Banking {mode} mode is not configured. Set OPEN_BANKING_MODE, "
+        "OPEN_BANKING_BASE_URL, OPEN_BANKING_CLIENT_ID, and OPEN_BANKING_CLIENT_SECRET."
+    )
+
+
+def _callback_url(consent_id: str) -> str | None:
+    callback_base_url = settings.backend_public_url or settings.app_public_url
+    if not callback_base_url:
+        return None
+    return (
+        f"{callback_base_url.rstrip('/')}/v1/open-banking/callback"
+        f"?consentId={consent_id}"
+    )
+
+
+def _with_callback_params(auth_url: str, consent_id: str) -> str:
+    callback_url = _callback_url(consent_id)
+    if not callback_url:
+        return auth_url
+    parts = urlsplit(auth_url)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query.setdefault("redirect_uri", callback_url)
+    query.setdefault("returnUrl", callback_url)
+    return urlunsplit(
+        (parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment)
+    )
 
 
 def _sandbox_error_detail(exc: Exception) -> str:
@@ -40,7 +83,9 @@ def _sandbox_error_detail(exc: Exception) -> str:
                 return f"Sandbox returned {exc.response.status_code}: {body[:500]}"
         except Exception:
             pass
-        return f"Sandbox returned {exc.response.status_code}: {exc.response.reason_phrase}"
+        return (
+            f"Sandbox returned {exc.response.status_code}: {exc.response.reason_phrase}"
+        )
     return str(exc)
 
 
@@ -70,43 +115,78 @@ def _extract_account_ids(accounts_response: Dict[str, Any]) -> list[str]:
 
 
 class ConsentRequest(BaseModel):
-    permissions: list[str] = [
-        "ReadAccountsBasic",
-        "ReadTransactionsBasic",
-        "ReadTransactionsCredits",
-        "ReadTransactionsDebits",
-    ]
-    expiration_days: int = 90
+    model_config = ConfigDict(extra="forbid")
+
+    permissions: list[str] = Field(
+        default_factory=lambda: [
+            "ReadAccountsBasic",
+            "ReadTransactionsBasic",
+            "ReadTransactionsCredits",
+            "ReadTransactionsDebits",
+        ],
+        min_length=1,
+        max_length=20,
+    )
+    expiration_days: int = Field(default=90, ge=1, le=365)
+
+    @field_validator("permissions")
+    @classmethod
+    def validate_permissions(cls, permissions: list[str]) -> list[str]:
+        allowed_permissions = {
+            "ReadAccountsBasic",
+            "ReadAccountsDetail",
+            "ReadBalances",
+            "ReadTransactionsBasic",
+            "ReadTransactionsCredits",
+            "ReadTransactionsDebits",
+            "ReadTransactionsDetail",
+        }
+        invalid_permissions = [
+            permission
+            for permission in permissions
+            if permission not in allowed_permissions
+        ]
+        if invalid_permissions:
+            raise ValueError(
+                f"Unsupported permissions: {', '.join(invalid_permissions)}"
+            )
+        return permissions
 
 
 class ConsentResponse(BaseModel):
     consent_id: str
     status: str
     authorization_url: str | None = None
+    provider_mode: str
+    is_sandbox: bool
 
 
 @router.post("/consent", response_model=ConsentResponse)
 async def create_consent(
     req: ConsentRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ConsentResponse:
     """Create Open Banking consent for account access"""
-    if not (client_id and client_secret):
+    if not (settings.open_banking_client_id and settings.open_banking_client_secret):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Open Banking sandbox not configured. Add OPEN_BANKING_CLIENT_ID and OPEN_BANKING_CLIENT_SECRET to backend .env (see OPEN_BANKING.md).",
+            detail=_open_banking_not_configured_detail(),
         )
+    ob_client = _open_banking_client()
     try:
         token_response = await ob_client.token_client_credentials()
         client_token = token_response.get("access_token")
         if not client_token:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Sandbox did not return an access token.",
+                detail=f"Open Banking {_open_banking_mode()} provider did not return an access token.",
             )
 
-        expiration = (datetime.utcnow() + timedelta(days=req.expiration_days)).isoformat()
+        expiration = (
+            datetime.utcnow() + timedelta(days=req.expiration_days)
+        ).isoformat()
 
         consent_response = await ob_client.create_consent(
             client_token=client_token,
@@ -114,7 +194,7 @@ async def create_consent(
             expirationDateTime=expiration,
         )
 
-        # Sandbox may return ConsentId under Data or at top level
+        # Providers may return ConsentId under Data or at top level.
         data = consent_response.get("Data") or {}
         consent_id = (
             data.get("ConsentId")
@@ -126,7 +206,7 @@ async def create_consent(
         if not consent_id:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Sandbox did not return a consent ID. Response keys: "
+                detail=f"Open Banking {_open_banking_mode()} provider did not return a consent ID. Response keys: "
                 + ", ".join(_safe_keys(consent_response)),
             )
 
@@ -137,8 +217,10 @@ async def create_consent(
             or consent_response.get("authorisation_url")
         )
         if not auth_url and consent_id:
-            base = getattr(ob_client.cfg, "base_url", "https://open-banking-ais.onrender.com")
+            base = ob_client.cfg.base_url
             auth_url = f"{base.rstrip('/')}/psu/authorize/ui?consentId={consent_id}"
+        if auth_url:
+            auth_url = _with_callback_params(auth_url, consent_id)
 
         account = LinkedAccount(
             user_id=current_user.id,
@@ -146,15 +228,37 @@ async def create_consent(
             account_id=f"ob_{consent_id}",
             open_banking_consent_id=consent_id,
             status="pending",
-            account_metadata={"permissions": req.permissions, "expiration": expiration},
+            account_metadata={
+                "permissions": req.permissions,
+                "expiration": expiration,
+                "provider_mode": _open_banking_mode(),
+                "is_sandbox": _is_sandbox(),
+            },
         )
         db.add(account)
+        db.flush()
+        add_audit_event(
+            db,
+            "consent_changed",
+            actor=current_user,
+            target_user=current_user,
+            metadata={
+                "action": "open_banking_consent_created",
+                "linked_account_id": account.id,
+                "consent_id": consent_id,
+                "permissions": req.permissions,
+                "provider_mode": _open_banking_mode(),
+            },
+            request=request,
+        )
         db.commit()
 
         return ConsentResponse(
             consent_id=consent_id,
             status="pending",
             authorization_url=auth_url,
+            provider_mode=_open_banking_mode(),
+            is_sandbox=_is_sandbox(),
         )
     except HTTPException:
         raise
@@ -166,9 +270,47 @@ async def create_consent(
         )
 
 
+@router.get("/callback")
+async def consent_callback(
+    consent_id: str = Query(alias="consentId", min_length=1, max_length=255),
+    status_value: str | None = Query(default=None, alias="status"),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    """Handle the consent return URL and mark the linked account as authorised when applicable."""
+    account = (
+        db.query(LinkedAccount)
+        .filter(LinkedAccount.open_banking_consent_id == consent_id)
+        .first()
+    )
+    outcome = "received"
+    if account:
+        normalized_status = (status_value or "").lower()
+        if normalized_status in {"authorised", "authorized", "active", "accepted"}:
+            account.status = "active"
+            outcome = "authorised"
+        elif normalized_status in {"rejected", "revoked", "failed", "denied"}:
+            account.status = "failed"
+            outcome = normalized_status
+        else:
+            account.status = "pending"
+        metadata = dict(account.account_metadata or {})
+        metadata["last_callback_status"] = status_value or "not_provided"
+        metadata["last_callback_at"] = datetime.utcnow().isoformat()
+        account.account_metadata = metadata
+        db.commit()
+
+    app_url = settings.app_public_url.rstrip("/") if settings.app_public_url else ""
+    redirect_url = (
+        f"{app_url}/accounts?open_banking_consent={consent_id}&status={outcome}"
+        if app_url
+        else f"/accounts?open_banking_consent={consent_id}&status={outcome}"
+    )
+    return RedirectResponse(redirect_url)
+
+
 @router.get("/consent/{consent_id}")
 async def get_consent(
-    consent_id: str,
+    consent_id: str = Path(min_length=1, max_length=255),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
@@ -176,156 +318,91 @@ async def get_consent(
     # Verify consent belongs to user
     account = (
         db.query(LinkedAccount)
-        .filter(LinkedAccount.open_banking_consent_id == consent_id, LinkedAccount.user_id == current_user.id)
+        .filter(
+            LinkedAccount.open_banking_consent_id == consent_id,
+            LinkedAccount.user_id == current_user.id,
+        )
         .first()
     )
     if not account:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Consent not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Consent not found"
+        )
 
     try:
+        ob_client = _open_banking_client()
         token_response = await ob_client.token_client_credentials()
         client_token = token_response.get("access_token")
-        consent_data = await ob_client.get_consent(client_token=client_token, consent_id=consent_id)
-        return consent_data
+        consent_data = await ob_client.get_consent(
+            client_token=client_token, consent_id=consent_id
+        )
+        return {
+            "provider_mode": _open_banking_mode(),
+            "is_sandbox": _is_sandbox(),
+            "local_status": account.status,
+            "provider": consent_data,
+        }
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get consent: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get consent: {str(e)}",
+        )
 
 
-@router.post("/fetch-transactions")
+@router.post(
+    "/fetch-transactions",
+    response_model=JobAcceptedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def fetch_transactions(
-    account_id: int,
+    request: Request,
+    account_id: int = Query(gt=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> Dict[str, Any]:
-    """Fetch transactions from Open Banking API and run forensics"""
+) -> JobAcceptedResponse:
+    """Queue Open Banking transaction sync and forensic analysis."""
     account = (
         db.query(LinkedAccount)
-        .filter(LinkedAccount.id == account_id, LinkedAccount.user_id == current_user.id)
+        .filter(
+            LinkedAccount.id == account_id, LinkedAccount.user_id == current_user.id
+        )
         .first()
     )
     if not account:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Account not found"
+        )
 
     if not account.open_banking_consent_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Account not linked via Open Banking")
-
-    try:
-        # 1. Get data access token (scope needed for /accounts and /accounts/.../transactions)
-        token_response = await ob_client.token_client_credentials(
-            consent_id=account.open_banking_consent_id,
-            scope="accounts.read transactions.read",
-        )
-        access_token = token_response.get("access_token")
-        if not access_token:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Sandbox did not return a data access token. Ensure consent is Authorised.",
-            )
-
-        # 2. List authorised accounts for this consent (acc-001, acc-002, etc.)
-        accounts_response = await ob_client.list_accounts(access_token=access_token)
-        bank_account_ids = _extract_account_ids(accounts_response)
-        if not bank_account_ids:
-            return {
-                "status": "success",
-                "message": "No authorised accounts for this consent. Approve the consent and select accounts, then sync again.",
-                "account_id": account_id,
-                "new_transactions": 0,
-                "total_monitored": 0,
-                "health_score": None,
-            }
-
-        # 3. Fetch transactions from each authorised account
-        raw_txs: list = []
-        for bank_account_id in bank_account_ids:
-            try:
-                tx_response = await ob_client.list_transactions(
-                    access_token=access_token, account_id=bank_account_id
-                )
-                raw_txs.extend(tx_response.get("Data", {}).get("Transaction", []))
-            except Exception:
-                continue
-        
-        # 3. Map and save transactions to DB
-        new_tx_count = 0
-        tx_dicts_for_analysis = []
-        
-        for rt in raw_txs:
-            ext_id = rt.get("TransactionId")
-            if not ext_id: continue
-            
-            # Deduplicate
-            existing = db.query(Transaction).filter(Transaction.transaction_id == ext_id).first()
-            if not existing:
-                amount_data = rt.get("Amount", {})
-                
-                # Create DB model
-                tx = Transaction(
-                    user_id=current_user.id,
-                    account_id=account.id,
-                    transaction_id=ext_id,
-                    timestamp=datetime.fromisoformat(rt.get("BookingDateTime").replace("Z", "+00:00")),
-                    amount=float(amount_data.get("Amount", 0)),
-                    currency=amount_data.get("Currency", "ZAR"),
-                    description=rt.get("ProprietaryBankTransactionCode", {}).get("Description", "Bank Transaction"),
-                    merchant=rt.get("MerchantDetails", {}).get("MerchantName"),
-                    transaction_data=rt,
-                    direction="debit" if float(amount_data.get("Amount", 0)) < 0 else "credit"
-                )
-                db.add(tx)
-                new_tx_count += 1
-            
-            # Add to list for forensic analysis
-            tx_dicts_for_analysis.append({
-                "id": ext_id,
-                "timestamp": rt.get("BookingDateTime"),
-                "amount": float(rt.get("Amount", {}).get("Amount", 0)),
-                "description": rt.get("ProprietaryBankTransactionCode", {}).get("Description", ""),
-                "merchant": rt.get("MerchantDetails", {}).get("MerchantName", ""),
-                "direction": "debit" if float(rt.get("Amount", {}).get("Amount", 0)) < 0 else "credit"
-            })
-
-        db.commit()
-        
-        # 4. Run Forensic Analysis
-        if tx_dicts_for_analysis:
-            analysis = forensic_engine.analyze(tx_dicts_for_analysis)
-            
-            # Save Analysis Result
-            result = AnalysisResult(
-                user_id=current_user.id,
-                financial_health_score=analysis["financial_health_score"],
-                health_band=analysis["health_band"],
-                money_leaks=analysis["money_leaks"],
-                summary_plain_language=analysis["summary_plain_language"],
-                transaction_count=len(tx_dicts_for_analysis)
-            )
-            db.add(result)
-            db.commit()
-
-        # Update last synced
-        account.last_synced_at = datetime.utcnow()
-        account.status = "active"
-        db.commit()
-
-        return {
-            "status": "success",
-            "message": f"Successfully ingested {new_tx_count} new transactions and updated forensics.",
-            "account_id": account_id,
-            "new_transactions": new_tx_count,
-            "total_monitored": len(tx_dicts_for_analysis),
-            "health_score": analysis["financial_health_score"] if tx_dicts_for_analysis else None
-        }
-    except HTTPException:
-        db.rollback()
-        raise
-    except Exception as e:
-        db.rollback()
-        detail = _sandbox_error_detail(e)
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Failed to fetch transactions: {detail}",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account not linked via Open Banking",
         )
+
+    job = enqueue_background_job(
+        db,
+        JOB_OPEN_BANKING_FETCH,
+        current_user.id,
+        {"account_id": account_id},
+    )
+    add_audit_event(
+        db,
+        "consent_changed",
+        actor=current_user,
+        target_user=current_user,
+        metadata={
+            "action": "open_banking_sync_queued",
+            "linked_account_id": account.id,
+            "job_id": job.job_id,
+        },
+        request=request,
+    )
+    db.commit()
+    return JobAcceptedResponse(
+        job_id=job.job_id,
+        status=job.status,
+        message=f"Open Banking {_open_banking_mode()} sync queued. Poll /v1/jobs/{job_id} for status.",
+    )
 
 
 @router.get("/accounts")
@@ -336,7 +413,10 @@ async def list_open_banking_accounts(
     """List accounts from Open Banking"""
     accounts = (
         db.query(LinkedAccount)
-        .filter(LinkedAccount.user_id == current_user.id, LinkedAccount.open_banking_consent_id.isnot(None))
+        .filter(
+            LinkedAccount.user_id == current_user.id,
+            LinkedAccount.open_banking_consent_id.isnot(None),
+        )
         .all()
     )
 
@@ -348,8 +428,9 @@ async def list_open_banking_accounts(
                 "account_id": acc.account_id,
                 "status": acc.status,
                 "consent_id": acc.open_banking_consent_id,
+                "provider_mode": (acc.account_metadata or {}).get("provider_mode", _open_banking_mode()),
+                "is_sandbox": bool((acc.account_metadata or {}).get("is_sandbox", _is_sandbox())),
             }
             for acc in accounts
         ]
     }
-
