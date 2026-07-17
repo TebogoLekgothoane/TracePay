@@ -1,0 +1,36 @@
+---
+description: Use Supabase MCP for all database work in TracePay
+alwaysApply: true
+---
+
+# Supabase database via MCP
+
+For **any** TracePay task involving the Supabase/Postgres database, use the **Supabase MCP server** (`project-0-TracePay-supabase`), not manual SQL Editor steps or shell-only guesses.
+
+## When to use MCP
+
+- Creating or altering tables, columns, indexes, triggers, functions
+- Applying migrations and RLS policies
+- Inspecting schema (`list_tables`, `list_migrations`)
+- Running DDL (`apply_migration`) or ad-hoc queries (`execute_sql`)
+- Debugging auth/data issues (`get_logs`, `get_advisors`)
+
+## Preferred tools
+
+| Task | MCP tool |
+|------|----------|
+| DDL / schema changes | `apply_migration` |
+| Read-only or data queries | `execute_sql` |
+| Inspect schema | `list_tables`, `list_migrations` |
+| Client config help | `get_project_url`, `get_publishable_keys` |
+
+## Project context
+
+- MCP config: `.cursor/mcp.json` (project `qbosrqpfcenylivvhzgl`)
+- SQL source files live in `supabase/` — after editing a `.sql` file, apply it via MCP `apply_migration`, not by telling the user to paste into the dashboard unless MCP is unavailable
+- Mobile auth recovery email uses `public.profiles` (see `supabase/mobile-profiles.sql`)
+
+## Do not
+
+- Ask the user to run schema SQL manually when Supabase MCP is connected
+- Use `execute_sql` for DDL when `apply_migration` is available

@@ -1,0 +1,31 @@
+---
+description: Security rules — validate input, protect secrets, handle failures
+alwaysApply: true
+---
+
+# Security
+
+Assume all user input is malicious.
+
+Always:
+
+- sanitize input
+- validate input
+- escape output when required
+- validate server responses
+- handle network failures
+- use secure storage for sensitive data
+- never trust client-side validation
+- never expose secrets
+- never hardcode API keys
+- never hardcode tokens
+- never log sensitive information
+- implement request timeout
+- implement retry with backoff where appropriate
+- protect against duplicate submissions
+- rate-limit expensive actions
+- debounce search requests
+- throttle repeated actions
+- prevent replay actions
+- prevent spam taps
+- never expose stack traces to users

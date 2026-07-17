@@ -1,0 +1,32 @@
+---
+description: Code quality standards — readable, maintainable, minimal
+alwaysApply: true
+---
+
+# Code Quality
+
+Never write code that "just works."
+
+Write code that is:
+
+- readable
+- maintainable
+- testable
+- minimal
+- scalable
+
+Avoid:
+
+- nested if statements
+- giant components
+- giant functions
+- magic numbers
+- magic strings
+- duplicated code
+- unnecessary comments
+
+Functions should do one thing.
+
+Components should do one thing.
+
+Prefer composition over complexity.

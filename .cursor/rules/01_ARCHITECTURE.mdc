@@ -1,0 +1,32 @@
+---
+description: Architecture rules — no duplication, single responsibility
+alwaysApply: true
+---
+
+# Architecture
+
+Never duplicate logic.
+
+Never duplicate state.
+
+Never duplicate API calls.
+
+Never duplicate validation.
+
+Never duplicate constants.
+
+If similar functionality already exists:
+
+Reuse it.
+
+If multiple screens need it:
+
+Extract it.
+
+Every component should have a single responsibility.
+
+Every hook should have one purpose.
+
+Business logic does not belong inside UI components.
+
+Move reusable logic into hooks or utilities.

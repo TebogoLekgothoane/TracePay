@@ -1,0 +1,33 @@
+---
+description: UI standards — no layout shift, skeletons, accessibility, dark mode
+globs: mobile/**/*.{tsx,ts,jsx,js}
+alwaysApply: false
+---
+
+# UI
+
+The UI must never jump.
+
+Prevent layout shifts.
+
+Skeletons must match the final layout exactly.
+
+Loading states should mirror real content.
+
+Buttons should disable while submitting.
+
+Prevent double taps.
+
+Show meaningful empty states.
+
+Show meaningful error states.
+
+Animations should be subtle.
+
+Accessibility is required.
+
+Support dark mode.
+
+Respect safe areas.
+
+Keep interactions under 100ms whenever possible.

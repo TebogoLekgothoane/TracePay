@@ -1,0 +1,26 @@
+---
+description: API request standards — loading, errors, cancellation, caching
+alwaysApply: true
+---
+
+# API
+
+Every API request must:
+
+- handle loading
+- handle errors
+- handle timeout
+- handle retries
+- handle cancellation
+- prevent duplicate requests
+- prevent race conditions
+- cache where appropriate
+- invalidate cache correctly
+
+Never fetch the same data twice unnecessarily.
+
+Use optimistic updates only when appropriate.
+
+Validate every API response.
+
+Never assume response shape.
