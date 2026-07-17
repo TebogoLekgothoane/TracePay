@@ -3,11 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
+from ..audit import add_audit_event
 from ..database import get_db
 from ..models_db import LinkedAccount, User
 from ..open_banking_client import OpenBankingSandboxClient, SandboxConfig
@@ -16,10 +17,12 @@ router = APIRouter(prefix="/accounts", tags=["accounts"])
 
 
 class LinkAccountRequest(BaseModel):
-    bank_name: str
-    account_id: Optional[str] = None
-    open_banking_consent_id: Optional[str] = None
-    metadata: Dict[str, Any] = {}
+    model_config = ConfigDict(extra="forbid")
+
+    bank_name: str = Field(min_length=1, max_length=100)
+    account_id: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    open_banking_consent_id: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class AccountResponse(BaseModel):
@@ -36,7 +39,12 @@ class AccountResponse(BaseModel):
 
 
 @router.post("/link", response_model=AccountResponse, status_code=status.HTTP_201_CREATED)
-def link_account(req: LinkAccountRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> AccountResponse:
+def link_account(
+    req: LinkAccountRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AccountResponse:
     """Link a new bank account"""
     # Check if account already linked
     existing = db.query(LinkedAccount).filter(
@@ -56,6 +64,20 @@ def link_account(req: LinkAccountRequest, current_user: User = Depends(get_curre
         account_metadata=req.metadata,
     )
     db.add(account)
+    db.flush()
+    add_audit_event(
+        db,
+        "consent_changed",
+        actor=current_user,
+        target_user=current_user,
+        metadata={
+            "action": "account_linked",
+            "linked_account_id": account.id,
+            "bank_name": account.bank_name,
+            "has_open_banking_consent": bool(account.open_banking_consent_id),
+        },
+        request=request,
+    )
     db.commit()
     db.refresh(account)
 
@@ -89,19 +111,41 @@ def list_accounts(current_user: User = Depends(get_current_user), db: Session = 
 
 
 @router.delete("/{account_id}")
-def unlink_account(account_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> Dict[str, str]:
+def unlink_account(
+    request: Request,
+    account_id: int = Path(gt=0),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, str]:
     """Unlink an account"""
     account = db.query(LinkedAccount).filter(LinkedAccount.id == account_id, LinkedAccount.user_id == current_user.id).first()
     if not account:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
 
+    add_audit_event(
+        db,
+        "consent_changed",
+        actor=current_user,
+        target_user=current_user,
+        metadata={
+            "action": "account_unlinked",
+            "linked_account_id": account.id,
+            "bank_name": account.bank_name,
+            "had_open_banking_consent": bool(account.open_banking_consent_id),
+        },
+        request=request,
+    )
     db.delete(account)
     db.commit()
     return {"message": "Account unlinked successfully"}
 
 
 @router.post("/{account_id}/sync")
-def sync_account(account_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> Dict[str, str]:
+def sync_account(
+    account_id: int = Path(gt=0),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, str]:
     """Manually sync transactions for an account"""
     account = db.query(LinkedAccount).filter(LinkedAccount.id == account_id, LinkedAccount.user_id == current_user.id).first()
     if not account:

@@ -2,26 +2,29 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class TransactionIn(BaseModel):
-    id: str
-    timestamp: str
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, max_length=255)
+    timestamp: str = Field(min_length=1, max_length=64)
     amount: float
-    currency: str = "ZAR"
-    description: str = ""
-    merchant: Optional[str] = None
-    category: Optional[str] = None
-    counterparty: Optional[str] = None
+    currency: str = Field(default="ZAR", min_length=3, max_length=10)
+    description: str = Field(default="", max_length=1000)
+    merchant: Optional[str] = Field(default=None, max_length=255)
+    category: Optional[str] = Field(default=None, max_length=100)
+    counterparty: Optional[str] = Field(default=None, max_length=255)
     direction: Optional[Literal["debit", "credit"]] = None
-    channel: Optional[str] = None  # e.g. "momo", "bank", "cash"
+    channel: Optional[str] = Field(default=None, max_length=50)  # e.g. "momo", "bank", "cash"
     meta: Dict[str, Any] = Field(default_factory=dict)
 
 
 class AnalyzeRequest(BaseModel):
-    # Simple and flexible: accept either { "transactions": [...] } or a raw list in the API handler.
-    transactions: List[TransactionIn] = Field(default_factory=list)
+    model_config = ConfigDict(extra="forbid")
+
+    transactions: List[TransactionIn] = Field(min_length=1, max_length=5000)
     context: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -44,10 +47,18 @@ class AnalyzeResponse(BaseModel):
 
 
 class FreezeRequest(BaseModel):
-    leak_id: Optional[str] = None
-    transaction_id: Optional[str] = None
-    consent_id: Optional[str] = None
-    reason: str = "User pressed Freeze in dashboard"
+    model_config = ConfigDict(extra="forbid")
+
+    leak_id: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    transaction_id: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    consent_id: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    reason: str = Field(default="User pressed Freeze in dashboard", min_length=1, max_length=1000)
+
+    @model_validator(mode="after")
+    def require_freeze_identifier(self) -> "FreezeRequest":
+        if not (self.leak_id or self.transaction_id or self.consent_id):
+            raise ValueError("Provide at least one of leak_id, transaction_id, consent_id.")
+        return self
 
 
 class FreezeResponse(BaseModel):

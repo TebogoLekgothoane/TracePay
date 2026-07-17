@@ -2,13 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { FeatureCollection, Feature } from "geojson";
-import type { Map as LeafletMapType, GeoJSON as GeoJSONType } from "leaflet";
+import type { Map as LeafletMapType, GeoJSON as GeoJSONType, Layer } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 interface LeafletMapProps {
   geoJsonData: FeatureCollection;
-  getFeatureStyle: (feature?: Feature) => any;
-  onEachFeature: (feature: Feature, layer: any) => void;
+  getFeatureStyle: (feature?: Feature) => object;
+  onEachFeature: (feature: Feature, layer: Layer) => void;
   activeTab: string;
 }
 
@@ -25,31 +25,25 @@ export default function LeafletMapComponent({
   const isInitializedRef = useRef(false);
 
   useEffect(() => {
-    // Check if we're in the browser
     if (typeof window === "undefined") return;
-
     setIsMounted(true);
   }, []);
 
   useEffect(() => {
     if (!isMounted || !containerRef.current) return;
 
-    // Prevent double initialization
     if (isInitializedRef.current && mapRef.current) {
       return;
     }
 
-    // Dynamic import to avoid SSR issues
     import("leaflet").then((L) => {
       if (!containerRef.current) return;
       
-      // Double-check if map was already initialized
       if (isInitializedRef.current && mapRef.current) {
         return;
       }
 
       try {
-        // Create the map
         const map = L.map(containerRef.current, {
           center: [-32.5, 27.5],
           zoom: 7,
@@ -57,7 +51,6 @@ export default function LeafletMapComponent({
           scrollWheelZoom: true,
         });
 
-        // Add tile layer
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         }).addTo(map);
@@ -65,7 +58,6 @@ export default function LeafletMapComponent({
         mapRef.current = map;
         isInitializedRef.current = true;
 
-        // Add GeoJSON layer
         const geoJsonLayer = L.geoJSON(geoJsonData, {
           style: getFeatureStyle,
           onEachFeature: onEachFeature,
@@ -77,7 +69,6 @@ export default function LeafletMapComponent({
       }
     });
 
-    // Cleanup function
     return () => {
       if (mapRef.current) {
         try {
@@ -89,22 +80,18 @@ export default function LeafletMapComponent({
         }
       }
     };
-  }, [isMounted]);
+  }, [isMounted, geoJsonData, getFeatureStyle, onEachFeature]);
 
-  // Update GeoJSON layer when activeTab or data changes
   useEffect(() => {
     if (!mapRef.current || !geoJsonLayerRef.current) return;
 
-    // Remove old layer
     if (geoJsonLayerRef.current) {
       mapRef.current.removeLayer(geoJsonLayerRef.current);
     }
 
-    // Dynamic import for updating
     import("leaflet").then((L) => {
       if (!mapRef.current) return;
 
-      // Add new layer with updated styles
       const newGeoJsonLayer = L.geoJSON(geoJsonData, {
         style: getFeatureStyle,
         onEachFeature: onEachFeature,
@@ -112,7 +99,6 @@ export default function LeafletMapComponent({
       newGeoJsonLayer.addTo(mapRef.current);
       geoJsonLayerRef.current = newGeoJsonLayer;
 
-      // Invalidate size to ensure proper rendering
       setTimeout(() => {
         mapRef.current?.invalidateSize();
       }, 100);

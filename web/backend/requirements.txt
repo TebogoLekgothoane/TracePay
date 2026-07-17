@@ -16,3 +16,6 @@ gtts==2.5.1
 apscheduler==3.10.4
 psycopg2-binary==2.9.9
 email-validator==2.1.0
+pytest==8.3.4
+pyright==1.1.407
+ruff==0.8.6

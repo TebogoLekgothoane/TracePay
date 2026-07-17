@@ -3,13 +3,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
-import httpx
-
 
 class MTNMoMoClient:
     """
     MTN MoMo API Client
-    
+
     Note: This is a simulation client. In production, you would integrate
     with the actual MTN MoMo API which may require partnership/approval.
     """
@@ -21,7 +19,7 @@ class MTNMoMoClient:
     async def link_account(self, phone_number: str, pin: str) -> Dict[str, Any]:
         """
         Link an MTN MoMo account
-        
+
         In production, this would authenticate with MTN's API.
         For now, we simulate the response.
         """
@@ -34,11 +32,14 @@ class MTNMoMoClient:
         }
 
     async def fetch_transactions(
-        self, account_id: str, start_date: datetime | None = None, end_date: datetime | None = None
+        self,
+        account_id: str,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
     ) -> List[Dict[str, Any]]:
         """
         Fetch MTN MoMo transactions
-        
+
         In production, this would call MTN's API.
         For now, we return mock data based on patterns.
         """
@@ -54,13 +55,15 @@ class MTNMoMoClient:
         # - Airtime purchases
         # - P2P transfers
         # - Bill payments
-        
+
         return []
 
-    def calculate_inclusion_tax(self, transactions: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def calculate_inclusion_tax(
+        self, transactions: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         """
         Calculate "Inclusion Tax" = (Cash-Out Fees / Total MoMo Volume) × 100
-        
+
         This measures how much of a user's MoMo activity is lost to fees.
         """
         total_volume = 0.0
@@ -77,12 +80,18 @@ class MTNMoMoClient:
                 total_volume += amount
 
             # Count cash-out fees
-            if "cash-out" in description or "cash out" in description or "withdrawal" in description:
+            if (
+                "cash-out" in description
+                or "cash out" in description
+                or "withdrawal" in description
+            ):
                 if "fee" in description or direction == "debit":
                     cash_out_fees += amount
                     cash_out_count += 1
 
-        inclusion_tax_percentage = (cash_out_fees / total_volume * 100) if total_volume > 0 else 0.0
+        inclusion_tax_percentage = (
+            (cash_out_fees / total_volume * 100) if total_volume > 0 else 0.0
+        )
 
         return {
             "inclusion_tax_percentage": round(inclusion_tax_percentage, 2),
@@ -91,7 +100,9 @@ class MTNMoMoClient:
             "cash_out_count": cash_out_count,
         }
 
-    def detect_momo_patterns(self, transactions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def detect_momo_patterns(
+        self, transactions: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         """
         Detect MoMo-specific patterns:
         - Airtime-to-cash conversions
@@ -101,25 +112,34 @@ class MTNMoMoClient:
         patterns = []
 
         # Pattern: Frequent small cash-outs
-        cash_outs = [t for t in transactions if "cash-out" in str(t.get("description", "")).lower()]
+        cash_outs = [
+            t
+            for t in transactions
+            if "cash-out" in str(t.get("description", "")).lower()
+        ]
         if len(cash_outs) >= 5:
-            avg_amount = sum(abs(float(t.get("amount", 0))) for t in cash_outs) / len(cash_outs)
+            avg_amount = sum(abs(float(t.get("amount", 0))) for t in cash_outs) / len(
+                cash_outs
+            )
             if avg_amount < 100:  # Small cash-outs
-                patterns.append({
-                    "type": "frequent_small_cashouts",
-                    "count": len(cash_outs),
-                    "average_amount": round(avg_amount, 2),
-                    "severity": "medium",
-                })
+                patterns.append(
+                    {
+                        "type": "frequent_small_cashouts",
+                        "count": len(cash_outs),
+                        "average_amount": round(avg_amount, 2),
+                        "severity": "medium",
+                    }
+                )
 
         # Pattern: High inclusion tax
         inclusion_tax = self.calculate_inclusion_tax(transactions)
         if inclusion_tax["inclusion_tax_percentage"] > 5.0:  # More than 5% lost to fees
-            patterns.append({
-                "type": "high_inclusion_tax",
-                "percentage": inclusion_tax["inclusion_tax_percentage"],
-                "severity": "high",
-            })
+            patterns.append(
+                {
+                    "type": "high_inclusion_tax",
+                    "percentage": inclusion_tax["inclusion_tax_percentage"],
+                    "severity": "high",
+                }
+            )
 
         return patterns
-

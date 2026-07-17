@@ -3,11 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
+from ..audit import add_audit_event
 from ..database import get_db
 from ..models_db import FrozenItem, User
 
@@ -15,10 +16,18 @@ router = APIRouter(prefix="/mobile", tags=["mobile"])
 
 
 class FreezeRequest(BaseModel):
-    leak_id: str | None = None
-    transaction_id: str | None = None
-    consent_id: str | None = None
-    reason: str = "User pressed Freeze in mobile app"
+    model_config = ConfigDict(extra="forbid")
+
+    leak_id: str | None = Field(default=None, min_length=1, max_length=255)
+    transaction_id: str | None = Field(default=None, min_length=1, max_length=255)
+    consent_id: str | None = Field(default=None, min_length=1, max_length=255)
+    reason: str = Field(default="User pressed Freeze in mobile app", min_length=1, max_length=1000)
+
+    @model_validator(mode="after")
+    def require_freeze_identifier(self) -> "FreezeRequest":
+        if not (self.leak_id or self.transaction_id or self.consent_id):
+            raise ValueError("Provide at least one of leak_id, transaction_id, consent_id")
+        return self
 
 
 class FreezeResponse(BaseModel):
@@ -43,6 +52,7 @@ class FrozenItemResponse(BaseModel):
 @router.post("/freeze", response_model=FreezeResponse, status_code=status.HTTP_201_CREATED)
 def freeze_leak(
     req: FreezeRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> FreezeResponse:
@@ -59,6 +69,20 @@ def freeze_leak(
         status="frozen",
     )
     db.add(frozen_item)
+    db.flush()
+    add_audit_event(
+        db,
+        "freeze_created",
+        actor=current_user,
+        target_user=current_user,
+        metadata={
+            "frozen_item_id": frozen_item.id,
+            "leak_id": req.leak_id,
+            "transaction_id": req.transaction_id,
+            "consent_id": req.consent_id,
+        },
+        request=request,
+    )
     db.commit()
     db.refresh(frozen_item)
 
@@ -98,7 +122,8 @@ def list_frozen(
 
 @router.post("/unfreeze/{frozen_item_id}")
 def unfreeze(
-    frozen_item_id: int,
+    request: Request,
+    frozen_item_id: int = Path(gt=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, str]:
@@ -112,6 +137,14 @@ def unfreeze(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Frozen item not found")
 
     frozen_item.status = "unfrozen"
+    add_audit_event(
+        db,
+        "freeze_released",
+        actor=current_user,
+        target_user=current_user,
+        metadata={"frozen_item_id": frozen_item.id},
+        request=request,
+    )
     db.commit()
 
     return {"message": "Item unfrozen successfully"}

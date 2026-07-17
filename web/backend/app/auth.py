@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional
@@ -9,13 +8,15 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from .database import get_db
 from .models_db import User
+from .settings import settings
 
 # JWT Configuration
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+SECRET_KEY = settings.secret_key
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
@@ -36,6 +37,11 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
+def normalize_email(email: str) -> str:
+    """Normalize emails so case and surrounding whitespace do not create duplicates."""
+    return email.strip().lower()
+
+
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Create a JWT access token"""
     to_encode = data.copy()
@@ -52,6 +58,11 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
             to_encode["sub"] = str(to_encode["sub"])
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+
+def decode_token(token: str) -> dict:
+    """Decode a signed JWT token."""
+    return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
 
 
 def get_current_user(
@@ -72,10 +83,17 @@ def get_current_user(
             raise credentials_exception
         # Convert string back to UUID
         user_id = uuid.UUID(user_id_str)
-    except (JWTError, ValueError) as e:
+    except (JWTError, ValueError):
         raise credentials_exception
 
-    user = db.query(User).filter(User.id == user_id).first()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+    except OperationalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database connection failed while verifying the current user.",
+        ) from exc
+
     if user is None:
         raise credentials_exception
     if not user.is_active:

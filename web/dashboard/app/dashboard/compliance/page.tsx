@@ -1,25 +1,36 @@
 "use client";
 
-import { ShieldCheck, FileText, Lock, Users, CheckCircle2, AlertCircle, BookOpen, Database } from "lucide-react";
+import { ShieldCheck, FileText, Lock, Users, CheckCircle2, BookOpen, Database } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
 export default function CompliancePage() {
-    return (
-        <div className="p-8">
-            <div className="mb-8">
-                <div className="flex items-center gap-3 mb-2">
-                    <ShieldCheck className="h-8 w-8 text-primary" />
-                    <h1 className="text-3xl font-bold tracking-tight">Compliance (SARB)</h1>
-                </div>
-                <p className="text-muted-foreground">
-                    TracePay's compliance with South African Reserve Bank regulations and Open Banking standards
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="bg-gradient-to-br from-primary via-primary/90 to-primary/80 text-primary-foreground">
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-sm shrink-0">
+                <ShieldCheck className="h-7 w-7" />
+              </div>
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Compliance (SARB)</h1>
+                <p className="text-primary-foreground/80 mt-1 max-w-2xl text-sm md:text-base">
+                  TracePay&apos;s alignment with South African Reserve Bank expectations, Open Banking rules, and POPIA.
                 </p>
+              </div>
             </div>
+            <Badge className="w-fit bg-white/20 text-primary-foreground border-white/30 hover:bg-white/25">
+              Governance overview
+            </Badge>
+          </div>
+        </div>
+      </div>
 
-            <div className="space-y-6">
+      <div className="max-w-7xl mx-auto px-6 py-8 space-y-6 pb-12">
                 {/* SARB Directive No. 2 of 2024 */}
-                <Card className="border-primary/20 bg-primary/5">
+                <Card className="border-0 shadow-lg border-primary/20 bg-primary/5">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <FileText className="h-5 w-5 text-primary" />
@@ -85,7 +96,7 @@ export default function CompliancePage() {
                 </Card>
 
                 {/* FSCA Consumer Protection */}
-                <Card>
+                <Card className="border-0 shadow-lg">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Users className="h-5 w-5 text-primary" />
@@ -112,7 +123,7 @@ export default function CompliancePage() {
                             <div className="p-3 bg-secondary/50 rounded-lg">
                                 <p className="text-xs font-bold uppercase text-muted-foreground mb-1">Transparency</p>
                                 <p className="text-xs text-muted-foreground">
-                                    Every detection can be traced to specific transactions. No "black box" algorithms—everything
+                                    Every detection can be traced to specific transactions. No "black box" algorithmsΓÇöeverything
                                     is explainable and verifiable.
                                 </p>
                             </div>
@@ -135,7 +146,7 @@ export default function CompliancePage() {
                 </Card>
 
                 {/* POPIA Compliance */}
-                <Card>
+                <Card className="border-0 shadow-lg">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Lock className="h-5 w-5 text-primary" />
@@ -188,7 +199,7 @@ export default function CompliancePage() {
                 </Card>
 
                 {/* Security Architecture */}
-                <Card>
+                <Card className="border-0 shadow-lg">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Lock className="h-5 w-5 text-primary" />
@@ -245,7 +256,7 @@ export default function CompliancePage() {
                 </Card>
 
                 {/* Consent Management */}
-                <Card>
+                <Card className="border-0 shadow-lg">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <CheckCircle2 className="h-5 w-5 text-primary" />
@@ -310,7 +321,7 @@ export default function CompliancePage() {
                 </Card>
 
                 {/* Data Flow Controls */}
-                <Card>
+                <Card className="border-0 shadow-lg">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Database className="h-5 w-5 text-primary" />
@@ -357,7 +368,7 @@ export default function CompliancePage() {
                 </Card>
 
                 {/* Governance & Accountability */}
-                <Card>
+                <Card className="border-0 shadow-lg">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <BookOpen className="h-5 w-5 text-primary" />
@@ -402,7 +413,7 @@ export default function CompliancePage() {
                 </Card>
 
                 {/* Compliance Status */}
-                <Card className="border-green-500/20 bg-green-500/5">
+                <Card className="border-0 shadow-lg border-green-500/20 bg-green-500/5">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <CheckCircle2 className="h-5 w-5 text-green-500" />
@@ -434,8 +445,8 @@ export default function CompliancePage() {
                         </p>
                     </CardContent>
                 </Card>
-            </div>
-        </div>
-    );
+      </div>
+    </div>
+  );
 }
 

@@ -1,526 +1,704 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
-    Activity,
-    AlertTriangle,
-    BarChart3,
-    Brain,
-    Database,
-    Flame,
-    Gauge,
-    LayoutDashboard,
-    Shield,
-    TrendingUp,
-    Users,
-    MapPin,
-    Target,
-    Info,
-    ArrowRight,
-    Zap,
-    Globe,
-    Lock,
-    Store
+  Brain,
+  Gauge,
+  Info,
+  ArrowRight,
+  ArrowUpRight,
+  Lock,
+  MapPin,
+  Store,
+  Target,
+  TrendingUp,
+  RefreshCw,
+  Sparkles,
+  Shield,
+  Users,
+  Wallet,
+  Activity,
+  CheckCircle2,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
-import { getCachedData, setCachedData, isCacheFresh } from "@/lib/data-cache";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
-import { DashboardSidebar } from "@/components/dashboard-sidebar";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import {
-    Sheet,
-    SheetContent,
-    SheetDescription,
-    SheetHeader,
-    SheetTitle,
-    SheetTrigger,
-} from "@/components/ui/sheet";
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from "@/components/ui/tooltip";
-
-const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
+import { Progress } from "@/components/ui/progress";
 
 type OverviewStats = {
-    total_users: number;
-    active_users: number;
-    total_linked_accounts: number;
-    total_transactions: number;
-    total_analyses: number;
-    average_health_score: number;
-    total_frozen_items: number;
-    total_capital_protected: number;
-    active_consents: number;
-    ml_anomalies_detected: number;
-    mailbox_effect_prevalence: number;
-    avg_inclusion_score: number;
-    retail_wealth_unlock: number;
-    avg_inclusion_delta: number;
-    total_retail_velocity: number;
+  total_users: number;
+  active_users: number;
+  total_linked_accounts: number;
+  total_transactions: number;
+  total_analyses: number;
+  average_health_score: number;
+  total_frozen_items: number;
+  total_capital_protected: number;
+  active_consents: number;
+  ml_anomalies_detected: number;
+  mailbox_effect_prevalence: number;
+  avg_inclusion_score: number;
+  retail_wealth_unlock: number;
+  avg_inclusion_delta: number;
+  total_retail_velocity: number;
 };
 
 type MLFindings = {
-    top_leak_categories: Array<{ category: string, count: number, growth: string }>;
-    anomaly_distribution: { high_risk: number, medium_risk: number, low_risk: number };
-    predicted_savings_next_month: number;
-};
-
-type IngestionStats = {
-    total_linked_accounts: number;
-    sources: { open_banking: number, mtn_momo: number, manual: number };
-    ingestion_health: string;
-    last_sync_all: string;
+  top_leak_categories: Array<{ category: string; count: number; growth: string }>;
+  anomaly_distribution: { high_risk: number; medium_risk: number; low_risk: number };
+  predicted_savings_next_month: number;
 };
 
 type RegionalInsight = {
-    region: string;
-    average_health_score: number;
-    total_leaks: number;
-    total_users: number;
-    top_leak_type: string;
+  region: string;
+  average_health_score: number;
+  total_leaks: number;
+  total_users: number;
+  top_leak_type: string;
 };
 
-type TemporalData = {
-    date: string;
-    average_score: number;
-    count: number;
+type ProviderHealth = {
+  status: string;
+  checks: Record<string, { status: string; detail?: string }>;
 };
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
+const REPORTING_PERIOD_LABEL = "Last 30 days";
 
-// Dummy data for when there's no real data
-const DUMMY_STATS: OverviewStats = {
-    total_users: 1247,
-    active_users: 892,
-    total_linked_accounts: 2156,
-    total_transactions: 45832,
-    total_analyses: 3421,
-    average_health_score: 72,
-    total_frozen_items: 156,
-    total_capital_protected: 2845000,
-    active_consents: 1893,
-    ml_anomalies_detected: 234,
-    mailbox_effect_prevalence: 18.5,
-    avg_inclusion_score: 68,
-    retail_wealth_unlock: 1250000,
-    avg_inclusion_delta: 12,
-    total_retail_velocity: 1875000,
+function formatLastUpdated(d: Date | null): string {
+  if (!d) return "—";
+  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+const EMPTY_STATS: OverviewStats = {
+  total_users: 0,
+  active_users: 0,
+  total_linked_accounts: 0,
+  total_transactions: 0,
+  total_analyses: 0,
+  average_health_score: 0,
+  total_frozen_items: 0,
+  total_capital_protected: 0,
+  active_consents: 0,
+  ml_anomalies_detected: 0,
+  mailbox_effect_prevalence: 0,
+  avg_inclusion_score: 0,
+  retail_wealth_unlock: 0,
+  avg_inclusion_delta: 0,
+  total_retail_velocity: 0,
 };
 
-const DUMMY_REGIONAL: RegionalInsight[] = [
-    { region: "Port Elizabeth", average_health_score: 75, total_leaks: 342, total_users: 456, top_leak_type: "Bank Fees" },
-    { region: "East London", average_health_score: 68, total_leaks: 289, total_users: 389, top_leak_type: "Subscription Leaks" },
-    { region: "Uitenhage", average_health_score: 71, total_leaks: 198, total_users: 267, top_leak_type: "ATM Charges" },
-    { region: "Queenstown", average_health_score: 65, total_leaks: 156, total_users: 234, top_leak_type: "Bank Fees" },
-];
+function hasAnyPlatformData(stats: OverviewStats | null): boolean {
+  if (!stats) return false;
+  return (
+    stats.total_users > 0 ||
+    stats.total_linked_accounts > 0 ||
+    stats.total_transactions > 0 ||
+    stats.total_analyses > 0 ||
+    stats.total_frozen_items > 0
+  );
+}
 
-const DUMMY_ML_FINDINGS: MLFindings = {
-    top_leak_categories: [
-        { category: "Bank Service Fees", count: 1247, growth: "+12.3%" },
-        { category: "Subscription Creep", count: 892, growth: "+8.7%" },
-        { category: "ATM Withdrawal Charges", count: 654, growth: "-3.2%" },
-        { category: "Overdraft Penalties", count: 423, growth: "+15.1%" },
-    ],
-    anomaly_distribution: { high_risk: 89, medium_risk: 112, low_risk: 33 },
-    predicted_savings_next_month: 3250000,
-};
+function statusTone(status: string | undefined): string {
+  if (status === "ok" || status === "configured") return "bg-accent";
+  if (status === "degraded" || status === "unreachable") return "bg-amber-500";
+  return "bg-muted-foreground";
+}
+
+function statusLabel(status: string | undefined): string {
+  if (!status) return "Unavailable";
+  return status
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
 export default function DashboardPage() {
-    const [stats, setStats] = useState<OverviewStats | null>(null);
-    const [regional, setRegional] = useState<RegionalInsight[]>([]);
-    const [temporal, setTemporal] = useState<TemporalData[]>([]);
-    const [mlFindings, setMlFindings] = useState<MLFindings | null>(null);
-    const [ingestion, setIngestion] = useState<IngestionStats | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [isFetching, setIsFetching] = useState(false);
+  const [stats, setStats] = useState<OverviewStats | null>(null);
+  const [regional, setRegional] = useState<RegionalInsight[]>([]);
+  const [mlFindings, setMlFindings] = useState<MLFindings | null>(null);
+  const [providerHealth, setProviderHealth] = useState<ProviderHealth | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
-    async function handleGlobalSync() {
-        if (refreshing || isFetching) return; // Prevent concurrent calls
-        setRefreshing(true);
-        try {
-            await apiClient.syncAllData();
-            await fetchStats(true); // Force refresh after sync
-        } catch (e) {
-            console.error("Sync error:", e);
-            setError("Global data ingestion failed. Please check the backend connection.");
-        } finally {
-            setRefreshing(false);
-        }
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDashboardData() {
+      setLoading(true);
+      setError(null);
+
+      const [statsResult, regionalResult, mlResult, healthResult] =
+        await Promise.allSettled([
+          apiClient.getOverviewStats(),
+          apiClient.getRegionalStats(),
+          apiClient.getMLFindings(),
+          apiClient.getProviderHealth(),
+        ]);
+
+      if (cancelled) return;
+
+      const failures: string[] = [];
+
+      if (statsResult.status === "fulfilled") {
+        setStats(statsResult.value);
+      } else {
+        setStats(null);
+        failures.push("overview metrics");
+      }
+
+      if (regionalResult.status === "fulfilled") {
+        setRegional(regionalResult.value);
+      } else {
+        setRegional([]);
+        failures.push("regional metrics");
+      }
+
+      if (mlResult.status === "fulfilled") {
+        setMlFindings(mlResult.value);
+      } else {
+        setMlFindings(null);
+        failures.push("spending patterns");
+      }
+
+      if (healthResult.status === "fulfilled") {
+        setProviderHealth(healthResult.value);
+      } else {
+        setProviderHealth(null);
+        failures.push("provider health");
+      }
+
+      if (failures.length > 0) {
+        setError(`Could not load ${failures.join(", ")} from the backend.`);
+      }
+
+      if (
+        statsResult.status === "fulfilled" ||
+        regionalResult.status === "fulfilled" ||
+        mlResult.status === "fulfilled" ||
+        healthResult.status === "fulfilled"
+      ) {
+        setLastUpdatedAt(new Date());
+      }
+
+      setLoading(false);
     }
 
-    async function fetchStats(force = false) {
-        if (isFetching) return; // Prevent concurrent calls
+    void loadDashboardData();
 
-        // Check cache first if not forcing refresh
-        if (!force) {
-            const cacheKey = "dashboard_overview";
-            const isFresh = isCacheFresh(cacheKey, 5 * 60 * 1000); // 5 minutes TTL
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-            if (isFresh) {
-                const cachedStats = getCachedData<OverviewStats>("dashboard_stats");
-                const cachedRegional = getCachedData<RegionalInsight[]>("dashboard_regional");
-                const cachedTemporal = getCachedData<TemporalData[]>("dashboard_temporal");
-                const cachedMlFindings = getCachedData<MLFindings>("dashboard_ml_findings");
-                const cachedIngestion = getCachedData<IngestionStats>("dashboard_ingestion");
+  const getStats = useMemo(() => {
+    return stats ?? EMPTY_STATS;
+  }, [stats]);
 
-                if (cachedStats) setStats(cachedStats);
-                if (cachedRegional) setRegional(cachedRegional);
-                if (cachedTemporal) setTemporal(cachedTemporal);
-                if (cachedMlFindings) setMlFindings(cachedMlFindings);
-                if (cachedIngestion) setIngestion(cachedIngestion);
+  const hasPlatformData = hasAnyPlatformData(stats);
+  const hasRegionalData = regional.length > 0;
+  const hasMlFindings = Boolean(mlFindings?.top_leak_categories.length);
+  const providerStatus = providerHealth?.status;
 
-                setLoading(false);
-                return; // Use cached data
-            }
-        }
+  const impactValue = useMemo(() => {
+    return getStats.total_capital_protected;
+  }, [getStats]);
 
-        setIsFetching(true);
-        setLoading(true);
-        setError(null);
-        try {
-            const [ov, reg, temp, ml, ing] = await Promise.all([
-                apiClient.getOverviewStats(),
-                apiClient.getRegionalStats(),
-                apiClient.getTemporalStats(),
-                fetch(`${BACKEND_URL}/admin/stats/ml-findings`).then(r => r.ok ? r.json() : null),
-                fetch(`${BACKEND_URL}/admin/stats/data-ingestion`).then(r => r.ok ? r.json() : null)
-            ]);
-
-            if (ov) {
-                setStats(ov);
-                setCachedData("dashboard_stats", ov);
-            }
-            if (ml) {
-                setMlFindings(ml);
-                setCachedData("dashboard_ml_findings", ml);
-            }
-            if (ing) {
-                setIngestion(ing);
-                setCachedData("dashboard_ingestion", ing);
-            }
-            const regionalData = Array.isArray(reg) ? reg : [];
-            setRegional(regionalData);
-            setCachedData("dashboard_regional", regionalData);
-
-            const temporalData = temp?.temporal_data || [];
-            setTemporal(temporalData);
-            setCachedData("dashboard_temporal", temporalData);
-        } catch (e) {
-            console.error("Fetch error:", e);
-            setError("Live data sync failed. Ensure the TracePay backend is running on port 8001.");
-        } finally {
-            setLoading(false);
-            setIsFetching(false);
-        }
-    }
-
-    useEffect(() => {
-        void fetchStats();
-        // void handleGlobalSync(); // Removed auto-sync on load to prevent hanging
-    }, []);
-
-    // Helper functions to get data with dummy fallbacks
-    const getStats = useMemo(() => {
-        if (!stats) return DUMMY_STATS;
-        // If stats exist but key values are zero, use dummy values instead
-        return {
-            ...stats,
-            total_capital_protected: stats.total_capital_protected === 0 ? DUMMY_STATS.total_capital_protected : stats.total_capital_protected,
-            average_health_score: stats.average_health_score === 0 ? DUMMY_STATS.average_health_score : stats.average_health_score,
-            total_retail_velocity: stats.total_retail_velocity === 0 ? DUMMY_STATS.total_retail_velocity : stats.total_retail_velocity,
-            avg_inclusion_delta: stats.avg_inclusion_delta === 0 ? DUMMY_STATS.avg_inclusion_delta : stats.avg_inclusion_delta,
-            total_analyses: stats.total_analyses === 0 ? DUMMY_STATS.total_analyses : stats.total_analyses,
-        };
-    }, [stats]);
-
-    const getRegional = useMemo(() => {
-        return regional.length > 0 ? regional : DUMMY_REGIONAL;
-    }, [regional]);
-
-    const getMlFindings = useMemo(() => {
-        if (!mlFindings) return DUMMY_ML_FINDINGS;
-        // If mlFindings exist but empty arrays or zero values, use dummy data
-        if (mlFindings.top_leak_categories.length === 0 || mlFindings.predicted_savings_next_month === 0) {
-            return DUMMY_ML_FINDINGS;
-        }
-        return mlFindings;
-    }, [mlFindings]);
-
-    const impactValue = useMemo(() => {
-        return getStats.total_capital_protected;
-    }, [getStats]);
-
+  if (loading) {
     return (
-        <TooltipProvider>
-            {/* --- IMPACT TICKER --- */}
-            {/* <div className="w-full bg-primary/10 border-b border-primary/20 py-1.5 overflow-hidden whitespace-nowrap">
-                <div className="flex animate-marquee items-center gap-12 text-[10px] font-bold uppercase tracking-widest text-primary">
-                    <span className="flex items-center gap-2"><Zap className="h-3 w-3" /> Live: R{(stats?.total_retail_velocity || 0).toLocaleString()} Recovered for EC Retailers this month</span>
-                    <span className="flex items-center gap-2"><Globe className="h-3 w-3" /> Forensic Health Index: {stats?.average_health_score}/100</span>
-                    <span className="flex items-center gap-2"><Users className="h-3 w-3" /> Lives Protected: {stats?.total_users.toLocaleString()}</span>
-                    <span className="flex items-center gap-2"><TrendingUp className="h-3 w-3" /> Average Inclusion Delta: +{stats?.avg_inclusion_delta || 0} pts</span>
-                    {/* Duplicate for seamless loop if needed, but marquee usually handles it */}
-            {/* <span className="flex items-center gap-2"><Zap className="h-3 w-3" /> Live: R{(stats?.total_retail_velocity || 0).toLocaleString()} Recovered for EC Retailers this month</span>
-                </div>
-            </div>  */}
-            <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/40 pb-4 pt-4">
-                <div>
-                    <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight md:text-2xl">
-                        <Target className="h-5 w-5 text-primary" />
-                        Dashboard
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative">
+            <div className="h-16 w-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+            <Sparkles className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-6 w-6 text-primary" />
+          </div>
+          <p className="text-sm text-muted-foreground">Loading your dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <TooltipProvider>
+      <div className="min-h-screen bg-background">
+        {/* Hero Header */}
+        <div className="bg-gradient-to-br from-primary via-primary to-primary/80 text-primary-foreground">
+          <div className="container mx-auto px-4 py-8 md:py-12">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+                    <Target className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+                      TracePay Overview
                     </h1>
-                    <p className="mt-1 text-xs text-muted-foreground md:text-sm">
-                        High-fidelity forensic monitoring and commercial opportunity mapping for the Eastern Cape.
+                    <p className="text-primary-foreground/80 text-sm">
+                      Eastern Cape Financial Health Dashboard
                     </p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                    {/* <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void handleGlobalSync()}
-                        disabled={loading || refreshing}
-                        className="bg-background/50 backdrop-blur-sm border-primary/20 text-primary hover:bg-primary/5"
-                    >
-                        <Activity className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-                        {refreshing ? "Updating Intelligence..." : "Sync Global Pipelines"}
-                    </Button> */}
+                <p className="text-primary-foreground/70 text-sm max-w-xl leading-relaxed">
+                  Track how TracePay helps people and businesses keep money in their pockets, strengthen financial inclusion, and boost local retail.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 backdrop-blur-sm text-sm">
+                  <Activity className="h-4 w-4" />
+                  <span>{REPORTING_PERIOD_LABEL}</span>
                 </div>
-            </header>
-
-            {error ? (
-                <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-xs text-red-100 mt-2">
-                    {error}
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 backdrop-blur-sm text-sm">
+                  <RefreshCw className="h-4 w-4" />
+                  <span>Updated {formatLastUpdated(lastUpdatedAt)}</span>
                 </div>
-            ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
 
-            <div className="space-y-6 mt-6 pb-12">
-                {/* --- EXECUTIVE OVERVIEW --- */}
-                <section className="space-y-3">
-                    <div className="flex items-center gap-2 px-1">
-                        <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Executive Overview</h2>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Info className="h-3.5 w-3.5 text-muted-foreground/50 cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p className="max-w-xs text-[10px]">High-level indicators of platform growth and overall community forensic health.</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </div>
-                    <div className="grid gap-3 md:grid-cols-4">
-                        <Card className="border-border/70 bg-background/80 hover:border-primary/50 transition-colors">
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-                                    Community Health
-                                </CardTitle>
-                                <Gauge className="h-4 w-4 text-primary opacity-70" />
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-3xl font-semibold">
-                                    {Math.round(getStats.average_health_score)}
-                                    <span className="text-base text-muted-foreground font-normal">/100</span>
-                                </p>
-                                <div className="mt-1 flex items-center justify-between">
-                                    <Badge className="bg-primary/20 text-primary border-none text-[8px] h-4 uppercase">EC Average</Badge>
-                                </div>
-                            </CardContent>
-                        </Card>
+        {/* Main Content */}
+        <div className="container mx-auto px-4 py-8">
+          {error && (
+            <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <p>{error}</p>
+            </div>
+          )}
 
-                        <Card className="border-border/70 bg-background/80 hover:border-accent/50 transition-colors">
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-                                    Capital Protected
-                                </CardTitle>
-                                <TrendingUp className="h-4 w-4 text-accent opacity-70" />
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-3xl font-semibold text-accent">R{impactValue.toLocaleString()}</p>
-                                <p className="mt-1 text-[9px] text-muted-foreground">Total monthly leakage stopped by TracePay</p>
-                            </CardContent>
-                        </Card>
+          {!hasPlatformData && (
+            <div className="mb-6 rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+              No platform metrics are available yet. Link accounts and run transaction analyses to populate this overview.
+            </div>
+          )}
 
-                        <Card className="border-border/70 bg-background/80">
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-                                    Inclusion Delta
-                                </CardTitle>
-                                <TrendingUp className="h-4 w-4 text-primary opacity-70" />
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-3xl font-semibold text-primary">+{getStats.avg_inclusion_delta}</p>
-                                <p className="mt-1 text-[9px] text-muted-foreground">Average points added to traditional credit scores</p>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="border-border/70 bg-background/80">
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-                                    Retail Velocity
-                                </CardTitle>
-                                <Store className="h-4 w-4 text-primary opacity-70" />
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-3xl font-semibold">R{getStats.total_retail_velocity.toLocaleString()}</p>
-                                <p className="mt-1 text-[9px] text-muted-foreground">Capital redirected to Eastern Cape retail</p>
-                            </CardContent>
-                        </Card>
-                    </div>
-                </section>
-
-                {/* --- STAKEHOLDER REVENUE CARDS --- */}
-                <section className="space-y-3">
-                    <div className="flex items-center gap-2 px-1">
-                        <h2 className="text-sm font-bold uppercase tracking-widest text-primary">Revenue Streams & Commercial ROI</h2>
-                    </div>
-                    <div className="grid gap-4 md:grid-cols-3">
-                        <Card className="border-primary/20 bg-primary/5">
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-xs font-bold text-primary flex items-center gap-2">
-                                    <Store className="h-4 w-4" /> Retailer Loyalty ROI
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="space-y-2">
-                                    <p className="text-[11px] text-muted-foreground leading-snug">
-                                        Retailers in the region have seen an estimated <strong>R{getStats.total_retail_velocity.toLocaleString()}</strong> in new purchasing power reclaimed from bank fees.
-                                    </p>
-                                    <Button variant="ghost" className="p-0 h-auto text-[10px] text-primary hover:bg-transparent hover:underline" asChild>
-                                        <Link href="/dashboard/regional">View Retail Map <ArrowRight className="h-2 w-2 ml-1" /></Link>
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="border-accent/20 bg-accent/5">
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-xs font-bold text-accent flex items-center gap-2">
-                                    <Brain className="h-4 w-4" /> Data Insight Sales
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="space-y-2">
-                                    <p className="text-[11px] text-muted-foreground leading-snug">
-                                        Aggregated regional datasets for <strong>{getStats.total_analyses}</strong> forensic sessions available for licensing to Banks and Telcos.
-                                    </p>
-                                    <Button variant="ghost" className="p-0 h-auto text-[10px] text-accent font-bold hover:bg-transparent hover:underline" asChild>
-                                        <Link href="/dashboard/ml-reports">Export Insight Pack <ArrowRight className="h-2 w-2 ml-1" /></Link>
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="border-border bg-secondary/10">
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-xs font-bold flex items-center gap-2">
-                                    <Lock className="h-4 w-4" /> Autopsy API Status
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="flex items-center justify-between">
-                                    <div className="space-y-1">
-                                        <p className="text-[10px] text-muted-foreground uppercase font-semibold">Endpoint Health</p>
-                                        <div className="flex items-center gap-1.5">
-                                            <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                                            <span className="text-[11px] font-bold">99.9% Uptime</span>
-                                        </div>
-                                    </div>
-                                    <Badge variant="outline" className="text-[9px] h-5 bg-background border-border">v2.4 Stable</Badge>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-                </section>
-
-                <div className="grid gap-4 lg:grid-cols-2">
-                    {/* MISSION: EASTERN CAPE */}
-                    <Card className="border-border/70 bg-background/80">
-                        <CardHeader className="pb-4">
-                            <div className="flex items-center justify-between">
-                                <CardTitle className="text-sm font-bold flex items-center gap-2">
-                                    <MapPin className="h-4 w-4 text-primary" />
-                                    Regional Hotspots
-                                </CardTitle>
-                                <Button variant="ghost" size="sm" className="h-7 text-[10px] text-primary" asChild>
-                                    <Link href="/dashboard/regional">Geographic Audit <ArrowRight className="h-3 w-3 ml-1" /></Link>
-                                </Button>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-4">
-                                {getRegional.map((reg) => (
-                                    <div key={reg.region} className="space-y-1.5">
-                                        <div className="flex items-center justify-between text-[10px]">
-                                            <span className="font-bold text-foreground uppercase tracking-tight">{reg.region}</span>
-                                            <span className="text-muted-foreground">{reg.average_health_score}/100 Index</span>
-                                        </div>
-                                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary/30">
-                                            <div
-                                                className={`h-full ${reg.average_health_score > 60 ? 'bg-primary' : 'bg-red-400'}`}
-                                                style={{ width: `${reg.average_health_score}%` }}
-                                            />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-border/70 bg-background/80">
-                        <CardHeader className="pb-4">
-                            <CardTitle className="text-sm font-bold flex items-center gap-2">
-                                <Brain className="h-4 w-4 text-primary" />
-                                Predicted Forensic Trends
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-4">
-                                {getMlFindings.top_leak_categories.map((leak) => (
-                                    <div key={leak.category} className="flex items-center justify-between border-b border-border/40 pb-2">
-                                        <div>
-                                            <p className="text-xs font-medium text-foreground">{leak.category}</p>
-                                            <p className="text-[10px] text-muted-foreground">{leak.count} active hotspots</p>
-                                        </div>
-                                        <Badge variant="outline" className={leak.growth.startsWith('+') ? "text-red-400 border-red-400/20 bg-red-400/10 text-[9px]" : "text-green-400 border-green-400/20 bg-green-400/10 text-[9px]"}>
-                                            {leak.growth}
-                                        </Badge>
-                                    </div>
-                                ))}
-                                <div className="mt-4 p-3 bg-primary/5 rounded-lg flex items-center justify-between">
-                                    <span className="text-[10px] font-bold text-muted-foreground uppercase">Next 30D Savings Prediction</span>
-                                    <span className="text-sm font-black text-primary">R{getMlFindings.predicted_savings_next_month.toLocaleString()}</span>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
+          {/* Key Metrics - Bento Grid */}
+          <section className="mb-10">
+            <div className="flex items-center gap-2 mb-6">
+              <h2 className="text-lg font-semibold text-foreground">At a Glance</h2>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs text-xs">
+                    Key metrics showing regional financial health, savings, inclusion, and local retail impact.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
             </div>
 
-            <style jsx global>{`
-                @keyframes marquee {
-                    0% { transform: translateX(100%); }
-                    100% { transform: translateX(-100%); }
-                }
-                .animate-marquee {
-                    display: inline-block;
-                    animation: marquee 30s linear infinite;
-                }
-            `}</style>
-        </TooltipProvider>
-    );
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Health Score Card */}
+              <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent shadow-sm hover:shadow-md transition-shadow">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardDescription className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Financial Health
+                    </CardDescription>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                      <Gauge className="h-4 w-4 text-primary" />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-4xl font-bold text-foreground">
+                      {Math.round(getStats.average_health_score)}
+                    </span>
+                    <span className="text-lg text-muted-foreground">/100</span>
+                  </div>
+                  <div className="mt-3">
+                    <Progress value={getStats.average_health_score} className="h-2" />
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Average score across Eastern Cape users
+                  </p>
+                  <Badge className="mt-2 border-transparent text-xs bg-primary/10 text-primary hover:bg-primary/20">
+                    EC Regional Average
+                  </Badge>
+                </CardContent>
+              </Card>
+
+              {/* Money Saved Card */}
+              <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-accent/10 via-accent/5 to-transparent shadow-sm hover:shadow-md transition-shadow">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-accent/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardDescription className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Money Users Kept
+                    </CardDescription>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/10">
+                      <Wallet className="h-4 w-4 text-accent" />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-4xl font-bold text-accent">
+                      R{(impactValue / 1000000).toFixed(1)}M
+                    </span>
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Fees and waste avoided or recovered
+                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {hasPlatformData ? "Based on recorded analyses" : "No protected capital recorded yet"}
+                  </p>
+                </CardContent>
+              </Card>
+
+              {/* Credit Inclusion Card */}
+              <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent shadow-sm hover:shadow-md transition-shadow">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardDescription className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Credit Inclusion Lift
+                    </CardDescription>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                      <TrendingUp className="h-4 w-4 text-primary" />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-4xl font-bold text-primary">
+                      +{getStats.avg_inclusion_delta}
+                    </span>
+                    <span className="text-lg text-muted-foreground">pts</span>
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Average credit score improvement
+                  </p>
+                  <div className="mt-2 flex items-center gap-1 text-xs text-primary">
+                    <Users className="h-3 w-3" />
+                    <span>{getStats.active_users.toLocaleString()} active users</span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Local Retail Card */}
+              <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-secondary via-secondary/50 to-transparent shadow-sm hover:shadow-md transition-shadow">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardDescription className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Local Retail Spend
+                    </CardDescription>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                      <Store className="h-4 w-4 text-primary" />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-4xl font-bold text-foreground">
+                      R{(getStats.total_retail_velocity / 1000000).toFixed(1)}M
+                    </span>
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Redirected to EC retailers
+                  </p>
+                  <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+                    <ArrowUpRight className="h-3 w-3 text-accent" />
+                    <span className="text-accent">Supporting local economy</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </section>
+
+          {/* Partners & Revenue Section */}
+          <section className="mb-10">
+            <div className="flex items-center gap-2 mb-6">
+              <h2 className="text-lg font-semibold text-foreground">Partners & Revenue</h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Retailer Impact */}
+              <Card className="border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold text-primary flex items-center gap-2">
+                    <Store className="h-4 w-4" />
+                    Retailer Impact
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Retailers in the region have seen an estimated{" "}
+                    <strong className="text-foreground">
+                      R{getStats.total_retail_velocity.toLocaleString()}
+                    </strong>{" "}
+                    in purchasing power reclaimed.
+                  </p>
+                  <Button variant="ghost" size="sm" className="p-0 h-auto text-xs text-primary hover:bg-transparent hover:underline" asChild>
+                    <Link href="/dashboard/regional">
+                      View retail map <ArrowRight className="h-3 w-3 ml-1" />
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Licensing Insights */}
+              <Card className="border border-accent/20 bg-accent/5 hover:bg-accent/10 transition-colors">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold text-accent flex items-center gap-2">
+                    <Brain className="h-4 w-4" />
+                    Regional Insights
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Aggregated datasets from{" "}
+                    <strong className="text-foreground">
+                      {getStats.total_analyses.toLocaleString()}
+                    </strong>{" "}
+                    health checks available for licensing.
+                  </p>
+                  <Button variant="ghost" size="sm" className="p-0 h-auto text-xs text-accent hover:bg-transparent hover:underline" asChild>
+                    <Link href="/dashboard/ml-reports">
+                      Download insight pack <ArrowRight className="h-3 w-3 ml-1" />
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* System Status */}
+              <Card className="border border-border bg-card hover:bg-secondary/50 transition-colors">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-muted-foreground" />
+                    System Status
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground uppercase font-medium">
+                        Data Service
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <div className={`h-2 w-2 rounded-full ${statusTone(providerStatus)}`} />
+                        <span className="text-sm font-semibold text-foreground">
+                          {statusLabel(providerStatus)}
+                        </span>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-xs">
+                      Backend health
+                    </Badge>
+                  </div>
+                  {providerHealth ? (
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      {Object.entries(providerHealth.checks).map(([name, check]) => (
+                        <div key={name} className="flex items-center justify-between gap-3">
+                          <span className="capitalize">{name.replaceAll("_", " ")}</span>
+                          <span>{statusLabel(check.status)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Provider health is unavailable.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </section>
+
+          {/* Two Column Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Regional Focus */}
+            <Card className="border-0 shadow-sm">
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                      <MapPin className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base font-semibold">
+                        Areas in Focus
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Eastern Cape regional health scores
+                      </CardDescription>
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="sm" className="text-xs text-primary" asChild>
+                    <Link href="/dashboard/regional">
+                      View all <ArrowRight className="h-3 w-3 ml-1" />
+                    </Link>
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {hasRegionalData ? (
+                  <div className="space-y-5">
+                    {regional.map((reg, index) => (
+                      <div key={reg.region} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                              {index + 1}
+                            </div>
+                            <span className="text-sm font-medium text-foreground">
+                              {reg.region}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-foreground">
+                              {reg.average_health_score}
+                            </span>
+                            <span className="text-xs text-muted-foreground">/100</span>
+                          </div>
+                        </div>
+                        <div className="relative">
+                          <Progress
+                            value={reg.average_health_score}
+                            className="h-2"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>{reg.total_users.toLocaleString()} users</span>
+                          <span className="flex items-center gap-1">
+                            <span className="inline-block h-1.5 w-1.5 rounded-full bg-destructive/60" />
+                            Top issue: {reg.top_leak_type}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+                    No regional metrics are available yet.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Spending Patterns */}
+            <Card className="border-0 shadow-sm">
+              <CardHeader className="pb-4">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                    <Brain className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base font-semibold">
+                      Spending Patterns
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Categories with most activity
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {hasMlFindings && mlFindings ? (
+                  <div className="space-y-4">
+                    {mlFindings.top_leak_categories.map((leak, index) => (
+                      <div
+                        key={leak.category}
+                        className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                            {index + 1}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">
+                              {leak.category}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {leak.count.toLocaleString()} occurrences
+                            </p>
+                          </div>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className={
+                            leak.growth.startsWith("+")
+                              ? "border-destructive/30 bg-destructive/10 text-destructive"
+                              : "border-accent/30 bg-accent/10 text-accent"
+                          }
+                        >
+                          {leak.growth}
+                        </Badge>
+                      </div>
+                    ))}
+
+                    <div className="mt-4 p-4 rounded-xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/20">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-primary" />
+                          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                            Predicted Savings (Next 30 Days)
+                          </span>
+                        </div>
+                        <span className="text-xl font-bold text-primary">
+                          R{mlFindings.predicted_savings_next_month.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+                    No spending pattern findings are available yet.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Footer Stats */}
+          <section className="mt-10 pt-8 border-t border-border">
+            <div className="flex flex-wrap items-center justify-center gap-8 text-center">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-accent" />
+                <span className="text-sm text-muted-foreground">
+                  <strong className="text-foreground">{getStats.total_users.toLocaleString()}</strong> total users
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-accent" />
+                <span className="text-sm text-muted-foreground">
+                  <strong className="text-foreground">{getStats.total_linked_accounts.toLocaleString()}</strong> linked accounts
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-accent" />
+                <span className="text-sm text-muted-foreground">
+                  <strong className="text-foreground">{getStats.total_transactions.toLocaleString()}</strong> transactions analyzed
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Lock className="h-4 w-4 text-primary" />
+                <span className="text-sm text-muted-foreground">
+                  <strong className="text-foreground">{getStats.active_consents.toLocaleString()}</strong> active consents
+                </span>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </TooltipProvider>
+  );
 }
