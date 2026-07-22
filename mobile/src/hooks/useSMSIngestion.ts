@@ -13,6 +13,7 @@ import {
   openAppPermissionSettings,
   getSmsPermissionBlockedHelp,
   createSmsListener,
+  isDemoSmsSource,
   type SmsListenerInstance,
 } from '../services/sms/sms-module';
 import {
@@ -30,6 +31,7 @@ interface UseSMSIngestionReturn {
   state: SMSServiceState;
   isLoading: boolean;
   error: string | null;
+  isDemoMode: boolean;
   requestPermission: () => Promise<PermissionStatus>;
   refreshPermission: () => Promise<PermissionStatus>;
   openPermissionSettings: () => Promise<void>;
@@ -134,13 +136,17 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
     setError(null);
 
     try {
-      let permission = await checkSMSPermission();
-      if (permission !== 'granted') {
-        permission = await requestSMSPermission();
-        setServiceState((prev) => ({ ...prev, permissionStatus: permission }));
-       }
-      if (permission !== 'granted') {
-        throw new Error(await getSmsPermissionBlockedHelp());
+      if (!isDemoSmsSource()) {
+        let permission = await checkSMSPermission();
+        if (permission !== 'granted') {
+          permission = await requestSMSPermission();
+          setServiceState((prev) => ({ ...prev, permissionStatus: permission }));
+        }
+        if (permission !== 'granted') {
+          throw new Error(await getSmsPermissionBlockedHelp());
+        }
+      } else {
+        setServiceState((prev) => ({ ...prev, permissionStatus: 'granted' }));
       }
 
       const current = normalizeTransactions(transactionsRef.current);
@@ -174,6 +180,7 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
   }, [normalizeTransactions, persistTransactions]);
 
   const startListening = useCallback(() => {
+    if (isDemoSmsSource()) return;
     if (listenerRef.current?.isActive) return;
 
     void (async () => {
@@ -234,6 +241,7 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
     state: serviceState,
     isLoading,
     error,
+    isDemoMode: isDemoSmsSource(),
     requestPermission,
     refreshPermission,
     openPermissionSettings,

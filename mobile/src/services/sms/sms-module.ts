@@ -46,6 +46,8 @@ export async function ingestSMS(
   return sms.ingestSMS(options);
 }
 
+export { isDemoSmsSource, getSmsIngestionSource } from './smsSource';
+
 export async function getSmsPermissionBlockedHelp(): Promise<string> {
   const sms = await loadIngestionModule();
   return sms.SMS_PERMISSION_BLOCKED_HELP;

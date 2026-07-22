@@ -1,10 +1,10 @@
 import { RawSMS, TransactionCategory } from './sms.types';
 import { CATEGORY_KEYWORDS, CURRENCY_PATTERNS } from './banks.constants';
 
-// ─── Bank SMS detection ───────────────────────────────────────────────────────
-// SA banks often send from numeric sender IDs; the bank name appears in the body.
+// ─── Financial-alert SMS detection ────────────────────────────────────────────
+// Providers can send from numeric short codes, so match both sender and body.
 
-export function canParseBankSms(
+export function canParseFinancialAlertSms(
   sms: RawSMS,
   senderPatterns: RegExp[],
   bodyPatterns: RegExp[]
@@ -14,6 +14,9 @@ export function canParseBankSms(
   if (senderPatterns.some((p) => p.test(address))) return true;
   return bodyPatterns.some((p) => p.test(body));
 }
+
+/** @deprecated Use canParseFinancialAlertSms. */
+export const canParseBankSms = canParseFinancialAlertSms;
 
 // ─── Deterministic ID ─────────────────────────────────────────────────────────
 // Simple djb2 hash — no native crypto needed in RN

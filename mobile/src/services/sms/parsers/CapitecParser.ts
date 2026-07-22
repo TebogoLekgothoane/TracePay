@@ -17,7 +17,7 @@ import {
  *   "Capitec: ATM WD R1000.00 CAPITEC ATM 08Jun25 Avail R1150.00"
  */
 export const CapitecParser: BankParser = {
-  bankName: 'CAPITEC',
+  providerName: 'CAPITEC',
   senderPatterns: [/^CAPITEC$/i, /^CAP\s*BANK/i],
   bodyPatterns: [/^Capitec[:\s]/i],
 
