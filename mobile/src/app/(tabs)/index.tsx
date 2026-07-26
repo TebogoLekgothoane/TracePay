@@ -19,9 +19,10 @@ import { PARTNERS } from "@/constants/partners";
 import { useIngestion } from "@/context/SMSIngestionContext";
 import { TransactionRow } from "@/components/TransactionRow";
 import { PartnerDealCard } from "@/components/PartnerDealCard";
+import { LeakActionModal } from "@/components/LeakActionModal";
+import type { Leak } from "@/stores/leaksStore";
 
 const ACTIONS = [
-  { id: "freeze", label: "Freeze\nLeaks", icon: "snowflake" },
   { id: "budget", label: "Smart\nBudget", icon: "chart-bar" },
   { id: "scan", label: "Rescan\nSMS", icon: "message-text-outline" },
   { id: "history", label: "History", icon: "chart-line" },
@@ -58,6 +59,7 @@ export default function HomeScreen() {
   const { leaks, analysis, fetchLeaks } = useLeaksStore();
   const { transactions } = useIngestion();
   const [showNotifications, setShowNotifications] = useState(false);
+  const [selectedLeak, setSelectedLeak] = useState<Leak | null>(null);
 
   useEffect(() => {
     void fetchLeaks();
@@ -93,8 +95,6 @@ export default function HomeScreen() {
       router.push("/(tabs)/history");
     } else if (id === "budget") {
       router.push("/(tabs)/budget");
-    } else if (id === "freeze") {
-      router.push("/(tabs)/sms-scan");
     } else if (id === "scan") {
       router.push("/(tabs)/sms-scanning");
     }
@@ -202,7 +202,7 @@ export default function HomeScreen() {
                   variant="ghost"
                   size="sm"
                   className="min-h-0 px-0"
-                  onPress={() => router.push("/(tabs)/sms-results")}
+                  onPress={() => router.push("/(tabs)/leaks")}
                 >
                   <AppText variant="label" className="text-brand-purple dark:text-primary">
                     See all
@@ -217,23 +217,29 @@ export default function HomeScreen() {
                 contentContainerClassName="gap-3 px-[18px] pb-1"
               >
                 {activeLeaks.slice(0, 3).map((leak) => (
-                  <Card key={leak.id} className="w-[150px]" contentClassName="gap-0">
-                    <MaterialCommunityIcons
-                      name={(leak.categoryIcon as any) ?? "credit-card-outline"}
-                      size={22}
-                      color={colors.primary}
-                    />
-                    <AppText variant="label" className="mb-0.5" numberOfLines={1}>
-                      {leak.name}
-                    </AppText>
-                    <AppText variant="caption" className="mb-2" numberOfLines={1}>
-                      {leak.category}
-                    </AppText>
-                    <AppText variant="title" className="text-red-600 dark:text-red-400">
-                      -R{leak.amountMonthly.toFixed(2)}
-                    </AppText>
-                    <AppText variant="caption">/month</AppText>
-                  </Card>
+                  <Pressable
+                    key={leak.id}
+                    onPress={() => setSelectedLeak(leak)}
+                    className="active:opacity-90"
+                  >
+                    <Card className="w-[150px]" contentClassName="gap-0">
+                      <MaterialCommunityIcons
+                        name={(leak.categoryIcon as any) ?? "credit-card-outline"}
+                        size={22}
+                        color={colors.primary}
+                      />
+                      <AppText variant="label" className="mb-0.5" numberOfLines={1}>
+                        {leak.name}
+                      </AppText>
+                      <AppText variant="caption" className="mb-2" numberOfLines={1}>
+                        {leak.category}
+                      </AppText>
+                      <AppText variant="title" className="text-red-600 dark:text-red-400">
+                        -R{leak.amountMonthly.toFixed(2)}
+                      </AppText>
+                      <AppText variant="caption">/month</AppText>
+                    </Card>
+                  </Pressable>
                 ))}
               </ScrollView>
             </>
@@ -367,7 +373,7 @@ export default function HomeScreen() {
                       className="min-h-0 flex-row items-center gap-3 border-b border-border py-3 dark:border-white/10"
                       onPress={() => {
                         setShowNotifications(false);
-                        router.push("/(tabs)/sms-scan");
+                        setSelectedLeak(leak);
                       }}
                     >
                       <View
@@ -403,6 +409,12 @@ export default function HomeScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <LeakActionModal
+        leak={selectedLeak}
+        visible={selectedLeak != null}
+        onClose={() => setSelectedLeak(null)}
+      />
     </>
   );
 }

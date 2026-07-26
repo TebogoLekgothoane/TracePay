@@ -10,6 +10,7 @@ import {
   type StoredTransaction,
 } from './mapParsedTransaction';
 import { pipelineError, pipelineLog } from '@/lib/pipeline-log';
+import type { LifecycleLeak } from '../../../lib/backend-client';
 
 const DATABASE_NAME = 'tracepay-transactions.db';
 const DATABASE_KEY_NAME = 'tracepay_transactions_database_key_v1';
@@ -32,6 +33,10 @@ interface TransactionRow {
   parsed_at: string;
   confidence: StoredTransaction['confidence'];
   logo_domain: string | null;
+}
+
+interface LeakRow {
+  payload: string;
 }
 
 type SQLiteDatabase = import('expo-sqlite').SQLiteDatabase;
@@ -113,6 +118,15 @@ async function openEncryptedDatabase(): Promise<SQLiteDatabase> {
       ) WITHOUT ROWID;
       CREATE INDEX IF NOT EXISTS transactions_owner_date_idx
         ON transactions (owner_id, occurred_at DESC);
+      CREATE TABLE IF NOT EXISTS leaks (
+        owner_id TEXT NOT NULL,
+        id TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (owner_id, id)
+      ) WITHOUT ROWID;
+      CREATE INDEX IF NOT EXISTS leaks_owner_updated_idx
+        ON leaks (owner_id, updated_at DESC);
     `);
     pipelineLog('db.open.schemaReady');
     return database;
@@ -244,6 +258,58 @@ export function saveStoredTransactions(
   const operation = writeQueue
     .catch(() => undefined)
     .then(() => replaceStoredTransactions(ownerId, transactions));
+  writeQueue = operation;
+  return operation;
+}
+
+export async function loadStoredLeaks(ownerId: string): Promise<LifecycleLeak[]> {
+  if (Platform.OS === 'web') return [];
+  const database = await getDatabase();
+  const rows = await database.getAllAsync<LeakRow>(
+    'SELECT payload FROM leaks WHERE owner_id = ? ORDER BY updated_at DESC',
+    ownerId,
+  );
+  const leaks: LifecycleLeak[] = [];
+  for (const row of rows) {
+    try {
+      const leak = JSON.parse(row.payload) as LifecycleLeak;
+      if (
+        typeof leak.id === 'string'
+        && typeof leak.fi_code === 'string'
+        && ['active', 'monitoring', 'resolved'].includes(leak.status)
+        && Number.isFinite(leak.amount_monthly)
+        && typeof leak.exact_action === 'string'
+      ) {
+        leaks.push(leak);
+      }
+    } catch {
+      // Skip a corrupt cached record; the server remains authoritative.
+    }
+  }
+  return leaks;
+}
+
+export function saveStoredLeaks(ownerId: string, leaks: LifecycleLeak[]): Promise<void> {
+  const operation = writeQueue
+    .catch(() => undefined)
+    .then(async () => {
+      if (Platform.OS === 'web') return;
+      const database = await getDatabase();
+      const updatedAt = new Date().toISOString();
+      await database.withTransactionAsync(async () => {
+        await database.runAsync('DELETE FROM leaks WHERE owner_id = ?', ownerId);
+        const statement = await database.prepareAsync(
+          'INSERT INTO leaks (owner_id, id, payload, updated_at) VALUES (?, ?, ?, ?)',
+        );
+        try {
+          for (const leak of leaks) {
+            await statement.executeAsync([ownerId, leak.id, JSON.stringify(leak), updatedAt]);
+          }
+        } finally {
+          await statement.finalizeAsync();
+        }
+      });
+    });
   writeQueue = operation;
   return operation;
 }

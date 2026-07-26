@@ -3,14 +3,12 @@
  *
  * Use this for:
  * - Open Banking (consent, accounts, transactions) – backend integrates with Open Banking API.
- * - Analysis (POST /analyze with transactions).
- * - Mobile freeze/unfreeze (POST /mobile/freeze, GET /mobile/frozen, etc.).
+ * - Canonical transaction sync and backend-owned leak lifecycle.
  *
  * App state (settings, subscriptions, banks, etc.) stays in Supabase via lib/api.ts.
  * Set EXPO_PUBLIC_BACKEND_URL to your deployed backend URL (e.g. https://tracepay-api.example.com).
  *
- * Auth: getAuthToken() returns the stored backend JWT first, then the Supabase session token.
- * After backend login, call setBackendAuthToken(access_token). On logout, call clearBackendAuthToken().
+ * Auth: lifecycle endpoints use the Supabase session token.
  *
  * See docs/ARCHITECTURE.md for frontend–backend linkage and Open Banking (other team member).
  */
@@ -49,10 +47,8 @@ export {
  * 2. Current Supabase session access_token (for when backend supports Supabase JWT).
  */
 async function getAuthToken(): Promise<string | null> {
-  const stored = await getBackendToken();
-  if (stored) return stored;
   const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
+  return data.session?.access_token ?? await getBackendToken();
 }
 
 async function request<T>(
@@ -290,57 +286,60 @@ export async function fetchTransactionsFromBackend(
 }
 
 // ---------------------------------------------------------------------------
-// Mobile freeze (backend records freeze; may integrate with Open Banking revoke)
+// Leak lifecycle
 // ---------------------------------------------------------------------------
 
-export interface FreezeRequest {
-  leak_id?: string | null;
-  transaction_id?: string | null;
-  consent_id?: string | null;
-  reason?: string;
+export interface LifecycleTransaction {
+  client_id: string;
+  timestamp: string;
+  amount: number;
+  currency: string;
+  description: string;
+  merchant?: string;
+  category?: string;
+  counterparty?: string;
+  direction: "debit" | "credit" | "reversal";
+  channel: "sms" | "demo" | "bank" | "momo";
+  meta: Record<string, unknown>;
 }
 
-export interface FreezeResponse {
-  status: string;
-  message: string;
-  frozen_item_id?: number | null;
+export interface LifecycleLeak {
+  id: string;
+  fi_code: string;
+  status: "active" | "monitoring" | "resolved";
+  detected_at: string;
+  resolved_at: string | null;
+  detection_rule: string;
+  resolution_rule: string;
+  resolution_checked_at: string | null;
+  evidence: Record<string, unknown>;
+  resolution_evidence: Record<string, unknown> | null;
+  merchant: string | null;
+  amount_monthly: number;
+  amount_annual: number;
+  exact_action: string;
 }
 
-export async function mobileFreeze(body: FreezeRequest): Promise<FreezeResponse> {
-  return request("/mobile/freeze", {
+export interface TransactionSyncResponse {
+  accepted_count: number;
+  inserted_count: number;
+  leaks: LifecycleLeak[];
+}
+
+export async function syncTransactions(
+  transactions: LifecycleTransaction[],
+  signal?: AbortSignal,
+): Promise<TransactionSyncResponse> {
+  return request("/transactions/sync", {
     method: "POST",
-    body: JSON.stringify({
-      leak_id: body.leak_id ?? null,
-      transaction_id: body.transaction_id ?? null,
-      consent_id: body.consent_id ?? null,
-      reason: body.reason ?? "User pressed Freeze in mobile app",
-    }),
+    body: JSON.stringify({ transactions }),
+    signal,
   });
 }
 
-export interface FrozenItemResponse {
-  id: number;
-  leak_id: string | null;
-  transaction_id: string | null;
-  consent_id: string | null;
-  reason: string;
-  frozen_at: string;
-  status: string;
+export async function listLeaks(signal?: AbortSignal): Promise<LifecycleLeak[]> {
+  return request("/leaks", { signal });
 }
-
-export async function listFrozen(): Promise<FrozenItemResponse[]> {
-  return request("/mobile/frozen");
-}
-
-export async function mobileUnfreeze(
-  frozenItemId: number
-): Promise<{ message: string }> {
-  return request(`/mobile/unfreeze/${frozenItemId}`, { method: "POST" });
-}
-
-// ---------------------------------------------------------------------------
-// Analysis (send transactions to backend; returns leaks and health score)
-// ---------------------------------------------------------------------------
 
 export interface AnalyzeResponse {
   financial_health_score: number;

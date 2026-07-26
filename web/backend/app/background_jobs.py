@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from .database import SessionLocal
 from .forensic_engine import ForensicEngine
+from .leak_lifecycle import run_leak_lifecycle
 from .ml_engine import MLEngine
 from .models_db import AnalysisResult, BackgroundJob, LinkedAccount, Transaction
 from .open_banking_client import OpenBankingSandboxClient, SandboxConfig
@@ -42,6 +43,7 @@ def enqueue_background_job(
         payload=payload,
     )
     db.add(job)
+    db.flush()
     db.commit()
     db.refresh(job)
     return job
@@ -217,6 +219,8 @@ async def _run_open_banking_fetch(db: Session, job: BackgroundJob) -> dict[str, 
             }
         )
 
+    db.flush()
+    run_leak_lifecycle(db, job.user_id)
     db.commit()
 
     health_score = None

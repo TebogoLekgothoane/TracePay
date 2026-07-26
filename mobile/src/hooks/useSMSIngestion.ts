@@ -26,7 +26,7 @@ import {
   enrichParsedTransaction,
   isValidStoredTransaction,
 } from '../lib/transaction-display';
-import { analyzeMobileTransactions } from '@/services/analysis/transactionAnalysis';
+import { syncTransactions } from '../../lib/backend-client';
 import { useLeaksStore } from '@/stores/leaksStore';
 import { pipelineError, pipelineLog } from '@/lib/pipeline-log';
 
@@ -178,8 +178,20 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
         }
 
         const current = normalizeTransactions(transactionsRef.current);
-        pipelineLog('sync.ingest.start', { existingCount: current.length });
-        const result = await ingestSMS({ existingTransactions: current });
+        // Demo rescans must replace local cache; merging would keep stale IDs forever.
+        if (demoMode) {
+          await clearStoredTransactions();
+          useLeaksStore.getState().resetLeaks();
+          transactionsRef.current = [];
+          setTransactions([]);
+        }
+        pipelineLog('sync.ingest.start', {
+          existingCount: demoMode ? 0 : current.length,
+          demoReplace: demoMode,
+        });
+        const result = await ingestSMS({
+          existingTransactions: demoMode ? [] : current,
+        });
         const newTransactions = normalizeTransactions(result.transactions);
         pipelineLog('sync.ingest.done', {
           total: result.total,
@@ -190,11 +202,17 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
           sampleProviders: newTransactions.slice(0, 5).map((tx) => tx.bank),
         });
 
-        const existingIds = new Set(current.map((t) => t.id));
-        const merged = [
-          ...newTransactions.filter((t) => !existingIds.has(t.id)),
-          ...current,
-        ].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+        const merged = demoMode
+          ? newTransactions.sort(
+              (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+            )
+          : (() => {
+              const existingIds = new Set(current.map((t) => t.id));
+              return [
+                ...newTransactions.filter((t) => !existingIds.has(t.id)),
+                ...current,
+              ].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+            })();
         pipelineLog('sync.merge.done', { mergedCount: merged.length });
 
         setTransactions(merged);
@@ -203,24 +221,41 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
         analysisAbortRef.current?.abort();
         const controller = new AbortController();
         analysisAbortRef.current = controller;
-        pipelineLog('sync.analyze.start', {
+        pipelineLog('sync.backend.start', {
           count: merged.length,
           channel: demoMode ? 'demo' : 'sms',
         });
-        const report = await analyzeMobileTransactions(
-          merged,
-          demoMode ? 'demo' : 'sms',
+        const response = await syncTransactions(
+          merged
+            .flatMap((transaction) => {
+              if (transaction.type === "unknown") return [];
+              return [{
+            client_id: transaction.id,
+            timestamp: transaction.timestamp.toISOString(),
+            amount: transaction.amount,
+            currency: transaction.currency,
+            description: transaction.summary ?? '',
+            merchant: transaction.merchant,
+            category: transaction.category,
+            direction: transaction.type,
+            channel: demoMode ? 'demo' : 'sms',
+            meta: {
+              provider: transaction.bank,
+              confidence: transaction.confidence,
+            },
+              }];
+            }),
           controller.signal
         );
         if (analysisAbortRef.current !== controller) {
           throw new Error('Analysis request was superseded.');
         }
-        pipelineLog('sync.analyze.done', {
-          healthScore: report.healthScore,
-          healthBand: report.healthBand,
-          leakCount: report.leaks.length,
+        pipelineLog('sync.backend.done', {
+          acceptedCount: response.accepted_count,
+          insertedCount: response.inserted_count,
+          leakCount: response.leaks.length,
         });
-        await useLeaksStore.getState().replaceWithAnalysis(report);
+        await useLeaksStore.getState().replaceWithLifecycle(response.leaks);
         analysisAbortRef.current = null;
 
         const now = new Date();
@@ -301,6 +336,7 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
       clearStoredTransactions(),
       AsyncStorage.removeItem(STORAGE_KEYS.LAST_SYNC),
     ]);
+    useLeaksStore.getState().resetLeaks();
     setTransactions([]);
     setServiceState((prev) => ({
       ...prev,

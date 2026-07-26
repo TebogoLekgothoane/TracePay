@@ -16,6 +16,7 @@ load_dotenv(BASE_DIR / ".env")
 class Settings(BaseModel):
     database_url: str = Field(...)
     secret_key: str = Field(...)
+    supabase_url: str = ""
     cors_origins: List[str] = Field(default_factory=list)
     app_public_url: str = ""
     backend_public_url: str = ""
@@ -77,6 +78,7 @@ def get_settings() -> Settings:
     return Settings(
         database_url=os.getenv("DATABASE_URL", ""),
         secret_key=os.getenv("SECRET_KEY", ""),
+        supabase_url=os.getenv("SUPABASE_URL", "").rstrip("/"),
         cors_origins=os.getenv("CORS_ORIGINS", ""),
         app_public_url=os.getenv("APP_PUBLIC_URL", ""),
         backend_public_url=os.getenv("BACKEND_PUBLIC_URL", ""),

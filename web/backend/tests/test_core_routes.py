@@ -54,43 +54,10 @@ def test_analyze_rejects_legacy_raw_list_shape(client):
     assert response.json()["error"]["code"] == "validation_error"
 
 
-def test_freeze_persists_for_authenticated_user(client, db_session, test_email):
-    token = _registered_token(client, test_email)
-
-    freeze_response = client.post(
-        "/v1/freeze",
-        headers=auth_headers(token),
-        json={"leak_id": "leak-1", "reason": "pytest freeze"},
-    )
-    assert freeze_response.status_code == 200
-
-    frozen_response = client.get("/v1/frozen", headers=auth_headers(token))
-    assert frozen_response.status_code == 200
-    frozen_items = frozen_response.json()["items"]
-    assert any(
-        item["leak_id"] == "leak-1" and item["reason"] == "pytest freeze"
-        for item in frozen_items
-    )
-    assert (
-        db_session.query(AuditLog)
-        .filter(
-            AuditLog.event_type == "freeze_created",
-            AuditLog.event_metadata["leak_id"].as_string() == "leak-1",
-        )
-        .count()
-        == 1
-    )
-
-
-def test_freeze_requires_identifier(client, db_session, test_email):
-    token = _registered_token(client, test_email)
-
-    response = client.post(
-        "/v1/freeze", headers=auth_headers(token), json={"reason": "missing id"}
-    )
-
-    assert response.status_code == 422
-    assert response.json()["error"]["code"] == "validation_error"
+def test_manual_leak_actions_are_not_exposed(client):
+    assert client.post("/v1/freeze", json={}).status_code == 404
+    assert client.get("/v1/frozen").status_code == 404
+    assert client.post("/v1/mobile/freeze", json={}).status_code == 404
 
 
 def test_link_account_writes_consent_change_audit(client, db_session, test_email):

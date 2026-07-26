@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 import logging
 from typing import Any, AsyncIterator, Dict
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import Response, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .auth import get_current_admin_user, get_current_user
-from .audit import add_audit_event
 from .database import get_db
 from .errors import (
     http_exception_handler,
@@ -26,15 +25,13 @@ from .forensic_engine import ForensicEngine
 from .observability import RequestLoggingMiddleware, configure_logging
 from .settings import settings
 from .background_jobs import start_background_worker, stop_background_worker
-from .models_db import BackgroundJob, FrozenItem, User
+from .models_db import BackgroundJob, User
 from .models import (
     AnalyzeRequest,
     AnalyzeResponse,
-    FreezeRequest,
-    FreezeResponse,
     MoneyLeak,
 )
-from .routers import accounts, admin, auth, mobile, ml, mtn_momo, open_banking, voice
+from .routers import accounts, admin, auth, leaks, ml, mtn_momo, open_banking, voice
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -195,95 +192,6 @@ def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
     )
 
 
-@app.post("/v1/freeze", response_model=FreezeResponse)
-@app.post("/freeze", response_model=FreezeResponse)
-def freeze(
-    req: FreezeRequest,
-    request: Request,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> FreezeResponse:
-    """
-    Simulates "revoking consent" / stopping a leak.
-    In the real OB flow this would map to revoking a consent or blocking a payment action.
-    """
-    if not (req.leak_id or req.transaction_id or req.consent_id):
-        raise HTTPException(
-            status_code=400,
-            detail="Provide at least one of leak_id, transaction_id, consent_id.",
-        )
-
-    frozen_item = FrozenItem(
-        user_id=current_user.id,
-        leak_id=req.leak_id,
-        transaction_id=req.transaction_id,
-        consent_id=req.consent_id,
-        reason=req.reason,
-        status="frozen",
-    )
-    db.add(frozen_item)
-    try:
-        db.flush()
-        add_audit_event(
-            db,
-            "freeze_created",
-            actor=current_user,
-            target_user=current_user,
-            metadata={
-                "frozen_item_id": frozen_item.id,
-                "leak_id": req.leak_id,
-                "transaction_id": req.transaction_id,
-                "consent_id": req.consent_id,
-            },
-            request=request,
-        )
-        db.commit()
-    except OperationalError as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=503, detail="Database connection failed while recording freeze."
-        ) from exc
-    return FreezeResponse(
-        status="ok",
-        message="Freeze recorded. (Simulation: consent revoked / leak blocked)",
-    )
-
-
-@app.get("/v1/frozen")
-@app.get("/frozen")
-def frozen(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> Dict[str, Any]:
-    try:
-        query = db.query(FrozenItem).filter(
-            FrozenItem.user_id == current_user.id, FrozenItem.status == "frozen"
-        )
-        count = query.count()
-        items = query.order_by(FrozenItem.frozen_at.desc()).limit(50).all()
-    except OperationalError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="Database connection failed while loading frozen items.",
-        ) from exc
-
-    return {
-        "count": count,
-        "items": [
-            {
-                "id": item.id,
-                "leak_id": item.leak_id,
-                "transaction_id": item.transaction_id,
-                "consent_id": item.consent_id,
-                "reason": item.reason,
-                "frozen_at": item.frozen_at.isoformat(),
-                "status": item.status,
-            }
-            for item in items
-        ],
-    }
-
-
 @app.get("/v1/jobs/{job_id}")
 @app.get("/jobs/{job_id}")
 def get_background_job(
@@ -315,16 +223,16 @@ def get_background_job(
 app.include_router(auth.router)
 app.include_router(accounts.router)
 app.include_router(admin.router)
-app.include_router(mobile.router)
 app.include_router(voice.router)
 app.include_router(ml.router)
 app.include_router(open_banking.router)
 app.include_router(mtn_momo.router)
+app.include_router(leaks.router)
 app.include_router(auth.router, prefix="/v1")
 app.include_router(accounts.router, prefix="/v1")
 app.include_router(admin.router, prefix="/v1")
-app.include_router(mobile.router, prefix="/v1")
 app.include_router(voice.router, prefix="/v1")
 app.include_router(ml.router, prefix="/v1")
 app.include_router(open_banking.router, prefix="/v1")
 app.include_router(mtn_momo.router, prefix="/v1")
+app.include_router(leaks.router, prefix="/v1")
