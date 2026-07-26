@@ -12,7 +12,7 @@ import { Screen } from "@/components/Screen";
 import { AppText } from "@/components/Typography";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useProfileStore } from "@/stores/profileStore";
-import { useLeaksStore, getActiveLeakStats, DEFAULT_MONTHLY_INCOME } from "@/stores/leaksStore";
+import { useLeaksStore, getActiveLeakStats } from "@/stores/leaksStore";
 import { cn } from "@/lib/cn";
 import { getSeverityStyle } from "@/lib/severity";
 import { PARTNERS } from "@/constants/partners";
@@ -53,9 +53,9 @@ function QuickActionCard({
 export default function HomeScreen() {
   const { topOffset } = useScreenInsets();
   const { colors, isDarkColorScheme } = useColorScheme();
-  const { monthlyIncome, rewardPoints, name } = useProfileStore();
+  const { rewardPoints, name } = useProfileStore();
   const ensureDailyCheckIn = useProfileStore((s) => s.ensureDailyCheckIn);
-  const { leaks, fetchLeaks } = useLeaksStore();
+  const { leaks, analysis, fetchLeaks } = useLeaksStore();
   const { transactions } = useIngestion();
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -78,11 +78,12 @@ export default function HomeScreen() {
   }, [ensureDailyCheckIn]);
 
   const { activeLeaks, totalMonthly: totalLeaking } = getActiveLeakStats(leaks);
-  const estimatedIncome = monthlyIncome > 0 ? monthlyIncome : DEFAULT_MONTHLY_INCOME;
-  const healthScore = Math.max(0, 100 - Math.round((totalLeaking / estimatedIncome) * 100));
+  const healthScore = analysis?.healthScore ?? 0;
   const healthColor =
     healthScore >= 70 ? colors.success : healthScore >= 40 ? colors.warning : colors.destructive;
-  const healthLabel = healthScore >= 70 ? "HEALTHY" : healthScore >= 40 ? "FAIR" : "AT RISK";
+  const healthLabel = analysis
+    ? analysis.healthBand.toUpperCase()
+    : "NOT ANALYSED";
   const trackColor = isDarkColorScheme ? "rgba(255, 255, 255, 0.12)" : colors.border;
   const recentTransactions = transactions.slice(0, 5);
   const firstName = name.trim().split(/\s+/).filter(Boolean)[0] ?? "there";
@@ -153,7 +154,9 @@ export default function HomeScreen() {
                     {activeLeaks.length}
                   </AppText>
                   <AppText variant="caption" className="mt-1">
-                    {activeLeaks.length > 0
+                    {!analysis
+                      ? "Scan transactions to receive your backend analysis."
+                      : activeLeaks.length > 0
                       ? "Review active leaks to lower your monthly spend."
                       : "Great job! No leaks detected."}
                   </AppText>
@@ -240,8 +243,9 @@ export default function HomeScreen() {
               <View className="min-w-0 flex-1">
                 <AppText variant="titleMd">No leaks detected yet</AppText>
                 <AppText variant="bodySm" className="mt-2 leading-6">
-                  Your SMS transactions are imported. We&apos;re analysing your data to uncover hidden
-                  charges and recurring fees.
+                  {analysis
+                    ? "Your latest backend analysis found no money leaks."
+                    : "Scan your transactions so TracePay can request a backend analysis."}
                 </AppText>
                 <Pressable onPress={() => router.push("/(tabs)/sms-scanning")} className="mt-4 self-start">
                   <AppText variant="label" className="text-brand-purple dark:text-primary">

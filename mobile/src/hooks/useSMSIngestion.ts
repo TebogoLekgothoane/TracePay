@@ -6,6 +6,12 @@ import {
   PermissionStatus,
   SMSServiceState,
 } from '../services/sms/sms.types';
+import { getUserId } from '@/constants/api';
+import {
+  clearStoredTransactions,
+  migrateLegacyTransactions,
+  saveStoredTransactions,
+} from '@/services/transactions/transactionRepository';
 import {
   checkSMSPermission,
   requestSMSPermission,
@@ -20,9 +26,11 @@ import {
   enrichParsedTransaction,
   isValidStoredTransaction,
 } from '../lib/transaction-display';
+import { analyzeMobileTransactions } from '@/services/analysis/transactionAnalysis';
+import { useLeaksStore } from '@/stores/leaksStore';
+import { pipelineError, pipelineLog } from '@/lib/pipeline-log';
 
 const STORAGE_KEYS = {
-  TRANSACTIONS: '@tracepay/transactions',
   LAST_SYNC:    '@tracepay/lastSync',
 } as const;
 
@@ -54,6 +62,8 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
 
   const listenerRef = useRef<SmsListenerInstance | null>(null);
   const transactionsRef = useRef<ParsedTransaction[]>([]);
+  const analysisAbortRef = useRef<AbortController | null>(null);
+  const syncInFlightRef = useRef<Promise<boolean> | null>(null);
 
   useEffect(() => {
     transactionsRef.current = transactions;
@@ -66,19 +76,18 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
   );
 
   const persistTransactions = useCallback(async (txs: ParsedTransaction[]) => {
-    await AsyncStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(txs));
+    const ownerId = await getUserId();
+    pipelineLog('persist.start', { ownerIdPrefix: ownerId.slice(0, 8), count: txs.length });
+    await saveStoredTransactions(ownerId, txs);
+    pipelineLog('persist.done', { count: txs.length });
   }, []);
 
   const loadPersistedTransactions = useCallback(async (): Promise<ParsedTransaction[]> => {
-    const raw = await AsyncStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as ParsedTransaction[];
-    return parsed
-      .map((t) => ({
-        ...t,
-        timestamp: new Date(t.timestamp),
-        parsedAt: new Date(t.parsedAt),
-      }))
+    const ownerId = await getUserId();
+    pipelineLog('boot.loadStored.start', { ownerIdPrefix: ownerId.slice(0, 8) });
+    const stored = await migrateLegacyTransactions(ownerId);
+    pipelineLog('boot.loadStored.done', { count: stored.length });
+    return stored
       .filter(isValidStoredTransaction)
       .map(enrichParsedTransaction);
   }, []);
@@ -88,6 +97,7 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
 
     void (async () => {
       try {
+        pipelineLog('boot.start');
         const [stored, permission, lastSyncRaw] = await Promise.all([
           loadPersistedTransactions(),
           checkSMSPermission(),
@@ -96,6 +106,12 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
 
         if (cancelled) return;
 
+        pipelineLog('boot.ready', {
+          storedCount: stored.length,
+          permission,
+          hasLastSync: Boolean(lastSyncRaw),
+          demoMode: isDemoSmsSource(),
+        });
         setTransactions(stored);
         setServiceState((prev) => ({
           ...prev,
@@ -104,6 +120,7 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
           totalIngested: stored.length,
         }));
       } catch (err) {
+        pipelineError('boot', err);
         if (!cancelled) {
           setError((err as Error).message);
         }
@@ -131,52 +148,107 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
     await openAppPermissionSettings();
   }, []);
 
-  const syncNow = useCallback(async (): Promise<boolean> => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      if (!isDemoSmsSource()) {
-        let permission = await checkSMSPermission();
-        if (permission !== 'granted') {
-          permission = await requestSMSPermission();
-          setServiceState((prev) => ({ ...prev, permissionStatus: permission }));
-        }
-        if (permission !== 'granted') {
-          throw new Error(await getSmsPermissionBlockedHelp());
-        }
-      } else {
-        setServiceState((prev) => ({ ...prev, permissionStatus: 'granted' }));
-      }
-
-      const current = normalizeTransactions(transactionsRef.current);
-      const result = await ingestSMS({ existingTransactions: current });
-      const newTransactions = normalizeTransactions(result.transactions);
-
-      const existingIds = new Set(current.map((t) => t.id));
-      const merged = [
-        ...newTransactions.filter((t) => !existingIds.has(t.id)),
-        ...current,
-      ].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-
-      setTransactions(merged);
-      await persistTransactions(merged);
-
-      const now = new Date();
-      await AsyncStorage.setItem(STORAGE_KEYS.LAST_SYNC, now.toISOString());
-
-      setServiceState((prev) => ({
-        ...prev,
-        lastSyncAt: now,
-        totalIngested: merged.length,
-      }));
-      return true;
-    } catch (err) {
-      setError((err as Error).message);
-      return false;
-    } finally {
-      setIsLoading(false);
+  const syncNow = useCallback((): Promise<boolean> => {
+    if (syncInFlightRef.current) {
+      pipelineLog('sync.skipped', { reason: 'already in flight' });
+      return syncInFlightRef.current;
     }
+
+    const operation = (async () => {
+      setIsLoading(true);
+      setError(null);
+      const demoMode = isDemoSmsSource();
+      pipelineLog('sync.start', { demoMode });
+
+      try {
+        if (!demoMode) {
+          let permission = await checkSMSPermission();
+          pipelineLog('sync.permission.check', { permission });
+          if (permission !== 'granted') {
+            permission = await requestSMSPermission();
+            pipelineLog('sync.permission.request', { permission });
+            setServiceState((prev) => ({ ...prev, permissionStatus: permission }));
+          }
+          if (permission !== 'granted') {
+            throw new Error(await getSmsPermissionBlockedHelp());
+          }
+        } else {
+          setServiceState((prev) => ({ ...prev, permissionStatus: 'granted' }));
+          pipelineLog('sync.permission.skipped', { reason: 'demo mode' });
+        }
+
+        const current = normalizeTransactions(transactionsRef.current);
+        pipelineLog('sync.ingest.start', { existingCount: current.length });
+        const result = await ingestSMS({ existingTransactions: current });
+        const newTransactions = normalizeTransactions(result.transactions);
+        pipelineLog('sync.ingest.done', {
+          total: result.total,
+          parsed: result.parsed,
+          skipped: result.skipped,
+          failed: result.failed,
+          newCount: newTransactions.length,
+          sampleProviders: newTransactions.slice(0, 5).map((tx) => tx.bank),
+        });
+
+        const existingIds = new Set(current.map((t) => t.id));
+        const merged = [
+          ...newTransactions.filter((t) => !existingIds.has(t.id)),
+          ...current,
+        ].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+        pipelineLog('sync.merge.done', { mergedCount: merged.length });
+
+        setTransactions(merged);
+        await persistTransactions(merged);
+
+        analysisAbortRef.current?.abort();
+        const controller = new AbortController();
+        analysisAbortRef.current = controller;
+        pipelineLog('sync.analyze.start', {
+          count: merged.length,
+          channel: demoMode ? 'demo' : 'sms',
+        });
+        const report = await analyzeMobileTransactions(
+          merged,
+          demoMode ? 'demo' : 'sms',
+          controller.signal
+        );
+        if (analysisAbortRef.current !== controller) {
+          throw new Error('Analysis request was superseded.');
+        }
+        pipelineLog('sync.analyze.done', {
+          healthScore: report.healthScore,
+          healthBand: report.healthBand,
+          leakCount: report.leaks.length,
+        });
+        await useLeaksStore.getState().replaceWithAnalysis(report);
+        analysisAbortRef.current = null;
+
+        const now = new Date();
+        await AsyncStorage.setItem(STORAGE_KEYS.LAST_SYNC, now.toISOString());
+
+        setServiceState((prev) => ({
+          ...prev,
+          lastSyncAt: now,
+          totalIngested: merged.length,
+        }));
+        pipelineLog('sync.success', { totalIngested: merged.length });
+        return true;
+      } catch (err) {
+        pipelineError('sync', err);
+        setError((err as Error).message);
+        return false;
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+
+    syncInFlightRef.current = operation;
+    void operation.finally(() => {
+      if (syncInFlightRef.current === operation) {
+        syncInFlightRef.current = null;
+      }
+    });
+    return operation;
   }, [normalizeTransactions, persistTransactions]);
 
   const startListening = useCallback(() => {
@@ -220,13 +292,14 @@ export function useSMSIngestion(): UseSMSIngestionReturn {
   useEffect(() => {
     return () => {
       listenerRef.current?.stop();
+      analysisAbortRef.current?.abort();
     };
   }, []);
 
   const clearTransactions = useCallback(async () => {
-    await AsyncStorage.multiRemove([
-      STORAGE_KEYS.TRANSACTIONS,
-      STORAGE_KEYS.LAST_SYNC,
+    await Promise.all([
+      clearStoredTransactions(),
+      AsyncStorage.removeItem(STORAGE_KEYS.LAST_SYNC),
     ]);
     setTransactions([]);
     setServiceState((prev) => ({

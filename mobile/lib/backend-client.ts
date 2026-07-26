@@ -15,13 +15,18 @@
  * See docs/ARCHITECTURE.md for frontend–backend linkage and Open Banking (other team member).
  */
 
-import { getBackendToken, setBackendToken } from "./auth-storage";
-import { supabase } from "./supabase";
+import {
+  clearBackendToken,
+  getBackendToken,
+  setBackendToken,
+} from "@/lib/backend-token-storage";
+import { supabase } from "@/lib/supabase";
 
 const BACKEND_BASE_URL =
   process.env.EXPO_PUBLIC_BACKEND_URL || "http://127.0.0.1:8001";
 const NORMALIZED_BACKEND_BASE_URL = BACKEND_BASE_URL.replace(/\/$/, "").replace(/\/v\d+$/, "");
 const API_VERSION_PREFIX = "/v1";
+const REQUEST_TIMEOUT_MS = 20_000;
 
 export interface BackendApiError {
   detail?: string;
@@ -33,7 +38,10 @@ export interface BackendApiError {
 }
 
 /** Re-export for callers that need to set/clear the backend JWT after login/logout. */
-export { setBackendToken as setBackendAuthToken, clearBackendToken as clearBackendAuthToken } from "./auth-storage";
+export {
+  setBackendToken as setBackendAuthToken,
+  clearBackendToken as clearBackendAuthToken,
+} from "@/lib/backend-token-storage";
 
 /**
  * Returns the JWT to send to the backend (Bearer token).
@@ -53,6 +61,10 @@ async function request<T>(
 ): Promise<T> {
   const url = `${NORMALIZED_BACKEND_BASE_URL}${versionedPath(path)}`;
   const token = await getAuthToken();
+  const timeoutController = new AbortController();
+  const timeout = setTimeout(() => timeoutController.abort(), REQUEST_TIMEOUT_MS);
+  const abortFromCaller = () => timeoutController.abort();
+  options.signal?.addEventListener("abort", abortFromCaller, { once: true });
   const headers: HeadersInit = {
     "Content-Type": "application/json",
     ...options.headers,
@@ -63,8 +75,23 @@ async function request<T>(
 
   let response: Response;
   try {
-    response = await fetch(url, { ...options, headers });
+    if (__DEV__) {
+      console.log(`[TracePay] http.request`, {
+        method: options.method ?? "GET",
+        path: versionedPath(path),
+        hasAuth: Boolean(token),
+        hasSignal: Boolean(options.signal),
+      });
+    }
+    response = await fetch(url, {
+      ...options,
+      headers,
+      signal: timeoutController.signal,
+    });
   } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      throw new Error("The backend took too long to respond. Please try again.");
+    }
     const msg =
       e instanceof TypeError && e.message === "Network request failed"
         ? "Can't reach the backend. If you're on a phone or Android emulator, set EXPO_PUBLIC_BACKEND_URL in mobile/.env to your PC's IP (e.g. http://192.168.1.x:8001) or use http://10.0.2.2:8001 for the emulator, then restart Expo."
@@ -72,6 +99,17 @@ async function request<T>(
           ? e.message
           : "Network request failed";
     throw new Error(msg);
+  } finally {
+    clearTimeout(timeout);
+    options.signal?.removeEventListener("abort", abortFromCaller);
+  }
+
+  if (__DEV__) {
+    console.log(`[TracePay] http.response`, {
+      path: versionedPath(path),
+      status: response.status,
+      ok: response.ok,
+    });
   }
 
   if (!response.ok) {
@@ -307,16 +345,42 @@ export async function mobileUnfreeze(
 export interface AnalyzeResponse {
   financial_health_score: number;
   health_band: "green" | "yellow" | "red";
-  money_leaks: Array<Record<string, unknown>>;
+  money_leaks: BackendMoneyLeak[];
   summary_plain_language: string;
 }
 
+export interface BackendMoneyLeak {
+  id: string;
+  detector: string;
+  title: string;
+  plain_language_reason: string;
+  severity: "low" | "medium" | "high";
+  transaction_id?: string | null;
+  estimated_monthly_cost?: number | null;
+  evidence: Record<string, unknown>;
+}
+
+export interface AnalyzeTransaction {
+  id: string;
+  timestamp: string;
+  amount: number;
+  currency: string;
+  description: string;
+  merchant?: string;
+  category?: string;
+  direction: "debit" | "credit";
+  channel: "sms" | "demo";
+  meta: { provider: string; confidence: "high" | "medium" | "low" };
+}
+
 export async function analyzeTransactions(
-  transactions: Array<Record<string, unknown>>
+  transactions: AnalyzeTransaction[],
+  signal?: AbortSignal
 ): Promise<AnalyzeResponse> {
   return request("/analyze", {
     method: "POST",
     body: JSON.stringify({ transactions }),
+    signal,
   });
 }
 

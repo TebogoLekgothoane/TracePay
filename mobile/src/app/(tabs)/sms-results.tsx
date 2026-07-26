@@ -11,14 +11,15 @@ import { useProfileStore } from "@/stores/profileStore";
 import { useIngestion } from "@/context/SMSIngestionContext";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { TransactionCategory } from "@/services/sms/sms.types";
-import { leakAnalysisComingSoon } from "@/constants/copy";
 import { CATEGORY_ICONS } from "@/constants/category-icons";
+import { useLeaksStore } from "@/stores/leaksStore";
 
 export default function SmsResultsScreen() {
   const { colors } = useColorScheme();
   const completeOnboarding = useProfileStore((s) => s.completeOnboarding);
   const onboardingComplete = useProfileStore((s) => s.onboardingComplete);
   const { state, transactions } = useIngestion();
+  const { leaks, analysis } = useLeaksStore();
 
   const categoryBreakdown = transactions.reduce<
     Record<TransactionCategory, { count: number; total: number }>
@@ -102,11 +103,19 @@ export default function SmsResultsScreen() {
       <EmptyState
         className="mb-6"
         tone="brand"
-        title="No money leaks detected"
+        title={
+          analysis
+            ? leaks.length > 0
+              ? `${leaks.length} money leak${leaks.length === 1 ? "" : "s"} found`
+              : "No money leaks detected"
+            : "Analysis not available"
+        }
         description={
-          state.totalIngested > 0
-            ? leakAnalysisComingSoon(state.totalIngested)
-            : "We couldn't find bank SMS messages to analyse yet. Make sure TracePay has SMS permission, then try scanning again."
+          analysis
+            ? analysis.summary
+            : state.totalIngested > 0
+              ? "We could not complete backend analysis. Please scan again when the backend is available."
+              : "We couldn't find bank SMS messages to analyse yet. Make sure TracePay has SMS permission, then try scanning again."
         }
         icon={
           <EmptyStateIcon size="lg">

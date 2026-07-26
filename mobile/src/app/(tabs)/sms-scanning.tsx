@@ -115,8 +115,8 @@ export default function SmsScanningScreen() {
     preparing: isDemoMode ? "Preparing demo dataset…" : "Preparing SMS service…",
     reading: isDemoMode ? "Loading demo transactions…" : "Reading messages from inbox…",
     analysing: isDemoMode
-      ? "Normalising demo transactions…"
-      : "Parsing bank transactions…",
+      ? "Sending demo transactions for backend analysis…"
+      : "Sending sanitised transactions for backend analysis…",
     done: `Done — ${state.totalIngested} transaction${state.totalIngested !== 1 ? "s" : ""} ingested`,
     failed: "Scanning failed",
   };
