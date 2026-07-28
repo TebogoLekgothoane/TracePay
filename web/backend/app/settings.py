@@ -16,6 +16,7 @@ load_dotenv(BASE_DIR / ".env")
 class Settings(BaseModel):
     database_url: str = Field(...)
     secret_key: str = Field(...)
+    supabase_jwt_secret: str = Field(...)
     cors_origins: List[str] = Field(default_factory=list)
     app_public_url: str = ""
     backend_public_url: str = ""
@@ -51,6 +52,16 @@ class Settings(BaseModel):
             raise ValueError("SECRET_KEY is required for JWT authentication.")
         return value
 
+    @field_validator("supabase_jwt_secret")
+    @classmethod
+    def validate_supabase_jwt_secret(cls, value: str) -> str:
+        if not value:
+            raise ValueError(
+                "SUPABASE_JWT_SECRET is required to verify Supabase Auth tokens "
+                "(Supabase Dashboard -> Project Settings -> API -> JWT Settings)."
+            )
+        return value
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, value):
@@ -77,6 +88,7 @@ def get_settings() -> Settings:
     return Settings(
         database_url=os.getenv("DATABASE_URL", ""),
         secret_key=os.getenv("SECRET_KEY", ""),
+        supabase_jwt_secret=os.getenv("SUPABASE_JWT_SECRET", ""),
         cors_origins=os.getenv("CORS_ORIGINS", ""),
         app_public_url=os.getenv("APP_PUBLIC_URL", ""),
         backend_public_url=os.getenv("BACKEND_PUBLIC_URL", ""),

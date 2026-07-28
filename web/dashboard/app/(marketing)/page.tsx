@@ -1,186 +1,277 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, ShieldCheck, Sparkles } from "lucide-react";
-
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card";
+
+const EXHIBITS = [
+    {
+        id: "A",
+        title: "Airtime Drains",
+        body: "Small top-ups that feel like nothing on their own — and add up to real rand every month.",
+    },
+    {
+        id: "B",
+        title: "Cash-out Fees",
+        body: "What ATMs quietly take for balance checks and cash-outs — before you even see your balance.",
+    },
+    {
+        id: "C",
+        title: "Informal Loans",
+        body: "Mashonisa and P2P borrowing that never shows up as “debt” until it already is.",
+    },
+    {
+        id: "D",
+        title: "Zombie Subscriptions",
+        body: "Free trials that quietly became paid subscriptions, and gym or insurance debit orders still running long after you needed them.",
+    },
+];
+
+const PROOF_STATS = [
+    {
+        n: "01",
+        stat: "59%",
+        body: "of people we surveyed have no idea what they actually pay in fees.",
+    },
+    {
+        n: "02",
+        stat: "51%",
+        body: "have had unrecognised charges show up on their account.",
+    },
+    {
+        n: "03",
+        stat: "81%",
+        body: "want step-by-step help to actually stop a financial leak.",
+    },
+];
+
+const STEPS = [
+    {
+        n: "01",
+        title: "Connect, read-only",
+        body: "Link your bank or mobile money account. We only ever read your history — we never move money.",
+    },
+    {
+        n: "02",
+        title: "We trace the leaks",
+        body: "Every transaction gets sorted into what it actually was: a fee, a drain, a loan, or just spend.",
+    },
+    {
+        n: "03",
+        title: "You freeze what you want",
+        body: "Cut off a leak in one tap — simulate revoking consent on the merchants draining you dry.",
+    },
+];
 
 export default function LandingPage() {
     return (
-        <main className="mx-auto flex max-w-7xl flex-col gap-16 px-4 pb-20 pt-12 md:pt-20">
-            <section className="grid gap-12 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:items-center">
-                <div className="space-y-8">
-                    <Badge className="bg-primary/10 text-primary ring-1 ring-primary/30">
-                        Your finances, fully investigated
-                    </Badge>
-                    <div className="space-y-6">
-                        <h1 className="text-balance text-4xl font-bold leading-tight tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
-                            Accelerate Your Edge with{" "}
-                            <span className="bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
-                                Next-Gen
-                            </span>
-                            <br />
-                            <span className="bg-gradient-to-r from-accent to-primary bg-clip-text text-transparent">
-                                Money Autopsy
-                            </span>
-                        </h1>
-                        <p className="max-w-xl text-base text-muted-foreground md:text-lg">
-                            See the truth behind airtime drains, bank fees and informal
-                            loans. Money Autopsy turns raw transactions into clear{" "}
-                            <span className="text-foreground font-medium">Money Leaks</span> you can
-                            freeze in one click.
-                        </p>
+        <main className="mx-auto flex max-w-6xl flex-col gap-28 px-4 pb-28 pt-8 md:pt-16">
+            {/* Hero */}
+            <section className="grid gap-16 md:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] md:items-center">
+                <div className="animate-fade-up space-y-8">
+                    <div className="inline-flex -rotate-2 items-center gap-2 rounded-sm border border-dashed border-primary/50 bg-primary/5 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.2em] text-primary">
+                        Money Autopsy — Case Intake
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-4">
+                    <h1 className="text-balance font-display text-5xl font-medium leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
+                        Find out where your money{" "}
+                        <span className="relative inline-block whitespace-nowrap italic text-primary">
+                            actually went
+                            <svg
+                                viewBox="0 0 300 20"
+                                className="absolute -bottom-2 left-0 h-4 w-full text-primary"
+                                preserveAspectRatio="none"
+                            >
+                                <path
+                                    d="M2 14C60 4 240 4 298 14"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="4"
+                                    strokeLinecap="round"
+                                    pathLength="1"
+                                    className="animate-draw"
+                                />
+                            </svg>
+                        </span>
+                        .
+                    </h1>
+
+                    <p className="max-w-lg text-lg leading-relaxed text-muted-foreground">
+                        TracePay reads your bank and mobile money history like a forensic
+                        report — every airtime top-up, cash-out fee, and informal loan,
+                        laid out and traceable to the rand. Not another budgeting app.{" "}
+                        <span className="text-foreground">A financial investigator.</span>
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-6">
                         <Link href="/register">
-                            <Button size="lg" className="gap-2 rounded-full shadow-lg shadow-primary/30">
-                                Start Now
-                                <ArrowRight className="h-4 w-4" />
+                            <Button size="lg" className="rounded-sm px-6">
+                                Open Your Case File
                             </Button>
                         </Link>
-                        <Link href="/dashboard">
-                            <Button size="lg" variant="outline" className="rounded-full border-border/70">
-                                Learn More
-                            </Button>
-                        </Link>
+                        <a
+                            href="#exhibits"
+                            className="font-mono text-sm uppercase tracking-wide text-muted-foreground underline decoration-dashed underline-offset-4 transition-colors hover:text-foreground"
+                        >
+                            See what we catch ↓
+                        </a>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-6 pt-2 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-2">
-                            <ShieldCheck className="h-5 w-5 text-primary" />
-                            <span>Read-only analysis. Your consent, your data.</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Sparkles className="h-5 w-5 text-accent" />
-                            <span>Optimised for Eastern Cape money patterns.</span>
-                        </div>
+                    <div className="flex flex-col gap-2 border-l-2 border-border/60 pl-4 text-sm text-muted-foreground">
+                        <p>Read-only. Nothing moves without your say-so.</p>
+                        <p>Built on real Eastern Cape mobile-money patterns.</p>
+                        <p>Available in all 11 official South African languages.</p>
                     </div>
                 </div>
 
-                <div className="relative space-y-6">
-                    <Card className="relative border-primary/30 bg-gradient-to-br from-primary/10 via-background/95 to-background/95 shadow-glow-card backdrop-blur-sm">
-                        <CardHeader>
-                            <CardDescription className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
-                                Finance Overview
-                            </CardDescription>
-                            <CardTitle className="text-xl">Household Health Check</CardTitle>
-                        </CardHeader>
-                        <CardContent className="grid grid-cols-2 gap-6 pt-2">
-                            <div className="flex flex-col justify-center gap-4">
-                                <p className="text-sm text-muted-foreground">
-                                    Current Money Health
-                                </p>
-                                <p className="text-5xl font-bold tracking-tight text-primary">24%</p>
-                                <p className="text-xs leading-relaxed text-muted-foreground">
-                                    High airtime usage and informal loans detected this month.
-                                </p>
-                            </div>
-                            <div className="flex flex-col gap-4">
-                                <div className="rounded-xl bg-gradient-to-br from-primary/10 to-background/80 p-4 ring-1 ring-primary/50">
-                                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                                        Money Leaks
-                                    </p>
-                                    <p className="mt-2 text-base font-semibold">Airtime Drains</p>
-                                    <p className="mt-1.5 text-xs text-muted-foreground">
-                                        R410 leaking every month on small top-ups.
-                                    </p>
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="rounded-lg bg-background/90 p-3 ring-1 ring-border/70 backdrop-blur">
-                                        <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                                            Fees
-                                        </p>
-                                        <p className="mt-1.5 text-base font-bold">R192</p>
-                                        <p className="mt-1 text-[11px] text-muted-foreground">
-                                            Cash-out & service fees
-                                        </p>
-                                    </div>
-                                    <div className="rounded-lg bg-background/90 p-3 ring-1 ring-border/70 backdrop-blur">
-                                        <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                                            Informal Loans
-                                        </p>
-                                        <p className="mt-1.5 text-base font-bold">38%</p>
-                                        <p className="mt-1 text-[11px] text-muted-foreground">
-                                            Of spending sent P2P this month
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                {/* App preview */}
+                <div className="animate-fade-up [animation-delay:150ms] relative mx-auto w-full max-w-xs md:mx-0 md:ml-auto">
+                    <div
+                        aria-hidden
+                        className="absolute left-1/2 top-1/2 -z-10 h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/25 blur-[90px]"
+                    />
 
-                    <div className="grid gap-4 md:grid-cols-2">
-                        <Card className="border-border/70 bg-background/60 shadow-glow-card backdrop-blur">
-                            <CardHeader>
-                                <CardTitle className="text-base">Freeze Money Leaks</CardTitle>
-                                <CardDescription className="text-sm">
-                                    Simulate revoking consent on high-risk merchants and
-                                    transfers.
-                                </CardDescription>
-                            </CardHeader>
-                        </Card>
-                        <Card className="border-border/70 bg-background/60 shadow-glow-card backdrop-blur">
-                            <CardHeader>
-                                <CardTitle className="text-base">Built for FinTech School</CardTitle>
-                                <CardDescription className="text-sm">
-                                    Powered by FastAPI + Next.js + Pandas on real-world MoMo
-                                    patterns.
-                                </CardDescription>
-                            </CardHeader>
-                        </Card>
+                    <Image
+                        src="/app-preview.png"
+                        alt="TracePay app home screen showing a financial health score of 100 and no leaks detected"
+                        width={339}
+                        height={736}
+                        priority
+                        unoptimized
+                        className="relative mx-auto w-full max-w-[260px] rotate-[2deg] drop-shadow-2xl"
+                    />
+
+                    <div className="absolute -left-6 top-16 hidden -rotate-3 flex-col gap-1 rounded-sm border border-border/70 bg-card px-3 py-2 font-mono text-[11px] text-muted-foreground shadow-glow-card lg:flex">
+                        <span className="text-primary">Financial Health Score</span>
+                        <span>Updated after every scan</span>
+                    </div>
+
+                    <div className="absolute -bottom-2 -right-2 rotate-[6deg] rounded-sm border-2 border-dashed border-primary/60 bg-primary/10 px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-widest text-primary shadow-sm">
+                        Real App Preview
                     </div>
                 </div>
             </section>
 
-            <section className="relative overflow-hidden rounded-3xl border border-border/50 bg-gradient-to-br from-background/90 to-background/60 px-8 py-12 backdrop-blur-xl md:px-12">
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
-                <div className="relative grid gap-8 md:grid-cols-[2fr_3fr]">
-                    <div className="flex flex-col justify-center">
-                        <p className="text-lg font-light leading-relaxed text-muted-foreground md:text-xl">
-                            We give individuals the tools to grow their financial future.
-                        </p>
-                    </div>
-                    <div className="grid gap-8 md:grid-cols-3">
-                        <div>
-                            <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
-                                Signal
-                            </p>
-                            <p className="mt-3 text-4xl font-bold md:text-5xl">98%</p>
-                            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                                Clients Satisfaction
-                            </p>
-                        </div>
-                        <div>
-                            <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
-                                Coverage
-                            </p>
-                            <p className="mt-3 text-4xl font-bold md:text-5xl">65M+</p>
-                            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                                Revenue Total
-                            </p>
-                        </div>
-                        <div>
-                            <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
-                                Control
-                            </p>
-                            <p className="mt-3 text-4xl font-bold md:text-5xl">100%</p>
-                            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                                Customer Loyalty Rate
-                            </p>
-                        </div>
-                    </div>
+            {/* Proof */}
+            <section className="space-y-10">
+                <div className="max-w-xl space-y-3">
+                    <p className="font-mono text-xs uppercase tracking-[0.25em] text-primary">
+                        The Evidence
+                    </p>
+                    <h2 className="font-display text-3xl font-medium tracking-tight sm:text-4xl">
+                        Money disappears. Most people don&apos;t know why.
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                        Small leaks. Repeated monthly. Big impact. From our own survey of
+                        people just like you.
+                    </p>
                 </div>
+
+                <div className="grid gap-8 sm:grid-cols-3">
+                    {PROOF_STATS.map((s) => (
+                        <div key={s.n} className="space-y-2">
+                            <span className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                                {s.n}.
+                            </span>
+                            <p className="font-display text-5xl font-medium text-primary">
+                                {s.stat}
+                            </p>
+                            <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
+                                {s.body}
+                            </p>
+                        </div>
+                    ))}
+                </div>
+            </section>
+
+            {/* What we catch */}
+            <section id="exhibits" className="scroll-mt-24 space-y-10">
+                <div className="max-w-xl space-y-3">
+                    <p className="font-mono text-xs uppercase tracking-[0.25em] text-primary">
+                        The Usual Suspects
+                    </p>
+                    <h2 className="font-display text-3xl font-medium tracking-tight sm:text-4xl">
+                        Four ways your money quietly disappears.
+                    </h2>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                    {EXHIBITS.map((exhibit) => (
+                        <div
+                            key={exhibit.id}
+                            className="group relative rounded-sm border border-border/60 bg-card/60 p-6 transition-colors hover:border-primary/40"
+                        >
+                            <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                                Exhibit {exhibit.id}
+                            </span>
+                            <h3 className="mt-3 font-display text-xl font-medium">
+                                {exhibit.title}
+                            </h3>
+                            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                                {exhibit.body}
+                            </p>
+                        </div>
+                    ))}
+                </div>
+            </section>
+
+            {/* How it works */}
+            <section className="space-y-12">
+                <div className="max-w-xl space-y-3">
+                    <p className="font-mono text-xs uppercase tracking-[0.25em] text-primary">
+                        The Process
+                    </p>
+                    <h2 className="font-display text-3xl font-medium tracking-tight sm:text-4xl">
+                        From bank statement to case closed.
+                    </h2>
+                </div>
+
+                <div className="grid gap-10 md:grid-cols-3">
+                    {STEPS.map((step, i) => (
+                        <div key={step.n} className="relative space-y-3">
+                            <span
+                                aria-hidden
+                                className="font-display text-6xl font-medium text-transparent [-webkit-text-stroke:1.5px_var(--border)]"
+                            >
+                                {step.n}
+                            </span>
+                            <h3 className="font-display text-xl font-medium">{step.title}</h3>
+                            <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
+                                {step.body}
+                            </p>
+                            {i < STEPS.length - 1 && (
+                                <div
+                                    aria-hidden
+                                    className="absolute right-[-1.25rem] top-8 hidden h-px w-8 border-t border-dashed border-border/70 md:block"
+                                />
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </section>
+
+            {/* Closing CTA */}
+            <section className="bg-grain relative overflow-hidden rounded-sm border border-border/60 bg-card/60 px-8 py-14 text-center md:px-16">
+                <h2 className="mx-auto max-w-lg text-balance font-display text-3xl font-medium tracking-tight sm:text-4xl">
+                    Your money has a story.
+                    <br />
+                    Let&apos;s read it.
+                </h2>
+                <p className="mx-auto mt-4 max-w-sm text-sm text-muted-foreground">
+                    Free for you, always. No card required — we only earn when we find
+                    you real savings.
+                </p>
+                <div className="mt-8 flex justify-center">
+                    <Link href="/register">
+                        <Button size="lg" className="rounded-sm px-8">
+                            Open Your Case File
+                        </Button>
+                    </Link>
+                </div>
+                <p className="mt-10 font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+                    Built for the 2026 FinTech Summer School Hackathon
+                </p>
             </section>
         </main>
     );
 }
-

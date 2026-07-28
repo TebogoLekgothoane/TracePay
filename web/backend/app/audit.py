@@ -1,19 +1,35 @@
 from __future__ import annotations
 
-from typing import Any
+import uuid
+from typing import Any, Union
 
 from fastapi import Request
 from sqlalchemy.orm import Session
 
-from .models_db import AuditLog, User
+from .auth import AuthenticatedUser
+from .models_db import AuditLog, Profile
+
+# Accepts either a resolved identity object (AuthenticatedUser/Profile) or a
+# raw UUID directly, since some call sites only have a user_id on hand (e.g.
+# a business record's `user_id` column) and shouldn't need to look up a
+# Profile row just to log who it belongs to.
+ActorLike = Union[AuthenticatedUser, Profile, uuid.UUID, None]
+
+
+def _actor_id(actor: ActorLike) -> uuid.UUID | None:
+    if actor is None:
+        return None
+    if isinstance(actor, uuid.UUID):
+        return actor
+    return actor.id
 
 
 def add_audit_event(
     db: Session,
     event_type: str,
     *,
-    actor: User | None = None,
-    target_user: User | None = None,
+    actor: ActorLike = None,
+    target_user: ActorLike = None,
     metadata: dict[str, Any] | None = None,
     request: Request | None = None,
 ) -> AuditLog:
@@ -28,8 +44,8 @@ def add_audit_event(
 
     audit_log = AuditLog(
         event_type=event_type,
-        actor_user_id=actor.id if actor is not None else None,
-        target_user_id=target_user.id if target_user is not None else None,
+        actor_user_id=_actor_id(actor),
+        target_user_id=_actor_id(target_user),
         ip_address=ip_address,
         user_agent=user_agent,
         event_metadata={**request_metadata, **(metadata or {})},

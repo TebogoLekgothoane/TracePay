@@ -4,7 +4,6 @@ from datetime import datetime
 import uuid
 
 from sqlalchemy import (
-    Boolean,
     Column,
     DateTime,
     Float,
@@ -20,46 +19,39 @@ from sqlalchemy.orm import relationship
 from .database import Base
 
 
-class User(Base):
-    __tablename__ = "users"
+class Profile(Base):
+    """Read-only mapping onto Supabase's `public.profiles` table.
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    username = Column(String(255), unique=True, nullable=True)  # Keep for compatibility
-    full_name = Column(String(255), nullable=True)  # Keep for compatibility
-    email = Column(String(255), unique=False, index=True, nullable=False)
-    password_hash = Column(String(255), nullable=False)
-    created_at = Column(
-        DateTime(timezone=True), default=datetime.utcnow, nullable=False
-    )
+    This table is owned by the mobile app / Supabase project setup, not by
+    this backend -- no Alembic migration here ever creates, alters, or drops
+    it. Only the columns this backend actually reads are declared; the real
+    table has additional mobile-only columns (recovery_email, reward_points,
+    etc.) that are intentionally omitted.
+    """
+
+    __tablename__ = "profiles"
+
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    full_name = Column(String(255), nullable=True)
     role = Column(String(50), default="user", nullable=False)
-    is_active = Column(Boolean, default=True, nullable=False)
-    email_verified_at = Column(DateTime(timezone=True), nullable=True)
-    auth_token_version = Column(Integer, default=0, server_default="0", nullable=False)
-    failed_login_attempts = Column(
-        Integer, default=0, server_default="0", nullable=False
-    )
-    login_cooldown_until = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
 
-    # Relationships
-    linked_accounts = relationship(
-        "LinkedAccount", back_populates="user", cascade="all, delete-orphan"
-    )
-    transactions = relationship(
-        "Transaction", back_populates="user", cascade="all, delete-orphan"
-    )
-    analysis_results = relationship(
-        "AnalysisResult", back_populates="user", cascade="all, delete-orphan"
-    )
-    frozen_items = relationship(
-        "FrozenItem", back_populates="user", cascade="all, delete-orphan"
-    )
+
+# The six models below store `user_id`/`actor_user_id`/`target_user_id` as
+# plain UUID columns with no foreign key constraint. There is no
+# backend-owned `users` table -- identity lives in Supabase's `auth.users`
+# (a separate schema this repo's Alembic doesn't manage) and `profiles`
+# (owned by the mobile app, see `Profile` above). Adding a DB-level FK to
+# either would give this repo's migrations authority over a table they
+# don't create, which has already caused one historical inconsistency
+# (dangling FKs to a `users` table that no longer exists).
 
 
 class LinkedAccount(Base):
     __tablename__ = "linked_accounts"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     bank_name = Column(String(100), nullable=False)
     account_id = Column(String(255), nullable=False)
     open_banking_consent_id = Column(String(255), nullable=True)
@@ -70,7 +62,6 @@ class LinkedAccount(Base):
     )
     account_metadata = Column("metadata", JSON, default=dict)
 
-    user = relationship("User", back_populates="linked_accounts")
     transactions = relationship(
         "Transaction", back_populates="account", cascade="all, delete-orphan"
     )
@@ -80,7 +71,7 @@ class Transaction(Base):
     __tablename__ = "transactions"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     account_id = Column(Integer, ForeignKey("linked_accounts.id"), nullable=True)
     transaction_id = Column(String(255), unique=True, index=True, nullable=False)
     timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
@@ -98,7 +89,6 @@ class Transaction(Base):
         DateTime(timezone=True), default=datetime.utcnow, nullable=False
     )
 
-    user = relationship("User", back_populates="transactions")
     account = relationship("LinkedAccount", back_populates="transactions")
 
 
@@ -106,7 +96,7 @@ class AnalysisResult(Base):
     __tablename__ = "analysis_results"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     financial_health_score = Column(Integer, nullable=False)
     health_band = Column(String(20), nullable=False)
     money_leaks = Column(JSON, default=list)
@@ -116,14 +106,12 @@ class AnalysisResult(Base):
     )
     transaction_count = Column(Integer, default=0, nullable=False)
 
-    user = relationship("User", back_populates="analysis_results")
-
 
 class FrozenItem(Base):
     __tablename__ = "frozen_items"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     leak_id = Column(String(255), nullable=True)
     transaction_id = Column(String(255), nullable=True)
     consent_id = Column(String(255), nullable=True)
@@ -132,8 +120,6 @@ class FrozenItem(Base):
         DateTime(timezone=True), default=datetime.utcnow, nullable=False, index=True
     )
     status = Column(String(50), default="frozen", nullable=False)
-
-    user = relationship("User", back_populates="frozen_items")
 
 
 class RegionalStat(Base):
@@ -156,7 +142,7 @@ class BackgroundJob(Base):
     job_id = Column(String(64), unique=True, index=True, nullable=False)
     job_type = Column(String(100), index=True, nullable=False)
     status = Column(String(50), default="pending", index=True, nullable=False)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    user_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     payload = Column(JSON, default=dict, nullable=False)
     result = Column(JSON, nullable=True)
     error = Column(Text, nullable=True)
@@ -172,12 +158,8 @@ class AuditLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     event_type = Column(String(100), index=True, nullable=False)
-    actor_user_id = Column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True
-    )
-    target_user_id = Column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True
-    )
+    actor_user_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    target_user_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     ip_address = Column(String(64), nullable=True)
     user_agent = Column(Text, nullable=True)
     event_metadata = Column("metadata", JSON, default=dict, nullable=False)

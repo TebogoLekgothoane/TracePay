@@ -10,10 +10,10 @@ from gtts import gTTS
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_user
+from ..auth import AuthenticatedUser, get_current_user
 from ..database import get_db
 from ..external_http import request_json_with_retries
-from ..models_db import AnalysisResult, User
+from ..models_db import AnalysisResult
 from ..settings import settings
 
 router = APIRouter(prefix="/voice", tags=["voice"])
@@ -116,7 +116,7 @@ async def voice_chat(req: VoiceChatRequest) -> VoiceChatResponse:
 def generate_voice(
     text: str = Query(min_length=1, max_length=2000),
     lang: str = Query(default="xh", min_length=2, max_length=10),  # IsiXhosa
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
 ) -> StreamingResponse:
     """Generate IsiXhosa audio from text"""
     if not text or len(text.strip()) == 0:
@@ -146,7 +146,7 @@ def generate_voice(
 @router.get("/analysis/{analysis_id}")
 def get_voice_analysis(
     analysis_id: int = Path(gt=0),
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
     """Get voice summary of an analysis"""

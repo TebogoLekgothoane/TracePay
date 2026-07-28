@@ -108,13 +108,10 @@ export default function UsersPage() {
                 className="flex items-center justify-between rounded-lg border p-4"
               >
                 <div>
-                  <div className="font-medium">{u.email}</div>
+                  <div className="font-medium">{u.full_name || u.id}</div>
                   <div className="text-sm text-muted-foreground">
                     Profile: {u.role === 'admin' ? 'Lead Analyst' : 'Standard Monitor'} • Established: {new Date(u.created_at).toLocaleDateString()}
                   </div>
-                </div>
-                <div className={u.is_active ? "text-green-400" : "text-red-400"}>
-                  {u.is_active ? "Data Pipeline: ACTIVE" : "Data Pipeline: INACTIVE"}
                 </div>
               </div>
             ))}

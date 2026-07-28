@@ -39,7 +39,6 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
     )
     op.create_index("ix_background_jobs_id", "background_jobs", ["id"], unique=False)
     op.create_index("ix_background_jobs_job_id", "background_jobs", ["job_id"], unique=True)

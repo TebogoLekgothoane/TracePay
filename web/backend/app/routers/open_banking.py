@@ -10,7 +10,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_user
+from ..auth import AuthenticatedUser, get_current_user
 from ..audit import add_audit_event
 from ..background_jobs import (
     JOB_OPEN_BANKING_FETCH,
@@ -18,7 +18,7 @@ from ..background_jobs import (
     enqueue_background_job,
 )
 from ..database import get_db
-from ..models_db import LinkedAccount, User
+from ..models_db import LinkedAccount
 from ..open_banking_client import OpenBankingSandboxClient, SandboxConfig
 from ..settings import settings
 
@@ -165,7 +165,7 @@ class ConsentResponse(BaseModel):
 async def create_consent(
     req: ConsentRequest,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ConsentResponse:
     """Create Open Banking consent for account access"""
@@ -311,7 +311,7 @@ async def consent_callback(
 @router.get("/consent/{consent_id}")
 async def get_consent(
     consent_id: str = Path(min_length=1, max_length=255),
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Check consent status"""
@@ -357,7 +357,7 @@ async def get_consent(
 async def fetch_transactions(
     request: Request,
     account_id: int = Query(gt=0),
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> JobAcceptedResponse:
     """Queue Open Banking transaction sync and forensic analysis."""
@@ -407,7 +407,7 @@ async def fetch_transactions(
 
 @router.get("/accounts")
 async def list_open_banking_accounts(
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """List accounts from Open Banking"""

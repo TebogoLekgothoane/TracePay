@@ -74,8 +74,6 @@
   }
 
   @theme inline {
-    --font-sans: 'Geist', 'Geist Fallback';
-    --font-mono: 'Geist Mono', 'Geist Mono Fallback';
     --color-background: var(--background);
     --color-foreground: var(--foreground);
     --color-card: var(--card);
@@ -133,13 +131,68 @@ body {
     box-shadow: 0 8px 32px -8px hsl(0 0% 0% / 0.6), 0 0 0 1px hsl(var(--border) / 0.5);
 }
 
+/* Subtle film-grain texture so glass/gradient surfaces don't read as flat AI-template gradients. */
+.bg-grain {
+    position: relative;
+    isolation: isolate;
+}
 
+.bg-grain::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    opacity: 0.05;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@keyframes scan-sweep {
+    0% {
+        transform: translateY(-110%);
+    }
+    100% {
+        transform: translateY(210%);
+    }
+}
+
+.animate-scan {
+    animation: scan-sweep 4.5s ease-in-out infinite;
+}
+
+@keyframes draw-in {
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+.animate-draw {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: draw-in 0.9s 0.4s ease-out forwards;
+}
+
+@keyframes fade-up {
+    from {
+        opacity: 0;
+        transform: translateY(14px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-fade-up {
+    animation: fade-up 0.7s ease-out both;
+}
 
 @layer base {
     * {
       border-color: var(--border);
     }
     body {
-      @apply bg-background text-foreground;
+      @apply text-foreground;
     }
 }

@@ -13,7 +13,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .auth import get_current_admin_user, get_current_user
+from .auth import AuthenticatedUser, get_current_admin_user, get_current_user
 from .audit import add_audit_event
 from .database import get_db
 from .errors import (
@@ -26,7 +26,7 @@ from .forensic_engine import ForensicEngine
 from .observability import RequestLoggingMiddleware, configure_logging
 from .settings import settings
 from .background_jobs import start_background_worker, stop_background_worker
-from .models_db import BackgroundJob, FrozenItem, User
+from .models_db import BackgroundJob, FrozenItem
 from .models import (
     AnalyzeRequest,
     AnalyzeResponse,
@@ -86,7 +86,7 @@ def health_live() -> Dict[str, str]:
 @app.get("/v1/db-health")
 @app.get("/db-health")
 def db_health(
-    _current_user: User = Depends(get_current_admin_user),
+    _current_user: AuthenticatedUser = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, str]:
     """
@@ -200,7 +200,7 @@ def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
 def freeze(
     req: FreezeRequest,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> FreezeResponse:
     """
@@ -252,7 +252,7 @@ def freeze(
 @app.get("/v1/frozen")
 @app.get("/frozen")
 def frozen(
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     try:
@@ -288,7 +288,7 @@ def frozen(
 @app.get("/jobs/{job_id}")
 def get_background_job(
     job_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     job = db.query(BackgroundJob).filter(BackgroundJob.job_id == job_id).first()

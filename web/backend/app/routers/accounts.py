@@ -7,10 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_user
+from ..auth import AuthenticatedUser, get_current_user
 from ..audit import add_audit_event
 from ..database import get_db
-from ..models_db import LinkedAccount, User
+from ..models_db import LinkedAccount
 from ..open_banking_client import OpenBankingSandboxClient, SandboxConfig
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
@@ -42,7 +42,7 @@ class AccountResponse(BaseModel):
 def link_account(
     req: LinkAccountRequest,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> AccountResponse:
     """Link a new bank account"""
@@ -93,7 +93,7 @@ def link_account(
 
 
 @router.get("", response_model=List[AccountResponse])
-def list_accounts(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> List[AccountResponse]:
+def list_accounts(current_user: AuthenticatedUser = Depends(get_current_user), db: Session = Depends(get_db)) -> List[AccountResponse]:
     """List user's linked accounts"""
     accounts = db.query(LinkedAccount).filter(LinkedAccount.user_id == current_user.id).all()
     return [
@@ -114,7 +114,7 @@ def list_accounts(current_user: User = Depends(get_current_user), db: Session = 
 def unlink_account(
     request: Request,
     account_id: int = Path(gt=0),
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, str]:
     """Unlink an account"""
@@ -143,7 +143,7 @@ def unlink_account(
 @router.post("/{account_id}/sync")
 def sync_account(
     account_id: int = Path(gt=0),
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, str]:
     """Manually sync transactions for an account"""

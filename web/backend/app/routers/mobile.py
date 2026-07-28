@@ -7,10 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_user
+from ..auth import AuthenticatedUser, get_current_user
 from ..audit import add_audit_event
 from ..database import get_db
-from ..models_db import FrozenItem, User
+from ..models_db import FrozenItem
 
 router = APIRouter(prefix="/mobile", tags=["mobile"])
 
@@ -53,7 +53,7 @@ class FrozenItemResponse(BaseModel):
 def freeze_leak(
     req: FreezeRequest,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> FreezeResponse:
     """Freeze a leak (for mobile app)"""
@@ -95,7 +95,7 @@ def freeze_leak(
 
 @router.get("/frozen", response_model=List[FrozenItemResponse])
 def list_frozen(
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> List[FrozenItemResponse]:
     """List user's frozen items"""
@@ -124,7 +124,7 @@ def list_frozen(
 def unfreeze(
     request: Request,
     frozen_item_id: int = Path(gt=0),
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, str]:
     """Unfreeze an item"""

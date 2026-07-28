@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { apiClient } from "@/lib/api";
+import { getSupabase } from "@/lib/supabase";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -20,8 +20,13 @@ export default function ForgotPasswordPage() {
     setMessage(null);
     setError(null);
     try {
-      const response = await apiClient.requestPasswordReset(email);
-      setMessage(response.message);
+      const { error: resetError } = await getSupabase().auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (resetError) {
+        throw resetError;
+      }
+      setMessage("If an account exists for that email, reset instructions have been sent.");
       setEmail("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not request password reset.");

@@ -25,20 +25,10 @@ def upgrade() -> None:
     bind = op.get_bind()
     inspector = inspect(bind)
 
-    if not inspector.has_table("users"):
-        op.create_table(
-            "users",
-            sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
-            sa.Column("username", sa.String(length=255), nullable=True),
-            sa.Column("full_name", sa.String(length=255), nullable=True),
-            sa.Column("email", sa.String(length=255), nullable=True),
-            sa.Column("password_hash", sa.String(length=255), nullable=True),
-            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-            sa.Column("role", sa.String(length=50), nullable=False),
-            sa.Column("is_active", sa.Boolean(), nullable=False),
-        )
-        op.create_index(op.f("ix_users_email"), "users", ["email"], unique=True)
-        op.create_index(op.f("ix_users_id"), "users", ["id"], unique=False)
+    # Identity lives in Supabase Auth (auth.users) + the mobile app's
+    # public.profiles table, neither of which this repo's Alembic manages --
+    # there is no backend-owned `users` table. See app/models_db.py's
+    # `Profile` model.
 
     if not inspector.has_table("linked_accounts"):
         op.create_table(
@@ -52,7 +42,6 @@ def upgrade() -> None:
             sa.Column("last_synced_at", sa.DateTime(timezone=True), nullable=True),
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
             sa.Column("metadata", sa.JSON(), nullable=True),
-            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
         )
         op.create_index(op.f("ix_linked_accounts_id"), "linked_accounts", ["id"], unique=False)
 
@@ -76,7 +65,6 @@ def upgrade() -> None:
             sa.Column("analyzed_at", sa.DateTime(timezone=True), nullable=True),
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
             sa.ForeignKeyConstraint(["account_id"], ["linked_accounts.id"]),
-            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
         )
         op.create_index(op.f("ix_transactions_id"), "transactions", ["id"], unique=False)
         op.create_index(op.f("ix_transactions_timestamp"), "transactions", ["timestamp"], unique=False)
@@ -93,7 +81,6 @@ def upgrade() -> None:
             sa.Column("summary_plain_language", sa.Text(), nullable=False),
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
             sa.Column("transaction_count", sa.Integer(), nullable=False),
-            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
         )
         op.create_index(op.f("ix_analysis_results_created_at"), "analysis_results", ["created_at"], unique=False)
         op.create_index(op.f("ix_analysis_results_id"), "analysis_results", ["id"], unique=False)
@@ -108,7 +95,6 @@ def upgrade() -> None:
             sa.Column("reason", sa.Text(), nullable=False),
             sa.Column("frozen_at", sa.DateTime(timezone=True), nullable=False),
             sa.Column("status", sa.String(length=50), nullable=False),
-            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
         )
         op.create_index(op.f("ix_frozen_items_frozen_at"), "frozen_items", ["frozen_at"], unique=False)
         op.create_index(op.f("ix_frozen_items_id"), "frozen_items", ["id"], unique=False)
@@ -149,7 +135,3 @@ def downgrade() -> None:
 
     op.drop_index(op.f("ix_linked_accounts_id"), table_name="linked_accounts")
     op.drop_table("linked_accounts")
-
-    op.drop_index(op.f("ix_users_id"), table_name="users")
-    op.drop_index(op.f("ix_users_email"), table_name="users")
-    op.drop_table("users")

@@ -1,139 +1,101 @@
 from __future__ import annotations
 
-import uuid
-
-from app.models_db import AuditLog
-
-from app.models_db import User
+from app.settings import settings
 
 from conftest import (
-    BrokenCommitSession,
     BrokenQuerySession,
     auth_headers,
+    create_db_profile,
+    override_current_user,
     override_db_with,
+    supabase_style_token,
 )
 
 
-def test_register_login_me_and_refresh(client, db_session, test_email):
-    password = "Password123!"
+def test_me_returns_current_user_profile(client, db_session):
+    profile = create_db_profile(db_session, role="admin", full_name="Test User")
+    override_current_user(profile, email="me@example.com")
 
-    register_response = client.post(
-        "/v1/auth/register",
-        json={"email": test_email.upper(), "password": password},
-    )
+    response = client.get("/v1/auth/me")
 
-    assert register_response.status_code == 201
-    registered = register_response.json()
-    assert registered["email"] == test_email
-    assert registered["role"] == "user"
-    assert registered["access_token"]
-    registered_user_id = uuid.UUID(registered["user_id"])
-    assert (
-        db_session.query(AuditLog)
-        .filter(AuditLog.event_type == "user_created", AuditLog.target_user_id == registered_user_id)
-        .count()
-        == 1
-    )
-
-    saved_user = db_session.query(User).filter(User.email == test_email).first()
-    assert saved_user is not None
-    assert saved_user.role == "user"
-
-    login_response = client.post(
-        "/v1/auth/login",
-        json={"email": test_email, "password": password},
-    )
-    assert login_response.status_code == 200
-    token = login_response.json()["access_token"]
-    assert (
-        db_session.query(AuditLog)
-        .filter(AuditLog.event_type == "login_succeeded", AuditLog.target_user_id == registered_user_id)
-        .count()
-        == 1
-    )
-
-    me_response = client.get("/v1/auth/me", headers=auth_headers(token))
-    assert me_response.status_code == 200
-    assert me_response.json()["email"] == test_email
-
-    refresh_response = client.post("/v1/auth/refresh", headers=auth_headers(token))
-    assert refresh_response.status_code == 200
-    assert refresh_response.json()["email"] == test_email
-    assert refresh_response.json()["access_token"]
-
-
-def test_register_rejects_invalid_request(client):
-    response = client.post(
-        "/v1/auth/register",
-        json={"email": "not-an-email", "password": "short", "extra": True},
-    )
-
-    assert response.status_code == 422
+    assert response.status_code == 200
     body = response.json()
-    assert body["error"]["code"] == "validation_error"
+    assert body["id"] == str(profile.id)
+    assert body["email"] == "me@example.com"
+    assert body["role"] == "admin"
 
 
-def test_failed_login_writes_audit_event(client, db_session, test_email):
-    register_response = client.post(
-        "/v1/auth/register",
-        json={"email": test_email, "password": "Password123!"},
-    )
-    assert register_response.status_code == 201
-
-    response = client.post(
-        "/v1/auth/login",
-        json={"email": test_email, "password": "wrong-password"},
-    )
-
-    assert response.status_code == 401
-    assert (
-        db_session.query(AuditLog)
-        .filter(
-            AuditLog.event_type == "login_failed",
-            AuditLog.target_user_id == uuid.UUID(register_response.json()["user_id"]),
-        )
-        .count()
-        == 1
-    )
+def test_me_requires_authorization(client):
+    # FastAPI's HTTPBearer security scheme itself returns 403 (not 401) when
+    # no Authorization header is present at all; 401 is reserved for a
+    # present-but-invalid token (see get_current_user).
+    response = client.get("/v1/auth/me")
+    assert response.status_code == 403
 
 
-def test_register_database_query_failure_returns_service_unavailable(client):
-    override_db_with(BrokenQuerySession())
+def test_me_defaults_role_to_user_when_no_profile_row_exists(client, db_session):
+    # A JWT can be valid (a real Supabase user) before a `profiles` row exists
+    # for them -- get_current_user should default to "user", not 500.
+    import uuid
 
-    response = client.post(
-        "/v1/auth/register",
-        json={"email": "query-failure@example.com", "password": "Password123!"},
-    )
+    user_id = uuid.uuid4()
+    token = supabase_style_token(user_id, "brand-new@example.com")
 
-    assert response.status_code == 503
-    assert response.json()["error"]["code"] == "service_unavailable"
+    response = client.get("/v1/auth/me", headers=auth_headers(token))
 
-
-def test_register_database_commit_failure_returns_service_unavailable(client):
-    override_db_with(BrokenCommitSession())
-
-    response = client.post(
-        "/v1/auth/register",
-        json={"email": "commit-failure@example.com", "password": "Password123!"},
-    )
-
-    assert response.status_code == 503
-    assert response.json()["error"]["code"] == "service_unavailable"
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == str(user_id)
+    assert body["role"] == "user"
 
 
-def test_me_database_failure_returns_service_unavailable(
-    client, db_session, test_email
-):
-    token_response = client.post(
-        "/v1/auth/register",
-        json={"email": test_email, "password": "Password123!"},
-    )
-    assert token_response.status_code == 201
-    token = token_response.json()["access_token"]
+def test_me_database_failure_returns_service_unavailable(client):
+    import uuid
 
+    token = supabase_style_token(uuid.uuid4(), "db-failure@example.com")
     override_db_with(BrokenQuerySession())
 
     response = client.get("/v1/auth/me", headers=auth_headers(token))
 
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "service_unavailable"
+
+
+def test_bootstrap_admin_rejects_wrong_token(client, monkeypatch):
+    monkeypatch.setattr(settings, "admin_bootstrap_token", "correct-token")
+
+    response = client.post(
+        "/v1/auth/bootstrap-admin",
+        json={"email": "someone@example.com", "bootstrap_token": "wrong-token"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_bootstrap_admin_requires_configuration(client, monkeypatch):
+    monkeypatch.setattr(settings, "admin_bootstrap_token", "")
+
+    response = client.post(
+        "/v1/auth/bootstrap-admin",
+        json={"email": "someone@example.com", "bootstrap_token": "anything"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_bootstrap_admin_404s_for_unknown_supabase_account(client, monkeypatch, test_email):
+    monkeypatch.setattr(settings, "admin_bootstrap_token", "correct-token")
+
+    response = client.post(
+        "/v1/auth/bootstrap-admin",
+        json={"email": test_email, "bootstrap_token": "correct-token"},
+    )
+
+    assert response.status_code == 404
+
+
+# Note: the "successfully promotes an existing Supabase user to admin" happy
+# path is intentionally not covered here -- it requires a real row in
+# Supabase's `auth.users` (a schema this test suite doesn't own or create),
+# and faking one directly would risk bypassing Supabase's own invariants for
+# very little value. Covered manually per the verification plan instead.

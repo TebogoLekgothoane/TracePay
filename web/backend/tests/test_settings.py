@@ -10,6 +10,7 @@ def _settings(cors_origins: str) -> Settings:
     return Settings(
         database_url="postgresql://user:password@example.com:5432/postgres",
         secret_key="test-secret",
+        supabase_jwt_secret="test-supabase-jwt-secret",
         cors_origins=cors_origins,
     )
 

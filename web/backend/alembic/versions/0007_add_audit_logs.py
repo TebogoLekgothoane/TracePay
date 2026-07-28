@@ -36,8 +36,6 @@ def upgrade() -> None:
         sa.Column("user_agent", sa.Text(), nullable=True),
         sa.Column("metadata", sa.JSON(), nullable=False, server_default="{}"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(["actor_user_id"], ["users.id"]),
-        sa.ForeignKeyConstraint(["target_user_id"], ["users.id"]),
     )
     op.create_index("ix_audit_logs_id", "audit_logs", ["id"], unique=False)
     op.create_index("ix_audit_logs_event_type", "audit_logs", ["event_type"], unique=False)

@@ -9,9 +9,9 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..audit import add_audit_event
-from ..auth import get_current_admin_user
+from ..auth import AuthenticatedUser, get_current_admin_user
 from ..database import get_db, SessionLocal
-from ..models_db import AnalysisResult, FrozenItem, LinkedAccount, RegionalStat, Transaction, User
+from ..models_db import AnalysisResult, FrozenItem, LinkedAccount, Profile, RegionalStat, Transaction
 from ..open_banking_client import OpenBankingSandboxClient, SandboxConfig
 from ..settings import settings
 from ..forensic_engine import ForensicEngine
@@ -19,9 +19,9 @@ from ..forensic_engine import ForensicEngine
 
 def audit_admin_request(
     request: Request,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: AuthenticatedUser = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
-) -> User:
+) -> AuthenticatedUser:
     add_audit_event(
         db,
         "admin_action",
@@ -84,8 +84,24 @@ def get_overview_stats(
     db: Session = Depends(get_db),
 ) -> OverviewStats:
     """Get overall platform statistics from persisted platform data."""
-    total_users = db.query(User).count()
-    active_users = db.query(User).filter(User.is_active == True).count()
+    total_users = db.query(Profile).count()
+
+    # "Active" has no direct column now that identity lives in Supabase Auth
+    # (which manages its own account status) -- defined here as distinct
+    # users with a transaction or analysis in the last 30 days.
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    active_from_transactions = (
+        db.query(Transaction.user_id)
+        .filter(Transaction.created_at >= thirty_days_ago)
+        .distinct()
+    )
+    active_from_analyses = (
+        db.query(AnalysisResult.user_id)
+        .filter(AnalysisResult.created_at >= thirty_days_ago)
+        .distinct()
+    )
+    active_users = active_from_transactions.union(active_from_analyses).count()
+
     total_linked_accounts = db.query(LinkedAccount).count()
     total_transactions = db.query(Transaction).count()
     total_analyses = db.query(AnalysisResult).count()
@@ -230,7 +246,7 @@ def get_temporal_stats(
 
 @router.get("/stats/user-segments")
 def get_user_segments(
-    current_user: User = Depends(get_current_admin_user),
+    current_user: AuthenticatedUser = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Get user segment analysis"""
@@ -443,23 +459,22 @@ async def sync_all_data(
 
 @router.get("/users")
 def list_users(
-    current_user: User = Depends(get_current_admin_user),
+    current_user: AuthenticatedUser = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
 ) -> Dict[str, Any]:
     """List all users (paginated)"""
-    users = db.query(User).offset(skip).limit(limit).all()
-    total = db.query(User).count()
+    users = db.query(Profile).offset(skip).limit(limit).all()
+    total = db.query(Profile).count()
 
     return {
         "users": [
             {
                 "id": u.id,
-                "email": u.email,
+                "full_name": u.full_name,
                 "role": u.role,
                 "created_at": u.created_at.isoformat(),
-                "is_active": u.is_active,
             }
             for u in users
         ],
@@ -475,15 +490,15 @@ def get_user_analysis(
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Get a user's analysis history."""
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
+    profile = db.query(Profile).filter(Profile.id == user_id).first()
+    if not profile:
         return {"error": "User not found"}
 
     analyses = db.query(AnalysisResult).filter(AnalysisResult.user_id == user_id).order_by(AnalysisResult.created_at.desc()).all()
 
     return {
         "user_id": user_id,
-        "email": user.email,
+        "full_name": profile.full_name,
         "analyses": [
             {
                 "id": a.id,
@@ -509,7 +524,7 @@ def _analysis_open_banking_verified(result: AnalysisResult) -> bool:
 
 
 def _analysis_feed_item(
-    db: Session, result: AnalysisResult, user: User
+    db: Session, result: AnalysisResult, profile: Profile
 ) -> Dict[str, Any]:
     leaks = []
     inclusion_delta = 0
@@ -530,8 +545,8 @@ def _analysis_feed_item(
 
     return {
         "id": str(result.id),
-        "user_id": str(user.id),
-        "username": user.username or user.email,
+        "user_id": str(profile.id),
+        "username": profile.full_name or str(profile.id),
         "score": result.financial_health_score,
         "band": result.health_band,
         "created_at": result.created_at.isoformat(),
@@ -616,17 +631,17 @@ def get_forensic_feed(
 ) -> List[Dict[str, Any]]:
     """Get a global feed of recent forensic analyses for the dashboard"""
     results = (
-        db.query(AnalysisResult, User)
-        .join(User, AnalysisResult.user_id == User.id)
+        db.query(AnalysisResult, Profile)
+        .join(Profile, AnalysisResult.user_id == Profile.id)
         .order_by(AnalysisResult.created_at.desc())
         .limit(limit)
         .all()
     )
 
     feed = []
-    for res, user in results:
-        feed.append(_analysis_feed_item(db, res, user))
-    
+    for res, profile in results:
+        feed.append(_analysis_feed_item(db, res, profile))
+
     return feed
 
 
@@ -635,17 +650,17 @@ def export_analysis_pdf(
     analysis_id: int,
     db: Session = Depends(get_db),
 ) -> Response:
-    result, user = (
-        db.query(AnalysisResult, User)
-        .join(User, AnalysisResult.user_id == User.id)
+    result, profile = (
+        db.query(AnalysisResult, Profile)
+        .join(Profile, AnalysisResult.user_id == Profile.id)
         .filter(AnalysisResult.id == analysis_id)
         .first()
         or (None, None)
     )
-    if result is None or user is None:
+    if result is None or profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found")
 
-    row = _analysis_feed_item(db, result, user)
+    row = _analysis_feed_item(db, result, profile)
     filename = f"tracepay-analysis-{analysis_id}.pdf"
     return Response(
         content=_build_analysis_pdf(row),
@@ -659,7 +674,7 @@ def request_analysis_follow_up(
     request_body: FollowUpRequest,
     request: Request,
     analysis_id: int,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: AuthenticatedUser = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     result = db.query(AnalysisResult).filter(AnalysisResult.id == analysis_id).first()
@@ -670,7 +685,7 @@ def request_analysis_follow_up(
         db,
         "analysis_follow_up_requested",
         actor=current_user,
-        target_user=result.user,
+        target_user=result.user_id,
         metadata={
             "analysis_id": analysis_id,
             "note": request_body.note,

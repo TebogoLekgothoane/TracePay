@@ -7,10 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_user
+from ..auth import AuthenticatedUser, get_current_user
 from ..audit import add_audit_event
 from ..database import get_db
-from ..models_db import LinkedAccount, User
+from ..models_db import LinkedAccount
 from ..mtn_momo_client import MTNMoMoClient
 
 router = APIRouter(prefix="/mtn-momo", tags=["mtn momo"])
@@ -36,7 +36,7 @@ class LinkMoMoResponse(BaseModel):
 async def link_momo_account(
     req: LinkMoMoRequest,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> LinkMoMoResponse:
     """Link an MTN MoMo account"""
@@ -88,7 +88,7 @@ async def link_momo_account(
 @router.get("/transactions")
 async def get_momo_transactions(
     account_id: int = Query(gt=0),
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Fetch MTN MoMo transactions"""
@@ -113,7 +113,7 @@ async def get_momo_transactions(
 async def sync_momo(
     request: Request,
     account_id: int = Query(gt=0),
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Sync MTN MoMo data"""

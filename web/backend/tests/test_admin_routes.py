@@ -2,15 +2,7 @@ from __future__ import annotations
 
 from app.main import app
 from app.models_db import AuditLog
-from conftest import auth_headers, create_db_user
-
-
-def _login_token(client, email: str) -> str:
-    login_response = client.post(
-        "/v1/auth/login", json={"email": email, "password": "Password123!"}
-    )
-    assert login_response.status_code == 200
-    return login_response.json()["access_token"]
+from conftest import create_db_profile, override_current_user
 
 
 def _sample_admin_path(path: str) -> str:
@@ -32,11 +24,11 @@ def test_every_admin_route_requires_authorization(client):
             assert response.status_code in {401, 403}, f"{method} {route.path}"
 
 
-def test_admin_overview_stats_requires_admin(client, db_session, test_email):
-    create_db_user(db_session, test_email, role="admin")
-    token = _login_token(client, test_email)
+def test_admin_overview_stats_requires_admin(client, db_session):
+    profile = create_db_profile(db_session, role="admin")
+    override_current_user(profile)
 
-    response = client.get("/v1/admin/stats/overview", headers=auth_headers(token))
+    response = client.get("/v1/admin/stats/overview")
 
     assert response.status_code == 200
     body = response.json()
@@ -45,31 +37,30 @@ def test_admin_overview_stats_requires_admin(client, db_session, test_email):
     assert "total_frozen_items" in body
     assert (
         db_session.query(AuditLog)
-        .filter(AuditLog.event_type == "admin_action", AuditLog.event_metadata["path"].as_string() == "/v1/admin/stats/overview")
+        .filter(
+            AuditLog.event_type == "admin_action",
+            AuditLog.event_metadata["path"].as_string() == "/v1/admin/stats/overview",
+        )
         .count()
         >= 1
     )
 
 
-def test_admin_users_requires_admin(client, db_session, test_email):
-    create_db_user(db_session, test_email, role="user")
-    token = _login_token(client, test_email)
+def test_admin_users_requires_admin(client, db_session):
+    profile = create_db_profile(db_session, role="user")
+    override_current_user(profile)
 
-    response = client.get(
-        "/v1/admin/users", headers=auth_headers(token)
-    )
+    response = client.get("/v1/admin/users")
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "forbidden"
 
 
-def test_admin_users_allows_admin(client, db_session, test_email):
-    create_db_user(db_session, test_email, role="admin")
-    token = _login_token(client, test_email)
+def test_admin_users_allows_admin(client, db_session):
+    profile = create_db_profile(db_session, role="admin")
+    override_current_user(profile)
 
-    response = client.get(
-        "/v1/admin/users", headers=auth_headers(token)
-    )
+    response = client.get("/v1/admin/users")
 
     assert response.status_code == 200
     body = response.json()

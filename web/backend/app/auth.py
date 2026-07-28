@@ -1,107 +1,85 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta
-from typing import Optional
+from dataclasses import dataclass
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models_db import User
+from .models_db import Profile
 from .settings import settings
 
-# JWT Configuration
-SECRET_KEY = settings.secret_key
+# Supabase Auth issues HS256-signed JWTs using the project's shared JWT secret
+# (Project Settings -> API -> JWT Settings). This backend only ever verifies
+# tokens Supabase itself issued -- it never issues its own.
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
+AUDIENCE = "authenticated"
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# HTTP Bearer token
 security = HTTPBearer()
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against a hash"""
-    return pwd_context.verify(plain_password, hashed_password)
+@dataclass(frozen=True)
+class AuthenticatedUser:
+    """Lightweight identity derived from a verified Supabase JWT + profiles row.
 
+    Not an ORM model -- deliberately kept separate from `Profile` so call sites
+    can't accidentally treat a request's identity as a mutable DB row.
+    """
 
-def get_password_hash(password: str) -> str:
-    """Hash a password"""
-    return pwd_context.hash(password)
-
-
-def normalize_email(email: str) -> str:
-    """Normalize emails so case and surrounding whitespace do not create duplicates."""
-    return email.strip().lower()
-
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """Create a JWT access token"""
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    # Convert UUID to string for JWT
-    if "sub" in to_encode:
-        if isinstance(to_encode["sub"], uuid.UUID):
-            to_encode["sub"] = str(to_encode["sub"])
-        elif isinstance(to_encode["sub"], int):
-            to_encode["sub"] = str(to_encode["sub"])
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-
-def decode_token(token: str) -> dict:
-    """Decode a signed JWT token."""
-    return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    id: uuid.UUID
+    email: str
+    role: str
 
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
-) -> User:
-    """Get the current authenticated user from JWT token"""
+) -> AuthenticatedUser:
+    """Verify a Supabase-issued access token and resolve the caller's app role.
+
+    Note: the JWT's own `role` claim is a Postgres role hint (normally
+    "authenticated"), NOT this app's admin/user/stakeholder role -- that
+    always comes from the `profiles` table, never from the token.
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        token = credentials.credentials
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id_str: str = payload.get("sub")
-        if user_id_str is None:
+        payload = jwt.decode(
+            credentials.credentials,
+            settings.supabase_jwt_secret,
+            algorithms=[ALGORITHM],
+            audience=AUDIENCE,
+        )
+        user_id_str = payload.get("sub")
+        email = payload.get("email")
+        if not user_id_str or not email:
             raise credentials_exception
-        # Convert string back to UUID
         user_id = uuid.UUID(user_id_str)
     except (JWTError, ValueError):
         raise credentials_exception
 
     try:
-        user = db.query(User).filter(User.id == user_id).first()
+        profile = db.query(Profile).filter(Profile.id == user_id).first()
     except OperationalError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database connection failed while verifying the current user.",
         ) from exc
 
-    if user is None:
-        raise credentials_exception
-    if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is inactive")
-    return user
+    role = profile.role if profile is not None else "user"
+    return AuthenticatedUser(id=user_id, email=email, role=role)
 
 
-def get_current_admin_user(current_user: User = Depends(get_current_user)) -> User:
+def get_current_admin_user(
+    current_user: AuthenticatedUser = Depends(get_current_user),
+) -> AuthenticatedUser:
     """Get current user and verify they are an admin"""
     if current_user.role not in ["admin", "stakeholder"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")

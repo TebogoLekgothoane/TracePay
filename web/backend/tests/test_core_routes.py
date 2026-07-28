@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 from app.models_db import AuditLog
-from conftest import auth_headers
+from conftest import auth_headers, create_db_profile, supabase_style_token
 
 
-def _registered_token(client, email: str) -> str:
-    response = client.post(
-        "/v1/auth/register", json={"email": email, "password": "Password123!"}
-    )
-    assert response.status_code == 201
-    return response.json()["access_token"]
+def _authed_headers(db_session) -> dict[str, str]:
+    profile = create_db_profile(db_session, role="user")
+    token = supabase_style_token(profile.id, f"{profile.id}@pytest.invalid")
+    return auth_headers(token)
 
 
 def test_analyze_accepts_strict_request_schema(client):
@@ -54,17 +52,17 @@ def test_analyze_rejects_legacy_raw_list_shape(client):
     assert response.json()["error"]["code"] == "validation_error"
 
 
-def test_freeze_persists_for_authenticated_user(client, db_session, test_email):
-    token = _registered_token(client, test_email)
+def test_freeze_persists_for_authenticated_user(client, db_session):
+    headers = _authed_headers(db_session)
 
     freeze_response = client.post(
         "/v1/freeze",
-        headers=auth_headers(token),
+        headers=headers,
         json={"leak_id": "leak-1", "reason": "pytest freeze"},
     )
     assert freeze_response.status_code == 200
 
-    frozen_response = client.get("/v1/frozen", headers=auth_headers(token))
+    frozen_response = client.get("/v1/frozen", headers=headers)
     assert frozen_response.status_code == 200
     frozen_items = frozen_response.json()["items"]
     assert any(
@@ -82,11 +80,11 @@ def test_freeze_persists_for_authenticated_user(client, db_session, test_email):
     )
 
 
-def test_freeze_requires_identifier(client, db_session, test_email):
-    token = _registered_token(client, test_email)
+def test_freeze_requires_identifier(client, db_session):
+    headers = _authed_headers(db_session)
 
     response = client.post(
-        "/v1/freeze", headers=auth_headers(token), json={"reason": "missing id"}
+        "/v1/freeze", headers=headers, json={"reason": "missing id"}
     )
 
     assert response.status_code == 422
@@ -94,11 +92,11 @@ def test_freeze_requires_identifier(client, db_session, test_email):
 
 
 def test_link_account_writes_consent_change_audit(client, db_session, test_email):
-    token = _registered_token(client, test_email)
+    headers = _authed_headers(db_session)
 
     response = client.post(
         "/v1/accounts/link",
-        headers=auth_headers(token),
+        headers=headers,
         json={
             "bank_name": "Pytest Bank",
             "account_id": f"{test_email}-account",

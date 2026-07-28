@@ -1,8 +1,17 @@
+import { getSupabase } from "./supabase";
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   "http://127.0.0.1:8001";
 const API_VERSION_PREFIX = "/v1";
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const {
+    data: { session },
+  } = await getSupabase().auth.getSession();
+  return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+}
 
 export interface ApiError {
   detail?: string;
@@ -15,7 +24,6 @@ export interface ApiError {
 
 export class ApiClient {
   private baseUrl: string;
-  private token: string | null = null;
   private pendingRequests = new Map<string, Promise<any>>();
 
   constructor(baseUrl: string = API_BASE_URL) {
@@ -26,21 +34,6 @@ export class ApiClient {
     }
     this.baseUrl = finalBase.endsWith("/") ? finalBase.slice(0, -1) : finalBase;
     this.baseUrl = this.baseUrl.replace(/\/v\d+$/, "");
-
-    if (typeof window !== "undefined") {
-      this.token = localStorage.getItem("auth_token");
-    }
-  }
-
-  setToken(token: string | null) {
-    this.token = token;
-    if (typeof window !== "undefined") {
-      if (token) {
-        localStorage.setItem("auth_token", token);
-      } else {
-        localStorage.removeItem("auth_token");
-      }
-    }
   }
 
   private async request<T>(
@@ -65,12 +58,9 @@ export class ApiClient {
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
+      ...(await getAuthHeaders()),
       ...(options.headers as Record<string, string> ?? {}),
     };
-
-    if (this.token) {
-      headers["Authorization"] = `Bearer ${this.token}`;
-    }
 
     // Add timeout (very helpful for debugging hanging requests)
     const controller = new AbortController();
@@ -137,95 +127,9 @@ export class ApiClient {
     return requestPromise;
   }
 
-  // Auth endpoints
-  // In web/dashboard/lib/api.ts - Update user_id types:
-
-  async register(email: string, password: string) {
-    const response = await this.request<{
-      access_token: string;
-      user_id: string;  // Changed from number to string
-      email: string;
-      role: string;
-    }>("/auth/register", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    });
-    this.setToken(response.access_token);
-    return response;
-  }
-
-  async login(email: string, password: string) {
-    const response = await this.request<{
-      access_token: string;
-      user_id: string;  // Changed from number to string
-      email: string;
-      role: string;
-    }>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    });
-    this.setToken(response.access_token);
-    return response;
-  }
-
-  async getMe() {
-    return this.request<{
-      id: string;  // Changed from number to string
-      email: string;
-      role: string;
-      created_at: string;
-      email_verified: boolean;
-    }>("/auth/me");
-  }
-
-  async refreshToken() {
-    const response = await this.request<{
-      access_token: string;
-      user_id: string;  // Changed from number to string
-      email: string;
-      role: string;
-    }>("/auth/refresh", {
-      method: "POST",
-    });
-    this.setToken(response.access_token);
-    return response;
-  }
-
-  async requestPasswordReset(email: string) {
-    return this.request<{
-      message: string;
-    }>("/auth/password-reset/request", {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    });
-  }
-
-  async confirmPasswordReset(token: string, newPassword: string) {
-    return this.request<{
-      message: string;
-    }>("/auth/password-reset/confirm", {
-      method: "POST",
-      body: JSON.stringify({ token, new_password: newPassword }),
-    });
-  }
-
-  async requestEmailVerification(email: string) {
-    return this.request<{
-      message: string;
-    }>("/auth/email-verification/request", {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    });
-  }
-
-  async confirmEmailVerification(token: string) {
-    return this.request<{
-      message: string;
-    }>("/auth/email-verification/confirm", {
-      method: "POST",
-      body: JSON.stringify({ token }),
-    });
-  }
+  // Auth (register/login/logout/password-reset/email-verification) all go
+  // straight through Supabase Auth via lib/auth.tsx and lib/supabase.ts, not
+  // through this client.
 
   // Analysis endpoints
   async analyze(transactions: any[]) {
@@ -433,10 +337,9 @@ export class ApiClient {
     return this.request<{
       users: Array<{
         id: string;
-        email: string;
+        full_name: string | null;
         role: string;
         created_at: string;
-        is_active: boolean;
       }>;
       total: number;
       skip: number;
@@ -470,13 +373,9 @@ export class ApiClient {
 
   async exportAnalysisPdf(analysisId: string) {
     const url = `${this.baseUrl}${API_VERSION_PREFIX}/admin/analysis/${encodeURIComponent(analysisId)}/export.pdf`;
-    const headers: Record<string, string> = {};
-    if (this.token) {
-      headers["Authorization"] = `Bearer ${this.token}`;
-    }
 
     const response = await fetch(url, {
-      headers,
+      headers: await getAuthHeaders(),
       credentials: "same-origin",
       cache: "no-store",
     });

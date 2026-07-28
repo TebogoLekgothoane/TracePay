@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_user
+from ..auth import AuthenticatedUser, get_current_user
 from ..background_jobs import (
     JOB_ML_DETECT_ANOMALIES,
     JOB_ML_PREDICT_LEAKS,
@@ -14,7 +14,7 @@ from ..background_jobs import (
     enqueue_background_job,
 )
 from ..database import get_db
-from ..models_db import Transaction, User
+from ..models_db import Transaction
 from ..ml_engine import MLEngine
 
 router = APIRouter(prefix="/ml", tags=["machine learning"])
@@ -35,7 +35,7 @@ class AnomalyResponse(BaseModel):
     status_code=status.HTTP_202_ACCEPTED,
 )
 def detect_anomalies(
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
     limit: int = Query(default=1000, ge=1, le=5000),
 ) -> JobAcceptedResponse:
@@ -55,7 +55,7 @@ def detect_anomalies(
 
 @router.get("/user-cluster")
 def get_user_cluster(
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Get user's spending profile cluster"""
@@ -90,7 +90,7 @@ def get_user_cluster(
     status_code=status.HTTP_202_ACCEPTED,
 )
 def predict_future_leaks(
-    current_user: User = Depends(get_current_user),
+    current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> JobAcceptedResponse:
     """Queue prediction of potential future money leaks."""
