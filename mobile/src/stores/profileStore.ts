@@ -4,6 +4,7 @@ import { create } from "zustand";
 
 import { AuthError, mapSupabaseAuthError, PHONE_ALREADY_REGISTERED_MESSAGE } from "@/lib/auth-errors";
 import { AUTH_KEYS, clearAllTracePayStorage } from "@/lib/auth-storage";
+import { BackendRequestError, redeemPartnerOffer } from "@/lib/backend";
 import { DAILY_CHECK_IN_POINTS, getUtcDayKey } from "@/lib/daily-rewards";
 import { isValidSaPhone, normalizeSaPhone } from "@/lib/phone";
 import { getSupabase } from "@/lib/supabase";
@@ -43,6 +44,7 @@ interface ProfileState {
   signInWithPassword: (phone: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   addRewardPoints: (pts: number) => void;
+  redeemPartner: (partnerId: string) => Promise<{ remainingPoints: number }>;
   ensureDailyCheckIn: () => Promise<{
     awarded: boolean;
     dateKey: string;
@@ -549,6 +551,20 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     const next = get().rewardPoints + pts;
     set({ rewardPoints: next });
     AsyncStorage.setItem(AUTH_KEYS.rewardPoints, String(next));
+  },
+
+  redeemPartner: async (partnerId) => {
+    try {
+      const result = await redeemPartnerOffer(partnerId);
+      set({ rewardPoints: result.remaining_points });
+      await AsyncStorage.setItem(AUTH_KEYS.rewardPoints, String(result.remaining_points));
+      return { remainingPoints: result.remaining_points };
+    } catch (error) {
+      if (error instanceof BackendRequestError) {
+        throw error;
+      }
+      throw new BackendRequestError("Could not redeem this offer. Please try again.");
+    }
   },
 
   ensureDailyCheckIn: async () => {

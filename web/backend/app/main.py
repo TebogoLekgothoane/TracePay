@@ -13,7 +13,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .auth import AuthenticatedUser, get_current_admin_user, get_current_user
+from .auth import ROLE_ADMIN, AuthenticatedUser, get_current_admin_user, get_current_user
 from .audit import add_audit_event
 from .database import get_db
 from .errors import (
@@ -34,7 +34,19 @@ from .models import (
     FreezeResponse,
     MoneyLeak,
 )
-from .routers import accounts, admin, auth, mobile, ml, mtn_momo, open_banking, voice
+from .routers import (
+    accounts,
+    admin,
+    auth,
+    investor,
+    me,
+    mobile,
+    ml,
+    mtn_momo,
+    open_banking,
+    partners,
+    voice,
+)
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -294,10 +306,7 @@ def get_background_job(
     job = db.query(BackgroundJob).filter(BackgroundJob.job_id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    if str(job.user_id) != str(current_user.id) and current_user.role not in {
-        "admin",
-        "stakeholder",
-    }:
+    if str(job.user_id) != str(current_user.id) and current_user.role != ROLE_ADMIN:
         raise HTTPException(status_code=403, detail="Not allowed to view this job")
     return {
         "job_id": job.job_id,
@@ -320,6 +329,9 @@ app.include_router(voice.router)
 app.include_router(ml.router)
 app.include_router(open_banking.router)
 app.include_router(mtn_momo.router)
+app.include_router(me.router)
+app.include_router(investor.router)
+app.include_router(partners.router)
 app.include_router(auth.router, prefix="/v1")
 app.include_router(accounts.router, prefix="/v1")
 app.include_router(admin.router, prefix="/v1")
@@ -328,3 +340,6 @@ app.include_router(voice.router, prefix="/v1")
 app.include_router(ml.router, prefix="/v1")
 app.include_router(open_banking.router, prefix="/v1")
 app.include_router(mtn_momo.router, prefix="/v1")
+app.include_router(me.router, prefix="/v1")
+app.include_router(investor.router, prefix="/v1")
+app.include_router(partners.router, prefix="/v1")

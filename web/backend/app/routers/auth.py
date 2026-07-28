@@ -8,7 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from ..auth import AuthenticatedUser, get_current_user
+from ..auth import ROLE_ADMIN, AuthenticatedUser, get_current_user
 from ..database import get_db
 from ..models_db import Profile
 from ..settings import settings
@@ -66,7 +66,7 @@ def bootstrap_admin(req: BootstrapAdminRequest, db: Session = Depends(get_db)) -
 
     email = req.email.strip().lower()
     try:
-        existing_admin = db.query(Profile).filter(Profile.role == "admin").first()
+        existing_admin = db.query(Profile).filter(Profile.role == ROLE_ADMIN).first()
         if existing_admin:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -87,11 +87,11 @@ def bootstrap_admin(req: BootstrapAdminRequest, db: Session = Depends(get_db)) -
         profile = db.query(Profile).filter(Profile.id == user_id).first()
         if profile is None:
             db.execute(
-                text("INSERT INTO profiles (id, role) VALUES (:id, 'admin')"),
-                {"id": user_id},
+                text("INSERT INTO profiles (id, role) VALUES (:id, :role)"),
+                {"id": user_id, "role": ROLE_ADMIN},
             )
         else:
-            profile.role = "admin"
+            profile.role = ROLE_ADMIN
         db.commit()
     except OperationalError as exc:
         db.rollback()

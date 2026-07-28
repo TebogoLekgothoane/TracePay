@@ -51,6 +51,13 @@ async function userFromSession(session: Session | null): Promise<User | null> {
   return { id: session.user.id, email: session.user.email, role };
 }
 
+function homeRouteForRole(role: string): string {
+  if (role === "admin") return "/dashboard";
+  if (role === "investor") return "/investor";
+  if (role === "partner") return "/partner";
+  return "/app";
+}
+
 export function AuthProvider({
   children,
 }: {
@@ -86,8 +93,9 @@ export function AuthProvider({
     if (error) {
       throw error;
     }
-    setUser(await userFromSession(data.session));
-    router.push("/dashboard");
+    const nextUser = await userFromSession(data.session);
+    setUser(nextUser);
+    router.push(homeRouteForRole(nextUser?.role ?? "user"));
   }
 
   async function register(email: string, password: string) {
@@ -102,8 +110,9 @@ export function AuthProvider({
       throw new Error("Check your email to confirm your account before signing in.");
     }
 
-    setUser(await userFromSession(data.session));
-    router.push("/dashboard");
+    const nextUser = await userFromSession(data.session);
+    setUser(nextUser);
+    router.push(homeRouteForRole(nextUser?.role ?? "user"));
   }
 
   function logout() {

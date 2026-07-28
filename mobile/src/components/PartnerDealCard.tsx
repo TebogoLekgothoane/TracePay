@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View } from "react-native";
+import { Alert, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 
@@ -9,6 +9,7 @@ import { AppText } from "@/components/Typography";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { hunterLogoUrl } from "@/constants/merchants";
 import type { PartnerDeal } from "@/constants/partners";
+import { useProfileStore } from "@/stores/profileStore";
 
 type PartnerDealCardProps = {
   partner: PartnerDeal;
@@ -48,7 +49,36 @@ function PartnerDealLogo({ name, logoDomain }: { name: string; logoDomain: strin
 
 export function PartnerDealCard({ partner, pointsBalance, className }: PartnerDealCardProps) {
   const { colors } = useColorScheme();
+  const redeemPartner = useProfileStore((state) => state.redeemPartner);
+  const [isRedeeming, setIsRedeeming] = useState(false);
   const canRedeem = pointsBalance >= partner.pts;
+
+  const handleRedeem = () => {
+    Alert.alert(
+      "Redeem offer",
+      `Spend ${partner.pts} pts on ${partner.name}'s "${partner.offer}"?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Redeem",
+          onPress: async () => {
+            setIsRedeeming(true);
+            try {
+              await redeemPartner(partner.id);
+              Alert.alert("Redeemed!", `Enjoy ${partner.offer} from ${partner.name}.`);
+            } catch (error) {
+              Alert.alert(
+                "Couldn't redeem",
+                error instanceof Error ? error.message : "Please try again.",
+              );
+            } finally {
+              setIsRedeeming(false);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   return (
     <Card className={className ?? "w-[140px]"} contentClassName="items-center gap-0">
@@ -70,11 +100,12 @@ export function PartnerDealCard({ partner, pointsBalance, className }: PartnerDe
       <Button
         size="sm"
         fullWidth
-        disabled={!canRedeem}
+        disabled={!canRedeem || isRedeeming}
+        onPress={handleRedeem}
         className="rounded-lg py-[7px]"
         variant={canRedeem ? "primary" : "outline"}
       >
-        {canRedeem ? "Redeem" : "Need more pts"}
+        {isRedeeming ? "Redeeming..." : canRedeem ? "Redeem" : "Need more pts"}
       </Button>
     </Card>
   );

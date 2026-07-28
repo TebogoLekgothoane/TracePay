@@ -144,6 +144,226 @@ export class ApiClient {
     });
   }
 
+  // Investor endpoints -- curated, aggregate-only, no individual is ever identifiable
+  async getInvestorOverview() {
+    return this.request<{
+      total_users: number;
+      active_users: number;
+      total_analyses: number;
+      average_health_score: number;
+      total_capital_protected: number;
+      total_frozen_items: number;
+    }>("/investor/overview", {}, 30000);
+  }
+
+  async getInvestorRegional() {
+    return this.request<
+      Array<{
+        region: string;
+        average_health_score: number;
+        total_leaks: number;
+        total_users: number;
+        top_leak_type: string;
+      }>
+    >("/investor/regional", {}, 30000);
+  }
+
+  // Personal (me) endpoints -- the caller's own data, never another user's
+  async getMySummary() {
+    return this.request<{
+      financial_health_score: number | null;
+      health_band: string | null;
+      leaks_found: number;
+      potential_monthly_savings: number;
+      linked_accounts_count: number;
+      frozen_items_count: number;
+      last_analyzed_at: string | null;
+    }>("/me/summary");
+  }
+
+  async getMyAccountSettings() {
+    return this.request<{
+      account_type: "individual" | "business";
+      business_name: string | null;
+    }>("/me/account");
+  }
+
+  async updateMyAccountSettings(data: {
+    account_type: "individual" | "business";
+    business_name?: string | null;
+  }) {
+    return this.request<{
+      account_type: "individual" | "business";
+      business_name: string | null;
+    }>("/me/account", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async analyzeMine(transactions: any[]) {
+    return this.request<{
+      id: number;
+      financial_health_score: number;
+      health_band: string;
+      money_leaks: Array<{
+        detector?: string;
+        title?: string;
+        severity?: string;
+        estimated_monthly_cost?: number;
+        [key: string]: any;
+      }>;
+      summary_plain_language: string;
+      transaction_count: number;
+      created_at: string;
+    }>("/me/analyze", {
+      method: "POST",
+      body: JSON.stringify({ transactions }),
+    });
+  }
+
+  async getMyAnalyses(limit: number = 10) {
+    return this.request<
+      Array<{
+        id: number;
+        financial_health_score: number;
+        health_band: string;
+        money_leaks: Array<{
+          detector?: string;
+          title?: string;
+          severity?: string;
+          estimated_monthly_cost?: number;
+          [key: string]: any;
+        }>;
+        summary_plain_language: string;
+        transaction_count: number;
+        created_at: string;
+      }>
+    >(`/me/analyses?limit=${limit}`);
+  }
+
+  // Reward partner endpoints -- redemption available to any signed-in
+  // account; the /partner/* views are gated server-side to that partner's
+  // own owner_user_id (or admin).
+  async listPartners() {
+    return this.request<
+      Array<{
+        id: string;
+        name: string;
+        offer_description: string;
+        points_cost: number;
+      }>
+    >("/partners");
+  }
+
+  async redeemPartnerOffer(partnerId: string) {
+    return this.request<{
+      redemption_id: number;
+      partner_id: string;
+      points_spent: number;
+      remaining_points: number;
+    }>("/me/redeem", {
+      method: "POST",
+      body: JSON.stringify({ partner_id: partnerId }),
+    });
+  }
+
+  async getPartnerSummary() {
+    return this.request<{
+      partner_id: string;
+      partner_name: string;
+      total_redemptions: number;
+      total_points_redeemed: number;
+      total_commission_owed: number;
+    }>("/partner/summary");
+  }
+
+  async getPartnerRedemptions() {
+    return this.request<
+      Array<{
+        id: number;
+        points_spent: number;
+        commission_amount: number;
+        status: string;
+        redeemed_at: string;
+      }>
+    >("/partner/redemptions");
+  }
+
+  // Admin partner management -- provisioning new commission partners and
+  // linking a Partner row to the account that will log in as its owner.
+  async adminListPartners() {
+    return this.request<
+      Array<{
+        id: string;
+        name: string;
+        offer_description: string;
+        points_cost: number;
+        estimated_value_rand: number;
+        commission_rate: number;
+        is_active: boolean;
+        owner_user_id: string | null;
+        total_redemptions: number;
+        total_commission_owed: number;
+      }>
+    >("/admin/partners");
+  }
+
+  async adminCreatePartner(data: {
+    id: string;
+    name: string;
+    offer_description: string;
+    points_cost: number;
+    estimated_value_rand: number;
+    commission_rate?: number;
+    owner_user_id?: string | null;
+  }) {
+    return this.request<{
+      id: string;
+      name: string;
+      offer_description: string;
+      points_cost: number;
+      estimated_value_rand: number;
+      commission_rate: number;
+      is_active: boolean;
+      owner_user_id: string | null;
+      total_redemptions: number;
+      total_commission_owed: number;
+    }>("/admin/partners", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async adminUpdatePartner(
+    partnerId: string,
+    data: Partial<{
+      name: string;
+      offer_description: string;
+      points_cost: number;
+      estimated_value_rand: number;
+      commission_rate: number;
+      is_active: boolean;
+      owner_user_id: string | null;
+    }>
+  ) {
+    return this.request<{
+      id: string;
+      name: string;
+      offer_description: string;
+      points_cost: number;
+      estimated_value_rand: number;
+      commission_rate: number;
+      is_active: boolean;
+      owner_user_id: string | null;
+      total_redemptions: number;
+      total_commission_owed: number;
+    }>(`/admin/partners/${encodeURIComponent(partnerId)}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
   // Account endpoints
   async linkAccount(data: {
     bank_name: string;
@@ -345,6 +565,44 @@ export class ApiClient {
       skip: number;
       limit: number;
     }>(`/admin/users?skip=${skip}&limit=${limit}`);
+  }
+
+  // Provisioning -- none of admin/investor/partner have self-service signup,
+  // so this is the only way to create one of those accounts.
+  async provisionUser(data: {
+    email: string;
+    role: "user" | "admin" | "investor" | "partner";
+  }) {
+    return this.request<{
+      id: string;
+      email: string;
+      role: string;
+    }>("/admin/provision-user", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getAuditLog(options?: { limit?: number; skip?: number; eventType?: string }) {
+    const params = new URLSearchParams();
+    params.set("limit", String(options?.limit ?? 50));
+    params.set("skip", String(options?.skip ?? 0));
+    if (options?.eventType) {
+      params.set("event_type", options.eventType);
+    }
+    return this.request<
+      Array<{
+        id: number;
+        event_type: string;
+        actor_user_id: string | null;
+        actor_name: string | null;
+        target_user_id: string | null;
+        target_name: string | null;
+        ip_address: string | null;
+        metadata: Record<string, unknown>;
+        created_at: string;
+      }>
+    >(`/admin/audit-log?${params.toString()}`);
   }
 
   async getForensicFeed(limit: number = 50) {

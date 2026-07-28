@@ -1,19 +1,22 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Literal, Optional
+import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response, status
-from pydantic import BaseModel
-from sqlalchemy import func
+from pydantic import BaseModel, ConfigDict, EmailStr
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from ..audit import add_audit_event
-from ..auth import AuthenticatedUser, get_current_admin_user
+from ..auth import ROLE_ADMIN, ROLE_INVESTOR, ROLE_PARTNER, ROLE_USER, AuthenticatedUser, get_current_admin_user
 from ..database import get_db, SessionLocal
-from ..models_db import AnalysisResult, FrozenItem, LinkedAccount, Profile, RegionalStat, Transaction
+from ..models_db import AnalysisResult, AuditLog, FrozenItem, LinkedAccount, Partner, Profile, Redemption, Transaction
 from ..open_banking_client import OpenBankingSandboxClient, SandboxConfig
 from ..settings import settings
+from ..stats import OverviewStats, RegionalInsight, compute_overview_stats, compute_regional_stats
+from ..supabase_admin import SupabaseAdminError, invite_user_by_email
 from ..forensic_engine import ForensicEngine
 
 
@@ -49,32 +52,6 @@ ob_client = OpenBankingSandboxClient(sandbox_config)
 forensic_engine = ForensicEngine()
 
 
-class OverviewStats(BaseModel):
-    total_users: int
-    active_users: int
-    total_linked_accounts: int
-    total_transactions: int
-    total_analyses: int
-    average_health_score: float
-    total_frozen_items: int
-    total_capital_protected: float
-    active_consents: int
-    ml_anomalies_detected: int
-    mailbox_effect_prevalence: float
-    avg_inclusion_score: int
-    retail_wealth_unlock: float
-    avg_inclusion_delta: float
-    total_retail_velocity: float
-
-
-class RegionalInsight(BaseModel):
-    region: str
-    average_health_score: float
-    total_leaks: int
-    total_users: int
-    top_leak_type: str
-
-
 class FollowUpRequest(BaseModel):
     note: str = ""
 
@@ -84,89 +61,7 @@ def get_overview_stats(
     db: Session = Depends(get_db),
 ) -> OverviewStats:
     """Get overall platform statistics from persisted platform data."""
-    total_users = db.query(Profile).count()
-
-    # "Active" has no direct column now that identity lives in Supabase Auth
-    # (which manages its own account status) -- defined here as distinct
-    # users with a transaction or analysis in the last 30 days.
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
-    active_from_transactions = (
-        db.query(Transaction.user_id)
-        .filter(Transaction.created_at >= thirty_days_ago)
-        .distinct()
-    )
-    active_from_analyses = (
-        db.query(AnalysisResult.user_id)
-        .filter(AnalysisResult.created_at >= thirty_days_ago)
-        .distinct()
-    )
-    active_users = active_from_transactions.union(active_from_analyses).count()
-
-    total_linked_accounts = db.query(LinkedAccount).count()
-    total_transactions = db.query(Transaction).count()
-    total_analyses = db.query(AnalysisResult).count()
-
-    # Average health score
-    avg_score = db.query(func.avg(AnalysisResult.financial_health_score)).scalar() or 0.0
-
-    # Total frozen items
-    total_frozen = db.query(FrozenItem).count()
-
-    # Total Capital Protected
-    # Summing up estimated_monthly_cost from all money_leaks in AnalysisResult
-    all_analyses = db.query(AnalysisResult).all()
-    total_capital = 0.0
-    mailbox_cases = 0
-    total_inclusion_score = 0
-    inclusion_count = 0
-    total_inclusion_delta = 0.0
-    total_retail_velocity = 0.0
-
-    for a in all_analyses:
-        if a.money_leaks:
-            for leak in a.money_leaks:
-                total_capital += leak.get("estimated_monthly_cost", 0.0)
-                if leak.get("detector") == "MailboxEffect":
-                    mailbox_cases += 1
-                if leak.get("detector") == "InclusionScorer":
-                    total_inclusion_score += leak.get("score", 0)
-                    inclusion_count += 1
-                if leak.get("detector") == "StakeholderMetrics":
-                    total_inclusion_delta += leak.get("inclusion_delta", 0.0)
-                    total_retail_velocity += leak.get("retail_velocity", 0.0)
-
-    mailbox_prevalence = (mailbox_cases / total_analyses * 100) if total_analyses > 0 else 0.0
-    avg_inclusion = (total_inclusion_score / inclusion_count) if inclusion_count > 0 else 0
-    retail_wealth = total_capital * 0.75 # 75% of protected capital reclaimed for local retail
-
-    # Active Consents (from Open Banking)
-    active_consents = db.query(LinkedAccount).filter(LinkedAccount.open_banking_consent_id.isnot(None)).count()
-
-    ml_anomalies = 0
-    for analysis in all_analyses:
-        for leak in analysis.money_leaks or []:
-            detector = str(leak.get("detector", "")).lower()
-            severity = str(leak.get("severity", "")).lower()
-            if "anomaly" in detector or severity == "anomaly":
-                ml_anomalies += 1
-
-    return OverviewStats(
-        total_users=total_users,
-        active_users=active_users,
-        total_linked_accounts=total_linked_accounts,
-        total_transactions=total_transactions,
-        total_analyses=total_analyses,
-        average_health_score=round(float(avg_score), 2),
-        total_frozen_items=total_frozen,
-        total_capital_protected=round(total_capital, 2),
-        active_consents=active_consents,
-        ml_anomalies_detected=ml_anomalies,
-        mailbox_effect_prevalence=round(mailbox_prevalence, 1),
-        avg_inclusion_score=int(avg_inclusion),
-        retail_wealth_unlock=round(retail_wealth, 2),
-        avg_inclusion_delta=round(total_inclusion_delta / max(total_analyses, 1), 1),
-        total_retail_velocity=round(total_retail_velocity, 2)
-    )
+    return compute_overview_stats(db)
 
 
 @router.get("/stats/regional", response_model=List[RegionalInsight])
@@ -174,35 +69,7 @@ def get_regional_stats(
     db: Session = Depends(get_db),
 ) -> List[RegionalInsight]:
     """Get regional leakage trends from persisted regional metrics."""
-    rows = (
-        db.query(RegionalStat)
-        .order_by(RegionalStat.region.asc(), RegionalStat.created_at.desc())
-        .all()
-    )
-    if not rows:
-        return []
-
-    by_region: dict[str, dict[str, float]] = {}
-    for row in rows:
-        metrics = by_region.setdefault(row.region, {})
-        if row.metric_name not in metrics:
-            metrics[row.metric_name] = row.value
-
-    insights: list[RegionalInsight] = []
-    for region, metrics in sorted(by_region.items()):
-        insights.append(
-            RegionalInsight(
-                region=region,
-                average_health_score=round(
-                    float(metrics.get("average_health_score", 0.0)), 1
-                ),
-                total_leaks=int(metrics.get("total_leaks", 0)),
-                total_users=int(metrics.get("total_users", 0)),
-                top_leak_type="Not available",
-            )
-        )
-
-    return insights
+    return compute_regional_stats(db)
 
 
 @router.get("/stats/temporal")
@@ -484,6 +351,70 @@ def list_users(
     }
 
 
+class ProvisionUserRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr
+    role: Literal[ROLE_USER, ROLE_ADMIN, ROLE_INVESTOR, ROLE_PARTNER]
+
+
+class ProvisionUserResponse(BaseModel):
+    id: str
+    email: str
+    role: str
+
+
+@router.post(
+    "/provision-user", response_model=ProvisionUserResponse, status_code=status.HTTP_201_CREATED
+)
+async def provision_user(
+    req: ProvisionUserRequest,
+    request: Request,
+    current_user: AuthenticatedUser = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+) -> ProvisionUserResponse:
+    """Create a new Supabase Auth account and set its role.
+
+    None of admin/investor/partner have self-service signup -- this is the
+    only way to get one of those accounts. A plain "user" account can also
+    be provisioned this way (e.g. setting someone up ahead of their first
+    login), though most user accounts come from mobile self-signup instead.
+    """
+    email = req.email.strip().lower()
+    try:
+        invited = await invite_user_by_email(email, req.role)
+    except SupabaseAdminError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+    user_id = invited.get("id")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Supabase did not return a user id for the invite.",
+        )
+
+    # A trigger on auth.users may already have inserted a default profiles
+    # row by the time we get here -- upsert rather than a plain insert.
+    db.execute(
+        text(
+            "INSERT INTO profiles (id, role, created_at) VALUES (:id, :role, now()) "
+            "ON CONFLICT (id) DO UPDATE SET role = :role"
+        ),
+        {"id": user_id, "role": req.role},
+    )
+    add_audit_event(
+        db,
+        "user_provisioned",
+        actor=current_user,
+        target_user=uuid.UUID(user_id),
+        metadata={"email": email, "role": req.role},
+        request=request,
+    )
+    db.commit()
+
+    return ProvisionUserResponse(id=str(user_id), email=email, role=req.role)
+
+
 @router.get("/users/{user_id}/analysis")
 def get_user_analysis(
     user_id: str,
@@ -645,6 +576,57 @@ def get_forensic_feed(
     return feed
 
 
+class AuditLogEntry(BaseModel):
+    id: int
+    event_type: str
+    actor_user_id: Optional[str]
+    actor_name: Optional[str]
+    target_user_id: Optional[str]
+    target_name: Optional[str]
+    ip_address: Optional[str]
+    metadata: Dict[str, Any]
+    created_at: str
+
+
+@router.get("/audit-log", response_model=List[AuditLogEntry])
+def list_audit_log(
+    db: Session = Depends(get_db),
+    limit: int = Query(50, ge=1, le=200),
+    skip: int = Query(0, ge=0),
+    event_type: Optional[str] = Query(None),
+) -> List[AuditLogEntry]:
+    """Recent platform audit events, newest first -- every admin action and
+    business-sensitive event (freeze, redemption, provisioning) writes here
+    via add_audit_event."""
+    query = db.query(AuditLog).order_by(AuditLog.created_at.desc())
+    if event_type:
+        query = query.filter(AuditLog.event_type == event_type)
+    logs = query.offset(skip).limit(limit).all()
+
+    referenced_ids = {log.actor_user_id for log in logs if log.actor_user_id is not None} | {
+        log.target_user_id for log in logs if log.target_user_id is not None
+    }
+    names: Dict[Any, str] = {}
+    if referenced_ids:
+        for profile in db.query(Profile).filter(Profile.id.in_(referenced_ids)).all():
+            names[profile.id] = profile.full_name or str(profile.id)
+
+    return [
+        AuditLogEntry(
+            id=log.id,
+            event_type=log.event_type,
+            actor_user_id=str(log.actor_user_id) if log.actor_user_id else None,
+            actor_name=names.get(log.actor_user_id) if log.actor_user_id else None,
+            target_user_id=str(log.target_user_id) if log.target_user_id else None,
+            target_name=names.get(log.target_user_id) if log.target_user_id else None,
+            ip_address=log.ip_address,
+            metadata=log.event_metadata,
+            created_at=log.created_at.isoformat(),
+        )
+        for log in logs
+    ]
+
+
 @router.get("/analysis/{analysis_id}/export.pdf")
 def export_analysis_pdf(
     analysis_id: int,
@@ -667,6 +649,137 @@ def export_analysis_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+class PartnerAdminView(BaseModel):
+    id: str
+    name: str
+    offer_description: str
+    points_cost: int
+    estimated_value_rand: float
+    commission_rate: float
+    is_active: bool
+    owner_user_id: Optional[str]
+    total_redemptions: int
+    total_commission_owed: float
+
+
+class CreatePartnerRequest(BaseModel):
+    id: str
+    name: str
+    offer_description: str
+    points_cost: int
+    estimated_value_rand: float
+    commission_rate: float = 0.025
+    owner_user_id: Optional[str] = None
+
+
+class UpdatePartnerRequest(BaseModel):
+    name: Optional[str] = None
+    offer_description: Optional[str] = None
+    points_cost: Optional[int] = None
+    estimated_value_rand: Optional[float] = None
+    commission_rate: Optional[float] = None
+    is_active: Optional[bool] = None
+    owner_user_id: Optional[str] = None
+
+
+def _partner_admin_view(db: Session, partner: Partner) -> PartnerAdminView:
+    total_redemptions = (
+        db.query(func.count(Redemption.id)).filter(Redemption.partner_id == partner.id).scalar() or 0
+    )
+    total_commission = (
+        db.query(func.coalesce(func.sum(Redemption.commission_amount), 0.0))
+        .filter(Redemption.partner_id == partner.id)
+        .scalar()
+        or 0.0
+    )
+    return PartnerAdminView(
+        id=partner.id,
+        name=partner.name,
+        offer_description=partner.offer_description,
+        points_cost=partner.points_cost,
+        estimated_value_rand=partner.estimated_value_rand,
+        commission_rate=partner.commission_rate,
+        is_active=partner.is_active,
+        owner_user_id=str(partner.owner_user_id) if partner.owner_user_id else None,
+        total_redemptions=int(total_redemptions),
+        total_commission_owed=round(float(total_commission), 2),
+    )
+
+
+@router.get("/partners", response_model=List[PartnerAdminView])
+def list_partners_admin(
+    db: Session = Depends(get_db),
+) -> List[PartnerAdminView]:
+    """All commission partners, active or not, with lifetime totals -- unlike
+    the partner-facing `/partner/summary`, this is not scoped to one owner."""
+    partners = db.query(Partner).order_by(Partner.name).all()
+    return [_partner_admin_view(db, p) for p in partners]
+
+
+@router.post("/partners", response_model=PartnerAdminView, status_code=status.HTTP_201_CREATED)
+def create_partner(
+    req: CreatePartnerRequest,
+    db: Session = Depends(get_db),
+) -> PartnerAdminView:
+    """Onboard a new commission partner.
+
+    There is no self-service partner signup -- per the admin-provisioned-only
+    access model, TracePay staff create the Partner row (and hand the owner
+    their login) rather than a partner registering themselves.
+    """
+    if db.query(Partner).filter(Partner.id == req.id).first() is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A partner with this id already exists")
+
+    owner_uuid: Optional[uuid.UUID] = None
+    if req.owner_user_id:
+        try:
+            owner_uuid = uuid.UUID(req.owner_user_id)
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="owner_user_id must be a UUID")
+
+    partner = Partner(
+        id=req.id,
+        name=req.name,
+        offer_description=req.offer_description,
+        points_cost=req.points_cost,
+        estimated_value_rand=req.estimated_value_rand,
+        commission_rate=req.commission_rate,
+        owner_user_id=owner_uuid,
+    )
+    db.add(partner)
+    db.commit()
+    db.refresh(partner)
+    return _partner_admin_view(db, partner)
+
+
+@router.put("/partners/{partner_id}", response_model=PartnerAdminView)
+def update_partner(
+    partner_id: str,
+    req: UpdatePartnerRequest,
+    db: Session = Depends(get_db),
+) -> PartnerAdminView:
+    partner = db.query(Partner).filter(Partner.id == partner_id).first()
+    if partner is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Partner not found")
+
+    updates = req.model_dump(exclude_unset=True, exclude={"owner_user_id"})
+    for field, value in updates.items():
+        setattr(partner, field, value)
+
+    if "owner_user_id" in req.model_fields_set:
+        if req.owner_user_id is None:
+            partner.owner_user_id = None
+        else:
+            try:
+                partner.owner_user_id = uuid.UUID(req.owner_user_id)
+            except ValueError:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="owner_user_id must be a UUID")
+
+    db.commit()
+    db.refresh(partner)
+    return _partner_admin_view(db, partner)
 
 
 @router.post("/analysis/{analysis_id}/follow-up")

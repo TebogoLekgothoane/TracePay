@@ -4,6 +4,7 @@ from datetime import datetime
 import uuid
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     Float,
@@ -24,9 +25,11 @@ class Profile(Base):
 
     This table is owned by the mobile app / Supabase project setup, not by
     this backend -- no Alembic migration here ever creates, alters, or drops
-    it. Only the columns this backend actually reads are declared; the real
-    table has additional mobile-only columns (recovery_email, reward_points,
-    etc.) that are intentionally omitted.
+    it. Only the columns this backend actually reads (or, for
+    `reward_points`, legitimately writes as *data* -- redeeming a reward
+    spends points the mobile app itself already writes to this same column)
+    are declared; the real table has additional mobile-only columns
+    (recovery_email, etc.) that are intentionally omitted.
     """
 
     __tablename__ = "profiles"
@@ -34,7 +37,70 @@ class Profile(Base):
     id = Column(UUID(as_uuid=True), primary_key=True)
     full_name = Column(String(255), nullable=True)
     role = Column(String(50), default="user", nullable=False)
+    reward_points = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class AccountSettings(Base):
+    """TracePay-owned account metadata (currently just individual-vs-business).
+
+    Unlike `Profile`, this table IS created/altered by this repo's Alembic
+    migrations -- it holds settings that are this app's concern, not
+    Supabase's, so there's no ownership boundary to respect here.
+    """
+
+    __tablename__ = "account_settings"
+
+    user_id = Column(UUID(as_uuid=True), primary_key=True)
+    account_type = Column(String(20), default="individual", nullable=False)
+    business_name = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
+class Partner(Base):
+    """A commission partner (Shoprite, Checkers, etc).
+
+    `id` is a stable string code matching mobile/src/constants/partners.ts's
+    existing hardcoded ids, not a generated integer -- both the mobile
+    display data and the backend's redemption records refer to the same
+    partner by the same key. `estimated_value_rand` is a placeholder
+    assumed redemption value used for commission calculation, not a real
+    negotiated figure.
+    """
+
+    __tablename__ = "partners"
+
+    id = Column(String(50), primary_key=True)
+    name = Column(String(255), nullable=False)
+    offer_description = Column(String(255), nullable=False)
+    points_cost = Column(Integer, nullable=False)
+    estimated_value_rand = Column(Float, nullable=False)
+    commission_rate = Column(Float, default=0.025, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    owner_user_id = Column(UUID(as_uuid=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
+class Redemption(Base):
+    """A single user's redemption of a partner offer.
+
+    `commission_amount` is a snapshot computed at redemption time (rate *
+    value at that moment), so a later change to the partner's commission
+    rate never retroactively alters historical commission owed.
+    """
+
+    __tablename__ = "redemptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    partner_id = Column(String(50), ForeignKey("partners.id"), nullable=False, index=True)
+    points_spent = Column(Integer, nullable=False)
+    commission_amount = Column(Float, nullable=False)
+    status = Column(String(20), default="completed", nullable=False)
+    redeemed_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    partner = relationship("Partner")
 
 
 # The six models below store `user_id`/`actor_user_id`/`target_user_id` as

@@ -17,6 +17,8 @@ class Settings(BaseModel):
     database_url: str = Field(...)
     secret_key: str = Field(...)
     supabase_jwt_secret: str = Field(...)
+    supabase_url: str = ""
+    supabase_service_role_key: str = ""
     cors_origins: List[str] = Field(default_factory=list)
     app_public_url: str = ""
     backend_public_url: str = ""
@@ -89,6 +91,8 @@ def get_settings() -> Settings:
         database_url=os.getenv("DATABASE_URL", ""),
         secret_key=os.getenv("SECRET_KEY", ""),
         supabase_jwt_secret=os.getenv("SUPABASE_JWT_SECRET", ""),
+        supabase_url=os.getenv("SUPABASE_URL", "").rstrip("/"),
+        supabase_service_role_key=os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""),
         cors_origins=os.getenv("CORS_ORIGINS", ""),
         app_public_url=os.getenv("APP_PUBLIC_URL", ""),
         backend_public_url=os.getenv("BACKEND_PUBLIC_URL", ""),

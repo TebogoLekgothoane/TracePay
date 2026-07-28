@@ -47,12 +47,15 @@ from app.auth import AuthenticatedUser, get_current_user
 from app.database import SessionLocal, get_db
 from app.main import app
 from app.models_db import (
+    AccountSettings,
     AnalysisResult,
     AuditLog,
     BackgroundJob,
     FrozenItem,
     LinkedAccount,
+    Partner,
     Profile,
+    Redemption,
     Transaction,
 )
 from app.settings import settings
@@ -67,6 +70,7 @@ def test_run_id() -> str:
 def db_session(test_run_id: str) -> Iterator:
     db = SessionLocal()
     db.info["created_profile_ids"] = []
+    db.info["created_partner_ids"] = []
     schema_ready = False
     try:
         require_current_schema(db)
@@ -75,7 +79,7 @@ def db_session(test_run_id: str) -> Iterator:
     finally:
         db.rollback()
         if schema_ready:
-            cleanup_test_data(db, db.info["created_profile_ids"])
+            cleanup_test_data(db, db.info["created_profile_ids"], db.info["created_partner_ids"])
         db.close()
 
 
@@ -91,29 +95,49 @@ def test_email(test_run_id: str) -> str:
     return f"{test_run_id}-{uuid.uuid4().hex}@example.com"
 
 
-def cleanup_test_data(db, profile_ids: list[uuid.UUID]) -> None:
-    """Delete only the throwaway `profiles` rows (and dependents) this test
-    session created -- never touches the real user's data, since we only
-    ever act on IDs this fixture itself generated and recorded."""
-    if not profile_ids:
+def cleanup_test_data(
+    db, profile_ids: list[uuid.UUID], partner_ids: Optional[list[str]] = None
+) -> None:
+    """Delete only the throwaway `profiles`/`partners` rows (and dependents)
+    this test session created -- never touches the real user's data, since we
+    only ever act on IDs this fixture itself generated and recorded."""
+    partner_ids = partner_ids or []
+    if not profile_ids and not partner_ids:
         return
-    db.query(AuditLog).filter(
-        (AuditLog.actor_user_id.in_(profile_ids)) | (AuditLog.target_user_id.in_(profile_ids))
-    ).delete(synchronize_session=False)
-    db.query(AnalysisResult).filter(AnalysisResult.user_id.in_(profile_ids)).delete(synchronize_session=False)
-    db.query(FrozenItem).filter(FrozenItem.user_id.in_(profile_ids)).delete(synchronize_session=False)
-    db.query(Transaction).filter(Transaction.user_id.in_(profile_ids)).delete(synchronize_session=False)
-    db.query(LinkedAccount).filter(LinkedAccount.user_id.in_(profile_ids)).delete(synchronize_session=False)
-    db.query(BackgroundJob).filter(BackgroundJob.user_id.in_(profile_ids)).delete(synchronize_session=False)
-    db.query(Profile).filter(Profile.id.in_(profile_ids)).delete(synchronize_session=False)
-    db.execute(text("DELETE FROM auth.users WHERE id = ANY(:ids)"), {"ids": profile_ids})
+    if profile_ids:
+        db.query(AuditLog).filter(
+            (AuditLog.actor_user_id.in_(profile_ids)) | (AuditLog.target_user_id.in_(profile_ids))
+        ).delete(synchronize_session=False)
+        db.query(AnalysisResult).filter(AnalysisResult.user_id.in_(profile_ids)).delete(synchronize_session=False)
+        db.query(FrozenItem).filter(FrozenItem.user_id.in_(profile_ids)).delete(synchronize_session=False)
+        db.query(Transaction).filter(Transaction.user_id.in_(profile_ids)).delete(synchronize_session=False)
+        db.query(LinkedAccount).filter(LinkedAccount.user_id.in_(profile_ids)).delete(synchronize_session=False)
+        db.query(BackgroundJob).filter(BackgroundJob.user_id.in_(profile_ids)).delete(synchronize_session=False)
+        db.query(AccountSettings).filter(AccountSettings.user_id.in_(profile_ids)).delete(synchronize_session=False)
+    if profile_ids:
+        db.query(Redemption).filter(Redemption.user_id.in_(profile_ids)).delete(synchronize_session=False)
+    if partner_ids:
+        db.query(Redemption).filter(Redemption.partner_id.in_(partner_ids)).delete(synchronize_session=False)
+    if partner_ids:
+        db.query(Partner).filter(Partner.id.in_(partner_ids)).delete(synchronize_session=False)
+    if profile_ids:
+        db.query(Partner).filter(Partner.owner_user_id.in_(profile_ids)).delete(synchronize_session=False)
+        db.query(Profile).filter(Profile.id.in_(profile_ids)).delete(synchronize_session=False)
+        db.execute(text("DELETE FROM auth.users WHERE id = ANY(:ids)"), {"ids": profile_ids})
     db.commit()
 
 
 def require_current_schema(db) -> None:
     inspector = inspect(db.get_bind())
     table_names = set(inspector.get_table_names())
-    required_tables = {"background_jobs", "audit_logs", "profiles"}
+    required_tables = {
+        "background_jobs",
+        "audit_logs",
+        "profiles",
+        "account_settings",
+        "partners",
+        "redemptions",
+    }
     frozen_item_columns = {column["name"] for column in inspector.get_columns("frozen_items")}
     missing = sorted(
         {f"{table} table" for table in required_tables - table_names}
@@ -159,6 +183,32 @@ def create_db_profile(db, role: str = "user", full_name: Optional[str] = None) -
     profile = db.query(Profile).filter(Profile.id == profile_id).one()
     db.info["created_profile_ids"].append(profile.id)
     return profile
+
+
+def create_test_partner(
+    db,
+    owner: Optional[Profile] = None,
+    points_cost: int = 100,
+    estimated_value_rand: float = 50.0,
+    commission_rate: float = 0.025,
+    is_active: bool = True,
+) -> Partner:
+    """Insert a throwaway `partners` row, tracked for cleanup by id (not by
+    owner) so tests can also cover unowned/public-listing partners."""
+    partner = Partner(
+        id=f"test-partner-{uuid.uuid4().hex[:12]}",
+        name="Test Partner",
+        offer_description="Test offer",
+        points_cost=points_cost,
+        estimated_value_rand=estimated_value_rand,
+        commission_rate=commission_rate,
+        is_active=is_active,
+        owner_user_id=owner.id if owner is not None else None,
+    )
+    db.add(partner)
+    db.commit()
+    db.info["created_partner_ids"].append(partner.id)
+    return partner
 
 
 def override_current_user(profile: Profile, email: str = "test@example.com") -> None:

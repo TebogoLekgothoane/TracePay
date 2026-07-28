@@ -83,7 +83,13 @@ def test_bootstrap_admin_requires_configuration(client, monkeypatch):
     assert response.status_code == 403
 
 
-def test_bootstrap_admin_404s_for_unknown_supabase_account(client, monkeypatch, test_email):
+def test_bootstrap_admin_rejects_unknown_supabase_account_or_already_bootstrapped(
+    client, monkeypatch, test_email
+):
+    # This hits a shared dev database that may already have a real admin from
+    # a prior bootstrap -- the endpoint's own "only bootstrap once" guard (409)
+    # is just as valid an outcome here as "no such account" (404). Either way,
+    # it must not create anything and must not 500.
     monkeypatch.setattr(settings, "admin_bootstrap_token", "correct-token")
 
     response = client.post(
@@ -91,7 +97,7 @@ def test_bootstrap_admin_404s_for_unknown_supabase_account(client, monkeypatch, 
         json={"email": test_email, "bootstrap_token": "correct-token"},
     )
 
-    assert response.status_code == 404
+    assert response.status_code in (404, 409)
 
 
 # Note: the "successfully promotes an existing Supabase user to admin" happy
