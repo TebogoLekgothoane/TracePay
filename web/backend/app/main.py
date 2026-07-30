@@ -38,6 +38,7 @@ from .routers import (
     accounts,
     admin,
     auth,
+    business,
     investor,
     me,
     mobile,
@@ -332,6 +333,7 @@ app.include_router(mtn_momo.router)
 app.include_router(me.router)
 app.include_router(investor.router)
 app.include_router(partners.router)
+app.include_router(business.router)
 app.include_router(auth.router, prefix="/v1")
 app.include_router(accounts.router, prefix="/v1")
 app.include_router(admin.router, prefix="/v1")
@@ -343,3 +345,4 @@ app.include_router(mtn_momo.router, prefix="/v1")
 app.include_router(me.router, prefix="/v1")
 app.include_router(investor.router, prefix="/v1")
 app.include_router(partners.router, prefix="/v1")
+app.include_router(business.router, prefix="/v1")

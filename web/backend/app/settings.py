@@ -30,13 +30,6 @@ class Settings(BaseModel):
     mtn_momo_api_key: str = ""
     mtn_momo_base_url: str = ""
     admin_bootstrap_token: str = ""
-    smtp_host: str = ""
-    smtp_port: int = 587
-    smtp_username: str = ""
-    smtp_password: str = ""
-    smtp_from_email: str = ""
-    smtp_from_name: str = "TracePay"
-    smtp_use_tls: bool = True
 
     @field_validator("database_url")
     @classmethod
@@ -106,16 +99,6 @@ def get_settings() -> Settings:
         mtn_momo_api_key=os.getenv("MTN_MOMO_API_KEY", ""),
         mtn_momo_base_url=os.getenv("MTN_MOMO_BASE_URL", ""),
         admin_bootstrap_token=os.getenv("ADMIN_BOOTSTRAP_TOKEN", ""),
-        smtp_host=os.getenv("SMTP_HOST", ""),
-        smtp_port=int(os.getenv("SMTP_PORT", "587")),
-        smtp_username=os.getenv("SMTP_USERNAME", ""),
-        smtp_password=os.getenv("SMTP_PASSWORD", ""),
-        smtp_from_email=os.getenv("SMTP_FROM_EMAIL", ""),
-        smtp_from_name=os.getenv("SMTP_FROM_NAME", "TracePay"),
-        smtp_use_tls=(
-            os.getenv("SMTP_USE_TLS", "true").strip().lower()
-            not in {"0", "false", "no"}
-        ),
     )
 
 

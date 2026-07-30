@@ -10,12 +10,23 @@ import {
   ReactNode,
   ReactElement,
 } from "react";
+import { apiClient } from "./api";
 import { getSupabase } from "./supabase";
+
+export type AccountType = "individual" | "business";
 
 interface User {
   id: string;
   email: string;
   role: string;
+  fullName: string | null;
+  accountType: AccountType;
+  businessName: string | null;
+  onboarded: boolean;
+  // True for an invited staff member of someone else's business -- their
+  // own accountType stays "individual" (they never onboarded as a business
+  // themselves), so this is tracked separately for routing/gating.
+  isBusinessMember: boolean;
 }
 
 interface AuthContextType {
@@ -29,32 +40,90 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-async function fetchRole(userId: string): Promise<string> {
+async function fetchProfile(userId: string): Promise<{ role: string; fullName: string | null }> {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, full_name")
     .eq("id", userId)
     .maybeSingle();
 
   if (error || !data) {
-    return "user";
+    return { role: "user", fullName: null };
   }
-  return (data.role as string) ?? "user";
+  return {
+    role: (data.role as string) ?? "user",
+    fullName: (data.full_name as string | null) ?? null,
+  };
+}
+
+async function fetchAccountSettings(): Promise<{
+  accountType: AccountType;
+  businessName: string | null;
+  onboarded: boolean;
+  isBusinessMember: boolean;
+}> {
+  try {
+    const settings = await apiClient.getMyAccountSettings();
+    let onboarded =
+      settings.onboarded ||
+      settings.account_type === "business" ||
+      settings.is_business_member;
+
+    // Older accounts can have dashboard activity but no account_settings row.
+    // Do not let a stale/older backend response classify them as brand new.
+    if (!onboarded) {
+      try {
+        const summary = await apiClient.getMySummary();
+        onboarded =
+          summary.last_analyzed_at !== null ||
+          summary.financial_health_score !== null ||
+          summary.linked_accounts_count > 0 ||
+          summary.frozen_items_count > 0;
+      } catch {
+        // A completed profile is checked separately in userFromSession.
+      }
+    }
+
+    return {
+      accountType: settings.account_type,
+      businessName: settings.business_name,
+      onboarded,
+      isBusinessMember: settings.is_business_member,
+    };
+  } catch {
+    // Backend unreachable -- fall back to "already onboarded, individual"
+    // rather than get someone stuck behind a modal or bounced to the wrong
+    // dashboard because of a transient outage.
+    return { accountType: "individual", businessName: null, onboarded: true, isBusinessMember: false };
+  }
 }
 
 async function userFromSession(session: Session | null): Promise<User | null> {
   if (!session?.user?.email) {
     return null;
   }
-  const role = await fetchRole(session.user.id);
-  return { id: session.user.id, email: session.user.email, role };
+  const [{ role, fullName }, { accountType, businessName, onboarded, isBusinessMember }] = await Promise.all([
+    fetchProfile(session.user.id),
+    fetchAccountSettings(),
+  ]);
+  return {
+    id: session.user.id,
+    email: session.user.email,
+    role,
+    fullName,
+    accountType,
+    businessName,
+    onboarded: onboarded || Boolean(fullName?.trim()),
+    isBusinessMember,
+  };
 }
 
-function homeRouteForRole(role: string): string {
-  if (role === "admin") return "/dashboard";
-  if (role === "investor") return "/investor";
-  if (role === "partner") return "/partner";
+export function homeRouteForUser(user: Pick<User, "role" | "accountType" | "isBusinessMember">): string {
+  if (user.role === "admin") return "/dashboard";
+  if (user.role === "investor") return "/investor";
+  if (user.role === "partner") return "/partner";
+  if (user.accountType === "business" || user.isBusinessMember) return "/business";
   return "/app";
 }
 
@@ -95,7 +164,9 @@ export function AuthProvider({
     }
     const nextUser = await userFromSession(data.session);
     setUser(nextUser);
-    router.push(homeRouteForRole(nextUser?.role ?? "user"));
+    router.push(
+      homeRouteForUser(nextUser ?? { role: "user", accountType: "individual", isBusinessMember: false })
+    );
   }
 
   async function register(email: string, password: string) {
@@ -112,7 +183,9 @@ export function AuthProvider({
 
     const nextUser = await userFromSession(data.session);
     setUser(nextUser);
-    router.push(homeRouteForRole(nextUser?.role ?? "user"));
+    router.push(
+      homeRouteForUser(nextUser ?? { role: "user", accountType: "individual", isBusinessMember: false })
+    );
   }
 
   function logout() {

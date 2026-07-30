@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
+import httpx
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
@@ -12,10 +13,16 @@ from sqlalchemy.orm import Session
 from .database import get_db
 from .models_db import Profile
 from .settings import settings
+from .supabase_jwks import find_key_for_kid
 
-# Supabase Auth issues HS256-signed JWTs using the project's shared JWT secret
-# (Project Settings -> API -> JWT Settings). This backend only ever verifies
-# tokens Supabase itself issued -- it never issues its own.
+# Supabase Auth issues access tokens signed one of two ways depending on the
+# project's key configuration: legacy projects use a shared HS256 secret
+# (Project Settings -> API -> JWT Settings); projects migrated to per-key
+# rotating signing keys sign asymmetrically (e.g. ES256) and publish the
+# public keys via JWKS (see supabase_jwks.py) -- there is no shared secret
+# for those. get_current_user picks the right path per-token based on
+# whether its header carries a `kid`. This backend only ever verifies tokens
+# Supabase itself issued -- it never issues its own.
 ALGORITHM = "HS256"
 AUDIENCE = "authenticated"
 
@@ -60,18 +67,37 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(
-            credentials.credentials,
-            settings.supabase_jwt_secret,
-            algorithms=[ALGORITHM],
-            audience=AUDIENCE,
-        )
+        header = jwt.get_unverified_header(credentials.credentials)
+        kid = header.get("kid")
+
+        if kid:
+            # Project has migrated to per-key rotating signing keys (asymmetric,
+            # e.g. ES256) -- verify against the matching public key from
+            # Supabase's JWKS endpoint rather than a shared secret.
+            jwk = find_key_for_kid(kid)
+            if jwk is None:
+                raise credentials_exception
+            payload = jwt.decode(
+                credentials.credentials,
+                jwk,
+                algorithms=[header.get("alg", "ES256")],
+                audience=AUDIENCE,
+            )
+        else:
+            # Legacy projects sign with the shared project JWT secret (HS256).
+            payload = jwt.decode(
+                credentials.credentials,
+                settings.supabase_jwt_secret,
+                algorithms=[ALGORITHM],
+                audience=AUDIENCE,
+            )
+
         user_id_str = payload.get("sub")
         email = payload.get("email")
         if not user_id_str or not email:
             raise credentials_exception
         user_id = uuid.UUID(user_id_str)
-    except (JWTError, ValueError):
+    except (JWTError, ValueError, httpx.HTTPError):
         raise credentials_exception
 
     try:

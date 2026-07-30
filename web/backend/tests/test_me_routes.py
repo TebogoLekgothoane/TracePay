@@ -142,7 +142,43 @@ def test_my_account_defaults_to_individual(client, db_session):
     response = client.get("/v1/me/account")
 
     assert response.status_code == 200
-    assert response.json() == {"account_type": "individual", "business_name": None}
+    assert response.json() == {
+        "account_type": "individual",
+        "business_name": None,
+        "onboarded": False,
+        "is_business_member": False,
+    }
+
+
+def test_existing_user_with_analysis_is_not_prompted_to_onboard(client, db_session):
+    profile = create_db_profile(db_session, role="user")
+    db_session.add(
+        AnalysisResult(
+            user_id=profile.id,
+            financial_health_score=79,
+            health_band="green",
+            money_leaks=[],
+            summary_plain_language="Existing analysis.",
+            transaction_count=12,
+        )
+    )
+    db_session.commit()
+    override_current_user(profile)
+
+    response = client.get("/v1/me/account")
+
+    assert response.status_code == 200
+    assert response.json()["onboarded"] is True
+
+
+def test_existing_user_with_completed_profile_is_not_prompted_to_onboard(client, db_session):
+    profile = create_db_profile(db_session, role="user", full_name="Thabo Nkosi")
+    override_current_user(profile)
+
+    response = client.get("/v1/me/account")
+
+    assert response.status_code == 200
+    assert response.json()["onboarded"] is True
 
 
 def test_can_set_own_account_to_business(client, db_session):
@@ -155,11 +191,21 @@ def test_can_set_own_account_to_business(client, db_session):
     )
 
     assert response.status_code == 200
-    assert response.json() == {"account_type": "business", "business_name": "Acme Traders"}
+    assert response.json() == {
+        "account_type": "business",
+        "business_name": "Acme Traders",
+        "onboarded": True,
+        "is_business_member": False,
+    }
 
     # Persisted, not just echoed back.
     refetched = client.get("/v1/me/account").json()
-    assert refetched == {"account_type": "business", "business_name": "Acme Traders"}
+    assert refetched == {
+        "account_type": "business",
+        "business_name": "Acme Traders",
+        "onboarded": True,
+        "is_business_member": False,
+    }
 
 
 def test_account_settings_reject_invalid_account_type(client, db_session):

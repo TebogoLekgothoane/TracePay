@@ -116,3 +116,75 @@ def test_link_account_writes_consent_change_audit(client, db_session, test_email
         .count()
         == 1
     )
+
+
+def test_link_account_accepts_branch_label(client, db_session, test_email):
+    headers = _authed_headers(db_session)
+
+    response = client.post(
+        "/v1/accounts/link",
+        headers=headers,
+        json={
+            "bank_name": "Pytest Bank",
+            "account_id": f"{test_email}-branch-account",
+            "branch_label": "Cape Town Store",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["branch_label"] == "Cape Town Store"
+
+
+def test_link_account_branch_label_defaults_to_none(client, db_session, test_email):
+    headers = _authed_headers(db_session)
+
+    response = client.post(
+        "/v1/accounts/link",
+        headers=headers,
+        json={"bank_name": "Pytest Bank", "account_id": f"{test_email}-no-branch"},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["branch_label"] is None
+
+
+def test_update_account_branch_retags_existing_account(client, db_session, test_email):
+    headers = _authed_headers(db_session)
+    link_response = client.post(
+        "/v1/accounts/link",
+        headers=headers,
+        json={"bank_name": "Pytest Bank", "account_id": f"{test_email}-retag"},
+    )
+    account_id = link_response.json()["id"]
+
+    response = client.put(
+        f"/v1/accounts/{account_id}/branch",
+        headers=headers,
+        json={"branch_label": "Durban Branch"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["branch_label"] == "Durban Branch"
+
+    refetched = client.get("/v1/accounts", headers=headers).json()
+    matching = next(acc for acc in refetched if acc["id"] == account_id)
+    assert matching["branch_label"] == "Durban Branch"
+
+
+def test_update_account_branch_rejects_other_users_account(client, db_session, test_email):
+    owner_headers = _authed_headers(db_session)
+    link_response = client.post(
+        "/v1/accounts/link",
+        headers=owner_headers,
+        json={"bank_name": "Pytest Bank", "account_id": f"{test_email}-not-yours"},
+    )
+    account_id = link_response.json()["id"]
+
+    other_headers = _authed_headers(db_session)
+    response = client.put(
+        f"/v1/accounts/{account_id}/branch",
+        headers=other_headers,
+        json={"branch_label": "Should not work"},
+    )
+
+    assert response.status_code == 404

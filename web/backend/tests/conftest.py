@@ -51,6 +51,7 @@ from app.models_db import (
     AnalysisResult,
     AuditLog,
     BackgroundJob,
+    BusinessMembership,
     FrozenItem,
     LinkedAccount,
     Partner,
@@ -114,6 +115,10 @@ def cleanup_test_data(
         db.query(LinkedAccount).filter(LinkedAccount.user_id.in_(profile_ids)).delete(synchronize_session=False)
         db.query(BackgroundJob).filter(BackgroundJob.user_id.in_(profile_ids)).delete(synchronize_session=False)
         db.query(AccountSettings).filter(AccountSettings.user_id.in_(profile_ids)).delete(synchronize_session=False)
+        db.query(BusinessMembership).filter(
+            (BusinessMembership.owner_user_id.in_(profile_ids))
+            | (BusinessMembership.member_user_id.in_(profile_ids))
+        ).delete(synchronize_session=False)
     if profile_ids:
         db.query(Redemption).filter(Redemption.user_id.in_(profile_ids)).delete(synchronize_session=False)
     if partner_ids:
@@ -137,6 +142,7 @@ def require_current_schema(db) -> None:
         "account_settings",
         "partners",
         "redemptions",
+        "business_memberships",
     }
     frozen_item_columns = {column["name"] for column in inspector.get_columns("frozen_items")}
     missing = sorted(
@@ -209,6 +215,21 @@ def create_test_partner(
     db.commit()
     db.info["created_partner_ids"].append(partner.id)
     return partner
+
+
+def make_business_account(db, profile: Profile, business_name: str = "Test Business") -> AccountSettings:
+    """Mark an existing test profile as a business account owner."""
+    now = datetime.now(timezone.utc)
+    settings_row = AccountSettings(
+        user_id=profile.id,
+        account_type="business",
+        business_name=business_name,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(settings_row)
+    db.commit()
+    return settings_row
 
 
 def override_current_user(profile: Profile, email: str = "test@example.com") -> None:

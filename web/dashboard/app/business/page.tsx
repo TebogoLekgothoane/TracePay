@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertCircle, Flame, Landmark, ShieldCheck, Sparkles, TrendingUp, Wallet } from "lucide-react";
+import { AlertCircle, Building2, Flame, Landmark, ShieldCheck, Sparkles, TrendingUp, Wallet } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,20 +21,23 @@ import { LeakBreakdownDonut, type DonutSegment } from "@/components/leak-breakdo
 import { apiClient } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
-type Summary = Awaited<ReturnType<typeof apiClient.getMySummary>>;
-type Analysis = Awaited<ReturnType<typeof apiClient.getMyAnalyses>>[number];
+type Summary = Awaited<ReturnType<typeof apiClient.getBusinessSummary>>;
+type Analysis = Awaited<ReturnType<typeof apiClient.getBusinessAnalyses>>[number];
+type Account = Awaited<ReturnType<typeof apiClient.listBusinessAccounts>>[number];
 
-// A small, clearly-labeled sample dataset so a new account can see the
-// pipeline work end to end without needing a real linked bank/MoMo sync
+const UNASSIGNED_BRANCH_LABEL = "Unassigned";
+
+// A small, clearly-labeled sample dataset so a new business account can see
+// the pipeline work end to end without needing a real linked bank/MoMo sync
 // (Open Banking sandbox credentials aren't configured in this environment).
 const SAMPLE_TRANSACTIONS = [
-  { id: "sample-1", timestamp: "2026-07-01T08:00:00Z", amount: -30, currency: "ZAR", description: "Airtime top-up", merchant: "MTN", direction: "debit" as const },
-  { id: "sample-2", timestamp: "2026-07-04T08:00:00Z", amount: -30, currency: "ZAR", description: "Airtime top-up", merchant: "MTN", direction: "debit" as const },
-  { id: "sample-3", timestamp: "2026-07-08T08:00:00Z", amount: -30, currency: "ZAR", description: "Airtime top-up", merchant: "MTN", direction: "debit" as const },
-  { id: "sample-4", timestamp: "2026-07-12T08:00:00Z", amount: -30, currency: "ZAR", description: "Airtime top-up", merchant: "MTN", direction: "debit" as const },
-  { id: "sample-5", timestamp: "2026-07-15T14:00:00Z", amount: -149, currency: "ZAR", description: "Monthly streaming subscription", merchant: "StreamCo", direction: "debit" as const },
-  { id: "sample-6", timestamp: "2026-07-20T09:00:00Z", amount: -92, currency: "ZAR", description: "ATM cash-out fee", merchant: "ATM", direction: "debit" as const },
-  { id: "sample-7", timestamp: "2026-07-25T10:00:00Z", amount: 8500, currency: "ZAR", description: "Salary", merchant: "Employer", direction: "credit" as const },
+  { id: "sample-1", timestamp: "2026-07-01T08:00:00Z", amount: -450, currency: "ZAR", description: "SaaS subscription", merchant: "CloudTools", direction: "debit" as const },
+  { id: "sample-2", timestamp: "2026-07-04T08:00:00Z", amount: -450, currency: "ZAR", description: "SaaS subscription", merchant: "CloudTools", direction: "debit" as const },
+  { id: "sample-3", timestamp: "2026-07-08T08:00:00Z", amount: -180, currency: "ZAR", description: "Vendor service fee", merchant: "Supplier Co", direction: "debit" as const },
+  { id: "sample-4", timestamp: "2026-07-12T08:00:00Z", amount: -180, currency: "ZAR", description: "Vendor service fee", merchant: "Supplier Co", direction: "debit" as const },
+  { id: "sample-5", timestamp: "2026-07-15T14:00:00Z", amount: -899, currency: "ZAR", description: "Unused software seat", merchant: "TeamApp", direction: "debit" as const },
+  { id: "sample-6", timestamp: "2026-07-20T09:00:00Z", amount: -220, currency: "ZAR", description: "Bank service fee", merchant: "Bank", direction: "debit" as const },
+  { id: "sample-7", timestamp: "2026-07-25T10:00:00Z", amount: 45000, currency: "ZAR", description: "Customer payment", merchant: "Client Invoice", direction: "credit" as const },
 ];
 
 const BAND_STYLES: Record<string, string> = {
@@ -68,10 +71,11 @@ function visibleLeaks(analysis: Analysis | undefined) {
   return analysis.money_leaks.filter((leak) => !METADATA_ONLY_DETECTORS.has(leak.detector ?? ""));
 }
 
-export default function PersonalOverviewPage() {
+export default function BusinessOverviewPage() {
   const { user } = useAuth();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [analyses, setAnalyses] = useState<Analysis[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [runningDemo, setRunningDemo] = useState(false);
@@ -79,14 +83,16 @@ export default function PersonalOverviewPage() {
   async function load() {
     try {
       setError(null);
-      const [summaryData, analysesData] = await Promise.all([
-        apiClient.getMySummary(),
-        apiClient.getMyAnalyses(8),
+      const [summaryData, analysesData, accountsData] = await Promise.all([
+        apiClient.getBusinessSummary(),
+        apiClient.getBusinessAnalyses(8),
+        apiClient.listBusinessAccounts(),
       ]);
       setSummary(summaryData);
       setAnalyses(analysesData);
+      setAccounts(accountsData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load your dashboard.");
+      setError(err instanceof Error ? err.message : "Could not load your business dashboard.");
     } finally {
       setLoading(false);
     }
@@ -100,7 +106,7 @@ export default function PersonalOverviewPage() {
     setRunningDemo(true);
     setError(null);
     try {
-      await apiClient.analyzeMine(SAMPLE_TRANSACTIONS);
+      await apiClient.analyzeBusiness(SAMPLE_TRANSACTIONS);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not run the sample analysis.");
@@ -109,12 +115,11 @@ export default function PersonalOverviewPage() {
     }
   }
 
-  const firstName = (user?.fullName?.trim().split(/\s+/).filter(Boolean)[0]) || "there";
+  const businessName = user?.businessName?.trim() || "Your Business";
   const hasAnalysis = Boolean(summary && summary.financial_health_score !== null);
   const latestAnalysis = analyses[0];
   const score = summary?.financial_health_score ?? 0;
   const band = summary?.health_band ?? undefined;
-  const bandClass = band ? BAND_STYLES[band] ?? "" : "";
 
   const trendPoints: TrendPoint[] = useMemo(
     () =>
@@ -151,11 +156,22 @@ export default function PersonalOverviewPage() {
       .slice(0, 5);
   }, [latestAnalysis]);
 
+  const accountsByBranch: TrendPoint[] = useMemo(() => {
+    const byBranch = new Map<string, number>();
+    for (const account of accounts) {
+      const key = account.branch_label?.trim() || UNASSIGNED_BRANCH_LABEL;
+      byBranch.set(key, (byBranch.get(key) ?? 0) + 1);
+    }
+    return [...byBranch.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, value]) => ({ label, value }));
+  }, [accounts]);
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
         <Spinner className="h-4 w-4" />
-        Loading your dashboard...
+        Loading your business dashboard...
       </div>
     );
   }
@@ -163,8 +179,10 @@ export default function PersonalOverviewPage() {
   return (
     <div className="space-y-6 p-2 md:p-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Welcome back, {firstName} 👋</h1>
-        <p className="text-sm text-muted-foreground">Here&apos;s what&apos;s happening with your money today.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">{businessName}</h1>
+        <p className="text-sm text-muted-foreground">
+          Here&apos;s what&apos;s happening across your business&apos;s accounts today.
+        </p>
       </div>
 
       {error && (
@@ -202,19 +220,18 @@ export default function PersonalOverviewPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Health score trend</CardTitle>
-              <CardDescription>Your financial health score across recent analyses</CardDescription>
+              <CardTitle>Business health score trend</CardTitle>
+              <CardDescription>Your business's financial health score across recent analyses</CardDescription>
             </CardHeader>
             <CardContent>
               <TrendBarChart
                 points={trendPoints}
                 domain={[0, 100]}
-                height={140}
                 valueLabel="Health score"
                 formatValue={(value) => `${value} / 100`}
                 emptyIcon={TrendingUp}
                 emptyTitle="No history yet"
-                emptyDescription="Run an analysis (or link and sync an account) to start tracking your health score over time."
+                emptyDescription="Run an analysis (or link and sync a business account) to start tracking your health score over time."
               />
             </CardContent>
           </Card>
@@ -223,11 +240,11 @@ export default function PersonalOverviewPage() {
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle>Recent leaks</CardTitle>
-                <CardDescription>From your latest analysis</CardDescription>
+                <CardDescription>Vendor fees, unused subscriptions, and other recurring costs found across your business</CardDescription>
               </div>
               {hasAnalysis && (
                 <Button variant="ghost" size="sm" asChild>
-                  <Link href="/app/leaks">View all</Link>
+                  <Link href="/business/leaks">View all</Link>
                 </Button>
               )}
             </CardHeader>
@@ -239,14 +256,14 @@ export default function PersonalOverviewPage() {
                     tone="brand"
                     icon={ShieldCheck}
                     title="Nothing leaking"
-                    description="Nice work -- we didn't find any money leaks in your latest analysis."
+                    description="Nice work -- we didn't find any money leaks across your business in the latest analysis."
                   />
                 ) : (
                   <EmptyState
                     card={false}
                     icon={Sparkles}
                     title="No leaks yet"
-                    description="Link an account and sync it, or try a sample analysis to see how TracePay reads your transactions."
+                    description="Link a business account and sync it, or try a sample analysis to see how TracePay reads your transactions."
                     actionLabel="Try a sample analysis"
                     onAction={runningDemo ? undefined : runSampleAnalysis}
                   />
@@ -284,7 +301,7 @@ export default function PersonalOverviewPage() {
         <div className="space-y-4">
           <Card className="overflow-hidden border-0 bg-gradient-to-br from-primary to-primary/70 text-primary-foreground">
             <CardHeader>
-              <CardDescription className="text-primary-foreground/70">Financial health</CardDescription>
+              <CardDescription className="text-primary-foreground/70">Business financial health</CardDescription>
               <CardTitle className="text-primary-foreground">
                 {hasAnalysis
                   ? summary?.last_analyzed_at
@@ -318,8 +335,25 @@ export default function PersonalOverviewPage() {
 
           <Card>
             <CardHeader>
+              <CardTitle>Accounts by branch</CardTitle>
+              <CardDescription>How your linked accounts are spread across branches</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <TrendBarChart
+                points={accountsByBranch}
+                valueLabel="Accounts"
+                formatValue={(value) => `${value} account${value === 1 ? "" : "s"}`}
+                emptyIcon={Building2}
+                emptyTitle="No accounts yet"
+                emptyDescription="Link accounts and tag them with a branch to see the split here."
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle>Leak breakdown</CardTitle>
-              <CardDescription>Where your money is leaking, by category</CardDescription>
+              <CardDescription>Where your business's money is leaking, by category</CardDescription>
             </CardHeader>
             <CardContent>
               <LeakBreakdownDonut segments={donutSegments} />
@@ -331,13 +365,13 @@ export default function PersonalOverviewPage() {
               <CardTitle>{hasAnalysis ? "Add more data" : "Get started"}</CardTitle>
               <CardDescription>
                 {hasAnalysis
-                  ? "Link another account or re-run the sample to refresh your numbers."
-                  : "Link an account and sync it, or try a sample analysis to see how TracePay reads your transactions."}
+                  ? "Link another business account or re-run the sample to refresh your numbers."
+                  : "Link a business account and sync it, or try a sample analysis to see how TracePay reads your transactions."}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-3">
               <Button asChild>
-                <Link href="/app/accounts">
+                <Link href="/business/accounts">
                   <Landmark className="mr-2 h-4 w-4" />
                   Link an account
                 </Link>

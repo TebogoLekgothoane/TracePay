@@ -3,31 +3,34 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-import { AppSidebar } from "@/components/app-sidebar";
+import { BusinessSidebar } from "@/components/business-sidebar";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import { RequireRole } from "@/components/require-role";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { useAuth } from "@/lib/auth";
 
-/** A business account (or an invited member of one) that lands here
- * directly (bookmark, typed URL) gets bounced to its own dashboard -- only
- * checked for role "user" since admins browse /app for support/QA
- * regardless of their own account_type. */
-function AppGate({ children }: { children: React.ReactNode }) {
+/** An individual account with no business membership that lands here
+ * directly (bookmark, typed URL) gets bounced back to /app -- only checked
+ * for role "user" since admins browse /business for support/QA regardless
+ * of their own account_type. Invited members pass this check too: their own
+ * accountType stays "individual", but isBusinessMember is what actually
+ * grants them access here. */
+function BusinessGate({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
     const router = useRouter();
-    const isBusinessAccount =
+    const isIndividualAccount =
         user?.role === "user" &&
         user.onboarded &&
-        (user.accountType === "business" || user.isBusinessMember);
+        user.accountType !== "business" &&
+        !user.isBusinessMember;
 
     useEffect(() => {
-        if (isBusinessAccount) {
-            router.replace("/business");
+        if (isIndividualAccount) {
+            router.replace("/app");
         }
-    }, [isBusinessAccount, router]);
+    }, [isIndividualAccount, router]);
 
-    if (isBusinessAccount) {
+    if (isIndividualAccount) {
         return null;
     }
 
@@ -39,7 +42,7 @@ function AppGate({ children }: { children: React.ReactNode }) {
     );
 }
 
-export default function PersonalAppLayout({
+export default function BusinessLayout({
     children,
 }: {
     children: React.ReactNode;
@@ -47,9 +50,9 @@ export default function PersonalAppLayout({
     return (
         <RequireRole allow={["user", "admin"]}>
             <SidebarProvider defaultOpen={true}>
-                <AppSidebar />
+                <BusinessSidebar />
                 <SidebarInset className="flex flex-col gap-4 px-4 pb-10 pt-4 md:pt-6">
-                    <AppGate>{children}</AppGate>
+                    <BusinessGate>{children}</BusinessGate>
                 </SidebarInset>
             </SidebarProvider>
         </RequireRole>

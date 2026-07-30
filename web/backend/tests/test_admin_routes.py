@@ -46,6 +46,24 @@ def test_admin_overview_stats_requires_admin(client, db_session):
     )
 
 
+def test_admin_operational_stats_exposes_decision_metrics(client, db_session):
+    admin = create_db_profile(db_session, role="admin")
+    create_db_profile(db_session, role="user", full_name="Active Customer")
+    override_current_user(admin)
+
+    response = client.get("/v1/admin/stats/operations", params={"days": 30})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["period_days"] == 30
+    assert body["funnel"]["registered_users"] >= 1
+    assert body["funnel"]["completed_profiles"] >= 1
+    assert len(body["daily_activity"]) == 30
+    assert {"current", "previous"} <= body["active_users"].keys()
+    assert isinstance(body["alerts"], list)
+    assert {"individual_accounts", "business_accounts", "freeze_rate"} <= body.keys()
+
+
 def test_admin_users_requires_admin(client, db_session):
     profile = create_db_profile(db_session, role="user")
     override_current_user(profile)

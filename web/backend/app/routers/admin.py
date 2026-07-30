@@ -12,7 +12,18 @@ from sqlalchemy.orm import Session
 from ..audit import add_audit_event
 from ..auth import ROLE_ADMIN, ROLE_INVESTOR, ROLE_PARTNER, ROLE_USER, AuthenticatedUser, get_current_admin_user
 from ..database import get_db, SessionLocal
-from ..models_db import AnalysisResult, AuditLog, FrozenItem, LinkedAccount, Partner, Profile, Redemption, Transaction
+from ..models_db import (
+    AccountSettings,
+    AnalysisResult,
+    AuditLog,
+    BackgroundJob,
+    FrozenItem,
+    LinkedAccount,
+    Partner,
+    Profile,
+    Redemption,
+    Transaction,
+)
 from ..open_banking_client import OpenBankingSandboxClient, SandboxConfig
 from ..settings import settings
 from ..stats import OverviewStats, RegionalInsight, compute_overview_stats, compute_regional_stats
@@ -109,6 +120,290 @@ def get_temporal_stats(
         "total_analyses": len(analyses),
         "temporal_data": temporal_data,
     }
+
+
+class OperationalComparison(BaseModel):
+    current: float
+    previous: float
+
+
+class OperationalFunnel(BaseModel):
+    registered_users: int
+    completed_profiles: int
+    linked_account_users: int
+    analyzed_users: int
+    returning_active_users: int
+
+
+class DailyOperationalMetric(BaseModel):
+    date: str
+    new_users: int
+    active_users: int
+    analyses: int
+    savings_identified: float
+
+
+class OperationalAlert(BaseModel):
+    key: str
+    label: str
+    count: int
+    severity: Literal["critical", "warning", "info"]
+    href: str
+
+
+class OperationalStats(BaseModel):
+    period_days: int
+    new_users: OperationalComparison
+    active_users: OperationalComparison
+    analyses: OperationalComparison
+    savings_identified: OperationalComparison
+    funnel: OperationalFunnel
+    daily_activity: List[DailyOperationalMetric]
+    alerts: List[OperationalAlert]
+    individual_accounts: int
+    business_accounts: int
+    analyses_per_active_user: float
+    freeze_rate: float
+
+
+def _period_savings(analyses: List[AnalysisResult]) -> float:
+    total = 0.0
+    for analysis in analyses:
+        for leak in analysis.money_leaks or []:
+            if leak.get("detector") in {"InclusionScorer", "StakeholderMetrics", "DataSource"}:
+                continue
+            total += float(leak.get("estimated_monthly_cost", 0.0) or 0.0)
+    return round(total, 2)
+
+
+def _active_user_ids(db: Session, start: datetime, end: datetime) -> set[Any]:
+    transaction_users = {
+        row[0]
+        for row in db.query(Transaction.user_id)
+        .filter(Transaction.created_at >= start, Transaction.created_at < end)
+        .distinct()
+        .all()
+    }
+    analysis_users = {
+        row[0]
+        for row in db.query(AnalysisResult.user_id)
+        .filter(AnalysisResult.created_at >= start, AnalysisResult.created_at < end)
+        .distinct()
+        .all()
+    }
+    return transaction_users | analysis_users
+
+
+@router.get("/stats/operations", response_model=OperationalStats)
+def get_operational_stats(
+    db: Session = Depends(get_db),
+    days: int = Query(30, ge=7, le=90),
+) -> OperationalStats:
+    """Aggregate product operations, comparisons, funnel stages, and alerts.
+
+    This endpoint intentionally returns counts only. Existing drill-down
+    endpoints remain the place for admins to inspect individual records.
+    """
+    end = datetime.utcnow()
+    current_start = end - timedelta(days=days)
+    previous_start = current_start - timedelta(days=days)
+
+    current_analyses = (
+        db.query(AnalysisResult)
+        .filter(AnalysisResult.created_at >= current_start, AnalysisResult.created_at < end)
+        .all()
+    )
+    previous_analyses = (
+        db.query(AnalysisResult)
+        .filter(AnalysisResult.created_at >= previous_start, AnalysisResult.created_at < current_start)
+        .all()
+    )
+    current_active_ids = _active_user_ids(db, current_start, end)
+    previous_active_ids = _active_user_ids(db, previous_start, current_start)
+
+    product_users = db.query(Profile).filter(Profile.role == ROLE_USER)
+    registered_users = product_users.count()
+    completed_profiles = product_users.filter(
+        Profile.full_name.isnot(None), func.length(func.trim(Profile.full_name)) > 0
+    ).count()
+    linked_user_ids = {
+        row[0] for row in db.query(LinkedAccount.user_id).distinct().all()
+    }
+    analyzed_user_ids = {
+        row[0] for row in db.query(AnalysisResult.user_id).distinct().all()
+    }
+    product_user_ids = {row[0] for row in product_users.with_entities(Profile.id).all()}
+    linked_users = len(linked_user_ids & product_user_ids)
+    analyzed_users = len(analyzed_user_ids & product_user_ids)
+    returning_active_users = len(
+        current_active_ids
+        & {
+            row[0]
+            for row in db.query(AnalysisResult.user_id)
+            .filter(AnalysisResult.created_at < current_start)
+            .distinct()
+            .all()
+        }
+    )
+
+    daily: Dict[str, Dict[str, Any]] = {}
+    for offset in range(days):
+        day = (end.date() - timedelta(days=days - 1 - offset)).isoformat()
+        daily[day] = {
+            "new_users": set(),
+            "active_users": set(),
+            "analyses": 0,
+            "savings_identified": 0.0,
+        }
+
+    for profile in (
+        db.query(Profile)
+        .filter(Profile.role == ROLE_USER, Profile.created_at >= current_start, Profile.created_at < end)
+        .all()
+    ):
+        key = profile.created_at.date().isoformat()
+        if key in daily:
+            daily[key]["new_users"].add(profile.id)
+
+    for transaction in (
+        db.query(Transaction)
+        .filter(Transaction.created_at >= current_start, Transaction.created_at < end)
+        .all()
+    ):
+        key = transaction.created_at.date().isoformat()
+        if key in daily:
+            daily[key]["active_users"].add(transaction.user_id)
+
+    for analysis in current_analyses:
+        key = analysis.created_at.date().isoformat()
+        if key not in daily:
+            continue
+        daily[key]["active_users"].add(analysis.user_id)
+        daily[key]["analyses"] += 1
+        daily[key]["savings_identified"] += _period_savings([analysis])
+
+    failed_accounts = db.query(LinkedAccount).filter(
+        func.lower(LinkedAccount.status).in_(["failed", "error", "revoked", "denied"])
+    ).count()
+    pending_accounts = db.query(LinkedAccount).filter(
+        func.lower(LinkedAccount.status) == "pending"
+    ).count()
+    failed_jobs = db.query(BackgroundJob).filter(
+        BackgroundJob.status == "failed", BackgroundJob.created_at >= current_start
+    ).count()
+    stalled_jobs = db.query(BackgroundJob).filter(
+        BackgroundJob.status.in_(["pending", "running"]),
+        BackgroundJob.created_at < end - timedelta(hours=1),
+    ).count()
+    unresolved_freezes = db.query(FrozenItem).filter(
+        FrozenItem.status == "frozen"
+    ).count()
+    stuck_users = product_users.filter(
+        Profile.created_at < end - timedelta(days=3),
+        ~Profile.id.in_(analyzed_user_ids or {uuid.UUID(int=0)}),
+    ).count()
+
+    alerts = [
+        OperationalAlert(
+            key="failed_accounts",
+            label="Failed or revoked account connections",
+            count=failed_accounts,
+            severity="critical",
+            href="/dashboard/data-log",
+        ),
+        OperationalAlert(
+            key="failed_jobs",
+            label=f"Failed jobs in the last {days} days",
+            count=failed_jobs,
+            severity="critical",
+            href="/dashboard/data-log",
+        ),
+        OperationalAlert(
+            key="stalled_jobs",
+            label="Background jobs stalled for over an hour",
+            count=stalled_jobs,
+            severity="warning",
+            href="/dashboard/data-log",
+        ),
+        OperationalAlert(
+            key="pending_accounts",
+            label="Account connections still pending",
+            count=pending_accounts,
+            severity="warning",
+            href="/dashboard/data-log",
+        ),
+        OperationalAlert(
+            key="stuck_users",
+            label="Users without a first analysis after 3 days",
+            count=stuck_users,
+            severity="warning",
+            href="/dashboard/data-log",
+        ),
+        OperationalAlert(
+            key="unresolved_freezes",
+            label="Frozen items awaiting resolution",
+            count=unresolved_freezes,
+            severity="info",
+            href="/dashboard/history",
+        ),
+    ]
+
+    business_accounts = db.query(AccountSettings).filter(
+        AccountSettings.account_type == "business"
+    ).count()
+    individual_accounts = max(registered_users - business_accounts, 0)
+    current_savings = _period_savings(current_analyses)
+    previous_savings = _period_savings(previous_analyses)
+    current_analysis_count = len(current_analyses)
+    active_count = len(current_active_ids)
+    frozen_in_period = db.query(FrozenItem).filter(
+        FrozenItem.frozen_at >= current_start, FrozenItem.frozen_at < end
+    ).count()
+
+    return OperationalStats(
+        period_days=days,
+        new_users=OperationalComparison(
+            current=float(
+                product_users.filter(Profile.created_at >= current_start, Profile.created_at < end).count()
+            ),
+            previous=float(
+                product_users.filter(
+                    Profile.created_at >= previous_start, Profile.created_at < current_start
+                ).count()
+            ),
+        ),
+        active_users=OperationalComparison(
+            current=float(active_count), previous=float(len(previous_active_ids))
+        ),
+        analyses=OperationalComparison(
+            current=float(current_analysis_count), previous=float(len(previous_analyses))
+        ),
+        savings_identified=OperationalComparison(
+            current=current_savings, previous=previous_savings
+        ),
+        funnel=OperationalFunnel(
+            registered_users=registered_users,
+            completed_profiles=completed_profiles,
+            linked_account_users=linked_users,
+            analyzed_users=analyzed_users,
+            returning_active_users=returning_active_users,
+        ),
+        daily_activity=[
+            DailyOperationalMetric(
+                date=date,
+                new_users=len(values["new_users"]),
+                active_users=len(values["active_users"]),
+                analyses=values["analyses"],
+                savings_identified=round(values["savings_identified"], 2),
+            )
+            for date, values in sorted(daily.items())
+        ],
+        alerts=alerts,
+        individual_accounts=individual_accounts,
+        business_accounts=business_accounts,
+        analyses_per_active_user=round(current_analysis_count / max(active_count, 1), 2),
+        freeze_rate=round(frozen_in_period / max(current_analysis_count, 1) * 100, 1),
+    )
 
 
 @router.get("/stats/user-segments")

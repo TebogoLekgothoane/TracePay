@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Lock } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -12,16 +12,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import { homeRouteForUser, useAuth, type AccountType } from "@/lib/auth";
 
-export default function AccountSettingsPage() {
+export default function BusinessSettingsPage() {
   const { user, refreshUser } = useAuth();
   const router = useRouter();
-  const [accountType, setAccountType] = useState<AccountType>("individual");
+  const [accountType, setAccountType] = useState<AccountType>("business");
   const [businessName, setBusinessName] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -54,10 +55,12 @@ export default function AccountSettingsPage() {
       });
       await refreshUser();
       setSaved(true);
-      // Switching to business moves the account onto its own dashboard --
-      // send them there instead of leaving them on the personal one.
-      if (accountType === "business") {
-        router.push(homeRouteForUser({ role: user?.role ?? "user", accountType, isBusinessMember: false }));
+      // Switching to individual moves the account off the business
+      // dashboard entirely -- send them to wherever they now belong.
+      if (accountType === "individual") {
+        router.push(
+          homeRouteForUser({ role: user?.role ?? "user", accountType, isBusinessMember: false })
+        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save account settings.");
@@ -70,12 +73,24 @@ export default function AccountSettingsPage() {
     return <div className="p-6 text-sm text-muted-foreground">Loading account settings...</div>;
   }
 
+  if (user?.isBusinessMember) {
+    return (
+      <div className="p-2 md:p-4">
+        <EmptyState
+          icon={Lock}
+          title="Owner only"
+          description="Only the business account owner can change these settings. Ask them if something needs to change."
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 p-2 md:p-4">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Account Settings</h1>
         <p className="text-sm text-muted-foreground">
-          Business accounts get their own dashboard and are billed a fee — switch here any time.
+          Manage your business name and account type.
         </p>
       </div>
 
@@ -126,6 +141,12 @@ export default function AccountSettingsPage() {
                   placeholder="Acme Traders"
                 />
               </div>
+            )}
+
+            {accountType === "individual" && (
+              <p className="text-xs text-muted-foreground">
+                Switching to individual will move you to the personal dashboard.
+              </p>
             )}
 
             <div className="flex items-center gap-3">

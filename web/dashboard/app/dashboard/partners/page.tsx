@@ -1,16 +1,21 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { AlertCircle, Gift } from "lucide-react";
+import { AlertCircle, Gift, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiClient } from "@/lib/api";
@@ -34,6 +39,7 @@ export default function AdminPartnersPage() {
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [busyPartnerId, setBusyPartnerId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   async function load() {
     try {
@@ -65,6 +71,7 @@ export default function AdminPartnersPage() {
         owner_user_id: form.owner_user_id.trim() || null,
       });
       setForm(emptyForm);
+      setCreateOpen(false);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create that partner.");
@@ -88,12 +95,104 @@ export default function AdminPartnersPage() {
 
   return (
     <div className="space-y-6 p-2 md:p-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Reward Partners</h1>
-        <p className="text-sm text-muted-foreground">
-          Onboard commission partners and link the account that logs in as their owner. There is no
-          self-service signup — provisioning is admin-only.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Reward Partners</h1>
+          <p className="text-sm text-muted-foreground">
+            Onboard commission partners and link the account that logs in as their owner. There is no
+            self-service signup — provisioning is admin-only.
+          </p>
+        </div>
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Add a partner
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Add a partner</DialogTitle>
+              <DialogDescription>
+                owner_user_id is the Supabase auth UUID of the account that should see this partner&apos;s view
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleCreate} className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="id">Partner id</Label>
+                <Input
+                  id="id"
+                  value={form.id}
+                  onChange={(e) => setForm({ ...form, id: e.target.value })}
+                  placeholder="checkers"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="name">Name</Label>
+                <Input
+                  id="name"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="Checkers"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="offer_description">Offer</Label>
+                <Input
+                  id="offer_description"
+                  value={form.offer_description}
+                  onChange={(e) => setForm({ ...form, offer_description: e.target.value })}
+                  placeholder="3% cashback"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="points_cost">Points cost</Label>
+                <Input
+                  id="points_cost"
+                  type="number"
+                  value={form.points_cost}
+                  onChange={(e) => setForm({ ...form, points_cost: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="estimated_value_rand">Estimated value (R)</Label>
+                <Input
+                  id="estimated_value_rand"
+                  type="number"
+                  value={form.estimated_value_rand}
+                  onChange={(e) => setForm({ ...form, estimated_value_rand: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="commission_rate">Commission rate</Label>
+                <Input
+                  id="commission_rate"
+                  type="number"
+                  step="0.001"
+                  value={form.commission_rate}
+                  onChange={(e) => setForm({ ...form, commission_rate: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="owner_user_id">Owner user id (optional)</Label>
+                <Input
+                  id="owner_user_id"
+                  value={form.owner_user_id}
+                  onChange={(e) => setForm({ ...form, owner_user_id: e.target.value })}
+                  placeholder="Supabase auth UUID"
+                />
+              </div>
+              <Button type="submit" disabled={submitting} className="sm:col-span-2 sm:justify-self-start">
+                {submitting ? "Creating..." : "Create partner"}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {error && (
@@ -102,89 +201,6 @@ export default function AdminPartnersPage() {
           {error}
         </div>
       )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Add a partner</CardTitle>
-          <CardDescription>owner_user_id is the Supabase auth UUID of the account that should see this partner&apos;s view</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleCreate} className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="id">Partner id</Label>
-              <Input
-                id="id"
-                value={form.id}
-                onChange={(e) => setForm({ ...form, id: e.target.value })}
-                placeholder="checkers"
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="Checkers"
-                required
-              />
-            </div>
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="offer_description">Offer</Label>
-              <Input
-                id="offer_description"
-                value={form.offer_description}
-                onChange={(e) => setForm({ ...form, offer_description: e.target.value })}
-                placeholder="3% cashback"
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="points_cost">Points cost</Label>
-              <Input
-                id="points_cost"
-                type="number"
-                value={form.points_cost}
-                onChange={(e) => setForm({ ...form, points_cost: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="estimated_value_rand">Estimated value (R)</Label>
-              <Input
-                id="estimated_value_rand"
-                type="number"
-                value={form.estimated_value_rand}
-                onChange={(e) => setForm({ ...form, estimated_value_rand: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="commission_rate">Commission rate</Label>
-              <Input
-                id="commission_rate"
-                type="number"
-                step="0.001"
-                value={form.commission_rate}
-                onChange={(e) => setForm({ ...form, commission_rate: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="owner_user_id">Owner user id (optional)</Label>
-              <Input
-                id="owner_user_id"
-                value={form.owner_user_id}
-                onChange={(e) => setForm({ ...form, owner_user_id: e.target.value })}
-                placeholder="Supabase auth UUID"
-              />
-            </div>
-            <Button type="submit" disabled={submitting} className="sm:col-span-2 sm:justify-self-start">
-              {submitting ? "Creating..." : "Create partner"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading partners...</p>

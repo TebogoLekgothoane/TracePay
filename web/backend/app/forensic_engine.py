@@ -12,6 +12,22 @@ from .detectors.vas_charges import detect_vas_charges
 from .detectors.weekend_spending import detect_weekend_spending
 
 
+def _json_safe(value: Any) -> Any:
+    """Recursively convert pandas/datetime values into JSON-serializable
+    ones. Detector `evidence` dicts often embed `DataFrame.to_dict()` output
+    (e.g. a `sample` of recent rows) where the `timestamp` column is still a
+    `pd.Timestamp`, which the DB driver can't serialize directly -- this is
+    the single point every detector's evidence passes through before being
+    persisted, so fixing it here covers all of them at once."""
+    if isinstance(value, pd.Timestamp):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    return value
+
+
 class ForensicEngine:
     """
     Money Autopsy "Forensic Engine"
@@ -426,7 +442,7 @@ class ForensicEngine:
             "severity": leak.severity,
             "transaction_id": leak.transaction_id,
             "estimated_monthly_cost": leak.estimated_monthly_cost,
-            "evidence": leak.evidence or {},
+            "evidence": _json_safe(leak.evidence or {}),
         }
 
 

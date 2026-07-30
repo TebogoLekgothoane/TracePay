@@ -58,6 +58,26 @@ class AccountSettings(Base):
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
 
+class BusinessMembership(Base):
+    """An invited staff member's access to a business account's dashboard.
+
+    `owner_user_id` is the business account's own user_id (the same id as
+    its `account_settings`/`profiles` row) -- not a separate entity, since a
+    business account IS a Supabase user, just one with account_type
+    "business". `member_user_id` is unique: a person belongs to at most one
+    business at a time, so resolving "whose data am I looking at" never has
+    to pick between multiple employers.
+    """
+
+    __tablename__ = "business_memberships"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    member_user_id = Column(UUID(as_uuid=True), nullable=False, unique=True, index=True)
+    invited_email = Column(String(255), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
 class Partner(Base):
     """A commission partner (Shoprite, Checkers, etc).
 
@@ -127,6 +147,11 @@ class LinkedAccount(Base):
         DateTime(timezone=True), default=datetime.utcnow, nullable=False
     )
     account_metadata = Column("metadata", JSON, default=dict)
+    # Free-text tag a business uses to group its accounts (e.g. "Main Branch",
+    # "Cape Town Store"). Null for individual accounts and for businesses that
+    # haven't tagged an account yet -- those fall into a single "Unassigned"
+    # bucket in the branch rollup rather than being required upfront.
+    branch_label = Column(String(100), nullable=True)
 
     transactions = relationship(
         "Transaction", back_populates="account", cascade="all, delete-orphan"

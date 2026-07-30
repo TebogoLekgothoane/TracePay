@@ -23,6 +23,13 @@ class LinkAccountRequest(BaseModel):
     account_id: Optional[str] = Field(default=None, min_length=1, max_length=255)
     open_banking_consent_id: Optional[str] = Field(default=None, min_length=1, max_length=255)
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    branch_label: Optional[str] = Field(default=None, max_length=100)
+
+
+class UpdateAccountBranchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    branch_label: Optional[str] = Field(default=None, max_length=100)
 
 
 class AccountResponse(BaseModel):
@@ -33,6 +40,7 @@ class AccountResponse(BaseModel):
     last_synced_at: Optional[str]
     created_at: str
     metadata: Dict[str, Any]
+    branch_label: Optional[str]
 
     class Config:
         from_attributes = True
@@ -62,6 +70,7 @@ def link_account(
         open_banking_consent_id=req.open_banking_consent_id,
         status="active",
         account_metadata=req.metadata,
+        branch_label=req.branch_label,
     )
     db.add(account)
     db.flush()
@@ -89,6 +98,7 @@ def link_account(
         last_synced_at=account.last_synced_at.isoformat() if account.last_synced_at else None,
         created_at=account.created_at.isoformat(),
         metadata=account.account_metadata or {},
+        branch_label=account.branch_label,
     )
 
 
@@ -105,9 +115,44 @@ def list_accounts(current_user: AuthenticatedUser = Depends(get_current_user), d
             last_synced_at=acc.last_synced_at.isoformat() if acc.last_synced_at else None,
             created_at=acc.created_at.isoformat(),
             metadata=acc.account_metadata or {},
+            branch_label=acc.branch_label,
         )
         for acc in accounts
     ]
+
+
+@router.put("/{account_id}/branch", response_model=AccountResponse)
+def update_account_branch(
+    req: UpdateAccountBranchRequest,
+    account_id: int = Path(gt=0),
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AccountResponse:
+    """Tag (or re-tag) which branch/department an already-linked account
+    belongs to -- lets a business organize accounts after linking rather
+    than requiring the branch upfront."""
+    account = (
+        db.query(LinkedAccount)
+        .filter(LinkedAccount.id == account_id, LinkedAccount.user_id == current_user.id)
+        .first()
+    )
+    if not account:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+
+    account.branch_label = req.branch_label
+    db.commit()
+    db.refresh(account)
+
+    return AccountResponse(
+        id=account.id,
+        bank_name=account.bank_name,
+        account_id=account.account_id,
+        status=account.status,
+        last_synced_at=account.last_synced_at.isoformat() if account.last_synced_at else None,
+        created_at=account.created_at.isoformat(),
+        metadata=account.account_metadata or {},
+        branch_label=account.branch_label,
+    )
 
 
 @router.delete("/{account_id}")

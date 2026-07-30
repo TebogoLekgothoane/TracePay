@@ -1,30 +1,42 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Brain,
-  Gauge,
-  Info,
+  Activity,
+  AlertCircle,
   ArrowRight,
-  ArrowUpRight,
-  Lock,
-  MapPin,
-  Store,
-  Target,
-  TrendingUp,
+  BarChart3,
+  BriefcaseBusiness,
+  CheckCircle2,
+  CircleAlert,
+  Clock3,
+  Database,
+  Download,
+  FileSearch,
+  Flame,
+  Gauge,
   RefreshCw,
+  ShieldAlert,
   Sparkles,
-  Shield,
+  TrendingDown,
+  TrendingUp,
+  UserCheck,
   Users,
   Wallet,
-  Activity,
-  CheckCircle2,
 } from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip as ChartTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { apiClient } from "@/lib/api";
 import {
   Card,
   CardContent,
@@ -32,673 +44,607 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Progress } from "@/components/ui/progress";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Spinner } from "@/components/ui/spinner";
+import { apiClient } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
-type OverviewStats = {
-  total_users: number;
-  active_users: number;
-  total_linked_accounts: number;
-  total_transactions: number;
-  total_analyses: number;
-  average_health_score: number;
-  total_frozen_items: number;
-  total_capital_protected: number;
-  active_consents: number;
-  ml_anomalies_detected: number;
-  mailbox_effect_prevalence: number;
-  avg_inclusion_score: number;
-  retail_wealth_unlock: number;
-  avg_inclusion_delta: number;
-  total_retail_velocity: number;
-};
+type Overview = Awaited<ReturnType<typeof apiClient.getOverviewStats>>;
+type Operations = Awaited<ReturnType<typeof apiClient.getOperationalStats>>;
+type MLFindings = Awaited<ReturnType<typeof apiClient.getMLFindings>>;
+type ProviderHealth = Awaited<ReturnType<typeof apiClient.getProviderHealth>>;
+type AuditEntry = Awaited<ReturnType<typeof apiClient.getAuditLog>>[number];
+type Period = 7 | 30 | 90;
+type ChartMetric = "active_users" | "new_users" | "analyses" | "savings_identified";
 
-type MLFindings = {
-  top_leak_categories: Array<{ category: string; count: number; growth: string }>;
-  anomaly_distribution: { high_risk: number; medium_risk: number; low_risk: number };
-  predicted_savings_next_month: number;
-};
+const CHART_METRICS: Array<{ key: ChartMetric; label: string; color: string }> = [
+  { key: "active_users", label: "Active users", color: "hsl(var(--primary))" },
+  { key: "new_users", label: "New users", color: "hsl(var(--primary))" },
+  { key: "analyses", label: "Analyses", color: "hsl(var(--primary))" },
+  { key: "savings_identified", label: "Savings", color: "hsl(var(--primary))" },
+];
 
-type RegionalInsight = {
-  region: string;
-  average_health_score: number;
-  total_leaks: number;
-  total_users: number;
-  top_leak_type: string;
-};
-
-type ProviderHealth = {
-  status: string;
-  checks: Record<string, { status: string; detail?: string }>;
-};
-
-const REPORTING_PERIOD_LABEL = "Last 30 days";
-
-function formatLastUpdated(d: Date | null): string {
-  if (!d) return "—";
-  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+function formatRand(value: number, maximumFractionDigits = 0) {
+  return new Intl.NumberFormat("en-ZA", {
+    style: "currency",
+    currency: "ZAR",
+    maximumFractionDigits,
+  }).format(value);
 }
 
-const EMPTY_STATS: OverviewStats = {
-  total_users: 0,
-  active_users: 0,
-  total_linked_accounts: 0,
-  total_transactions: 0,
-  total_analyses: 0,
-  average_health_score: 0,
-  total_frozen_items: 0,
-  total_capital_protected: 0,
-  active_consents: 0,
-  ml_anomalies_detected: 0,
-  mailbox_effect_prevalence: 0,
-  avg_inclusion_score: 0,
-  retail_wealth_unlock: 0,
-  avg_inclusion_delta: 0,
-  total_retail_velocity: 0,
-};
+function comparisonLabel(current: number, previous: number) {
+  if (previous === 0) {
+    return current === 0
+      ? { label: "No change", positive: true }
+      : { label: "New this period", positive: true };
+  }
+  const change = ((current - previous) / previous) * 100;
+  return {
+    label: `${change >= 0 ? "+" : ""}${change.toFixed(1)}% vs previous period`,
+    positive: change >= 0,
+  };
+}
 
-function hasAnyPlatformData(stats: OverviewStats | null): boolean {
-  if (!stats) return false;
+function KpiCard({
+  label,
+  value,
+  detail,
+  current,
+  previous,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  current: number;
+  previous: number;
+  icon: typeof Users;
+  tone: string;
+}) {
+  const comparison = comparisonLabel(current, previous);
+  const TrendIcon = comparison.positive ? TrendingUp : TrendingDown;
+
   return (
-    stats.total_users > 0 ||
-    stats.total_linked_accounts > 0 ||
-    stats.total_transactions > 0 ||
-    stats.total_analyses > 0 ||
-    stats.total_frozen_items > 0
+    <Card>
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="mt-2 text-3xl font-semibold tracking-tight">{value}</p>
+          </div>
+          <div className={cn("rounded-xl p-2.5", tone)}>
+            <Icon className="h-5 w-5" />
+          </div>
+        </div>
+        <div className="mt-4 flex items-center gap-1.5">
+          <TrendIcon
+            className={cn("h-3.5 w-3.5", comparison.positive ? "text-emerald-600" : "text-destructive")}
+          />
+          <span
+            className={cn(
+              "text-xs font-medium",
+              comparison.positive ? "text-emerald-600" : "text-destructive"
+            )}
+          >
+            {comparison.label}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+      </CardContent>
+    </Card>
   );
 }
 
-function statusTone(status: string | undefined): string {
-  if (status === "ok" || status === "configured") return "bg-accent";
-  if (status === "degraded" || status === "unreachable") return "bg-amber-500";
-  return "bg-muted-foreground";
+function percent(value: number, total: number) {
+  return total > 0 ? (value / total) * 100 : 0;
 }
 
-function statusLabel(status: string | undefined): string {
-  if (!status) return "Unavailable";
-  return status
+function formatEventName(event: string) {
+  return event
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 }
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<OverviewStats | null>(null);
-  const [regional, setRegional] = useState<RegionalInsight[]>([]);
+  const [period, setPeriod] = useState<Period>(30);
+  const [chartMetric, setChartMetric] = useState<ChartMetric>("active_users");
+  const [overview, setOverview] = useState<Overview | null>(null);
+  const [operations, setOperations] = useState<Operations | null>(null);
   const [mlFindings, setMlFindings] = useState<MLFindings | null>(null);
   const [providerHealth, setProviderHealth] = useState<ProviderHealth | null>(null);
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
+  const load = useCallback(async (background = false) => {
+    background ? setRefreshing(true) : setLoading(true);
+    setError(null);
+
+    const results = await Promise.allSettled([
+      apiClient.getOverviewStats(),
+      apiClient.getOperationalStats(period),
+      apiClient.getMLFindings(),
+      apiClient.getProviderHealth(),
+      apiClient.getAuditLog({ limit: 8 }),
+    ]);
+
+    const failures: string[] = [];
+    const [overviewResult, operationsResult, mlResult, providerResult, auditResult] = results;
+
+    if (overviewResult.status === "fulfilled") setOverview(overviewResult.value);
+    else failures.push("platform totals");
+    if (operationsResult.status === "fulfilled") setOperations(operationsResult.value);
+    else failures.push("operational metrics");
+    if (mlResult.status === "fulfilled") setMlFindings(mlResult.value);
+    else failures.push("leak intelligence");
+    if (providerResult.status === "fulfilled") setProviderHealth(providerResult.value);
+    else failures.push("provider health");
+    if (auditResult.status === "fulfilled") setAuditEntries(auditResult.value);
+    else failures.push("audit activity");
+
+    if (failures.length) setError(`Could not load ${failures.join(", ")}.`);
+    if (results.some((result) => result.status === "fulfilled")) setLastUpdatedAt(new Date());
+    setLoading(false);
+    setRefreshing(false);
+  }, [period]);
+
   useEffect(() => {
-    let cancelled = false;
+    void load();
+  }, [load]);
 
-    async function loadDashboardData() {
-      setLoading(true);
-      setError(null);
-
-      const [statsResult, regionalResult, mlResult, healthResult] =
-        await Promise.allSettled([
-          apiClient.getOverviewStats(),
-          apiClient.getRegionalStats(),
-          apiClient.getMLFindings(),
-          apiClient.getProviderHealth(),
-        ]);
-
-      if (cancelled) return;
-
-      const failures: string[] = [];
-
-      if (statsResult.status === "fulfilled") {
-        setStats(statsResult.value);
-      } else {
-        setStats(null);
-        failures.push("overview metrics");
-      }
-
-      if (regionalResult.status === "fulfilled") {
-        setRegional(regionalResult.value);
-      } else {
-        setRegional([]);
-        failures.push("regional metrics");
-      }
-
-      if (mlResult.status === "fulfilled") {
-        setMlFindings(mlResult.value);
-      } else {
-        setMlFindings(null);
-        failures.push("spending patterns");
-      }
-
-      if (healthResult.status === "fulfilled") {
-        setProviderHealth(healthResult.value);
-      } else {
-        setProviderHealth(null);
-        failures.push("provider health");
-      }
-
-      if (failures.length > 0) {
-        setError(`Could not load ${failures.join(", ")} from the backend.`);
-      }
-
-      if (
-        statsResult.status === "fulfilled" ||
-        regionalResult.status === "fulfilled" ||
-        mlResult.status === "fulfilled" ||
-        healthResult.status === "fulfilled"
-      ) {
-        setLastUpdatedAt(new Date());
-      }
-
-      setLoading(false);
-    }
-
-    void loadDashboardData();
-
-    return () => {
-      cancelled = true;
+  function exportSnapshot() {
+    if (!overview || !operations) return;
+    const snapshot = {
+      generated_at: new Date().toISOString(),
+      period_days: period,
+      overview,
+      operations,
+      leak_intelligence: mlFindings,
+      provider_health: providerHealth,
     };
-  }, []);
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `tracepay-operational-snapshot-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
 
-  const getStats = useMemo(() => {
-    return stats ?? EMPTY_STATS;
-  }, [stats]);
-
-  const hasPlatformData = hasAnyPlatformData(stats);
-  const hasRegionalData = regional.length > 0;
-  const hasMlFindings = Boolean(mlFindings?.top_leak_categories.length);
-  const providerStatus = providerHealth?.status;
-
-  const impactValue = useMemo(() => {
-    return getStats.total_capital_protected;
-  }, [getStats]);
+  const selectedChart = CHART_METRICS.find((metric) => metric.key === chartMetric) ?? CHART_METRICS[0];
+  const chartData = useMemo(
+    () =>
+      (operations?.daily_activity ?? []).map((point) => ({
+        ...point,
+        label: new Date(`${point.date}T00:00:00`).toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+        }),
+      })),
+    [operations]
+  );
+  const activeAlerts = operations?.alerts.filter((alert) => alert.count > 0) ?? [];
+  const providers = Object.entries(providerHealth?.checks ?? {});
+  const funnel = operations?.funnel;
+  const topLeaks = mlFindings?.top_leak_categories.slice(0, 4) ?? [];
+  const maxLeakCount = Math.max(1, ...topLeaks.map((leak) => leak.count));
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex min-h-[70vh] items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="relative">
-            <div className="h-16 w-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-            <Sparkles className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-6 w-6 text-primary" />
+            <div className="h-14 w-14 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
+            <Sparkles className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 text-primary" />
           </div>
-          <p className="text-sm text-muted-foreground">Loading your dashboard...</p>
+          <p className="text-sm text-muted-foreground">Loading operational overview...</p>
         </div>
       </div>
     );
   }
 
+  if (!overview || !operations) {
+    return (
+      <div className="p-4">
+        <EmptyState
+          icon={CircleAlert}
+          tone="brand"
+          title="Operational overview unavailable"
+          description={error ?? "The dashboard could not load its required platform metrics."}
+        />
+      </div>
+    );
+  }
+
+  const activationRate = percent(funnel?.analyzed_users ?? 0, funnel?.registered_users ?? 0);
+  const linkedRate = percent(funnel?.linked_account_users ?? 0, funnel?.registered_users ?? 0);
+  const returningRate = percent(funnel?.returning_active_users ?? 0, operations.active_users.current);
+  const businessRate = percent(
+    operations.business_accounts,
+    operations.business_accounts + operations.individual_accounts
+  );
+
+  const funnelSteps = [
+    { label: "Registered", value: funnel?.registered_users ?? 0, icon: Users },
+    { label: "Profile complete", value: funnel?.completed_profiles ?? 0, icon: UserCheck },
+    { label: "Account linked", value: funnel?.linked_account_users ?? 0, icon: Database },
+    { label: "First analysis", value: funnel?.analyzed_users ?? 0, icon: FileSearch },
+    { label: `Returning (${period}d)`, value: funnel?.returning_active_users ?? 0, icon: Activity },
+  ];
+
   return (
-    <TooltipProvider>
-      <div className="min-h-screen bg-background">
-        {/* Hero Header */}
-        <div className="bg-gradient-to-br from-primary via-primary to-primary/80 text-primary-foreground">
-          <div className="container mx-auto px-4 py-8 md:py-12">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
-                    <Target className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
-                      TracePay Overview
-                    </h1>
-                    <p className="text-primary-foreground/80 text-sm">
-                      Eastern Cape Financial Health Dashboard
-                    </p>
-                  </div>
-                </div>
-                <p className="text-primary-foreground/70 text-sm max-w-xl leading-relaxed">
-                  Track how TracePay helps people and businesses keep money in their pockets, strengthen financial inclusion, and boost local retail.
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 backdrop-blur-sm text-sm">
-                  <Activity className="h-4 w-4" />
-                  <span>{REPORTING_PERIOD_LABEL}</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 backdrop-blur-sm text-sm">
-                  <RefreshCw className="h-4 w-4" />
-                  <span>Updated {formatLastUpdated(lastUpdatedAt)}</span>
-                </div>
-              </div>
-            </div>
+    <div className="space-y-6 p-2 md:p-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight">Operational Overview</h1>
+            <Badge variant="outline">
+              Live data
+            </Badge>
           </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Growth, activation, customer value, and platform exceptions that need attention.
+          </p>
         </div>
-
-        {/* Main Content */}
-        <div className="container mx-auto px-4 py-8">
-          {error && (
-            <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              <p>{error}</p>
-            </div>
-          )}
-
-          {!hasPlatformData && (
-            <div className="mb-6 rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
-              No platform metrics are available yet. Link accounts and run transaction analyses to populate this overview.
-            </div>
-          )}
-
-          {/* Key Metrics - Bento Grid */}
-          <section className="mb-10">
-            <div className="flex items-center gap-2 mb-6">
-              <h2 className="text-lg font-semibold text-foreground">At a Glance</h2>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="max-w-xs text-xs">
-                    Key metrics showing regional financial health, savings, inclusion, and local retail impact.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Health Score Card */}
-              <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent shadow-sm hover:shadow-md transition-shadow">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardDescription className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Financial Health
-                    </CardDescription>
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                      <Gauge className="h-4 w-4 text-primary" />
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-4xl font-bold text-foreground">
-                      {Math.round(getStats.average_health_score)}
-                    </span>
-                    <span className="text-lg text-muted-foreground">/100</span>
-                  </div>
-                  <div className="mt-3">
-                    <Progress value={getStats.average_health_score} className="h-2" />
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Average score across Eastern Cape users
-                  </p>
-                  <Badge className="mt-2 border-transparent text-xs bg-primary/10 text-primary hover:bg-primary/20">
-                    EC Regional Average
-                  </Badge>
-                </CardContent>
-              </Card>
-
-              {/* Money Saved Card */}
-              <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-accent/10 via-accent/5 to-transparent shadow-sm hover:shadow-md transition-shadow">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-accent/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardDescription className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Money Users Kept
-                    </CardDescription>
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/10">
-                      <Wallet className="h-4 w-4 text-accent" />
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-4xl font-bold text-accent">
-                      R{(impactValue / 1000000).toFixed(1)}M
-                    </span>
-                  </div>
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    Fees and waste avoided or recovered
-                  </p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {hasPlatformData ? "Based on recorded analyses" : "No protected capital recorded yet"}
-                  </p>
-                </CardContent>
-              </Card>
-
-              {/* Credit Inclusion Card */}
-              <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent shadow-sm hover:shadow-md transition-shadow">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardDescription className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Credit Inclusion Lift
-                    </CardDescription>
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                      <TrendingUp className="h-4 w-4 text-primary" />
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-4xl font-bold text-primary">
-                      +{getStats.avg_inclusion_delta}
-                    </span>
-                    <span className="text-lg text-muted-foreground">pts</span>
-                  </div>
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    Average credit score improvement
-                  </p>
-                  <div className="mt-2 flex items-center gap-1 text-xs text-primary">
-                    <Users className="h-3 w-3" />
-                    <span>{getStats.active_users.toLocaleString()} active users</span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Local Retail Card */}
-              <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-secondary via-secondary/50 to-transparent shadow-sm hover:shadow-md transition-shadow">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2" />
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardDescription className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Local Retail Spend
-                    </CardDescription>
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                      <Store className="h-4 w-4 text-primary" />
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-4xl font-bold text-foreground">
-                      R{(getStats.total_retail_velocity / 1000000).toFixed(1)}M
-                    </span>
-                  </div>
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    Redirected to EC retailers
-                  </p>
-                  <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-                    <ArrowUpRight className="h-3 w-3 text-accent" />
-                    <span className="text-accent">Supporting local economy</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </section>
-
-          {/* Partners & Revenue Section */}
-          <section className="mb-10">
-            <div className="flex items-center gap-2 mb-6">
-              <h2 className="text-lg font-semibold text-foreground">Partners & Revenue</h2>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Retailer Impact */}
-              <Card className="border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-semibold text-primary flex items-center gap-2">
-                    <Store className="h-4 w-4" />
-                    Retailer Impact
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Retailers in the region have seen an estimated{" "}
-                    <strong className="text-foreground">
-                      R{getStats.total_retail_velocity.toLocaleString()}
-                    </strong>{" "}
-                    in purchasing power reclaimed.
-                  </p>
-                  <Button variant="ghost" size="sm" className="p-0 h-auto text-xs text-primary hover:bg-transparent hover:underline" asChild>
-                    <Link href="/dashboard/regional">
-                      View retail map <ArrowRight className="h-3 w-3 ml-1" />
-                    </Link>
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {/* Licensing Insights */}
-              <Card className="border border-accent/20 bg-accent/5 hover:bg-accent/10 transition-colors">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-semibold text-accent flex items-center gap-2">
-                    <Brain className="h-4 w-4" />
-                    Regional Insights
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Aggregated datasets from{" "}
-                    <strong className="text-foreground">
-                      {getStats.total_analyses.toLocaleString()}
-                    </strong>{" "}
-                    health checks available for licensing.
-                  </p>
-                  <Button variant="ghost" size="sm" className="p-0 h-auto text-xs text-accent hover:bg-transparent hover:underline" asChild>
-                    <Link href="/dashboard/ml-reports">
-                      Download insight pack <ArrowRight className="h-3 w-3 ml-1" />
-                    </Link>
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {/* System Status */}
-              <Card className="border border-border bg-card hover:bg-secondary/50 transition-colors">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                    <Shield className="h-4 w-4 text-muted-foreground" />
-                    System Status
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground uppercase font-medium">
-                        Data Service
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <div className={`h-2 w-2 rounded-full ${statusTone(providerStatus)}`} />
-                        <span className="text-sm font-semibold text-foreground">
-                          {statusLabel(providerStatus)}
-                        </span>
-                      </div>
-                    </div>
-                    <Badge variant="outline" className="text-xs">
-                      Backend health
-                    </Badge>
-                  </div>
-                  {providerHealth ? (
-                    <div className="space-y-1 text-xs text-muted-foreground">
-                      {Object.entries(providerHealth.checks).map(([name, check]) => (
-                        <div key={name} className="flex items-center justify-between gap-3">
-                          <span className="capitalize">{name.replaceAll("_", " ")}</span>
-                          <span>{statusLabel(check.status)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Provider health is unavailable.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </section>
-
-          {/* Two Column Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Regional Focus */}
-            <Card className="border-0 shadow-sm">
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                      <MapPin className="h-4 w-4 text-primary" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-base font-semibold">
-                        Areas in Focus
-                      </CardTitle>
-                      <CardDescription className="text-xs">
-                        Eastern Cape regional health scores
-                      </CardDescription>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm" className="text-xs text-primary" asChild>
-                    <Link href="/dashboard/regional">
-                      View all <ArrowRight className="h-3 w-3 ml-1" />
-                    </Link>
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {hasRegionalData ? (
-                  <div className="space-y-5">
-                    {regional.map((reg, index) => (
-                      <div key={reg.region} className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                              {index + 1}
-                            </div>
-                            <span className="text-sm font-medium text-foreground">
-                              {reg.region}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-foreground">
-                              {reg.average_health_score}
-                            </span>
-                            <span className="text-xs text-muted-foreground">/100</span>
-                          </div>
-                        </div>
-                        <div className="relative">
-                          <Progress
-                            value={reg.average_health_score}
-                            className="h-2"
-                          />
-                        </div>
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span>{reg.total_users.toLocaleString()} users</span>
-                          <span className="flex items-center gap-1">
-                            <span className="inline-block h-1.5 w-1.5 rounded-full bg-destructive/60" />
-                            Top issue: {reg.top_leak_type}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                    No regional metrics are available yet.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Spending Patterns */}
-            <Card className="border-0 shadow-sm">
-              <CardHeader className="pb-4">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                    <Brain className="h-4 w-4 text-primary" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-base font-semibold">
-                      Spending Patterns
-                    </CardTitle>
-                    <CardDescription className="text-xs">
-                      Categories with most activity
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {hasMlFindings && mlFindings ? (
-                  <div className="space-y-4">
-                    {mlFindings.top_leak_categories.map((leak, index) => (
-                      <div
-                        key={leak.category}
-                        className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                            {index + 1}
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-foreground">
-                              {leak.category}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {leak.count.toLocaleString()} occurrences
-                            </p>
-                          </div>
-                        </div>
-                        <Badge
-                          variant="outline"
-                          className={
-                            leak.growth.startsWith("+")
-                              ? "border-destructive/30 bg-destructive/10 text-destructive"
-                              : "border-accent/30 bg-accent/10 text-accent"
-                          }
-                        >
-                          {leak.growth}
-                        </Badge>
-                      </div>
-                    ))}
-
-                    <div className="mt-4 p-4 rounded-xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/20">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <Sparkles className="h-4 w-4 text-primary" />
-                          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                            Predicted Savings (Next 30 Days)
-                          </span>
-                        </div>
-                        <span className="text-xl font-bold text-primary">
-                          R{mlFindings.predicted_savings_next_month.toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                    No spending pattern findings are available yet.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Footer Stats */}
-          <section className="mt-10 pt-8 border-t border-border">
-            <div className="flex flex-wrap items-center justify-center gap-8 text-center">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-accent" />
-                <span className="text-sm text-muted-foreground">
-                  <strong className="text-foreground">{getStats.total_users.toLocaleString()}</strong> total users
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-accent" />
-                <span className="text-sm text-muted-foreground">
-                  <strong className="text-foreground">{getStats.total_linked_accounts.toLocaleString()}</strong> linked accounts
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-accent" />
-                <span className="text-sm text-muted-foreground">
-                  <strong className="text-foreground">{getStats.total_transactions.toLocaleString()}</strong> transactions analyzed
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Lock className="h-4 w-4 text-primary" />
-                <span className="text-sm text-muted-foreground">
-                  <strong className="text-foreground">{getStats.active_consents.toLocaleString()}</strong> active consents
-                </span>
-              </div>
-            </div>
-          </section>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            aria-label="Reporting period"
+            value={period}
+            onChange={(event) => setPeriod(Number(event.target.value) as Period)}
+            className="h-10 rounded-md border border-border/70 bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value={7}>Last 7 days</option>
+            <option value={30}>Last 30 days</option>
+            <option value={90}>Last 90 days</option>
+          </select>
+          <Button variant="outline" onClick={() => void load(true)} disabled={refreshing}>
+            <RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "animate-spin")} />
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </Button>
+          <Button variant="outline" onClick={exportSnapshot}>
+            <Download className="mr-2 h-4 w-4" />
+            Export snapshot
+          </Button>
+          <Badge variant="outline" className="h-10 rounded-md px-3">
+            <Clock3 className="mr-2 h-3.5 w-3.5" />
+            {lastUpdatedAt
+              ? lastUpdatedAt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+              : "Not updated"}
+          </Badge>
         </div>
       </div>
-    </TooltipProvider>
+
+      {error && (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {error}
+        </div>
+      )}
+
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="flex shrink-0 items-center gap-2 font-semibold">
+              {activeAlerts.length ? (
+                <ShieldAlert className="h-5 w-5 text-primary" />
+              ) : (
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              )}
+              {activeAlerts.some((alert) => alert.severity !== "info")
+                ? "Attention required"
+                : activeAlerts.length
+                  ? "Items to review"
+                  : "No operational exceptions"}
+            </div>
+            {activeAlerts.length ? (
+              <div className="flex flex-1 flex-wrap gap-2">
+                {activeAlerts.map((alert) => (
+                  <Link
+                    key={alert.key}
+                    href={alert.href}
+                    className="inline-flex items-center gap-2 rounded-lg border border-border/70 bg-background px-3 py-2 text-xs transition-colors hover:bg-secondary/60"
+                  >
+                    <span className="font-semibold">{alert.count}</span>
+                    <span className="text-muted-foreground">{alert.label}</span>
+                    <ArrowRight className="h-3 w-3" />
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No failed connections, stalled jobs, or unresolved platform actions were detected.
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard
+          label="New users"
+          value={operations.new_users.current.toLocaleString()}
+          detail={`Registrations in the last ${period} days`}
+          current={operations.new_users.current}
+          previous={operations.new_users.previous}
+          icon={Users}
+          tone="bg-primary/10 text-primary"
+        />
+        <KpiCard
+          label="Active users"
+          value={operations.active_users.current.toLocaleString()}
+          detail={`${returningRate.toFixed(1)}% were returning users`}
+          current={operations.active_users.current}
+          previous={operations.active_users.previous}
+          icon={Activity}
+          tone="bg-primary/10 text-primary"
+        />
+        <KpiCard
+          label="Analyses completed"
+          value={operations.analyses.current.toLocaleString()}
+          detail={`${operations.analyses_per_active_user.toFixed(1)} per active user`}
+          current={operations.analyses.current}
+          previous={operations.analyses.previous}
+          icon={BarChart3}
+          tone="bg-primary/10 text-primary"
+        />
+        <KpiCard
+          label="Savings identified"
+          value={formatRand(operations.savings_identified.current)}
+          detail={`${operations.freeze_rate.toFixed(1)}% analysis-to-freeze rate`}
+          current={operations.savings_identified.current}
+          previous={operations.savings_identified.previous}
+          icon={Wallet}
+          tone="bg-primary/10 text-primary"
+        />
+      </div>
+
+      <Card>
+        <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle>Product activity</CardTitle>
+            <CardDescription>Daily operating signals across the selected period</CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-1 rounded-lg bg-muted/60 p-1">
+            {CHART_METRICS.map((metric) => (
+              <button
+                key={metric.key}
+                type="button"
+                onClick={() => setChartMetric(metric.key)}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                  chartMetric === metric.key
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {metric.label}
+              </button>
+            ))}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={chartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+              <defs>
+                <linearGradient id="activity-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={selectedChart.color} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={selectedChart.color} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border" />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} className="text-xs fill-muted-foreground" />
+              <YAxis tickLine={false} axisLine={false} className="text-xs fill-muted-foreground" width={54} />
+              <ChartTooltip
+                contentStyle={{
+                  backgroundColor: "hsl(var(--card))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: 8,
+                  fontSize: 12,
+                }}
+                formatter={(value) => [
+                  chartMetric === "savings_identified" ? formatRand(Number(value), 2) : Number(value).toLocaleString(),
+                  selectedChart.label,
+                ]}
+              />
+              <Area
+                type="monotone"
+                dataKey={chartMetric}
+                stroke={selectedChart.color}
+                strokeWidth={2.5}
+                fill="url(#activity-fill)"
+                isAnimationActive={false}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Activation funnel</CardTitle>
+            <CardDescription>Where product users progress—or drop out—before receiving value</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {funnelSteps.map((step, index) => {
+              const previous = index === 0 ? step.value : funnelSteps[index - 1].value;
+              const conversion = percent(step.value, previous);
+              const totalWidth = percent(step.value, funnelSteps[0].value);
+              return (
+                <div key={step.label} className="grid grid-cols-[145px_1fr_72px] items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <step.icon className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">{step.label}</span>
+                  </div>
+                  <div className="h-9 overflow-hidden rounded-lg bg-muted/60">
+                    <div
+                      className="flex h-full min-w-[36px] items-center rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground"
+                      style={{ width: `${Math.max(totalWidth, step.value > 0 ? 8 : 0)}%` }}
+                    >
+                      {step.value.toLocaleString()}
+                    </div>
+                  </div>
+                  <span className="text-right text-xs text-muted-foreground">
+                    {index === 0 ? "Baseline" : `${conversion.toFixed(1)}%`}
+                  </span>
+                </div>
+              );
+            })}
+            <div className="grid gap-3 border-t border-border/60 pt-4 sm:grid-cols-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Link conversion</p>
+                <p className="mt-1 text-lg font-semibold">{linkedRate.toFixed(1)}%</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Analysis activation</p>
+                <p className="mt-1 text-lg font-semibold">{activationRate.toFixed(1)}%</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Business adoption</p>
+                <p className="mt-1 text-lg font-semibold">{businessRate.toFixed(1)}%</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Core customer value</CardTitle>
+            <CardDescription>What analyses are finding and how users act on it</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-border/60 bg-secondary/30 p-4">
+                <Gauge className="h-4 w-4 text-primary" />
+                <p className="mt-3 text-2xl font-semibold">{overview.average_health_score.toFixed(1)}</p>
+                <p className="text-xs text-muted-foreground">Average health score</p>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-secondary/30 p-4">
+                <Flame className="h-4 w-4 text-primary" />
+                <p className="mt-3 text-2xl font-semibold">{operations.freeze_rate.toFixed(1)}%</p>
+                <p className="text-xs text-muted-foreground">Protective action rate</p>
+              </div>
+            </div>
+            <div>
+              <p className="mb-3 text-sm font-medium">Most common leak categories</p>
+              {topLeaks.length ? (
+                <div className="space-y-3">
+                  {topLeaks.map((leak) => (
+                    <div key={leak.category} className="grid grid-cols-[minmax(110px,1fr)_1.4fr_auto] items-center gap-3">
+                      <span className="truncate text-xs text-muted-foreground">{leak.category}</span>
+                      <div className="h-2 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-primary"
+                          style={{ width: `${(leak.count / maxLeakCount) * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-semibold">{leak.count}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No leak findings recorded yet.</p>
+              )}
+            </div>
+            <Button variant="outline" className="w-full" asChild>
+              <Link href="/dashboard/history">
+                Explore spending leaks
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between">
+            <div>
+              <CardTitle>Provider &amp; pipeline health</CardTitle>
+              <CardDescription>External services and data ingestion dependencies</CardDescription>
+            </div>
+            <Badge
+              className={cn(
+                providerHealth?.status === "ok"
+                  ? "bg-emerald-500/10 text-emerald-700"
+                  : "bg-amber-500/10 text-amber-800"
+              )}
+            >
+              {providerHealth?.status === "ok" ? "Healthy" : "Needs review"}
+            </Badge>
+          </CardHeader>
+          <CardContent>
+            {providers.length ? (
+              <div className="space-y-3">
+                {providers.map(([name, check]) => {
+                  const healthy = check.status === "ok" || check.status === "configured";
+                  return (
+                    <div key={name} className="flex items-center justify-between gap-4 rounded-xl border border-border/60 p-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", healthy ? "bg-emerald-500" : "bg-amber-500")} />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{formatEventName(name)}</p>
+                          {check.detail && <p className="truncate text-xs text-muted-foreground">{check.detail}</p>}
+                        </div>
+                      </div>
+                      <Badge variant="outline">{formatEventName(check.status)}</Badge>
+                    </div>
+                  );
+                })}
+                <Button variant="ghost" className="w-full" asChild>
+                  <Link href="/dashboard/data-log">
+                    Open data operations
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Provider health is unavailable.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between">
+            <div>
+              <CardTitle>Recent admin activity</CardTitle>
+              <CardDescription>Latest security-sensitive and operational events</CardDescription>
+            </div>
+            <BriefcaseBusiness className="h-5 w-5 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            {auditEntries.length ? (
+              <div className="space-y-1">
+                {auditEntries.slice(0, 6).map((entry) => (
+                  <div key={entry.id} className="flex items-center gap-3 border-b border-border/50 py-3 last:border-0">
+                    <div className="rounded-lg bg-muted p-2">
+                      <Activity className="h-3.5 w-3.5 text-muted-foreground" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{formatEventName(entry.event_type)}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {entry.actor_name ?? "System"} · {new Date(entry.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                <Button variant="ghost" className="mt-2 w-full" asChild>
+                  <Link href="/dashboard/audit-log">
+                    View full audit log
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No audit events recorded yet.</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 }

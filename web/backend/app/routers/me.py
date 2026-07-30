@@ -14,6 +14,7 @@ from ..models import AnalyzeRequest
 from ..models_db import (
     AccountSettings,
     AnalysisResult,
+    BusinessMembership,
     FrozenItem,
     LinkedAccount,
     Partner,
@@ -56,6 +57,15 @@ AccountType = Literal["individual", "business"]
 class MyAccountSettings(BaseModel):
     account_type: AccountType
     business_name: Optional[str]
+    # False only for a genuinely empty account. Legacy users may predate the
+    # account_settings table, so existing profile or financial data also
+    # counts as onboarding and must not make the welcome prompt reappear.
+    onboarded: bool
+    # True when this account is an invited staff member of *someone else's*
+    # business -- their own account_type stays "individual" (they never
+    # onboarded as a business themselves), so the dashboard needs this
+    # separately to know to route them to /business anyway.
+    is_business_member: bool
 
 
 class UpdateAccountSettingsRequest(BaseModel):
@@ -71,6 +81,18 @@ def _visible_leaks(money_leaks: Optional[List[Dict[str, Any]]]) -> List[Dict[str
         for leak in (money_leaks or [])
         if leak.get("detector") not in _METADATA_ONLY_DETECTORS
     ]
+
+
+def _has_existing_user_data(db: Session, user_id: Any) -> bool:
+    """Recognise users created before account_settings-based onboarding."""
+    profile = db.query(Profile).filter(Profile.id == user_id).first()
+    if profile is not None and bool(profile.full_name and profile.full_name.strip()):
+        return True
+
+    for model in (AnalysisResult, LinkedAccount, FrozenItem):
+        if db.query(model).filter(model.user_id == user_id).first() is not None:
+            return True
+    return False
 
 
 @router.get("/summary", response_model=MeSummary)
@@ -189,10 +211,24 @@ def get_my_account_settings(
     settings_row = (
         db.query(AccountSettings).filter(AccountSettings.user_id == current_user.id).first()
     )
+    is_member = (
+        db.query(BusinessMembership)
+        .filter(BusinessMembership.member_user_id == current_user.id)
+        .first()
+        is not None
+    )
     if settings_row is None:
-        return MyAccountSettings(account_type="individual", business_name=None)
+        return MyAccountSettings(
+            account_type="individual",
+            business_name=None,
+            onboarded=is_member or _has_existing_user_data(db, current_user.id),
+            is_business_member=is_member,
+        )
     return MyAccountSettings(
-        account_type=settings_row.account_type, business_name=settings_row.business_name
+        account_type=settings_row.account_type,
+        business_name=settings_row.business_name,
+        onboarded=True,
+        is_business_member=is_member,
     )
 
 
@@ -223,8 +259,17 @@ def update_my_account_settings(
         settings_row.updated_at = now
     db.commit()
 
+    is_member = (
+        db.query(BusinessMembership)
+        .filter(BusinessMembership.member_user_id == current_user.id)
+        .first()
+        is not None
+    )
     return MyAccountSettings(
-        account_type=settings_row.account_type, business_name=settings_row.business_name
+        account_type=settings_row.account_type,
+        business_name=settings_row.business_name,
+        onboarded=True,
+        is_business_member=is_member,
     )
 
 

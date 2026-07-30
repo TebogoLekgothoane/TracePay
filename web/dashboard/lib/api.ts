@@ -185,6 +185,8 @@ export class ApiClient {
     return this.request<{
       account_type: "individual" | "business";
       business_name: string | null;
+      onboarded: boolean;
+      is_business_member: boolean;
     }>("/me/account");
   }
 
@@ -195,6 +197,8 @@ export class ApiClient {
     return this.request<{
       account_type: "individual" | "business";
       business_name: string | null;
+      onboarded: boolean;
+      is_business_member: boolean;
     }>("/me/account", {
       method: "PUT",
       body: JSON.stringify(data),
@@ -370,6 +374,7 @@ export class ApiClient {
     account_id?: string;
     open_banking_consent_id?: string;
     metadata?: Record<string, any>;
+    branch_label?: string | null;
   }) {
     return this.request<{
       id: number;
@@ -379,6 +384,7 @@ export class ApiClient {
       last_synced_at: string | null;
       created_at: string;
       metadata: Record<string, any>;
+      branch_label: string | null;
     }>("/accounts/link", {
       method: "POST",
       body: JSON.stringify(data),
@@ -395,6 +401,7 @@ export class ApiClient {
         last_synced_at: string | null;
         created_at: string;
         metadata: Record<string, any>;
+        branch_label: string | null;
       }>
     >("/accounts");
   }
@@ -412,6 +419,22 @@ export class ApiClient {
         method: "POST",
       }
     );
+  }
+
+  async updateAccountBranch(accountId: number, branchLabel: string | null) {
+    return this.request<{
+      id: number;
+      bank_name: string;
+      account_id: string;
+      status: string;
+      last_synced_at: string | null;
+      created_at: string;
+      metadata: Record<string, any>;
+      branch_label: string | null;
+    }>(`/accounts/${accountId}/branch`, {
+      method: "PUT",
+      body: JSON.stringify({ branch_label: branchLabel }),
+    });
   }
 
   // Open Banking endpoints (consent → authorize → fetch-transactions)
@@ -528,6 +551,41 @@ export class ApiClient {
     }>(`/admin/stats/temporal?days=${days}`, {
       method: "GET",
     }, 30000); // 30s timeout for stats endpoints
+  }
+
+  async getOperationalStats(days: number = 30) {
+    return this.request<{
+      period_days: number;
+      new_users: { current: number; previous: number };
+      active_users: { current: number; previous: number };
+      analyses: { current: number; previous: number };
+      savings_identified: { current: number; previous: number };
+      funnel: {
+        registered_users: number;
+        completed_profiles: number;
+        linked_account_users: number;
+        analyzed_users: number;
+        returning_active_users: number;
+      };
+      daily_activity: Array<{
+        date: string;
+        new_users: number;
+        active_users: number;
+        analyses: number;
+        savings_identified: number;
+      }>;
+      alerts: Array<{
+        key: string;
+        label: string;
+        count: number;
+        severity: "critical" | "warning" | "info";
+        href: string;
+      }>;
+      individual_accounts: number;
+      business_accounts: number;
+      analyses_per_active_user: number;
+      freeze_rate: number;
+    }>(`/admin/stats/operations?days=${days}`, {}, 30000);
   }
 
   async getMLFindings() {
@@ -714,6 +772,193 @@ export class ApiClient {
         transactions_per_day: number;
       };
     }>("/ml/user-cluster");
+  }
+
+  // Business endpoints -- scoped to the business the caller acts on behalf
+  // of (their own account if they're the owner, their employer's if
+  // they're an invited member), resolved server-side.
+  async getBusinessSummary() {
+    return this.request<{
+      financial_health_score: number | null;
+      health_band: string | null;
+      leaks_found: number;
+      potential_monthly_savings: number;
+      linked_accounts_count: number;
+      frozen_items_count: number;
+      last_analyzed_at: string | null;
+    }>("/me/business/summary");
+  }
+
+  async analyzeBusiness(transactions: any[]) {
+    return this.request<{
+      id: number;
+      financial_health_score: number;
+      health_band: string;
+      money_leaks: Array<{
+        detector?: string;
+        title?: string;
+        severity?: string;
+        estimated_monthly_cost?: number;
+        [key: string]: any;
+      }>;
+      summary_plain_language: string;
+      transaction_count: number;
+      created_at: string;
+    }>("/me/business/analyze", {
+      method: "POST",
+      body: JSON.stringify({ transactions }),
+    });
+  }
+
+  async getBusinessAnalyses(limit: number = 10) {
+    return this.request<
+      Array<{
+        id: number;
+        financial_health_score: number;
+        health_band: string;
+        money_leaks: Array<{
+          detector?: string;
+          title?: string;
+          severity?: string;
+          estimated_monthly_cost?: number;
+          [key: string]: any;
+        }>;
+        summary_plain_language: string;
+        transaction_count: number;
+        created_at: string;
+      }>
+    >(`/me/business/analyses?limit=${limit}`);
+  }
+
+  async listBusinessAccounts() {
+    return this.request<
+      Array<{
+        id: number;
+        bank_name: string;
+        account_id: string;
+        status: string;
+        last_synced_at: string | null;
+        created_at: string;
+        metadata: Record<string, any>;
+        branch_label: string | null;
+      }>
+    >("/me/business/accounts");
+  }
+
+  async linkBusinessAccount(data: {
+    bank_name: string;
+    account_id?: string;
+    open_banking_consent_id?: string;
+    metadata?: Record<string, any>;
+    branch_label?: string | null;
+  }) {
+    return this.request<{
+      id: number;
+      bank_name: string;
+      account_id: string;
+      status: string;
+      last_synced_at: string | null;
+      created_at: string;
+      metadata: Record<string, any>;
+      branch_label: string | null;
+    }>("/me/business/accounts/link", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateBusinessAccountBranch(accountId: number, branchLabel: string | null) {
+    return this.request<{
+      id: number;
+      bank_name: string;
+      account_id: string;
+      status: string;
+      last_synced_at: string | null;
+      created_at: string;
+      metadata: Record<string, any>;
+      branch_label: string | null;
+    }>(`/me/business/accounts/${accountId}/branch`, {
+      method: "PUT",
+      body: JSON.stringify({ branch_label: branchLabel }),
+    });
+  }
+
+  async unlinkBusinessAccount(accountId: number) {
+    return this.request<{ message: string }>(`/me/business/accounts/${accountId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async syncBusinessAccount(accountId: number) {
+    return this.request<{ message: string; last_synced_at: string }>(
+      `/me/business/accounts/${accountId}/sync`,
+      { method: "POST" }
+    );
+  }
+
+  async freezeBusinessLeak(data: {
+    leak_id?: string;
+    transaction_id?: string;
+    consent_id?: string;
+    reason?: string;
+  }) {
+    return this.request<{
+      status: string;
+      message: string;
+      frozen_item_id: number | null;
+    }>("/me/business/freeze", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async listBusinessFrozen() {
+    return this.request<
+      Array<{
+        id: number;
+        leak_id: string | null;
+        transaction_id: string | null;
+        consent_id: string | null;
+        reason: string;
+        frozen_at: string;
+        status: string;
+      }>
+    >("/me/business/frozen");
+  }
+
+  async unfreezeBusinessItem(frozenItemId: number) {
+    return this.request<{ message: string }>(`/me/business/unfreeze/${frozenItemId}`, {
+      method: "POST",
+    });
+  }
+
+  async inviteBusinessMember(email: string) {
+    return this.request<{
+      id: number;
+      member_user_id: string;
+      invited_email: string;
+      created_at: string;
+    }>("/me/business/invite-member", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  async listBusinessMembers() {
+    return this.request<
+      Array<{
+        id: number;
+        member_user_id: string;
+        invited_email: string;
+        created_at: string;
+      }>
+    >("/me/business/members");
+  }
+
+  async removeBusinessMember(memberId: number) {
+    return this.request<{ message: string }>(`/me/business/members/${memberId}`, {
+      method: "DELETE",
+    });
   }
 }
 
