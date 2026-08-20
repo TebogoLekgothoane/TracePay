@@ -23,7 +23,7 @@ const FNB_NON_TRANSACTION =
   /congratulations|pre-?approved|loan\s+offer|you\s+have\s+won|competition|ebucks|marketing|click\s+here|call\s+\d/i;
 
 export const FNBParser: BankParser = {
-  bankName: 'FNB',
+  providerName: 'FNB',
   senderPatterns: [/^FNB$/i, /^FNBSA$/i],
   // Real FNB alerts always start with "FNB:" — avoid loose "first national bank" in promos/scams.
   bodyPatterns: [/^FNB:/i],

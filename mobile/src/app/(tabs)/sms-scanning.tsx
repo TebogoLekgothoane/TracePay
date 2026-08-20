@@ -22,7 +22,7 @@ export default function SmsScanningScreen() {
   const params = useLocalSearchParams<{ fromOnboarding?: string }>();
   const fromOnboarding = params.fromOnboarding === "1";
 
-  const { syncNow, isLoading, error, state, transactions, openPermissionSettings, refreshPermission } =
+  const { syncNow, isLoading, error, state, transactions, openPermissionSettings, refreshPermission, isDemoMode } =
     useIngestion();
   const { colors } = useColorScheme();
   const completeOnboarding = useProfileStore((s) => s.completeOnboarding);
@@ -92,6 +92,8 @@ export default function SmsScanningScreen() {
   }, [phase, error]);
 
   useEffect(() => {
+    if (isDemoMode) return;
+
     const sub = AppState.addEventListener("change", (nextState) => {
       if (nextState === "active" && phase === "failed") {
         void refreshPermission().then((status) => {
@@ -102,7 +104,7 @@ export default function SmsScanningScreen() {
       }
     });
     return () => sub.remove();
-  }, [phase, refreshPermission, handleRetry]);
+  }, [isDemoMode, phase, refreshPermission, handleRetry]);
 
   const progressWidth = progressAnim.interpolate({
     inputRange: [0, 1],
@@ -110,9 +112,11 @@ export default function SmsScanningScreen() {
   });
 
   const phaseLabels = {
-    preparing: "Preparing SMS service…",
-    reading: "Reading messages from inbox…",
-    analysing: "Parsing bank transactions…",
+    preparing: isDemoMode ? "Preparing demo dataset…" : "Preparing SMS service…",
+    reading: isDemoMode ? "Loading demo transactions…" : "Reading messages from inbox…",
+    analysing: isDemoMode
+      ? "Sending demo transactions for backend analysis…"
+      : "Sending sanitised transactions for backend analysis…",
     done: `Done — ${state.totalIngested} transaction${state.totalIngested !== 1 ? "s" : ""} ingested`,
     failed: "Scanning failed",
   };
@@ -134,7 +138,9 @@ export default function SmsScanningScreen() {
           </Button>
         ) : null}
         <View className="min-w-0 flex-1">
-          <AppText variant="titleLg">Scanning SMS Inbox</AppText>
+          <AppText variant="titleLg">
+            {isDemoMode ? "Loading Demo Data" : "Scanning SMS Inbox"}
+          </AppText>
           <AppText variant="lead" className="mt-1">
             {phaseLabels[phase]}
           </AppText>
@@ -178,14 +184,16 @@ export default function SmsScanningScreen() {
 
       {phase === "failed" ? (
         <View className="mb-4 gap-3">
-          <Button
-            variant="accent"
-            fullWidth
-            onPress={openPermissionSettings}
-            icon={<Feather name="settings" size={16} color="#fff" />}
-          >
-            Open Settings
-          </Button>
+          {!isDemoMode ? (
+            <Button
+              variant="accent"
+              fullWidth
+              onPress={openPermissionSettings}
+              icon={<Feather name="settings" size={16} color="#fff" />}
+            >
+              Open Settings
+            </Button>
+          ) : null}
           <Button
             variant="destructive"
             fullWidth

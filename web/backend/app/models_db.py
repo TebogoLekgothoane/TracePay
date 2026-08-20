@@ -183,6 +183,34 @@ class Transaction(Base):
     account = relationship("LinkedAccount", back_populates="transactions")
 
 
+class Leak(Base):
+    __tablename__ = "leaks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    fi_code = Column(String(6), nullable=False)
+    subject_key = Column(String(255), nullable=False)
+    status = Column(String(20), nullable=False, default="active", index=True)
+    detected_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    detection_rule = Column(String(128), nullable=False)
+    resolution_rule = Column(String(128), nullable=False)
+    resolution_checked_at = Column(DateTime(timezone=True), nullable=True)
+    evidence = Column(JSON, default=dict, nullable=False)
+    resolution_evidence = Column(JSON, nullable=True)
+    merchant = Column(String(255), nullable=True)
+    amount_monthly = Column(Float, nullable=False)
+    amount_annual = Column(Float, nullable=False)
+    exact_action = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+
 class AnalysisResult(Base):
     __tablename__ = "analysis_results"
 

@@ -14,7 +14,7 @@ import { PartnerDealCard } from "@/components/PartnerDealCard";
 
 const EARN_METHODS = [
   { icon: "radar" as const, label: "Scan SMS inbox", sub: "Analyse for new leaks", pts: "+50", color: "#7C3AED", iconBg: "bg-violet-100 dark:bg-primary/20" },
-  { icon: "snowflake" as const, label: "Freeze a leak", sub: "Stop an active money leak", pts: "+30", color: "#0284C7", iconBg: "bg-blue-100 dark:bg-blue-900/40" },
+  { icon: "chart-line" as const, label: "Maintain progress", sub: "Keep a leak resolved through the next cycle", pts: "+30", color: "#0284C7", iconBg: "bg-blue-100 dark:bg-blue-900/40" },
   { icon: "account-plus-outline" as const, label: "Invite a friend", sub: "Share TracePay with someone", pts: "+200", color: "#16A34A", iconBg: "bg-green-100 dark:bg-green-900/40" },
   { icon: "brain" as const, label: "Use AI budget", sub: "Generate a weekly plan", pts: "+20", color: "#D97706", iconBg: "bg-amber-100 dark:bg-amber-900/40" },
 ] as const;

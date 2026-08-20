@@ -29,7 +29,8 @@ export interface RawSMS {
   export interface ParsedTransaction {
     id: string;                     // deterministic hash of sms _id + body
     rawSmsId: string;
-    bank: string;                   // "FNB" | "ABSA" | etc.
+    /** Financial-alert provider, e.g. "FNB", "MTN", or "VODACOM". */
+    bank: string;
     type: TransactionType;
     amount: number;                 // always positive
     currency: string;               // "ZAR"
@@ -50,19 +51,25 @@ export interface RawSMS {
   
   // ─── Parser contract ──────────────────────────────────────────────────────────
   
-  export interface BankParserResult {
+export interface FinancialAlertParserResult {
     success: boolean;
     transaction?: Omit<ParsedTransaction, 'id' | 'rawSmsId' | 'parsedAt' | 'category'>;
     reason?: string;        // why parsing failed
   }
   
-  export interface BankParser {
-    bankName: string;
-    senderPatterns: RegExp[];   // matches against SMS address (short codes)
-    bodyPatterns: RegExp[];     // matches against SMS body (banks often send from phone numbers)
+  export interface FinancialAlertParser {
+    providerName: string;
+    senderPatterns: RegExp[];   // matches provider names and short codes
+    bodyPatterns: RegExp[];     // matches provider names where sender IDs are numeric
     canParse(sms: RawSMS): boolean;
-    parse(sms: RawSMS): BankParserResult;
+    parse(sms: RawSMS): FinancialAlertParserResult;
   }
+
+  /** @deprecated Use FinancialAlertParserResult. */
+  export type BankParserResult = FinancialAlertParserResult;
+
+  /** @deprecated Use FinancialAlertParser. */
+  export type BankParser = FinancialAlertParser;
   
   // ─── Ingestion result ────────────────────────────────────────────────────────
   

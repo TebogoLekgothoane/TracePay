@@ -1,9 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { getUserId } from "@/constants/api";
+import {
+  loadStoredLeaks,
+  saveStoredLeaks,
+} from "@/services/transactions/transactionRepository";
+import type { LifecycleLeak } from "../../lib/backend-client";
 
 export interface Leak {
-  id: number;
+  id: string;
+  fiCode?: string;
   name: string;
   category: string;
   categoryIcon: string;
@@ -12,52 +18,56 @@ export interface Leak {
   status: string;
   sourceSms?: string;
   advice?: string;
+  evidence?: Record<string, unknown>;
+  resolvedAt?: string | null;
   createdAt?: string;
 }
 
-async function leaksStorageKey() {
-  const userId = await getUserId();
-  return `@tracepay:leaks:${userId}`;
+export interface AnalysisSummary {
+  healthScore: number;
+  healthBand: "green" | "yellow" | "red";
+  summary: string;
+  analyzedAt: string;
 }
 
-/** Legacy demo leaks seeded in earlier builds — strip on load. */
-const LEGACY_DEMO_LEAK_NAMES = new Set([
-  "iflix Subscription",
-  "Capitec Loan Interest",
-  "Vodacom Airtime Advance Fee",
-  "Cross-Bank ATM Fee",
-]);
-
-function stripLegacyDemoLeaks(leaks: Leak[]) {
-  return leaks.filter((l) => !LEGACY_DEMO_LEAK_NAMES.has(l.name));
+async function analysisStorageKey() {
+  const userId = await getUserId();
+  return `@tracepay:analysis:${userId}`;
 }
 
 async function loadLeaks(): Promise<Leak[]> {
-  const raw = await AsyncStorage.getItem(await leaksStorageKey());
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw) as Leak[];
-    const cleaned = stripLegacyDemoLeaks(parsed);
-    if (cleaned.length !== parsed.length) {
-      await saveLeaks(cleaned);
-    }
-    return cleaned;
-  } catch {
-    return [];
-  }
+  const stored = await loadStoredLeaks(await getUserId());
+  return stored.map(leakFromLifecycle);
 }
 
-async function saveLeaks(leaks: Leak[]) {
-  await AsyncStorage.setItem(await leaksStorageKey(), JSON.stringify(leaks));
+async function loadAnalysis(): Promise<AnalysisSummary | null> {
+  const raw = await AsyncStorage.getItem(await analysisStorageKey());
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as AnalysisSummary;
+    if (
+      !Number.isInteger(parsed.healthScore) ||
+      parsed.healthScore < 0 ||
+      parsed.healthScore > 100 ||
+      !["green", "yellow", "red"].includes(parsed.healthBand) ||
+      typeof parsed.summary !== "string" ||
+      Number.isNaN(new Date(parsed.analyzedAt).getTime())
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 interface LeaksState {
   leaks: Leak[];
+  analysis: AnalysisSummary | null;
   isLoading: boolean;
   error: string | null;
   fetchLeaks: () => Promise<void>;
-  addLeaks: (leaks: Omit<Leak, "id" | "createdAt">[]) => Promise<void>;
-  freezeLeak: (id: number) => Promise<void>;
+  replaceWithLifecycle: (leaks: LifecycleLeak[]) => Promise<void>;
   resetLeaks: () => void;
 }
 
@@ -67,22 +77,40 @@ export function getActiveLeaks(leaks: Leak[]) {
   return leaks.filter((l) => l.status === "active");
 }
 
+function leakFromLifecycle(leak: LifecycleLeak): Leak {
+  return {
+    id: leak.id,
+    fiCode: leak.fi_code,
+    name: leak.merchant ?? leak.fi_code,
+    category: leak.fi_code,
+    categoryIcon: "alert-circle-outline",
+    amountMonthly: leak.amount_monthly,
+    severity: "medium",
+    status: leak.status,
+    advice: leak.exact_action,
+    evidence: leak.evidence,
+    resolvedAt: leak.resolved_at,
+    createdAt: leak.detected_at,
+  };
+}
+
 export function getActiveLeakStats(leaks: Leak[]) {
   const activeLeaks = getActiveLeaks(leaks);
   const totalMonthly = activeLeaks.reduce((sum, l) => sum + l.amountMonthly, 0);
   return { activeLeaks, count: activeLeaks.length, totalMonthly };
 }
 
-export const useLeaksStore = create<LeaksState>((set, get) => ({
+export const useLeaksStore = create<LeaksState>((set) => ({
   leaks: [],
+  analysis: null,
   isLoading: false,
   error: null,
 
   fetchLeaks: async () => {
     set({ isLoading: true, error: null });
     try {
-      const leaks = await loadLeaks();
-      set({ leaks });
+      const [leaks, analysis] = await Promise.all([loadLeaks(), loadAnalysis()]);
+      set({ leaks, analysis });
     } catch {
       set({ error: "Failed to load leaks" });
     } finally {
@@ -90,29 +118,13 @@ export const useLeaksStore = create<LeaksState>((set, get) => ({
     }
   },
 
-  addLeaks: async (leaksData) => {
-    const existing = get().leaks;
-    const inserted = leaksData.map((l, index) => ({
-      ...l,
-      id: Date.now() + index,
-      categoryIcon: l.categoryIcon ?? "alert-circle-outline",
-      status: l.status ?? "active",
-      createdAt: new Date().toISOString(),
-    }));
-    const merged = [...existing, ...inserted];
-    await saveLeaks(merged);
-    set({ leaks: merged });
-  },
-
-  freezeLeak: async (id) => {
-    const updated = get().leaks.map((l) =>
-      l.id === id ? { ...l, status: "frozen" } : l,
-    );
-    await saveLeaks(updated);
-    set({ leaks: updated });
+  replaceWithLifecycle: async (lifecycleLeaks) => {
+    const leaks = lifecycleLeaks.map(leakFromLifecycle);
+    await saveStoredLeaks(await getUserId(), lifecycleLeaks);
+    set({ leaks, error: null });
   },
 
   resetLeaks: () => {
-    set({ leaks: [], isLoading: false, error: null });
+    set({ leaks: [], analysis: null, isLoading: false, error: null });
   },
 }));

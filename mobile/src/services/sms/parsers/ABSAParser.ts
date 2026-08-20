@@ -17,7 +17,7 @@ import {
  *    Bal: R5 250.00."
  */
 export const ABSAParser: BankParser = {
-  bankName: 'ABSA',
+  providerName: 'ABSA',
   senderPatterns: [/^ABSA$/i, /^ABSA\s*BANK/i],
   bodyPatterns: [/^Absa[:\s]/i],
 

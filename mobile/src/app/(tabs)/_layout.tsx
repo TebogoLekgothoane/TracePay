@@ -85,6 +85,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="leaks"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="sms-scanning"
         options={{
           href: null,

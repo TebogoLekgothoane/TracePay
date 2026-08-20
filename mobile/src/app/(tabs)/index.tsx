@@ -12,16 +12,17 @@ import { Screen } from "@/components/Screen";
 import { AppText } from "@/components/Typography";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { useProfileStore } from "@/stores/profileStore";
-import { useLeaksStore, getActiveLeakStats, DEFAULT_MONTHLY_INCOME } from "@/stores/leaksStore";
+import { useLeaksStore, getActiveLeakStats } from "@/stores/leaksStore";
 import { cn } from "@/lib/cn";
 import { getSeverityStyle } from "@/lib/severity";
 import { PARTNERS } from "@/constants/partners";
 import { useIngestion } from "@/context/SMSIngestionContext";
 import { TransactionRow } from "@/components/TransactionRow";
 import { PartnerDealCard } from "@/components/PartnerDealCard";
+import { LeakActionModal } from "@/components/LeakActionModal";
+import type { Leak } from "@/stores/leaksStore";
 
 const ACTIONS = [
-  { id: "freeze", label: "Freeze\nLeaks", icon: "snowflake" },
   { id: "budget", label: "Smart\nBudget", icon: "chart-bar" },
   { id: "scan", label: "Rescan\nSMS", icon: "message-text-outline" },
   { id: "history", label: "History", icon: "chart-line" },
@@ -53,11 +54,12 @@ function QuickActionCard({
 export default function HomeScreen() {
   const { topOffset } = useScreenInsets();
   const { colors, isDarkColorScheme } = useColorScheme();
-  const { monthlyIncome, rewardPoints, name } = useProfileStore();
+  const { rewardPoints, name } = useProfileStore();
   const ensureDailyCheckIn = useProfileStore((s) => s.ensureDailyCheckIn);
-  const { leaks, fetchLeaks } = useLeaksStore();
+  const { leaks, analysis, fetchLeaks } = useLeaksStore();
   const { transactions } = useIngestion();
   const [showNotifications, setShowNotifications] = useState(false);
+  const [selectedLeak, setSelectedLeak] = useState<Leak | null>(null);
 
   useEffect(() => {
     void fetchLeaks();
@@ -78,11 +80,12 @@ export default function HomeScreen() {
   }, [ensureDailyCheckIn]);
 
   const { activeLeaks, totalMonthly: totalLeaking } = getActiveLeakStats(leaks);
-  const estimatedIncome = monthlyIncome > 0 ? monthlyIncome : DEFAULT_MONTHLY_INCOME;
-  const healthScore = Math.max(0, 100 - Math.round((totalLeaking / estimatedIncome) * 100));
+  const healthScore = analysis?.healthScore ?? 0;
   const healthColor =
     healthScore >= 70 ? colors.success : healthScore >= 40 ? colors.warning : colors.destructive;
-  const healthLabel = healthScore >= 70 ? "HEALTHY" : healthScore >= 40 ? "FAIR" : "AT RISK";
+  const healthLabel = analysis
+    ? analysis.healthBand.toUpperCase()
+    : "NOT ANALYSED";
   const trackColor = isDarkColorScheme ? "rgba(255, 255, 255, 0.12)" : colors.border;
   const recentTransactions = transactions.slice(0, 5);
   const firstName = name.trim().split(/\s+/).filter(Boolean)[0] ?? "there";
@@ -92,8 +95,6 @@ export default function HomeScreen() {
       router.push("/(tabs)/history");
     } else if (id === "budget") {
       router.push("/(tabs)/budget");
-    } else if (id === "freeze") {
-      router.push("/(tabs)/sms-scan");
     } else if (id === "scan") {
       router.push("/(tabs)/sms-scanning");
     }
@@ -153,7 +154,9 @@ export default function HomeScreen() {
                     {activeLeaks.length}
                   </AppText>
                   <AppText variant="caption" className="mt-1">
-                    {activeLeaks.length > 0
+                    {!analysis
+                      ? "Scan transactions to receive your backend analysis."
+                      : activeLeaks.length > 0
                       ? "Review active leaks to lower your monthly spend."
                       : "Great job! No leaks detected."}
                   </AppText>
@@ -199,7 +202,7 @@ export default function HomeScreen() {
                   variant="ghost"
                   size="sm"
                   className="min-h-0 px-0"
-                  onPress={() => router.push("/(tabs)/sms-results")}
+                  onPress={() => router.push("/(tabs)/leaks")}
                 >
                   <AppText variant="label" className="text-brand-purple dark:text-primary">
                     See all
@@ -214,23 +217,29 @@ export default function HomeScreen() {
                 contentContainerClassName="gap-3 px-[18px] pb-1"
               >
                 {activeLeaks.slice(0, 3).map((leak) => (
-                  <Card key={leak.id} className="w-[150px]" contentClassName="gap-0">
-                    <MaterialCommunityIcons
-                      name={(leak.categoryIcon as any) ?? "credit-card-outline"}
-                      size={22}
-                      color={colors.primary}
-                    />
-                    <AppText variant="label" className="mb-0.5" numberOfLines={1}>
-                      {leak.name}
-                    </AppText>
-                    <AppText variant="caption" className="mb-2" numberOfLines={1}>
-                      {leak.category}
-                    </AppText>
-                    <AppText variant="title" className="text-red-600 dark:text-red-400">
-                      -R{leak.amountMonthly.toFixed(2)}
-                    </AppText>
-                    <AppText variant="caption">/month</AppText>
-                  </Card>
+                  <Pressable
+                    key={leak.id}
+                    onPress={() => setSelectedLeak(leak)}
+                    className="active:opacity-90"
+                  >
+                    <Card className="w-[150px]" contentClassName="gap-0">
+                      <MaterialCommunityIcons
+                        name={(leak.categoryIcon as any) ?? "credit-card-outline"}
+                        size={22}
+                        color={colors.primary}
+                      />
+                      <AppText variant="label" className="mb-0.5" numberOfLines={1}>
+                        {leak.name}
+                      </AppText>
+                      <AppText variant="caption" className="mb-2" numberOfLines={1}>
+                        {leak.category}
+                      </AppText>
+                      <AppText variant="title" className="text-red-600 dark:text-red-400">
+                        -R{leak.amountMonthly.toFixed(2)}
+                      </AppText>
+                      <AppText variant="caption">/month</AppText>
+                    </Card>
+                  </Pressable>
                 ))}
               </ScrollView>
             </>
@@ -240,8 +249,9 @@ export default function HomeScreen() {
               <View className="min-w-0 flex-1">
                 <AppText variant="titleMd">No leaks detected yet</AppText>
                 <AppText variant="bodySm" className="mt-2 leading-6">
-                  Your SMS transactions are imported. We&apos;re analysing your data to uncover hidden
-                  charges and recurring fees.
+                  {analysis
+                    ? "Your latest backend analysis found no money leaks."
+                    : "Scan your transactions so TracePay can request a backend analysis."}
                 </AppText>
                 <Pressable onPress={() => router.push("/(tabs)/sms-scanning")} className="mt-4 self-start">
                   <AppText variant="label" className="text-brand-purple dark:text-primary">
@@ -363,7 +373,7 @@ export default function HomeScreen() {
                       className="min-h-0 flex-row items-center gap-3 border-b border-border py-3 dark:border-white/10"
                       onPress={() => {
                         setShowNotifications(false);
-                        router.push("/(tabs)/sms-scan");
+                        setSelectedLeak(leak);
                       }}
                     >
                       <View
@@ -399,6 +409,12 @@ export default function HomeScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <LeakActionModal
+        leak={selectedLeak}
+        visible={selectedLeak != null}
+        onClose={() => setSelectedLeak(null)}
+      />
     </>
   );
 }

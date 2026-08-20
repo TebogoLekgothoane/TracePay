@@ -31,8 +31,8 @@ export default function WelcomeScreen() {
           <AppText variant="display">Stop hidden money leaks.</AppText>
           <AppText variant="lead" className="mt-3">
             TracePay scans your bank and mobile SMS for forgotten fees, airtime
-            advances, and subscriptions then helps you freeze them and plan
-            smarter.
+            advances, and subscriptions, then tracks evidence as they improve
+            and helps you plan smarter.
           </AppText>
 
           <View className="mt-8 gap-3">

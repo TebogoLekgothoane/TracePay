@@ -1,0 +1,53 @@
+---
+description: Performance rules — the most important set; prevent renders, leaks, races
+alwaysApply: true
+---
+
+# Performance
+
+This is the most important one.
+
+Every feature must consider performance.
+
+Never cause:
+
+- unnecessary renders
+- duplicate renders
+- infinite renders
+- stale UI
+- race conditions
+- duplicated requests
+- memory leaks
+- unnecessary state
+- expensive computations
+- unnecessary animations
+
+Always:
+
+- memoize only when beneficial
+- cancel requests on unmount
+- clean up listeners
+- clean up timers
+- clean up intervals
+- clean up subscriptions
+- virtualize long lists
+- lazy load expensive screens
+- paginate large datasets
+- batch updates when possible
+- avoid prop drilling
+- avoid unnecessary context updates
+- keep renders predictable
+
+Never use state that can be derived.
+
+Derived state should never be stored.
+
+Prevent stale closures.
+
+Prevent async state updates after unmount.
+
+Never create new functions inside render unless necessary.
+
+Avoid unnecessary object creation inside render.
+
+Measure before optimizing.

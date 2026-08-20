@@ -17,7 +17,7 @@ import {
  *    Avail bal R11 234.56"
  */
 export const StandardBankParser: BankParser = {
-  bankName: 'STANDARD_BANK',
+  providerName: 'STANDARD_BANK',
   senderPatterns: [/^STD\s*B(AN)?K$/i, /^STANDARDBANK$/i, /^SBSA$/i],
   bodyPatterns: [/^Std\s*Bk[:\s]/i, /\bStandard\s*Bank\b/i],
 

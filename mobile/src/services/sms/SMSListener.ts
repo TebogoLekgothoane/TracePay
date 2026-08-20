@@ -61,7 +61,7 @@ export class SMSListener {
       type: 1,
     };
 
-    if (!parserRegistry.isBankSMS(sms)) return;
+    if (!parserRegistry.isFinancialAlertSMS(sms)) return;
 
     const parser = parserRegistry.findParser(sms);
     if (!parser) return;

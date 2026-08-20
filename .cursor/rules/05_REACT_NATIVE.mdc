@@ -1,0 +1,40 @@
+---
+description: React Native best practices for the mobile app
+globs: mobile/**/*.{tsx,ts,jsx,js}
+alwaysApply: false
+---
+
+# React Native
+
+Follow React Native best practices.
+
+Avoid:
+
+- useEffect abuse
+- prop drilling
+- deep component trees
+- large screen files
+- anonymous inline functions
+- unnecessary Context
+- unnecessary Redux
+- unnecessary libraries
+
+Prefer:
+
+- custom hooks
+- shared components
+- shared utilities
+- FlatList over ScrollView for lists
+- FlashList for very large datasets
+- React Query/TanStack Query for server state
+- minimal state
+- derived state
+- functional updates
+- stable keys
+- safe async patterns
+
+Never update state after component unmount.
+
+Never ignore dependency arrays.
+
+Never suppress eslint warnings instead of fixing them.

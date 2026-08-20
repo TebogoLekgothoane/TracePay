@@ -1,0 +1,32 @@
+---
+description: Pre-completion checklist — do not finish until every answer is YES
+alwaysApply: true
+---
+
+# Checklist
+
+Before finishing any task ask yourself:
+
+- Did I duplicate code?
+- Did I duplicate state?
+- Can this be simpler?
+- Can I reuse an existing component?
+- Can I reuse an existing hook?
+- Is this secure?
+- Is input sanitized?
+- Is input validated?
+- Are requests cancellable?
+- Are race conditions prevented?
+- Could this memory leak?
+- Could this infinite render?
+- Is loading handled?
+- Is empty state handled?
+- Is error handled?
+- Is retry handled?
+- Is offline handled?
+- Is stale UI prevented?
+- Is the code minimal?
+- Is the code production-ready?
+- Would a senior engineer approve this PR?
+
+Do not finish until every answer is YES.

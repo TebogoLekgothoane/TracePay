@@ -55,6 +55,12 @@
       "expo-web-browser",
       "expo-secure-store",
       [
+        "expo-sqlite",
+        {
+          "useSQLCipher": true
+        }
+      ],
+      [
         "expo-local-authentication",
         {
           "faceIDPermission": "Allow TracePay to use Face ID for quick, secure unlock."

@@ -13,3 +13,4 @@ web/backend/.env.*
 web/dashboard/.env
 web/dashboard/.env.*
 >>>>>>> Stashed changes
+mobile/.env

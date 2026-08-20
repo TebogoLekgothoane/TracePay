@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { clearStoredTransactions } from "@/services/transactions/transactionRepository";
 
 /** All TracePay keys — used for sign-out and account reset. */
 export const TRACEPAY_STORAGE_PREFIX = "@tracepay:";
@@ -23,6 +24,7 @@ export const AUTH_KEYS = {
 } as const;
 
 export async function clearAllTracePayStorage() {
+  await clearStoredTransactions();
   const keys = await AsyncStorage.getAllKeys();
   const tracepayKeys = keys.filter((k) => k.startsWith(TRACEPAY_STORAGE_PREFIX));
   if (tracepayKeys.length > 0) {

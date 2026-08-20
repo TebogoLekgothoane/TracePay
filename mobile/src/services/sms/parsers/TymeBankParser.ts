@@ -15,7 +15,7 @@ import {
  *   "TymeBank. Never share this One Time PIN with anyone." (OTP — skipped at parse)
  */
 export const TymeBankParser: BankParser = {
-  bankName: 'TYMEBANK',
+  providerName: 'TYMEBANK',
   senderPatterns: [/^TYMEBANK$/i, /^TYME$/i],
   bodyPatterns: [/^TymeBank[.\s:]/i],
 
