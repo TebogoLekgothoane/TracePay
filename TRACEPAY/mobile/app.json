@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "TRACEPAY",
+    "slug": "tracepay",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "tracepay",
+    "userInterfaceStyle": "automatic",
+    "android": {
+      "package": "com.tracepay.mobile",
+      "softwareKeyboardLayoutMode": "pan"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-sqlite",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow TracePay to use Face ID to unlock the app."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FAF9FE",
+          "dark": {
+            "backgroundColor": "#090B14"
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
