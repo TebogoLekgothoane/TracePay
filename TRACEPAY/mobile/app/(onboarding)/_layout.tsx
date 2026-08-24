@@ -12,16 +12,14 @@ export default function OnboardingLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        animation: "slide_from_right",
+        animation: "fade",
+        gestureEnabled: false,
         contentStyle: {
           backgroundColor: background,
         },
       }}
     >
-      <Stack.Screen name="introduction" />
-      <Stack.Screen name="language" />
-      <Stack.Screen name="features" />
-      <Stack.Screen name="privacy" />
+      <Stack.Screen name="index" />
     </Stack>
   );
 }

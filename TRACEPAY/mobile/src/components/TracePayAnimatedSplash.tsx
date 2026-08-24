@@ -1,7 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type FunctionComponent } from "react";
 import {
   StyleSheet,
-  Text,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -17,15 +16,20 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, {
-  Defs,
-  LinearGradient,
-  Line,
-  Stop,
-  Text as SvgText,
-} from "react-native-svg";
+import type { SvgProps } from "react-native-svg";
 
 import AssembledTracePayIcon from "../../assets/icons/assembled TracePay icon.svg";
+import DiagonalRLeg from "../../assets/icons/diagonal R leg.svg";
+import Droplet from "../../assets/icons/droplet.svg";
+import InnerCurve from "../../assets/icons/inner curve.svg";
+import OuterRStroke from "../../assets/icons/outer R stroke.svg";
+import TopStroke from "../../assets/icons/top stroke.svg";
+import VerticalTStroke from "../../assets/icons/vertical T stroke.svg";
+import LeftPinkAccent from "../../assets/tagline/left pink accent line.svg";
+import RightBlueAccent from "../../assets/tagline/right blue accent line.svg";
+import Tagline from "../../assets/tagline/tagline.svg";
+import PayWordmark from "../../assets/wordmark/PAY.svg";
+import TraceWordmark from "../../assets/wordmark/trace white wordmark.svg";
 import { TRACEPAY } from "../theme/colors";
 
 export type Props = {
@@ -40,43 +44,43 @@ export const TRACEPAY_SPLASH_BACKGROUNDS = {
 const ICON_VIEWBOX = "150 30 1030 820";
 const ICON_SOURCE_WIDTH = 1030;
 const ICON_SOURCE_HEIGHT = 820;
-
 const ENTER_EASING = Easing.out(Easing.cubic);
 const SETTLE_EASING = Easing.out(Easing.back(1.4));
 const EXIT_EASING = Easing.inOut(Easing.cubic);
 
 /**
- * Full branded intro (~5.3s):
- * 0.0–1.0s  first strokes enter dramatically
- * 1.0–2.3s  more pieces fly in from different directions
- * 2.3–3.2s  remaining pieces settle / interact
- * 3.2–4.0s  converge into final logo + wordmark
- * 4.0–4.8s  logo holds with spring settle + tagline
- * 4.8–5.3s  exit fade, then navigate
+ * Branded intro (~8.3s):
+ * 0.0–0.9s   upper-left top stroke
+ * 0.9–1.8s   upper/right arc
+ * 1.8–3.1s   diagonal ribbon (vertical + leg)
+ * 3.1–4.0s   lower curves + droplet
+ * 3.8–4.3s   wordmark + tagline
+ * 4.3–4.8s   crossfade settle onto assembled reference
+ * 4.8–8.3s   hold, then exit
  */
 export const TRACEPAY_SPLASH_TIMING = {
   pointStart: 0,
   topStart: 120,
-  topDuration: 780,
-  verticalStart: 480,
-  verticalDuration: 820,
+  topDuration: 720,
   outerStart: 900,
-  outerDuration: 860,
-  innerStart: 1680,
-  innerDuration: 720,
-  legStart: 2100,
-  legDuration: 760,
-  dropletStart: 2480,
-  dropletDuration: 780,
-  convergeStart: 3180,
-  convergeDuration: 520,
-  finalSpringStart: 3320,
-  traceStart: 3680,
-  payStart: 3880,
-  accentsStart: 4100,
-  taglineStart: 4180,
-  holdUntil: 4800,
-  exitStart: 4800,
+  outerDuration: 800,
+  verticalStart: 1750,
+  verticalDuration: 760,
+  legStart: 2280,
+  legDuration: 740,
+  innerStart: 3100,
+  innerDuration: 700,
+  dropletStart: 3520,
+  dropletDuration: 680,
+  convergeStart: 4300,
+  convergeDuration: 380,
+  finalSpringStart: 4380,
+  traceStart: 3800,
+  payStart: 3960,
+  accentsStart: 4160,
+  taglineStart: 4280,
+  holdUntil: 8320,
+  exitStart: 8320,
   exitDuration: 520,
 } as const;
 
@@ -84,21 +88,20 @@ type IconProps = {
   size: number;
 };
 
-type SourceRect = {
-  x: number;
-  y: number;
+type BrandPieceProps = {
   width: number;
   height: number;
+  animatedStyle: object;
+  frameStyle?: object;
+  preserveAspectRatio?: string;
+  Piece: FunctionComponent<SvgProps>;
 };
 
-const ICON_REGIONS = {
-  top: { x: 0, y: 0, width: 680, height: 180 },
-  vertical: { x: 180, y: 150, width: 260, height: 670 },
-  outer: { x: 390, y: 0, width: 640, height: 650 },
-  inner: { x: 340, y: 250, width: 400, height: 360 },
-  leg: { x: 570, y: 500, width: 460, height: 320 },
-  droplet: { x: 350, y: 270, width: 230, height: 300 },
-} satisfies Record<string, SourceRect>;
+type IconPieceProps = {
+  size: number;
+  animatedStyle: object;
+  Piece: FunctionComponent<SvgProps>;
+};
 
 function TracePayIcon({ size }: IconProps) {
   const height = size * (ICON_SOURCE_HEIGHT / ICON_SOURCE_WIDTH);
@@ -113,129 +116,39 @@ function TracePayIcon({ size }: IconProps) {
   );
 }
 
-function IconRegion({
-  size,
-  region,
-  animatedStyle,
-}: {
-  size: number;
-  region: SourceRect;
-  animatedStyle: object;
-}) {
-  const scale = size / ICON_SOURCE_WIDTH;
-  const iconHeight = size * (ICON_SOURCE_HEIGHT / ICON_SOURCE_WIDTH);
+function IconPiece({ size, animatedStyle, Piece }: IconPieceProps) {
+  const height = size * (ICON_SOURCE_HEIGHT / ICON_SOURCE_WIDTH);
 
   return (
-    <Animated.View
-      style={[
-        styles.iconRegion,
-        {
-          left: region.x * scale,
-          top: region.y * scale,
-          width: region.width * scale,
-          height: region.height * scale,
-        },
-        animatedStyle,
-      ]}
-    >
-      <View
-        style={{
-          position: "absolute",
-          left: -region.x * scale,
-          top: -region.y * scale,
-          width: size,
-          height: iconHeight,
-        }}
-      >
-        <TracePayIcon size={size} />
-      </View>
+    <Animated.View style={[styles.iconPiece, animatedStyle]}>
+      <Piece
+        width={size}
+        height={height}
+        viewBox={ICON_VIEWBOX}
+        preserveAspectRatio="xMidYMid meet"
+      />
     </Animated.View>
   );
 }
 
-function TraceWordmark({
+function LockupPiece({
   width,
   height,
-  color,
-}: {
-  width: number;
-  height: number;
-  color: string;
-}) {
+  animatedStyle,
+  frameStyle,
+  preserveAspectRatio = "xMidYMid meet",
+  Piece,
+}: BrandPieceProps) {
   return (
-    <Svg
-      width={width}
-      height={height}
-      viewBox="0 0 225 80"
-      preserveAspectRatio="xMidYMid meet"
+    <Animated.View
+      style={[styles.lockupPiece, { width, height }, frameStyle, animatedStyle]}
     >
-      <SvgText
-        x={0}
-        y={66}
-        fill={color}
-        fontFamily="sans-serif"
-        fontSize={68}
-        fontWeight="800"
-        letterSpacing={-2}
-      >
-        TRACE
-      </SvgText>
-    </Svg>
-  );
-}
-
-function PayWordmark({
-  width,
-  height,
-  startColor,
-  endColor,
-}: {
-  width: number;
-  height: number;
-  startColor: string;
-  endColor: string;
-}) {
-  return (
-    <Svg
-      width={width}
-      height={height}
-      viewBox="0 0 132 80"
-      preserveAspectRatio="xMidYMid meet"
-    >
-      <Defs>
-        <LinearGradient id="payGradient" x1="0" y1="0" x2="1" y2="0">
-          <Stop offset="0" stopColor={startColor} />
-          <Stop offset="1" stopColor={endColor} />
-        </LinearGradient>
-      </Defs>
-      <SvgText
-        x={0}
-        y={66}
-        fill="url(#payGradient)"
-        fontFamily="sans-serif"
-        fontSize={68}
-        fontWeight="800"
-        letterSpacing={-2}
-      >
-        PAY
-      </SvgText>
-    </Svg>
-  );
-}
-
-function AccentLine({ color, width }: { color: string; width: number }) {
-  return (
-    <Svg width={width} height={8} viewBox="0 0 100 8">
-      <Line
-        x1={2}
-        y1={4}
-        x2={98}
-        y2={4}
-        stroke={color}
-        strokeWidth={3}
-        strokeLinecap="round"
+      <Piece
+        width={width}
+        height={height}
+        preserveAspectRatio={preserveAspectRatio}
       />
-    </Svg>
+    </Animated.View>
   );
 }
 
@@ -254,11 +167,13 @@ export function TracePayAnimatedSplash({ onAnimationComplete }: Props) {
   const contentWidth = Math.min(width * 0.9, 410);
   const iconSize = Math.min(width * 0.56, height * 0.257, 235);
   const iconHeight = iconSize * (ICON_SOURCE_HEIGHT / ICON_SOURCE_WIDTH);
-  const wordmarkWidth = Math.min(contentWidth * 0.88, 350);
-  const wordmarkHeight = wordmarkWidth * (80 / 357);
-  const traceWidth = wordmarkWidth * (225 / 357);
-  const payWidth = wordmarkWidth * (132 / 357);
-  const accentWidth = Math.max(34, contentWidth * 0.16);
+  const wordmarkWidth = Math.min(contentWidth * 0.94, 380);
+  const wordmarkHeight = wordmarkWidth * (632 / 1897);
+  const wordmarkColumnWidth = (wordmarkWidth - 8) / 2;
+  const taglineStageHeight = 50;
+  const accentWidth = 42;
+  const taglineTextWidth = wordmarkWidth - accentWidth * 2 - 12;
+  const lockupHeight = wordmarkHeight + 12 + taglineStageHeight;
 
   // Motion distance scales with screen so large moves stay visible on all devices
   const flyX = Math.min(width * 0.42, 180);
@@ -291,32 +206,24 @@ export function TracePayAnimatedSplash({ onAnimationComplete }: Props) {
       withDelay(420, withTiming(0, { duration: 220, easing: EXIT_EASING })),
     );
 
-    // Top stroke: drops from above with slight rotation
+    // A. Upper-left top stroke
     top.value = withDelay(
       TRACEPAY_SPLASH_TIMING.topStart,
       withTiming(1, enterTiming(TRACEPAY_SPLASH_TIMING.topDuration)),
     );
 
-    // Vertical T: slides in from the left while rotating upright
-    vertical.value = withDelay(
-      TRACEPAY_SPLASH_TIMING.verticalStart,
-      withTiming(1, enterTiming(TRACEPAY_SPLASH_TIMING.verticalDuration)),
-    );
-
-    // Outer R: flies in from the right with counter-rotation
+    // B. Upper/right arc
     outer.value = withDelay(
       TRACEPAY_SPLASH_TIMING.outerStart,
       withTiming(1, enterTiming(TRACEPAY_SPLASH_TIMING.outerDuration)),
     );
 
-    // ── Phase 2: pause, then inner / leg / droplet ──────────────────
-    // Inner curve: scales up from centre with overshoot
-    inner.value = withDelay(
-      TRACEPAY_SPLASH_TIMING.innerStart,
-      withSpring(1, { damping: 11, stiffness: 96, mass: 0.75 }),
+    // C. Diagonal ribbon — vertical stem, then leg
+    vertical.value = withDelay(
+      TRACEPAY_SPLASH_TIMING.verticalStart,
+      withTiming(1, enterTiming(TRACEPAY_SPLASH_TIMING.verticalDuration)),
     );
 
-    // Diagonal leg: sweeps up from bottom-right
     leg.value = withDelay(
       TRACEPAY_SPLASH_TIMING.legStart,
       withTiming(1, {
@@ -325,10 +232,15 @@ export function TracePayAnimatedSplash({ onAnimationComplete }: Props) {
       }),
     );
 
-    // Droplet: falls from above and bounces into place
+    // D. Lower curves + droplet accent
+    inner.value = withDelay(
+      TRACEPAY_SPLASH_TIMING.innerStart,
+      withTiming(1, enterTiming(TRACEPAY_SPLASH_TIMING.innerDuration)),
+    );
+
     droplet.value = withDelay(
       TRACEPAY_SPLASH_TIMING.dropletStart,
-      withSpring(1, { damping: 9, stiffness: 110, mass: 0.7 }),
+      withTiming(1, enterTiming(TRACEPAY_SPLASH_TIMING.dropletDuration)),
     );
 
     // ── Phase 3: converge into final assembled logo ─────────────────
@@ -403,83 +315,75 @@ export function TracePayAnimatedSplash({ onAnimationComplete }: Props) {
     transform: [{ scale: 0.4 + point.value * 1.1 }],
   }));
 
-  // Top: from above, slight clockwise tip
+  // Pieces start slightly offset, then slide into the shared canvas coordinates.
   const topStyle = useAnimatedStyle(() => {
     const t = top.value;
     return {
       opacity: t * piecesVisible.value,
       transform: [
-        { translateY: (1 - t) * -flyY },
-        { translateX: (1 - t) * -24 },
-        { rotate: `${(1 - t) * -18}deg` },
-        { scale: 0.55 + t * 0.45 },
+        { translateX: (1 - t) * -flyX * 0.35 },
+        { translateY: (1 - t) * -flyY * 0.45 },
+        { rotate: `${(1 - t) * -4}deg` },
       ],
     };
   });
 
-  // Vertical: from far left, rotates into upright
-  const verticalStyle = useAnimatedStyle(() => {
-    const t = vertical.value;
-    return {
-      opacity: t * piecesVisible.value,
-      transform: [
-        { translateX: (1 - t) * -flyX },
-        { translateY: (1 - t) * 36 },
-        { rotate: `${(1 - t) * 28}deg` },
-        { scale: 0.5 + t * 0.5 },
-      ],
-    };
-  });
-
-  // Outer R: from far right, counter-rotates in
   const outerStyle = useAnimatedStyle(() => {
     const t = outer.value;
     return {
       opacity: t * piecesVisible.value,
       transform: [
-        { translateX: (1 - t) * flyX },
-        { translateY: (1 - t) * -28 },
-        { rotate: `${(1 - t) * -32}deg` },
-        { scale: 0.45 + t * 0.55 },
+        { translateX: (1 - t) * flyX * 0.4 },
+        { translateY: (1 - t) * -flyY * 0.35 },
+        { rotate: `${(1 - t) * 5}deg` },
       ],
     };
   });
 
-  // Inner: scale burst from centre with overshoot baked into spring
-  const innerStyle = useAnimatedStyle(() => {
-    const t = Math.min(1, inner.value);
+  const verticalStyle = useAnimatedStyle(() => {
+    const t = vertical.value;
     return {
       opacity: t * piecesVisible.value,
       transform: [
-        { scale: 0.15 + inner.value * 0.85 },
-        { rotate: `${(1 - t) * 40}deg` },
+        { translateX: (1 - t) * -flyX * 0.5 },
+        { translateY: (1 - t) * -flyY * 0.12 },
+        { rotate: `${(1 - t) * -3}deg` },
       ],
     };
   });
 
-  // Leg: sweeps up from bottom-right
   const legStyle = useAnimatedStyle(() => {
     const t = leg.value;
     return {
       opacity: t * piecesVisible.value,
       transform: [
-        { translateX: (1 - t) * flyX * 0.85 },
-        { translateY: (1 - t) * flyY },
-        { rotate: `${(1 - t) * 42}deg` },
-        { scale: 0.4 + t * 0.6 },
+        { translateX: (1 - t) * flyX * 0.45 },
+        { translateY: (1 - t) * flyY * 0.42 },
+        { rotate: `${(1 - t) * 6}deg` },
       ],
     };
   });
 
-  // Droplet: drops from above, spring overshoots
-  const dropletStyle = useAnimatedStyle(() => {
-    const t = Math.min(1, droplet.value);
+  const innerStyle = useAnimatedStyle(() => {
+    const t = inner.value;
     return {
       opacity: t * piecesVisible.value,
       transform: [
-        { translateY: (1 - t) * -flyY * 1.15 },
-        { scale: 0.2 + droplet.value * 0.8 },
-        { rotate: `${(1 - t) * -12}deg` },
+        { translateX: (1 - t) * -flyX * 0.18 },
+        { translateY: (1 - t) * flyY * 0.32 },
+        { rotate: `${(1 - t) * -4}deg` },
+      ],
+    };
+  });
+
+  const dropletStyle = useAnimatedStyle(() => {
+    const t = droplet.value;
+    return {
+      opacity: t * piecesVisible.value,
+      transform: [
+        { translateX: (1 - t) * flyX * 0.12 },
+        { translateY: (1 - t) * flyY * 0.28 },
+        { rotate: `${(1 - t) * 3}deg` },
       ],
     };
   });
@@ -526,17 +430,21 @@ export function TracePayAnimatedSplash({ onAnimationComplete }: Props) {
     };
   });
 
-  const leftAccentStyle = useAnimatedStyle(() => ({
-    width: accentWidth * accents.value,
-    opacity: accents.value,
-    transform: [{ translateX: (1 - accents.value) * -20 }],
-  }));
+  const leftAccentStyle = useAnimatedStyle(() => {
+    const t = accents.value;
+    return {
+      opacity: t,
+      transform: [{ translateX: (1 - t) * -28 }],
+    };
+  });
 
-  const rightAccentStyle = useAnimatedStyle(() => ({
-    width: accentWidth * accents.value,
-    opacity: accents.value,
-    transform: [{ translateX: (1 - accents.value) * 20 }],
-  }));
+  const rightAccentStyle = useAnimatedStyle(() => {
+    const t = accents.value;
+    return {
+      opacity: t,
+      transform: [{ translateX: (1 - t) * 28 }],
+    };
+  });
 
   const taglineStyle = useAnimatedStyle(() => {
     const t = tagline.value;
@@ -581,36 +489,12 @@ export function TracePayAnimatedSplash({ onAnimationComplete }: Props) {
             ]}
           />
 
-          <IconRegion
-            size={iconSize}
-            region={ICON_REGIONS.top}
-            animatedStyle={topStyle}
-          />
-          <IconRegion
-            size={iconSize}
-            region={ICON_REGIONS.vertical}
-            animatedStyle={verticalStyle}
-          />
-          <IconRegion
-            size={iconSize}
-            region={ICON_REGIONS.outer}
-            animatedStyle={outerStyle}
-          />
-          <IconRegion
-            size={iconSize}
-            region={ICON_REGIONS.inner}
-            animatedStyle={innerStyle}
-          />
-          <IconRegion
-            size={iconSize}
-            region={ICON_REGIONS.leg}
-            animatedStyle={legStyle}
-          />
-          <IconRegion
-            size={iconSize}
-            region={ICON_REGIONS.droplet}
-            animatedStyle={dropletStyle}
-          />
+          <IconPiece size={iconSize} animatedStyle={verticalStyle} Piece={VerticalTStroke} />
+          <IconPiece size={iconSize} animatedStyle={outerStyle} Piece={OuterRStroke} />
+          <IconPiece size={iconSize} animatedStyle={legStyle} Piece={DiagonalRLeg} />
+          <IconPiece size={iconSize} animatedStyle={innerStyle} Piece={InnerCurve} />
+          <IconPiece size={iconSize} animatedStyle={dropletStyle} Piece={Droplet} />
+          <IconPiece size={iconSize} animatedStyle={topStyle} Piece={TopStroke} />
 
           <Animated.View style={[StyleSheet.absoluteFill, finalIconStyle]}>
             <TracePayIcon size={iconSize} />
@@ -618,66 +502,58 @@ export function TracePayAnimatedSplash({ onAnimationComplete }: Props) {
         </Animated.View>
 
         <View
-          accessibilityLabel="TRACEPAY"
+          accessibilityLabel="TRACEPAY. Find the leaks. Save your money."
           style={[
-            styles.wordmark,
-            { width: wordmarkWidth, height: wordmarkHeight },
+            styles.lockupStage,
+            { width: wordmarkWidth, height: lockupHeight },
           ]}
         >
-          <Animated.View style={traceStyle}>
-            <TraceWordmark
-              color={palette.splashForeground}
-              width={traceWidth}
+          <View style={[styles.wordmarkRow, { width: wordmarkWidth, height: wordmarkHeight }]}>
+            <LockupPiece
+              width={wordmarkColumnWidth}
               height={wordmarkHeight}
+              animatedStyle={traceStyle}
+              frameStyle={{ left: 0 }}
+              Piece={TraceWordmark}
             />
-          </Animated.View>
-          <Animated.View style={payStyle}>
-            <PayWordmark
-              endColor={palette.splashPayEnd}
-              startColor={palette.splashPayStart}
-              width={payWidth}
+            <LockupPiece
+              width={wordmarkColumnWidth}
               height={wordmarkHeight}
+              animatedStyle={payStyle}
+              frameStyle={{ left: wordmarkColumnWidth - 12 }}
+              Piece={PayWordmark}
             />
-          </Animated.View>
-        </View>
+          </View>
 
-        <View style={styles.taglineRow}>
-          <Animated.View
+          <View
             style={[
-              styles.leftAccentReveal,
-              { maxWidth: accentWidth },
-              leftAccentStyle,
+              styles.taglineRow,
+              { top: wordmarkHeight + 12, width: wordmarkWidth, height: taglineStageHeight },
             ]}
           >
-            <View style={{ position: "absolute", right: 0 }}>
-              <AccentLine
-                color={palette.splashAccentPink}
-                width={accentWidth}
-              />
-            </View>
-          </Animated.View>
-
-          <Animated.View style={taglineStyle}>
-            <Text
-              numberOfLines={1}
-              style={[styles.tagline, { color: palette.splashMuted }]}
-            >
-              FIND THE LEAKS. SAVE YOUR MONEY.
-            </Text>
-          </Animated.View>
-
-          <Animated.View
-            style={[
-              styles.rightAccentReveal,
-              { maxWidth: accentWidth },
-              rightAccentStyle,
-            ]}
-          >
-            <AccentLine
-              color={palette.splashAccentBlue}
+            <LockupPiece
               width={accentWidth}
+              height={taglineStageHeight}
+              animatedStyle={leftAccentStyle}
+              frameStyle={{ left: 0 }}
+              Piece={LeftPinkAccent}
             />
-          </Animated.View>
+            <LockupPiece
+              width={taglineTextWidth}
+              height={taglineStageHeight}
+              animatedStyle={taglineStyle}
+              frameStyle={{ left: accentWidth + 6 }}
+              preserveAspectRatio="none"
+              Piece={Tagline}
+            />
+            <LockupPiece
+              width={accentWidth}
+              height={taglineStageHeight}
+              animatedStyle={rightAccentStyle}
+              frameStyle={{ left: accentWidth + 6 + taglineTextWidth + 6 }}
+              Piece={RightBlueAccent}
+            />
+          </View>
         </View>
       </View>
     </Animated.View>
@@ -701,10 +577,26 @@ const styles = StyleSheet.create({
   },
   iconStage: {
     position: "relative",
-  },
-  iconRegion: {
-    position: "absolute",
     overflow: "hidden",
+  },
+  iconPiece: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  lockupStage: {
+    position: "relative",
+    marginTop: 8,
+  },
+  wordmarkRow: {
+    position: "relative",
+  },
+  taglineRow: {
+    position: "absolute",
+    left: 0,
+  },
+  lockupPiece: {
+    position: "absolute",
+    top: 0,
+    left: 0,
   },
   tracePoint: {
     position: "absolute",
@@ -714,37 +606,5 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-  },
-  wordmark: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "center",
-    marginTop: 16,
-  },
-  taglineRow: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    marginTop: 22,
-  },
-  leftAccentReveal: {
-    height: 8,
-    alignItems: "flex-end",
-    overflow: "hidden",
-  },
-  rightAccentReveal: {
-    height: 8,
-    alignItems: "flex-start",
-    overflow: "hidden",
-  },
-  tagline: {
-    fontFamily: "sans-serif",
-    fontSize: 12,
-    fontWeight: "600",
-    letterSpacing: 0.45,
-    lineHeight: 16,
-    textAlign: "center",
   },
 });

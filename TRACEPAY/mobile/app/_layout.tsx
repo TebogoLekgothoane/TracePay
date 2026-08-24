@@ -92,7 +92,7 @@ function RootNavigator({
   }, []);
 
   const handleAnimationComplete = useCallback(() => {
-    router.replace("/(auth)/unlock");
+    router.replace("/");
     setShowAnimatedSplash(false);
   }, [router]);
 
@@ -145,6 +145,15 @@ function RootNavigator({
           },
         }}
       >
+        <Stack.Screen
+          name="(onboarding)"
+          options={{
+            headerShown: false,
+            animation: "fade",
+            gestureEnabled: false,
+          }}
+        />
+
         <Stack.Screen
           name="(auth)"
           options={{
