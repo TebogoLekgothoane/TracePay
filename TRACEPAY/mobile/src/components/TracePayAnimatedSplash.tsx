@@ -60,6 +60,7 @@ type BrandPieceProps = {
   animatedStyle: object;
   frameStyle?: object;
   preserveAspectRatio?: string;
+  color?: string;
   Piece: FunctionComponent<SvgProps>;
 };
 
@@ -69,6 +70,7 @@ function LockupPiece({
   animatedStyle,
   frameStyle,
   preserveAspectRatio = "xMidYMid meet",
+  color,
   Piece,
 }: BrandPieceProps) {
   return (
@@ -78,6 +80,7 @@ function LockupPiece({
       <Piece
         width={width}
         height={height}
+        color={color}
         preserveAspectRatio={preserveAspectRatio}
       />
     </Animated.View>
@@ -145,7 +148,7 @@ export function TracePayAnimatedSplash({ onAnimationComplete }: Props) {
   const wordmarkWidth = Math.min(contentWidth * 0.94, 380);
   const wordmarkHeight = wordmarkWidth * (632 / 1897);
   const wordmarkColumnWidth = (wordmarkWidth - 8) / 2;
-  const taglineStageHeight = 36;
+  const taglineStageHeight = 42;
   const accentWidth = 22;
   const accentHeight = 2;
   const taglineGap = 18;
@@ -287,6 +290,7 @@ export function TracePayAnimatedSplash({ onAnimationComplete }: Props) {
               height={wordmarkHeight}
               animatedStyle={{}}
               frameStyle={{ left: 0 }}
+              color={palette.splashForeground}
               Piece={TraceWordmark}
             />
             <LockupPiece
@@ -336,7 +340,7 @@ export function TracePayAnimatedSplash({ onAnimationComplete }: Props) {
                     <Text
                       numberOfLines={1}
                       adjustsFontSizeToFit
-                      minimumFontScale={0.72}
+                      minimumFontScale={0.82}
                       style={styles.taglineText}
                     >
                       FIND THE LEAKS. SAVE YOUR MONEY.
@@ -436,9 +440,9 @@ const styles = StyleSheet.create({
   },
   taglineText: {
     color: "#000000",
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: "600",
-    letterSpacing: 0.35,
+    letterSpacing: 0.4,
     textAlign: "center",
     includeFontPadding: false,
   },
