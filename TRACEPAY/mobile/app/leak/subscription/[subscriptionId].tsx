@@ -13,6 +13,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { COLORS, TRACEPAY, type ColorScheme, withAlpha } from "../../../src/theme/colors";
+import { IconButton } from "../../../src/components/ui/IconButton";
 
 const SUBSCRIPTIONS: Record<
   string,
@@ -105,13 +106,14 @@ export default function SubscriptionDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View className="px-5 pt-1">
-          <Pressable
+          <IconButton
             accessibilityLabel="Go back"
+            className="mb-4"
+            variant="outline"
             onPress={() => router.back()}
-            className="mb-4 h-10 w-10 items-center justify-center rounded-xl border border-border bg-card active:opacity-75"
           >
             <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
-          </Pressable>
+          </IconButton>
 
           <Text className="text-[28px] font-bold text-foreground">
             Subscription detail

@@ -4,7 +4,6 @@ import {
   type ListRenderItem,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
-  Text,
   useWindowDimensions,
   View,
 } from "react-native";

@@ -25,6 +25,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
+import { IconButton } from "../../src/components/ui/IconButton";
 import { COLORS, TRACEPAY, withAlpha } from "../../src/theme/colors";
 
 const TABS = ["All", "Money in", "Money out", "Transfers"] as const;
@@ -385,18 +386,12 @@ export default function TransactionsScreen() {
             </View>
 
             <View className="flex-row gap-2 pt-1">
-              <Pressable
-                accessibilityLabel="Search transactions"
-                className="h-10 w-10 items-center justify-center rounded-xl bg-primary/10 active:opacity-75"
-              >
+              <IconButton accessibilityLabel="Search transactions" variant="soft">
                 <Search color={palette.primary} size={18} strokeWidth={2} />
-              </Pressable>
-              <Pressable
-                accessibilityLabel="Filter transactions"
-                className="h-10 w-10 items-center justify-center rounded-xl bg-primary/10 active:opacity-75"
-              >
+              </IconButton>
+              <IconButton accessibilityLabel="Filter transactions" variant="soft">
                 <Filter color={palette.primary} size={18} strokeWidth={2} />
-              </Pressable>
+              </IconButton>
             </View>
           </View>
 

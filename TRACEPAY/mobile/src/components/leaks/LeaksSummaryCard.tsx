@@ -1,9 +1,10 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { Info } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { TRACEPAY, withAlpha } from "../../theme/colors";
+import { Button } from "../ui/Button";
 import { LeaksPipeIllustration } from "./LeaksPipeIllustration";
 
 type Props = {
@@ -87,19 +88,23 @@ export function LeaksSummaryCard({
           of your total spending
         </Text>
 
-        <Pressable
+        <Button
           onPress={onHowWeCalculate}
-          className="ml-3 flex-row items-center gap-1.5 rounded-full px-3 py-1.5 active:opacity-80"
+          size="sm"
+          variant="ghost"
+          className="ml-3 px-3 py-1.5"
           style={{ backgroundColor: trace.heroSubtle }}
         >
-          <Info color={trace.heroForeground} size={13} strokeWidth={2} />
-          <Text
-            style={{ color: trace.heroForeground }}
-            className="text-[11px] font-medium opacity-85"
-          >
-            How we calculate
-          </Text>
-        </Pressable>
+          <>
+            <Info color={trace.heroForeground} size={13} strokeWidth={2} />
+            <Text
+              style={{ color: trace.heroForeground }}
+              className="text-[11px] font-medium opacity-85"
+            >
+              How we calculate
+            </Text>
+          </>
+        </Button>
       </View>
     </LinearGradient>
   );

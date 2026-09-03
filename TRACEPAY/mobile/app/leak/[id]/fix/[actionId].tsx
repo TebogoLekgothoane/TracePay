@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { ChevronRight } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 

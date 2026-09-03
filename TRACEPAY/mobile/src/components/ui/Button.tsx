@@ -74,7 +74,7 @@ export function Button({
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const isDisabled = Boolean(disabled || loading);
   const spinnerColor =
-    variant === "primary" ? palette.primaryForeground : palette.primary;
+    variant === "primary" ? COLORS.white : palette.primary;
 
   return (
     <Pressable

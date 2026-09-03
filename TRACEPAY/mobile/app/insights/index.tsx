@@ -14,6 +14,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { COLORS, TRACEPAY, withAlpha } from "../../src/theme/colors";
+import { IconButton } from "../../src/components/ui/IconButton";
 
 const PERIODS = ["This month", "Last month", "3 months"] as const;
 type Period = (typeof PERIODS)[number];
@@ -143,13 +144,14 @@ export default function AllInsightsScreen() {
       >
         <View className="px-5 pt-1">
           <View className="mb-5 flex-row items-center">
-            <Pressable
+            <IconButton
               accessibilityLabel="Go back"
+              className="mr-3"
+              variant="outline"
               onPress={() => router.back()}
-              className="mr-3 h-10 w-10 items-center justify-center rounded-xl border border-border bg-card active:opacity-75"
             >
               <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
-            </Pressable>
+            </IconButton>
             <Text className="flex-1 text-center text-[18px] font-bold text-foreground">
               All insights
             </Text>

@@ -10,7 +10,7 @@ import {
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -19,7 +19,6 @@ import {
 } from "../../src/components/leaks/LeaksSegmentTabs";
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
 import { Button } from "../../src/components/ui/Button";
-import { IconButton } from "../../src/components/ui/IconButton";
 import { IconButton } from "../../src/components/ui/IconButton";
 import { LeaksSummaryCard } from "../../src/components/leaks/LeaksSummaryCard";
 import { TakeActionSection } from "../../src/components/leaks/TakeActionSection";

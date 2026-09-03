@@ -20,6 +20,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, G, Line, Path, Rect } from "react-native-svg";
 
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
+import { Button } from "../../src/components/ui/Button";
+import { IconButton } from "../../src/components/ui/IconButton";
 import { COLORS, TRACEPAY, withAlpha } from "../../src/theme/colors";
 
 const PERIODS = ["This month", "Last month", "3 months", "Custom"] as const;
@@ -362,9 +364,9 @@ export default function InsightsScreen() {
                 Understand your money story
               </Text>
             </View>
-            <Pressable className="h-10 w-10 items-center justify-center rounded-xl border border-border bg-card active:opacity-75">
+            <IconButton accessibilityLabel="Filter insights" variant="outline">
               <SlidersHorizontal color={palette.primary} size={18} strokeWidth={2} />
-            </Pressable>
+            </IconButton>
           </View>
 
           <View className="mt-5">
@@ -465,9 +467,9 @@ export default function InsightsScreen() {
             <Text className="text-[17px] font-bold text-foreground">
               Spending by category
             </Text>
-            <Pressable className="active:opacity-70">
-              <Text className="text-[13px] font-semibold text-primary">View all</Text>
-            </Pressable>
+            <Button size="sm" variant="ghost" className="px-0">
+              View all
+            </Button>
           </View>
           <View className="rounded-3xl border border-border bg-card p-4">
             <View className="flex-row items-center gap-3">
@@ -507,12 +509,14 @@ export default function InsightsScreen() {
             <Text className="text-[17px] font-bold text-foreground">
               Insights for you
             </Text>
-            <Pressable
+            <Button
               onPress={() => router.push("/insights")}
-              className="active:opacity-70"
+              size="sm"
+              variant="ghost"
+              className="px-0"
             >
-              <Text className="text-[13px] font-semibold text-primary">View all</Text>
-            </Pressable>
+              View all
+            </Button>
           </View>
           <ScrollView
             horizontal
