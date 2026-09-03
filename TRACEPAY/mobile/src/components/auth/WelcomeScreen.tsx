@@ -31,6 +31,7 @@ import { TRACEPAY, withAlpha } from "../../theme/colors";
 import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
 import { TRACEPAY_ICON_COMPOSITION } from "../tracePayIconComposition";
+import { getPendingPhone } from "../../features/auth/auth.service";
 import { useAuth } from "../../hooks/useAuth";
 import { WelcomeAuthForm, type WelcomeAuthMode, type WelcomeAuthPayload } from "./WelcomeAuthForm";
 
@@ -272,7 +273,7 @@ export function WelcomeScreen() {
         });
         router.push({
           pathname: "/(auth)/otp",
-          params: { phone: payload.phone },
+          params: { phone: getPendingPhone() ?? payload.phone },
         });
         return;
       }
@@ -285,7 +286,7 @@ export function WelcomeScreen() {
       if (result.requiresOtp) {
         router.push({
           pathname: "/(auth)/otp",
-          params: { phone: payload.phone },
+          params: { phone: getPendingPhone() ?? payload.phone },
         });
         return;
       }

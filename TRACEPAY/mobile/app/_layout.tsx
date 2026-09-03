@@ -74,6 +74,8 @@ function RootNavigator({
         "new-password",
         "password-updated",
       ].includes(screen ?? "");
+    const isPostPinSetupRoute =
+      isAuthRoute && screen === "biometric-setup";
     const isProtectedRoute =
       group === "(tabs)" ||
       (group !== undefined &&
@@ -83,6 +85,7 @@ function RootNavigator({
     return {
       isProtectedRoute,
       isRecoveryRoute,
+      isPostPinSetupRoute,
       isUnlockRoute,
     };
   }, [segments]);
@@ -101,7 +104,11 @@ function RootNavigator({
     }
 
     if (hasPin && isLocked) {
-      if (!routeState.isUnlockRoute && !routeState.isRecoveryRoute) {
+      if (
+        !routeState.isUnlockRoute &&
+        !routeState.isRecoveryRoute &&
+        !routeState.isPostPinSetupRoute
+      ) {
         router.replace("/(auth)/unlock");
       }
       return;

@@ -63,3 +63,7 @@ export async function saveBiometricsEnabled(enabled: boolean): Promise<void> {
   );
 }
 
+export async function clearBiometricsEnabled(): Promise<void> {
+  await secureStorage.remove(SECURITY_STORAGE_KEYS.biometricsEnabled);
+}
+

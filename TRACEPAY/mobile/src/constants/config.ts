@@ -21,18 +21,39 @@ function configuredAuthApiUrl(): string {
   return "";
 }
 
+function expoDevHost(): string | undefined {
+  const hostUri = Constants.expoConfig?.hostUri;
+  if (typeof hostUri !== "string" || hostUri.trim().length === 0) {
+    return undefined;
+  }
+
+  const host = hostUri.split(":")[0]?.trim();
+  if (!host || host === "localhost" || host === "127.0.0.1") {
+    return undefined;
+  }
+
+  return host;
+}
+
 export function getAuthApiBaseUrl(): string {
   const origin = configuredAuthApiUrl().replace(/\/$/, "");
   if (!origin) {
     return "";
   }
 
-  if (Platform.OS !== "android") {
+  const loopback = /^(https?:\/\/)(?:localhost|127\.0\.0\.1)(?=[:/]|$)/i;
+  if (!loopback.test(origin)) {
     return origin;
   }
 
-  return origin.replace(
-    /^(https?:\/\/)(?:localhost|127\.0\.0\.1)(?=[:/]|$)/i,
-    "$110.0.2.2",
-  );
+  const lanHost = expoDevHost();
+  if (lanHost) {
+    return origin.replace(loopback, `$1${lanHost}`);
+  }
+
+  if (Platform.OS === "android") {
+    return origin.replace(loopback, "$110.0.2.2");
+  }
+
+  return origin;
 }

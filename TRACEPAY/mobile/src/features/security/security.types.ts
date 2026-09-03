@@ -27,5 +27,6 @@ export type AppLockContextValue = {
   skipBiometrics: () => Promise<void>;
   authenticateWithBiometrics: () => Promise<boolean>;
   unlockApp: () => void;
+  clearDeviceLock: () => Promise<void>;
 };
 

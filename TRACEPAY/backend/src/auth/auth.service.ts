@@ -36,6 +36,10 @@ function requireValidPhone(phone: string): string {
   return normalized;
 }
 
+function phoneDigits(value: string | undefined): string {
+  return (value ?? "").replace(/\D/g, "");
+}
+
 let adminClient: SupabaseClient | null = null;
 let authClient: SupabaseClient | null = null;
 let twilioClient: ReturnType<typeof twilio> | null = null;
@@ -78,7 +82,9 @@ async function findUserByPhone(phone: string): Promise<User | undefined> {
       throw new AuthHttpError(500, "Could not look up that account.");
     }
 
-    const match = data.users.find((user) => user.phone === phone);
+    const match = data.users.find(
+      (user) => phoneDigits(user.phone) === phoneDigits(phone),
+    );
     if (match) {
       return match;
     }
@@ -111,10 +117,36 @@ async function sendOtp(phone: string): Promise<void> {
     pendingFallback.set(phone, { code, expiresAt: Date.now() + 10 * 60 * 1000 });
   } catch (error) {
     console.error("[auth] Twilio SMS failed", error);
-    throw new AuthHttpError(
-      502,
-      "Could not send the verification SMS. Check Twilio credentials on the backend.",
-    );
+    throw twilioSendError(error);
+  }
+}
+
+function twilioErrorCode(error: unknown): number {
+  if (typeof error === "object" && error && "code" in error) {
+    const code = Number((error as { code: unknown }).code);
+    return Number.isFinite(code) ? code : 0;
+  }
+  return 0;
+}
+
+function twilioSendError(error: unknown): AuthHttpError {
+  switch (twilioErrorCode(error)) {
+    case 21608:
+      return new AuthHttpError(
+        400,
+        "This phone number is not verified on the Twilio trial account. Add it in Twilio under Verified Caller IDs, or upgrade the account.",
+      );
+    case 21614:
+      return new AuthHttpError(400, "Twilio cannot send SMS to this number.");
+    case 60200:
+      return new AuthHttpError(400, "Twilio rejected this phone number.");
+    case 60203:
+      return new AuthHttpError(429, "Too many SMS attempts. Wait a few minutes and try again.");
+    default:
+      return new AuthHttpError(
+        502,
+        "Could not send the verification SMS. Check Twilio credentials on the backend.",
+      );
   }
 }
 
@@ -168,6 +200,8 @@ export async function register(body: SignUpBody): Promise<void> {
     throw new AuthHttpError(409, "This phone number is already registered. Log in instead.");
   }
 
+  await sendOtp(phone);
+
   const { error } = await getAdmin().auth.admin.createUser({
     phone,
     password,
@@ -181,8 +215,6 @@ export async function register(body: SignUpBody): Promise<void> {
     }
     throw new AuthHttpError(400, error.message);
   }
-
-  await sendOtp(phone);
 }
 
 export async function login(body: SignInBody): Promise<SignInResult> {

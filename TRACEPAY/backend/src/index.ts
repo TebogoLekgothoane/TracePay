@@ -31,11 +31,12 @@ app.post("/auth/resend-otp", (req, res) => {
   void resendOtpHandler(req, res);
 });
 
-app.listen(config.port, () => {
+app.listen(config.port, "0.0.0.0", () => {
   const sms = config.twilioVerifyServiceSid
     ? "verify"
     : config.twilioFrom
       ? "from-number"
       : "missing";
-  console.log(`TRACEPAY auth listening on ${config.port} (sms: ${sms})`);
+  console.log(`TRACEPAY auth listening on 0.0.0.0:${config.port} (sms: ${sms})`);
 });
+

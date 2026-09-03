@@ -1,5 +1,5 @@
-import { router } from "expo-router";
-import { useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import { useCallback, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -9,20 +9,30 @@ import { OTPInput } from "../../src/components/ui/OTPInput";
 
 export default function Screen() {
   const { error, resendPhone, setError, submitting, verifyPhone } = useAuth();
+  const params = useLocalSearchParams<{ phone?: string }>();
+  const phone = typeof params.phone === "string" ? params.phone : undefined;
   const [code, setCode] = useState("");
+  const verifyingRef = useRef(false);
 
-  const handleVerify = async () => {
+  const handleVerify = useCallback(async (nextCode = code) => {
+    if (verifyingRef.current || nextCode.replace(/\D/g, "").length < 6) {
+      return;
+    }
+
+    verifyingRef.current = true;
     try {
-      await verifyPhone(code);
+      await verifyPhone(nextCode, phone);
       router.replace("/(auth)/device-security");
     } catch {
       return;
+    } finally {
+      verifyingRef.current = false;
     }
-  };
+  }, [code, phone, verifyPhone]);
 
   const handleResend = async () => {
     try {
-      await resendPhone();
+      await resendPhone(phone);
       setCode("");
     } catch {
       return;
@@ -40,7 +50,14 @@ export default function Screen() {
         </Text>
 
         <View className="mt-10">
-          <OTPInput editable={!submitting} value={code} onChange={setCode} />
+          <OTPInput
+            editable={!submitting}
+            value={code}
+            onChange={setCode}
+            onComplete={(nextCode) => {
+              void handleVerify(nextCode);
+            }}
+          />
         </View>
 
         {error ? (

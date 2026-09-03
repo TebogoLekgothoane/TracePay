@@ -14,12 +14,15 @@ import {
   Wallet,
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { Pressable, Text, View } from "react-native";
+import { useState } from "react";
+import { Alert, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
 import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
+import { signOut } from "../../src/features/auth/auth.service";
+import { useAppLock } from "../../src/features/security/AppLockProvider";
 import { COLORS, TRACEPAY, withAlpha } from "../../src/theme/colors";
 
 type SettingsRow = {
@@ -128,10 +131,40 @@ function SettingsSection({
 
 export default function ProfileScreen() {
   const { colorScheme } = useColorScheme();
+  const { clearDeviceLock } = useAppLock();
+  const [loggingOut, setLoggingOut] = useState(false);
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
   const trace = TRACEPAY[scheme];
   const appearanceLabel = scheme === "dark" ? "Dark mode" : "Light mode";
+
+  const handleLogout = () => {
+    if (loggingOut) {
+      return;
+    }
+
+    Alert.alert("Log out", "You will need to sign in again on this device.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log out",
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            setLoggingOut(true);
+            try {
+              await signOut();
+              await clearDeviceLock();
+              router.replace("/(auth)/welcome");
+            } catch {
+              Alert.alert("Could not log out", "Please try again.");
+            } finally {
+              setLoggingOut(false);
+            }
+          })();
+        },
+      },
+    ]);
+  };
 
   const appRows = APP_ROWS.map((row) =>
     row.id === "appearance" ? { ...row, value: appearanceLabel } : row,
@@ -197,7 +230,13 @@ export default function ProfileScreen() {
           <SettingsSection title="Account" rows={ACCOUNT_ROWS} palette={palette} />
           <SettingsSection title="App settings" rows={appRows} palette={palette} />
 
-          <Button className="mt-6" size="md" variant="destructive">
+          <Button
+            className="mt-6"
+            loading={loggingOut}
+            onPress={handleLogout}
+            size="md"
+            variant="destructive"
+          >
             <>
               <LogOut color={palette.destructive} size={18} strokeWidth={2.2} />
               <Text className="text-[15px] font-semibold text-destructive">Log out</Text>

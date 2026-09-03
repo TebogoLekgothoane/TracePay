@@ -22,8 +22,7 @@ export default function BiometricsScreen() {
   const setBiometricEnabled = useDeviceAuthStore((s) => s.setBiometricEnabled);
   const setupPin = useDeviceAuthStore((s) => s.setupPin);
   const unlock = useDeviceAuthStore((s) => s.unlock);
-  const onboardingComplete = useProfileStore((s) => s.onboardingComplete);
-  const consentGiven = useProfileStore((s) => s.consentGiven);
+  const completeOnboarding = useProfileStore((s) => s.completeOnboarding);
 
   const [enableBio, setEnableBio] = useState(false);
   const [pin, setPin] = useState("");
@@ -69,14 +68,9 @@ export default function BiometricsScreen() {
     try {
       await setupPin(pin);
       await setBiometricEnabled(enableBio && isAvailable);
+      await completeOnboarding();
       unlock();
-      if (onboardingComplete) {
-        router.replace("/(tabs)");
-      } else if (consentGiven) {
-        router.push("/(onboarding)/sms-permission");
-      } else {
-        router.push("/(onboarding)/consent");
-      }
+      router.replace("/(tabs)");
     } catch {
       setError("Could not save your security settings. Try again.");
     } finally {

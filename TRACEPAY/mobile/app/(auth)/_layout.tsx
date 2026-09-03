@@ -69,30 +69,6 @@ export default function AuthLayout() {
       />
 
       <Stack.Screen
-        name="sms-consent"
-        options={{
-          headerShown: false,
-          gestureEnabled: true,
-        }}
-      />
-
-      <Stack.Screen
-        name="scan-inbox"
-        options={{
-          headerShown: false,
-          gestureEnabled: false,
-        }}
-      />
-
-      <Stack.Screen
-        name="notification-consent"
-        options={{
-          headerShown: false,
-          gestureEnabled: true,
-        }}
-      />
-
-      <Stack.Screen
         name="unlock"
         options={{
           headerShown: false,

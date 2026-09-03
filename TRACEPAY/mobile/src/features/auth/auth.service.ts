@@ -1,4 +1,5 @@
 import { authRequest } from "../../api/auth.api";
+import { getSupabase, isSupabaseConfigured } from "../../lib/supabase";
 import { AuthError } from "./auth.errors";
 import type { SignInInput, SignInResult, SignUpInput } from "./auth.types";
 import {
@@ -66,22 +67,42 @@ export async function signIn({
   return result;
 }
 
-export async function verifyPhoneOtp(code: string): Promise<void> {
-  if (!pendingPhone) {
+function resolvePendingPhone(phone?: string): string {
+  const raw = phone?.trim() || pendingPhone;
+  if (!raw) {
     throw new AuthError("Verification session expired. Please start again.");
   }
 
+  const normalized = normalizeSaPhone(raw);
+  pendingPhone = normalized;
+  return normalized;
+}
+
+export async function verifyPhoneOtp(code: string, phone?: string): Promise<void> {
+  const target = resolvePendingPhone(phone);
+
   await authRequest("/auth/verify-otp", {
-    phone: pendingPhone,
+    phone: target,
     code,
   });
   pendingPhone = null;
 }
 
-export async function resendPhoneOtp(): Promise<void> {
-  if (!pendingPhone) {
-    throw new AuthError("Verification session expired. Please start again.");
+export async function resendPhoneOtp(phone?: string): Promise<void> {
+  const target = resolvePendingPhone(phone);
+  await authRequest("/auth/resend-otp", { phone: target });
+}
+
+export async function signOut(): Promise<void> {
+  pendingPhone = null;
+
+  if (!isSupabaseConfigured()) {
+    return;
   }
 
-  await authRequest("/auth/resend-otp", { phone: pendingPhone });
+  try {
+    await getSupabase().auth.signOut();
+  } catch {
+    return;
+  }
 }

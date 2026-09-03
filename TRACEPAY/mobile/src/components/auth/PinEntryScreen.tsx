@@ -180,7 +180,9 @@ export function PinEntryScreen({
     setDigits(next);
 
     if (next.length === PIN_LENGTH) {
-      submitPin(next);
+      requestAnimationFrame(() => {
+        submitPin(next);
+      });
     }
   };
 
@@ -206,7 +208,9 @@ export function PinEntryScreen({
     setDigits(next);
 
     if (next.length === PIN_LENGTH) {
-      submitPin(next);
+      requestAnimationFrame(() => {
+        submitPin(next);
+      });
     }
   };
 

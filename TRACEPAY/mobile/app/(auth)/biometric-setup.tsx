@@ -21,8 +21,8 @@ export default function BiometricSetupScreen() {
   const [isBusy, setIsBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const continueToConsent = () => {
-    router.replace("/(auth)/sms-consent");
+  const continueToApp = () => {
+    router.replace("/(tabs)");
   };
 
   const handleEnable = async () => {
@@ -32,7 +32,7 @@ export default function BiometricSetupScreen() {
     setIsBusy(false);
 
     if (enabled) {
-      continueToConsent();
+      continueToApp();
       return;
     }
     setMessage("Biometric authentication was not completed.");
@@ -41,7 +41,7 @@ export default function BiometricSetupScreen() {
   const handleSkip = async () => {
     setIsBusy(true);
     await skipBiometrics();
-    continueToConsent();
+    continueToApp();
   };
 
   return (

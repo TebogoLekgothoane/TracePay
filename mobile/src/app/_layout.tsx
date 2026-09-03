@@ -40,22 +40,7 @@ const PRE_AUTH_ROUTES = new Set([
   "forgot-password",
 ]);
 
-const POST_AUTH_ONBOARDING_ROUTES = new Set([
-  "biometrics",
-  "consent",
-  "sms-permission",
-]);
-
 const AUTH_UNLOCK_ROUTES = new Set(["unlock", "pin", "sign-in"]);
-
-function getResumeOnboardingRoute(
-  pinEnabled: boolean,
-  consentGiven: boolean,
-): "/(onboarding)/biometrics" | "/(onboarding)/consent" | "/(onboarding)/sms-permission" {
-  if (!pinEnabled) return "/(onboarding)/biometrics";
-  if (!consentGiven) return "/(onboarding)/consent";
-  return "/(onboarding)/sms-permission";
-}
 
 function NavigationGuard({ children }: { children: React.ReactNode }) {
   const segments = useSegments();
@@ -63,7 +48,6 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
     onboardingComplete,
     isAuthenticated,
     isLoaded,
-    consentGiven,
     initializeAuth,
   } = useProfileStore();
   const {
@@ -112,7 +96,7 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
         return;
       }
       if (!onboardingComplete) {
-        router.replace(getResumeOnboardingRoute(pinEnabled, consentGiven));
+        router.replace("/(onboarding)/biometrics");
         return;
       }
       if (!isUnlocked) {
@@ -135,11 +119,11 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
 
     if (!onboardingComplete) {
       const allowedPostAuth =
-        (inOnboarding && childRoute && POST_AUTH_ONBOARDING_ROUTES.has(childRoute)) ||
+        (inOnboarding && childRoute === "biometrics") ||
         (inOnboarding && childRoute === "otp") ||
         onSmsFlow;
       if (!allowedPostAuth) {
-        router.replace(getResumeOnboardingRoute(pinEnabled, consentGiven));
+        router.replace("/(onboarding)/biometrics");
       }
       return;
     }
@@ -169,7 +153,6 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
     deviceAuthLoaded,
     isAuthenticated,
     onboardingComplete,
-    consentGiven,
     pinEnabled,
     isUnlocked,
     segments,

@@ -125,3 +125,7 @@ export async function savePinRecord(record: PinRecord): Promise<void> {
   );
 }
 
+export async function clearPinRecord(): Promise<void> {
+  await secureStorage.remove(SECURITY_STORAGE_KEYS.pinRecord);
+}
+

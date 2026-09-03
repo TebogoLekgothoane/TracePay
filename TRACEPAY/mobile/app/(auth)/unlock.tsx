@@ -35,6 +35,7 @@ export default function UnlockScreen() {
     biometricAvailability,
     biometricsEnabled,
     unlockApp,
+    verifyPin,
   } = useAppLock();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -49,6 +50,8 @@ export default function UnlockScreen() {
   const [phase, setPhase] = useState<BiometricPhase>("authenticating");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinResetKey, setPinResetKey] = useState(0);
 
   const biometricPromptedRef = useRef(false);
   const unlockFinishedRef = useRef(false);
@@ -174,15 +177,23 @@ export default function UnlockScreen() {
   }, [canUseBiometrics, finishUnlock, openPinSheet, runBiometrics]);
 
   const handlePin = useCallback(
-    async (_pin: readonly number[]) => {
+    async (pin: readonly number[]) => {
       if (unlockFinishedRef.current) {
         return;
       }
 
       setIsBusy(true);
+      setPinError(null);
 
       try {
-        // UI-only: treat any 4-digit PIN as valid for now.
+        const matches = await verifyPin(pin);
+        if (!matches) {
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          setPinError("Incorrect PIN");
+          setPinResetKey((value) => value + 1);
+          return;
+        }
+
         finishAfterDismissRef.current = false;
         finishUnlock();
         sheetRef.current?.dismiss();
@@ -192,7 +203,7 @@ export default function UnlockScreen() {
         }
       }
     },
-    [finishUnlock],
+    [finishUnlock, verifyPin],
   );
 
   const handleBiometricRetry = useCallback(async () => {
@@ -311,12 +322,15 @@ export default function UnlockScreen() {
         <BottomSheetView className="flex-1">
           <UnlockPinSheet
             biometricKind={canUseBiometrics ? biometricKind : null}
+            errorMessage={pinError}
             isBusy={isBusy}
             onBiometricPress={
               canUseBiometrics ? () => void handleBiometricRetry() : undefined
             }
+            onClearError={() => setPinError(null)}
             onComplete={handlePin}
             onForgotPin={() => router.replace("/(auth)/reset-pin")}
+            resetKey={pinResetKey}
           />
         </BottomSheetView>
       </BottomSheetModal>

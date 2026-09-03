@@ -1,11 +1,9 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   Pressable,
   Text,
   TextInput,
   View,
-  type TextInputKeyPressEventData,
-  type NativeSyntheticEvent,
 } from "react-native";
 
 type Props = {
@@ -13,6 +11,7 @@ type Props = {
   value: string;
   editable?: boolean;
   onChange: (value: string) => void;
+  onComplete?: (value: string) => void;
 };
 
 export function OTPInput({
@@ -20,57 +19,75 @@ export function OTPInput({
   value,
   editable = true,
   onChange,
+  onComplete,
 }: Props) {
   const digits = value.replace(/\D/g, "").slice(0, length);
-  const refs = useRef<Array<TextInput | null>>([]);
+  const inputRef = useRef<TextInput>(null);
+  const completedRef = useRef(false);
+
+  useEffect(() => {
+    if (digits.length < length) {
+      completedRef.current = false;
+    }
+  }, [digits.length, length]);
 
   const handleChange = useCallback(
-    (index: number, raw: string) => {
-      const nextDigit = raw.replace(/\D/g, "").slice(-1);
-      const chars = digits.split("");
-      chars[index] = nextDigit;
-      const next = chars.join("").slice(0, length);
-      onChange(next);
-
-      if (nextDigit && index < length - 1) {
-        refs.current[index + 1]?.focus();
-      }
-    },
-    [digits, length, onChange],
-  );
-
-  const handleKeyPress = useCallback(
-    (index: number, event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
-      if (event.nativeEvent.key !== "Backspace" || digits[index]) {
+    (nextValue: string) => {
+      if (!editable) {
         return;
       }
 
-      if (index > 0) {
-        refs.current[index - 1]?.focus();
-        onChange(digits.slice(0, index - 1));
+      const next = nextValue.replace(/\D/g, "").slice(0, length);
+      onChange(next);
+
+      if (next.length === length && !completedRef.current) {
+        completedRef.current = true;
+        onComplete?.(next);
       }
     },
-    [digits, onChange],
+    [editable, length, onChange, onComplete],
   );
 
   return (
-    <View className="flex-row justify-between gap-2">
-      {Array.from({ length }, (_, index) => (
-        <TextInput
-          key={index}
-          ref={(node) => {
-            refs.current[index] = node;
-          }}
-          accessibilityLabel={`Digit ${index + 1}`}
-          className="h-14 flex-1 rounded-2xl border border-input-border bg-input text-center text-[22px] font-semibold text-foreground"
-          editable={editable}
-          keyboardType="number-pad"
-          maxLength={1}
-          onChangeText={(text) => handleChange(index, text)}
-          onKeyPress={(event) => handleKeyPress(index, event)}
-          value={digits[index] ?? ""}
-        />
-      ))}
-    </View>
+    <Pressable
+      accessibilityRole="none"
+      onPress={() => {
+        if (editable) {
+          inputRef.current?.focus();
+        }
+      }}
+    >
+      <View className="flex-row justify-between gap-2" pointerEvents="none">
+        {Array.from({ length }, (_, index) => {
+          const focused = digits.length === index || (digits.length === length && index === length - 1);
+
+          return (
+            <View
+              key={index}
+              className={`h-14 flex-1 items-center justify-center rounded-2xl border bg-input ${
+                focused ? "border-primary" : "border-input-border"
+              }`}
+            >
+              <Text className="text-center text-[22px] font-semibold text-foreground">
+                {digits[index] ?? ""}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+      <TextInput
+        ref={inputRef}
+        autoFocus
+        caretHidden
+        contextMenuHidden
+        editable={editable}
+        keyboardType="number-pad"
+        maxLength={length}
+        onChangeText={handleChange}
+        textContentType="oneTimeCode"
+        value={digits}
+        className="absolute h-px w-px opacity-[0.01]"
+      />
+    </Pressable>
   );
 }

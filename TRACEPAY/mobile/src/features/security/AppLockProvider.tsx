@@ -12,12 +12,14 @@ import { AppState, type AppStateStatus } from "react-native";
 
 import {
   authenticateLocally,
+  clearBiometricsEnabled,
   getBiometricAvailability,
   loadBiometricsEnabled,
   saveBiometricsEnabled,
 } from "./biometric.service";
 import { APP_LOCK_TIMEOUT } from "./security.constants";
 import {
+  clearPinRecord,
   createPinRecord,
   loadPinRecord,
   savePinRecord,
@@ -179,6 +181,15 @@ export function AppLockProvider({ children }: PropsWithChildren): ReactElement {
     setIsLocked(false);
   }, []);
 
+  const clearDeviceLock = useCallback(async () => {
+    await Promise.all([clearPinRecord(), clearBiometricsEnabled()]);
+    setPinRecord(null);
+    setPendingPinRecord(null);
+    setBiometricsEnabled(false);
+    hasPinRef.current = false;
+    setIsLocked(true);
+  }, []);
+
   const value: AppLockContextValue = {
     isHydrated,
     hasPin: pinRecord !== null,
@@ -192,6 +203,7 @@ export function AppLockProvider({ children }: PropsWithChildren): ReactElement {
     skipBiometrics,
     authenticateWithBiometrics,
     unlockApp,
+    clearDeviceLock,
   };
 
   return (

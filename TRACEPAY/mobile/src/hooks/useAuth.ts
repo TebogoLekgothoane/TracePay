@@ -42,12 +42,12 @@ export function useAuth() {
   );
 
   const verifyPhone = useCallback(
-    (code: string) => run(() => verifyPhoneOtp(code)),
+    (code: string, phone?: string) => run(() => verifyPhoneOtp(code, phone)),
     [run],
   );
 
   const resendPhone = useCallback(
-    () => run(() => resendPhoneOtp()),
+    (phone?: string) => run(() => resendPhoneOtp(phone)),
     [run],
   );
 
