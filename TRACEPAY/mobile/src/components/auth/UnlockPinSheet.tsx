@@ -27,6 +27,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PIN_LENGTH } from "../../features/security/security.constants";
 import type { BiometricKind } from "../../features/security/security.types";
 import { COLORS } from "../../theme/colors";
+import { Button } from "../ui/Button";
 
 type Props = {
 	errorMessage?: string | null;
@@ -220,34 +221,39 @@ export function UnlockPinSheet({
 			</View>
 
 			{showBiometric ? (
-				<Pressable
-					accessibilityRole="button"
+				<Button
 					accessibilityLabel="Use Face ID"
+					className="mt-1 self-center bg-key-pressed/13"
 					disabled={isBusy}
+					size="sm"
+					variant="muted"
 					onPress={() => {
 						Keyboard.dismiss();
 						onBiometricPress?.();
 					}}
-					className="mt-1 flex-row items-center gap-2 self-center rounded-full bg-key-pressed/13 px-3.5 py-2.5 active:opacity-60"
 				>
-					<ScanFace color={palette.primary} size={20} strokeWidth={2} />
-					<Text className="text-sm font-semibold text-primary">
-						Use Face ID
-					</Text>
-				</Pressable>
+					<>
+						<ScanFace color={palette.primary} size={20} strokeWidth={2} />
+						<Text className="text-sm font-semibold text-primary">
+							Use Face ID
+						</Text>
+					</>
+				</Button>
 			) : null}
 
-			<Pressable
+			<Button
 				accessibilityRole="link"
+				className="mt-1 self-center"
 				disabled={isBusy}
+				size="sm"
+				variant="ghost"
 				onPress={() => {
 					Keyboard.dismiss();
 					onForgotPin();
 				}}
-				className="mt-1 self-center px-4 py-2.5 active:opacity-60"
 			>
-				<Text className="text-sm font-semibold text-primary">Reset PIN</Text>
-			</Pressable>
+				Reset PIN
+			</Button>
 		</View>
 	);
 }

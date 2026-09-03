@@ -1,11 +1,12 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { Check } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
 
 import { LeakFlowShell } from "../../../../../src/components/leaks/LeakFlowShell";
+import { Button } from "../../../../../src/components/ui/Button";
 import { getActionDetail } from "../../../../../src/features/leaks/fixContent";
 import { COLORS, TRACEPAY, withAlpha } from "../../../../../src/theme/colors";
 
@@ -79,15 +80,13 @@ export default function FixSuccessScreen() {
           </View>
         </View>
 
-        <Pressable
+        <Button
+          className="mt-8"
+          size="md"
           onPress={() => router.replace(`/leak/${leakId}/progress`)}
-          className="mt-8 w-full items-center rounded-2xl py-3.5 active:opacity-85"
-          style={{ backgroundColor: palette.primary }}
         >
-          <Text style={{ color: trace.primaryForeground }} className="text-[15px] font-semibold">
-            {detail.doneCta}
-          </Text>
-        </Pressable>
+          {detail.doneCta}
+        </Button>
       </ScrollView>
     </LeakFlowShell>
   );

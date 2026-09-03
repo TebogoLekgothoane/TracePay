@@ -1,11 +1,9 @@
 import { memo, useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   type LayoutChangeEvent,
   type ListRenderItem,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
-  Pressable,
   Text,
   useWindowDimensions,
   View,
@@ -22,7 +20,7 @@ import type {
   OnboardingPage,
 } from "../../features/onboarding/onboarding.types";
 import { useOnboarding } from "../../hooks/useOnboarding";
-import { COLORS } from "../../theme/colors";
+import { Button } from "../ui/Button";
 import { OnboardingHeader } from "./OnboardingHeader";
 import { OnboardingInfoSlideView } from "./OnboardingInfoSlide";
 import { OnboardingLanguageSlide } from "./OnboardingLanguageSlide";
@@ -35,9 +33,7 @@ type PageSlideProps = {
   pageHeight: number;
   scrollX: SharedValue<number>;
   selectedLanguage: OnboardingLanguage;
-  isFinishing: boolean;
   onSelectLanguage: (language: string) => void;
-  onAdvance: (pageIndex: number) => void;
 };
 
 const OnboardingPageSlide = memo(function OnboardingPageSlide({
@@ -47,19 +43,11 @@ const OnboardingPageSlide = memo(function OnboardingPageSlide({
   pageHeight,
   scrollX,
   selectedLanguage,
-  isFinishing,
   onSelectLanguage,
-  onAdvance,
 }: PageSlideProps) {
-  const handlePress = useCallback(() => {
-    onAdvance(index);
-  }, [index, onAdvance]);
-
-  const label = item.kind === "language" ? "Continue" : item.slide.actionLabel;
-
   return (
     <View style={{ width: pageWidth, height: pageHeight }} className="px-6">
-      <View className="flex-1 pb-5">
+      <View className="flex-1">
         {item.kind === "info" ? (
           <OnboardingInfoSlideView
             slide={item.slide}
@@ -74,30 +62,20 @@ const OnboardingPageSlide = memo(function OnboardingPageSlide({
           />
         )}
       </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={label}
-        disabled={isFinishing}
-        onPress={handlePress}
-        className="min-h-[56px] items-center justify-center rounded-[18px] bg-primary active:opacity-80"
-      >
-        {isFinishing ? (
-          <ActivityIndicator color={COLORS.white} />
-        ) : (
-          <Text className="text-[16px] font-bold text-primary-foreground">
-            {label}
-          </Text>
-        )}
-      </Pressable>
     </View>
   );
 });
+
+function getActionLabel(page: OnboardingPage): string {
+  return page.kind === "language" ? "Continue" : page.slide.actionLabel;
+}
 
 function OnboardingCarouselComponent() {
   const { width: pageWidth } = useWindowDimensions();
   const [pageHeight, setPageHeight] = useState(0);
   const {
     listRef,
+    index,
     scrollX,
     selectedLanguage,
     isFinishing,
@@ -111,6 +89,9 @@ function OnboardingCarouselComponent() {
     selectLanguage,
   } = useOnboarding(pageWidth);
 
+  const currentPage = ONBOARDING_PAGES[index] ?? ONBOARDING_PAGES[0];
+  const actionLabel = getActionLabel(currentPage);
+
   const handleListLayout = useCallback((event: LayoutChangeEvent) => {
     const nextHeight = event.nativeEvent.layout.height;
     setPageHeight((current) => (current === nextHeight ? current : nextHeight));
@@ -123,17 +104,14 @@ function OnboardingCarouselComponent() {
     [syncIndexFromOffset],
   );
 
-  const handleAdvance = useCallback(
-    (pageIndex: number) => {
-      if (pageIndex >= ONBOARDING_LAST_INDEX) {
-        void skip();
-        return;
-      }
+  const handlePrimaryAction = useCallback(() => {
+    if (index >= ONBOARDING_LAST_INDEX) {
+      void skip();
+      return;
+    }
 
-      goTo(pageIndex + 1);
-    },
-    [goTo, skip],
-  );
+    goTo(index + 1);
+  }, [goTo, index, skip]);
 
   const handleSkip = useCallback(() => {
     void skip();
@@ -148,14 +126,10 @@ function OnboardingCarouselComponent() {
         pageHeight={pageHeight}
         scrollX={scrollX}
         selectedLanguage={selectedLanguage}
-        isFinishing={isFinishing}
         onSelectLanguage={selectLanguage}
-        onAdvance={handleAdvance}
       />
     ),
     [
-      handleAdvance,
-      isFinishing,
       pageHeight,
       pageWidth,
       scrollX,
@@ -196,6 +170,8 @@ function OnboardingCarouselComponent() {
             getItemLayout={getItemLayout}
             horizontal
             pagingEnabled
+            snapToInterval={pageWidth}
+            snapToAlignment="start"
             bounces={false}
             overScrollMode="never"
             nestedScrollEnabled
@@ -217,11 +193,21 @@ function OnboardingCarouselComponent() {
         ) : null}
       </View>
 
-      <OnboardingPagination
-        pageWidth={pageWidth}
-        scrollX={scrollX}
-        onDotPress={goTo}
-      />
+      <View className="gap-5 px-6 pb-1 pt-6">
+        <OnboardingPagination
+          pageWidth={pageWidth}
+          scrollX={scrollX}
+          onDotPress={goTo}
+        />
+
+        <Button
+          accessibilityLabel={actionLabel}
+          loading={isFinishing}
+          onPress={handlePrimaryAction}
+        >
+          {actionLabel}
+        </Button>
+      </View>
     </SafeAreaView>
   );
 }

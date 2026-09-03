@@ -1,10 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
-import { Text, TouchableOpacity, View } from "react-native";
+import { Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { COLORS } from "../theme/colors";
+import { Button } from "./ui/Button";
+import { IconButton } from "./ui/IconButton";
 
 type ScreenShellProps = {
   title: string;
@@ -34,8 +36,9 @@ export function ScreenShell({
   return (
     <SafeAreaView className="flex-1 bg-background px-[18px]">
       <View className="flex-1">
-        <TouchableOpacity
-          className="h-[36px] w-[36px] items-center justify-center"
+        <IconButton
+          accessibilityLabel="Go back"
+          variant="ghost"
           onPress={() => navigate()}
         >
           <Ionicons
@@ -43,7 +46,7 @@ export function ScreenShell({
             size={22}
             color={palette.mutedForeground}
           />
-        </TouchableOpacity>
+        </IconButton>
         <View className="flex-1 items-center justify-center">
           <View className="mb-[28px] h-[88px] w-[88px] items-center justify-center">
             <Ionicons
@@ -68,25 +71,16 @@ export function ScreenShell({
         </View>
         <View className="gap-[10px] pb-[12px]">
           {next ? (
-            <TouchableOpacity
-              className="h-[50px] items-center justify-center rounded-full bg-primary"
-              activeOpacity={0.85}
-              onPress={() => navigate(next)}
-            >
-              <Text className="text-[14px] font-bold text-primary-foreground">
-                {actionLabel}
-              </Text>
-            </TouchableOpacity>
+            <Button onPress={() => navigate(next)}>{actionLabel}</Button>
           ) : null}
           {secondaryLabel && secondaryNext ? (
-            <TouchableOpacity
-              className="h-[48px] items-center justify-center rounded-full border border-border bg-card"
+            <Button
+              size="md"
+              variant="secondary"
               onPress={() => navigate(secondaryNext)}
             >
-              <Text className="text-[14px] font-semibold text-primary">
-                {secondaryLabel}
-              </Text>
-            </TouchableOpacity>
+              {secondaryLabel}
+            </Button>
           ) : null}
         </View>
       </View>

@@ -9,6 +9,7 @@ import {
   LeakFlowShell,
   resolveMarkColor,
 } from "../../../../src/components/leaks/LeakFlowShell";
+import { Button } from "../../../../src/components/ui/Button";
 import { getActionDetail } from "../../../../src/features/leaks/fixContent";
 import { COLORS, TRACEPAY, getImpactToneStyles, withAlpha } from "../../../../src/theme/colors";
 
@@ -128,15 +129,13 @@ export default function FixActionDetailScreen() {
           ))}
         </View>
 
-        <Pressable
+        <Button
+          className="mt-6"
+          size="md"
           onPress={() => router.push(`/leak/${leakId}/fix/${actionId}/compare`)}
-          className="mt-6 items-center rounded-2xl py-3.5 active:opacity-85"
-          style={{ backgroundColor: palette.primary }}
         >
-          <Text style={{ color: trace.primaryForeground }} className="text-[15px] font-semibold">
-            {detail.primaryCta}
-          </Text>
-        </Pressable>
+          {detail.primaryCta}
+        </Button>
       </ScrollView>
     </LeakFlowShell>
   );

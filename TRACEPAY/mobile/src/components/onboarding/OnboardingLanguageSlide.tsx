@@ -67,7 +67,7 @@ function OnboardingLanguageSlideComponent({
       <Text className="text-center text-[28px] font-bold leading-[34px] tracking-[-0.6px] text-foreground">
         Pick your language
       </Text>
-      <Text className="mt-2 text-center text-[15px] leading-[22px] text-muted-foreground">
+      <Text className="mt-2 pb-2 text-center text-[15px] leading-[22px] text-muted-foreground">
         You can change this later
       </Text>
 

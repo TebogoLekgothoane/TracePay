@@ -18,6 +18,9 @@ import {
   type LeaksTab,
 } from "../../src/components/leaks/LeaksSegmentTabs";
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
+import { Button } from "../../src/components/ui/Button";
+import { IconButton } from "../../src/components/ui/IconButton";
+import { IconButton } from "../../src/components/ui/IconButton";
 import { LeaksSummaryCard } from "../../src/components/leaks/LeaksSummaryCard";
 import { TakeActionSection } from "../../src/components/leaks/TakeActionSection";
 import {
@@ -96,20 +99,17 @@ export default function LeaksScreen() {
       >
         <View className="px-5 pt-1">
           <View className="mb-4 flex-row items-center justify-between">
-            <Pressable
+            <IconButton
               accessibilityLabel="Go back"
+              variant="outline"
               onPress={() => router.back()}
-              className="h-10 w-10 items-center justify-center rounded-xl border border-border bg-card active:opacity-75"
             >
               <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
-            </Pressable>
+            </IconButton>
 
-            <Pressable
-              accessibilityLabel="Download report"
-              className="h-10 w-10 items-center justify-center rounded-xl border border-border bg-card active:opacity-75"
-            >
+            <IconButton accessibilityLabel="Download report" variant="outline">
               <Download color={palette.foreground} size={20} strokeWidth={2} />
-            </Pressable>
+            </IconButton>
           </View>
 
           <Text className="text-[30px] font-bold tracking-[-0.6px] text-foreground">
@@ -138,11 +138,9 @@ export default function LeaksScreen() {
             <Text className="text-[17px] font-bold text-foreground">
               Your top leaks
             </Text>
-            <Pressable className="active:opacity-70">
-              <Text className="text-[13px] font-semibold text-primary">
-                View all leaks
-              </Text>
-            </Pressable>
+            <Button size="sm" variant="ghost" className="px-0">
+              View all leaks
+            </Button>
           </View>
 
           <View className="overflow-hidden rounded-3xl border border-border bg-card">

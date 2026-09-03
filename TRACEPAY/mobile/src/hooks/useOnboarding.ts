@@ -143,6 +143,7 @@ export function useOnboarding(pageWidth: number) {
 
   return {
     listRef,
+    index,
     scrollX,
     selectedLanguage,
     isFinishing,

@@ -2,11 +2,12 @@ import { router } from "expo-router";
 import { ScanFace } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import TracePayIcon from "../../assets/icons/assembled TracePay icon.svg";
 import { useAppLock } from "../../src/features/security/AppLockProvider";
+import { Button } from "../../src/components/ui/Button";
 import { COLORS } from "../../src/theme/colors";
 
 export default function BiometricSetupScreen() {
@@ -71,32 +72,20 @@ export default function BiometricSetupScreen() {
 
         <View className="mt-auto w-full max-w-[360px] gap-3">
           {biometricAvailability.available ? (
-            <Pressable
-              disabled={isBusy}
-              onPress={handleEnable}
-              className="min-h-[56px] items-center justify-center rounded-[18px] bg-primary active:opacity-70"
-            >
-              {isBusy ? (
-                <ActivityIndicator color={COLORS.white} />
-              ) : (
-                <Text className="text-[16px] font-bold text-primary-foreground">
-                  Enable Face ID
-                </Text>
-              )}
-            </Pressable>
+            <Button loading={isBusy} onPress={handleEnable}>
+              Enable Face ID
+            </Button>
           ) : null}
 
-          <Pressable
+          <Button
             disabled={isBusy}
             onPress={handleSkip}
-            className="min-h-[50px] items-center justify-center active:opacity-70"
+            size="md"
+            variant="ghost"
+            labelClassName="text-muted-foreground"
           >
-            <Text className="text-[15px] font-semibold text-muted-foreground">
-              {biometricAvailability.available
-                ? "Not now"
-                : "Continue with PIN"}
-            </Text>
-          </Pressable>
+            {biometricAvailability.available ? "Not now" : "Continue with PIN"}
+          </Button>
         </View>
       </View>
     </SafeAreaView>

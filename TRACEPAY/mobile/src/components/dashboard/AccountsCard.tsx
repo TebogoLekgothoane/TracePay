@@ -3,6 +3,7 @@ import { useColorScheme } from "nativewind";
 import { Pressable, Text, View } from "react-native";
 
 import { COLORS } from "../../theme/colors";
+import { Button } from "../ui/Button";
 
 export type AccountPreview = {
   id: string;
@@ -59,11 +60,9 @@ export function AccountsCard({
         <Text className="text-[17px] font-bold text-foreground">
           Your accounts
         </Text>
-        <Pressable onPress={onSeeDetails} className="active:opacity-70">
-          <Text className="text-[13px] font-semibold text-primary">
-            See details
-          </Text>
-        </Pressable>
+        <Button onPress={onSeeDetails} size="sm" variant="ghost" className="px-0">
+          See details
+        </Button>
       </View>
 
       {accounts.map((account, index) => (
@@ -103,15 +102,19 @@ export function AccountsCard({
         </Pressable>
       ))}
 
-      <Pressable
+      <Button
+        className="mx-4 mb-4 mt-2 border-dashed border-primary/50"
+        size="md"
+        variant="secondary"
         onPress={onAddAccount}
-        className="mx-4 mb-4 mt-2 min-h-[48px] flex-row items-center justify-center gap-2 rounded-2xl border border-dashed border-primary/50 active:opacity-70"
       >
-        <Plus color={palette.primary} size={18} strokeWidth={2.4} />
-        <Text className="text-[14px] font-semibold text-primary">
-          Add another account
-        </Text>
-      </Pressable>
+        <>
+          <Plus color={palette.primary} size={18} strokeWidth={2.4} />
+          <Text className="text-[14px] font-semibold text-primary">
+            Add another account
+          </Text>
+        </>
+      </Button>
     </View>
   );
 }

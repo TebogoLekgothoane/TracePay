@@ -1,13 +1,12 @@
-import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import type { LucideIcon } from "lucide-react-native";
 import { ChevronRight, CreditCard, RefreshCw, Wand2 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { Pressable, Text, View } from "react-native";
 
+import { Button } from "../ui/Button";
 import {
   COLORS,
-  TRACEPAY,
   type ImpactTone,
   getImpactToneStyles,
   withAlpha,
@@ -40,7 +39,6 @@ export function TakeActionSection() {
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
-  const trace = TRACEPAY[scheme];
 
   return (
     <View>
@@ -72,28 +70,12 @@ export function TakeActionSection() {
         </View>
 
         <View className="items-center">
-          <Pressable
+          <Button
             onPress={() => router.push("/leak/fees/fix")}
-            className="overflow-hidden rounded-xl active:opacity-85"
+            size="sm"
           >
-            <LinearGradient
-              colors={[trace.splashPayStart, trace.primary]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={{
-                paddingHorizontal: 16,
-                paddingVertical: 10,
-                borderRadius: 12,
-              }}
-            >
-              <Text
-                style={{ color: trace.primaryForeground }}
-                className="text-[13px] font-semibold"
-              >
-                Fix now
-              </Text>
-            </LinearGradient>
-          </Pressable>
+            Fix now
+          </Button>
           <Text className="mt-1 text-[10px] text-muted-foreground">
             2 min setup
           </Text>

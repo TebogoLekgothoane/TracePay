@@ -18,6 +18,8 @@ import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
+import { Button } from "../../src/components/ui/Button";
+import { IconButton } from "../../src/components/ui/IconButton";
 import { COLORS, TRACEPAY, withAlpha } from "../../src/theme/colors";
 
 type SettingsRow = {
@@ -153,12 +155,14 @@ export default function ProfileScreen() {
               </Text>
             </View>
 
-            <Pressable
+            <IconButton
+              accessibilityLabel="Open settings"
+              className="mt-1"
+              variant="soft"
               onPress={() => router.push("/settings/security")}
-              className="mt-1 h-10 w-10 items-center justify-center rounded-xl bg-primary/10 active:opacity-75"
             >
               <Settings color={palette.primary} size={20} strokeWidth={2} />
-            </Pressable>
+            </IconButton>
           </View>
 
           <View className="mt-5 flex-row items-center gap-3 rounded-3xl bg-muted p-4">
@@ -193,12 +197,12 @@ export default function ProfileScreen() {
           <SettingsSection title="Account" rows={ACCOUNT_ROWS} palette={palette} />
           <SettingsSection title="App settings" rows={appRows} palette={palette} />
 
-          <Pressable
-            className="mt-6 flex-row items-center justify-center gap-2 rounded-2xl bg-muted py-3.5 active:opacity-80"
-          >
-            <LogOut color={palette.destructive} size={18} strokeWidth={2.2} />
-            <Text className="text-[15px] font-semibold text-destructive">Log out</Text>
-          </Pressable>
+          <Button className="mt-6" size="md" variant="destructive">
+            <>
+              <LogOut color={palette.destructive} size={18} strokeWidth={2.2} />
+              <Text className="text-[15px] font-semibold text-destructive">Log out</Text>
+            </>
+          </Button>
         </View>
       </TabScrollView>
     </SafeAreaView>

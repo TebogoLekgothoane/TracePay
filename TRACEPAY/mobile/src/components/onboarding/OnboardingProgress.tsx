@@ -87,7 +87,7 @@ function OnboardingPaginationComponent({
   return (
     <View
       accessibilityRole="tablist"
-      className="h-10 flex-row items-center justify-center pb-1"
+      className="h-8 flex-row items-center justify-center"
     >
       {ONBOARDING_PAGINATION_INDICES.map((index) => (
         <PaginationDot

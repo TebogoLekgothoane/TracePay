@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useColorScheme } from "nativewind";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Button } from "../../src/components/ui/Button";
 import { COLORS } from "../../src/theme/colors";
 
 export default function ResetPinSuccessScreen() {
@@ -24,14 +25,12 @@ export default function ResetPinSuccessScreen() {
           Your new TracePay PIN is ready to use.
         </Text>
 
-        <Pressable
+        <Button
+          className="absolute bottom-5 left-7 right-7"
           onPress={() => router.replace("/(auth)/unlock")}
-          className="absolute bottom-5 left-7 right-7 min-h-[56px] items-center justify-center rounded-[18px] bg-primary active:opacity-70"
         >
-          <Text className="text-[16px] font-bold text-primary-foreground">
-            Return to unlock
-          </Text>
-        </Pressable>
+          Return to unlock
+        </Button>
       </View>
     </SafeAreaView>
   );

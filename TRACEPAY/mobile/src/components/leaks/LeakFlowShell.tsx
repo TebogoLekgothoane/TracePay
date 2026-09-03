@@ -6,6 +6,8 @@ import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Button } from "../ui/Button";
+import { IconButton } from "../ui/IconButton";
 import { COLORS, TRACEPAY, withAlpha } from "../../theme/colors";
 
 type Props = {
@@ -32,13 +34,14 @@ export function LeakFlowShell({
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <View className="flex-1 px-5 pt-1">
-        <Pressable
+        <IconButton
           accessibilityLabel="Go back"
+          className="mb-4"
+          variant="muted"
           onPress={onBack ?? (() => router.back())}
-          className="mb-4 h-10 w-10 items-center justify-center rounded-xl bg-muted active:opacity-75"
         >
           <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
-        </Pressable>
+        </IconButton>
 
         <Text className="text-[28px] font-bold tracking-[-0.5px] text-foreground">
           {title}
@@ -86,12 +89,12 @@ export function LeakPrimaryFooter({
 
   if (variant === "accent") {
     return (
-      <Pressable onPress={onPress} className="overflow-hidden rounded-2xl active:opacity-90">
+      <Pressable onPress={onPress} className="overflow-hidden rounded-full active:opacity-90">
         <LinearGradient
           colors={[trace.splashAccentPink, trace.accent]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={{ paddingHorizontal: 20, paddingVertical: 16, borderRadius: 16 }}
+          style={{ paddingHorizontal: 20, paddingVertical: 16, borderRadius: 999 }}
         >
           <Text style={{ color: trace.primaryForeground }} className="text-[15px] font-bold">
             {title}
@@ -103,7 +106,7 @@ export function LeakPrimaryFooter({
             {subtitle}
           </Text>
           <View
-            className="mt-3 self-start rounded-xl px-4 py-2"
+            className="mt-3 self-start rounded-full px-4 py-2"
             style={{ backgroundColor: withAlpha(trace.primaryForeground, 0.2) }}
           >
             <Text style={{ color: trace.primaryForeground }} className="text-[13px] font-semibold">
@@ -121,15 +124,13 @@ export function LeakPrimaryFooter({
         <Text className="text-[15px] font-bold text-foreground">{title}</Text>
         <Text className="mt-0.5 text-[12px] text-muted-foreground">{subtitle}</Text>
       </View>
-      <Pressable
+      <Button
         onPress={onPress}
-        className="rounded-xl px-4 py-2.5 active:opacity-85"
+        size="sm"
         style={{ backgroundColor: accentColor }}
       >
-        <Text style={{ color: trace.primaryForeground }} className="text-[13px] font-semibold">
-          {buttonLabel}
-        </Text>
-      </Pressable>
+        {buttonLabel}
+      </Button>
     </View>
   );
 }

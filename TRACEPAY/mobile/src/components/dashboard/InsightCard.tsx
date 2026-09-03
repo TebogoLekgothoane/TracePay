@@ -1,6 +1,8 @@
 import { Lightbulb } from "lucide-react-native";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import Svg, { Path, Rect } from "react-native-svg";
+
+import { Button } from "../ui/Button";
 
 type Props = {
   onViewAll?: () => void;
@@ -34,9 +36,9 @@ export function InsightCard({ onViewAll }: Props) {
         <Text className="text-[17px] font-bold text-foreground">
           Insights for you
         </Text>
-        <Pressable onPress={onViewAll} className="active:opacity-70">
-          <Text className="text-[13px] font-semibold text-primary">View all</Text>
-        </Pressable>
+        <Button onPress={onViewAll} size="sm" variant="ghost" className="px-0">
+          View all
+        </Button>
       </View>
 
       <View

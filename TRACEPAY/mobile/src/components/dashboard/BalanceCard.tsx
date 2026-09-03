@@ -4,6 +4,7 @@ import { Pressable, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 
 import TracePayIcon from "../../../assets/icons/assembled TracePay icon.svg";
+import { Button } from "../ui/Button";
 
 type Props = {
   balance: string;
@@ -109,40 +110,28 @@ export function BalanceCard({
       </View>
 
       <View className="mt-5 flex-row gap-3">
-        <Pressable
-          onPress={onAddAccount}
-          className="flex-1 overflow-hidden rounded-2xl active:opacity-85"
-        >
-          <LinearGradient
-            colors={["#C084FC", "#8B5CF6", "#6366F1"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={{
-              minHeight: 48,
-              borderRadius: 14,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              paddingHorizontal: 12,
-            }}
-          >
+        <Button className="flex-1" size="md" onPress={onAddAccount}>
+          <>
             <Landmark color="#FFFFFF" size={18} strokeWidth={2} />
             <Text className="text-[14px] font-semibold text-white">
               Add Account
             </Text>
-          </LinearGradient>
-        </Pressable>
+          </>
+        </Button>
 
-        <Pressable
+        <Button
+          className="flex-1 border-white/20 bg-white/5"
+          size="md"
+          variant="secondary"
           onPress={onViewInsights}
-          className="min-h-12 flex-1 flex-row items-center justify-center gap-2 rounded-2xl border border-white/20 bg-white/5 active:opacity-85"
         >
-          <BarChart3 color="#FFFFFF" size={18} strokeWidth={2} />
-          <Text className="text-[14px] font-semibold text-white/90">
-            View Insights
-          </Text>
-        </Pressable>
+          <>
+            <BarChart3 color="#FFFFFF" size={18} strokeWidth={2} />
+            <Text className="text-[14px] font-semibold text-white/90">
+              View Insights
+            </Text>
+          </>
+        </Button>
       </View>
     </LinearGradient>
   );

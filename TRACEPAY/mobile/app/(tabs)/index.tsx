@@ -7,6 +7,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AccountsCard } from "../../src/components/dashboard/AccountsCard";
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
+import { Button } from "../../src/components/ui/Button";
+import { IconButton } from "../../src/components/ui/IconButton";
 import { BalanceCard } from "../../src/components/dashboard/BalanceCard";
 import { InsightCard } from "../../src/components/dashboard/InsightCard";
 import { LeakSummary } from "../../src/components/dashboard/LeakSummary";
@@ -114,14 +116,16 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            <Pressable
+            <IconButton
               accessibilityLabel="Notifications"
+              className="relative"
+              variant="ghost"
+              size="md"
               onPress={() => router.push("/notifications/1")}
-              className="h-11 w-11 items-center justify-center active:opacity-70"
             >
               <Bell color="#FFFFFF" size={22} strokeWidth={2} />
               <View className="absolute right-2 top-2 h-2 w-2 rounded-full bg-primary" />
-            </Pressable>
+            </IconButton>
           </View>
 
           <BalanceCard
@@ -137,14 +141,14 @@ export default function HomeScreen() {
             <Text className="text-[17px] font-bold text-foreground">
               Money leaks
             </Text>
-            <Pressable
+            <Button
               onPress={() => router.push("/(tabs)/leaks")}
-              className="active:opacity-70"
+              size="sm"
+              variant="ghost"
+              className="px-0"
             >
-              <Text className="text-[13px] font-semibold text-primary">
-                View all
-              </Text>
-            </Pressable>
+              View all
+            </Button>
           </View>
           <LeakSummary
             items={leaks}

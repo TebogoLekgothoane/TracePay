@@ -2,9 +2,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useRef, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { Button } from "../../src/components/ui/Button";
+import { IconButton } from "../../src/components/ui/IconButton";
 import { COLORS } from "../../src/theme/colors";
 
 const CODE_LENGTH = 6;
@@ -39,13 +41,14 @@ export default function ResetPinScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background">
       <View className="flex-1 items-center px-6 pb-5">
-        <Pressable
+        <IconButton
           accessibilityLabel="Back to unlock"
+          className="self-start"
+          variant="ghost"
           onPress={() => router.replace("/(auth)/unlock")}
-          className="h-[42px] w-[42px] items-center justify-center self-start active:opacity-70"
         >
           <Ionicons color={palette.mutedForeground} name="chevron-back" size={24} />
-        </Pressable>
+        </IconButton>
 
         <View className="mt-[72px] h-[92px] w-[92px] items-center justify-center">
           <Ionicons color={palette.primary} name="shield-checkmark-outline" size={42} />
@@ -71,11 +74,9 @@ export default function ResetPinScreen() {
           value={code}
         />
 
-        <Pressable className="p-4 active:opacity-70">
-          <Text className="text-[14px] font-semibold text-primary">
-            Resend code
-          </Text>
-        </Pressable>
+        <Button size="sm" variant="ghost">
+          Resend code
+        </Button>
       </View>
     </SafeAreaView>
   );

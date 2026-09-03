@@ -32,6 +32,8 @@ import {
   LeakContentTabs,
   type LeakContentTab,
 } from "../../src/components/leaks/LeakContentTabs";
+import { Button } from "../../src/components/ui/Button";
+import { IconButton } from "../../src/components/ui/IconButton";
 import { getFixContent } from "../../src/features/leaks/fixContent";
 import {
   COLORS,
@@ -675,13 +677,14 @@ export default function LeakDetailScreen() {
       >
         <View className="px-5 pt-1">
           <View className="mb-4 flex-row items-start justify-between">
-            <Pressable
+            <IconButton
               accessibilityLabel="Go back"
+              className="mr-3 mt-1"
+              variant="muted"
               onPress={() => router.back()}
-              className="mr-3 mt-1 h-10 w-10 items-center justify-center rounded-xl bg-muted active:opacity-75"
             >
               <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
-            </Pressable>
+            </IconButton>
 
             <View className="min-w-0 flex-1 flex-row items-start gap-3">
               <View
@@ -715,9 +718,13 @@ export default function LeakDetailScreen() {
               </View>
             </View>
 
-            <Pressable className="mt-1 h-10 w-10 items-center justify-center rounded-full active:opacity-75">
+            <IconButton
+              accessibilityLabel="Help"
+              className="mt-1"
+              variant="ghost"
+            >
               <HelpCircle color={palette.placeholder} size={20} strokeWidth={2} />
-            </Pressable>
+            </IconButton>
           </View>
 
           <PeriodTabs active={period} onChange={setPeriod} toneColor={tone.color} />
@@ -1152,13 +1159,13 @@ export default function LeakDetailScreen() {
           {detail.variant === "breakdown" ? (
             <Pressable
               onPress={() => router.push(`/leak/${id}/fix`)}
-              className="overflow-hidden rounded-2xl active:opacity-90"
+              className="overflow-hidden rounded-full active:opacity-90"
             >
               <LinearGradient
                 colors={[trace.splashAccentPink, trace.accent]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={{ paddingHorizontal: 20, paddingVertical: 16, borderRadius: 16 }}
+                style={{ paddingHorizontal: 20, paddingVertical: 16, borderRadius: 999 }}
               >
                 <Text
                   style={{ color: trace.primaryForeground }}
@@ -1176,11 +1183,9 @@ export default function LeakDetailScreen() {
             </Pressable>
           ) : (
             <View
+              className="rounded-full px-5 py-4"
               style={{
                 backgroundColor: tone.color,
-                borderRadius: 16,
-                paddingHorizontal: 20,
-                paddingVertical: 16,
               }}
             >
               <View className="flex-row items-center justify-between gap-4">
@@ -1198,26 +1203,23 @@ export default function LeakDetailScreen() {
                     {detail.ctaSubtitle}
                   </Text>
                 </View>
-                <Pressable
+                <Button
+                  size="sm"
                   onPress={() => {
                     if (id === "subs") {
                       router.push("/leak/subs/fix");
                     }
                   }}
-                  className="overflow-hidden rounded-xl active:opacity-85"
+                  style={{ backgroundColor: trace.primaryForeground }}
+                  labelClassName="text-[13px] font-semibold"
                 >
-                  <View
-                    className="rounded-xl px-4 py-2.5"
-                    style={{ backgroundColor: trace.primaryForeground }}
+                  <Text
+                    className="text-[13px] font-semibold"
+                    style={{ color: tone.color }}
                   >
-                    <Text
-                      className="text-[13px] font-semibold"
-                      style={{ color: tone.color }}
-                    >
-                      {detail.ctaButton}
-                    </Text>
-                  </View>
-                </Pressable>
+                    {detail.ctaButton}
+                  </Text>
+                </Button>
               </View>
             </View>
           )}

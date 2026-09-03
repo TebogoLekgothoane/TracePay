@@ -1,10 +1,11 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { ExternalLink, Star } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { LeakFlowShell } from "../../../../../src/components/leaks/LeakFlowShell";
+import { Button } from "../../../../../src/components/ui/Button";
 import { getActionDetail } from "../../../../../src/features/leaks/fixContent";
 import { COLORS, TRACEPAY, withAlpha } from "../../../../../src/theme/colors";
 
@@ -72,20 +73,22 @@ export default function FixCompareScreen() {
           </View>
         ) : null}
 
-        <Pressable
+        <Button
+          className="mt-6"
+          size="md"
           onPress={() => router.push(`/leak/${leakId}/fix/${actionId}/guide`)}
-          className="mt-6 flex-row items-center justify-center gap-2 rounded-2xl py-3.5 active:opacity-85"
-          style={{ backgroundColor: palette.primary }}
         >
-          <Text style={{ color: trace.primaryForeground }} className="text-[15px] font-semibold">
-            {detail.compareCta}
-          </Text>
-          <ExternalLink color={trace.primaryForeground} size={16} strokeWidth={2.2} />
-        </Pressable>
+          <>
+            <Text className="text-[15px] font-semibold text-primary-foreground">
+              {detail.compareCta}
+            </Text>
+            <ExternalLink color={trace.primaryForeground} size={16} strokeWidth={2.2} />
+          </>
+        </Button>
 
-        <Pressable className="mt-3 items-center rounded-2xl bg-muted py-3.5 active:opacity-80">
-          <Text className="text-[14px] font-semibold text-primary">Learn more</Text>
-        </Pressable>
+        <Button className="mt-3" size="md" variant="muted">
+          Learn more
+        </Button>
       </ScrollView>
     </LeakFlowShell>
   );

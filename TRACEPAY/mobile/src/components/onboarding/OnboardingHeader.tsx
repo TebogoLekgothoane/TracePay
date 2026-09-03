@@ -1,5 +1,7 @@
 import { memo } from "react";
-import { Pressable, Text, View } from "react-native";
+import { View } from "react-native";
+
+import { Button } from "../ui/Button";
 
 type Props = {
   canGoBack: boolean;
@@ -19,31 +21,33 @@ function OnboardingHeaderComponent({
   return (
     <View className="h-12 flex-row items-center justify-between px-6">
       {canGoBack ? (
-        <Pressable
-          accessibilityRole="button"
+        <Button
           accessibilityLabel="Back"
           disabled={disabled}
           hitSlop={12}
           onPress={onBack}
-          className="min-h-11 justify-center active:opacity-70"
+          size="sm"
+          variant="ghost"
+          className="min-h-11 px-0"
         >
-          <Text className="text-[16px] font-semibold text-primary">Back</Text>
-        </Pressable>
+          Back
+        </Button>
       ) : (
         <View />
       )}
 
       {showSkip ? (
-        <Pressable
-          accessibilityRole="button"
+        <Button
           accessibilityLabel="Skip onboarding"
           disabled={disabled}
           hitSlop={12}
           onPress={onSkip}
-          className="min-h-11 justify-center active:opacity-70"
+          size="sm"
+          variant="ghost"
+          className="min-h-11 px-0"
         >
-          <Text className="text-[16px] font-semibold text-primary">Skip</Text>
-        </Pressable>
+          Skip
+        </Button>
       ) : (
         <View />
       )}

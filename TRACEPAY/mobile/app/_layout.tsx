@@ -92,9 +92,8 @@ function RootNavigator({
   }, []);
 
   const handleAnimationComplete = useCallback(() => {
-    router.replace("/");
     setShowAnimatedSplash(false);
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     if (showAnimatedSplash || !isHydrated) {
@@ -171,8 +170,9 @@ function RootNavigator({
 
       {showAnimatedSplash ? (
         <View
+          pointerEvents="none"
           onLayout={handleAnimatedSplashLayout}
-          className="absolute inset-0"
+          className="absolute inset-0 overflow-hidden"
         >
           <TracePayAnimatedSplash
             onAnimationComplete={handleAnimationComplete}

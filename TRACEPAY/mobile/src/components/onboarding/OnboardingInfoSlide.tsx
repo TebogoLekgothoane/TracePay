@@ -122,7 +122,7 @@ function OnboardingInfoSlideComponent({
       <Text className="mt-2 px-2 text-center text-[28px] font-bold leading-[34px] tracking-[-0.6px] text-foreground">
         {slide.title}
       </Text>
-      <Text className="mt-3 px-3 text-center text-[15px] leading-[22px] text-muted-foreground">
+      <Text className="mt-3 px-3 pb-2 text-center text-[15px] leading-[22px] text-muted-foreground">
         {slide.description}
       </Text>
     </View>
