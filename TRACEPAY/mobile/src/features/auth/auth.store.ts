@@ -1,2 +1,1 @@
-/** auth.store.ts */
-
+export {};

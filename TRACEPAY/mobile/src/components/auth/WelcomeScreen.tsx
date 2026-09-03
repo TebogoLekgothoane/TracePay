@@ -31,6 +31,7 @@ import { TRACEPAY, withAlpha } from "../../theme/colors";
 import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
 import { TRACEPAY_ICON_COMPOSITION } from "../tracePayIconComposition";
+import { useAuth } from "../../hooks/useAuth";
 import { WelcomeAuthForm, type WelcomeAuthMode, type WelcomeAuthPayload } from "./WelcomeAuthForm";
 
 const SHEET = {
@@ -196,16 +197,16 @@ export function WelcomeScreen() {
   const wordmarkWidth = Math.min(width * 0.78, 300);
   const sheetHeight = Math.min(height * 0.72, 640);
 
+  const { error, setError, signIn, signUp, submitting } = useAuth();
   const [panel, setPanel] = useState<Panel>("welcome");
   const [formMode, setFormMode] = useState<WelcomeAuthMode>("create");
-  const [submitting, setSubmitting] = useState(false);
   const lockingRef = useRef(false);
   const progress = useSharedValue(0);
   const isWelcome = panel === "welcome";
 
   const resetPanel = () => {
     lockingRef.current = false;
-    setSubmitting(false);
+    setError(null);
     setPanel("welcome");
   };
 
@@ -229,12 +230,21 @@ export function WelcomeScreen() {
       return;
     }
 
+    setError(null);
     setFormMode(next);
     setPanel(next);
   };
 
+  const handleBack = () => {
+    if (formMode === "forgot") {
+      switchMode("login");
+      return;
+    }
+    closePanel();
+  };
+
   const closePanel = () => {
-    if (panel === "welcome" || lockingRef.current || submitting) {
+    if (panel === "welcome" || submitting) {
       return;
     }
 
@@ -242,26 +252,48 @@ export function WelcomeScreen() {
     progress.value = withTiming(0, SHEET_CLOSE, (finished) => {
       if (finished) {
         runOnJS(resetPanel)();
+        return;
       }
+      lockingRef.current = false;
     });
   };
 
-  const submitForm = (payload: WelcomeAuthPayload) => {
+  const submitForm = async (payload: WelcomeAuthPayload) => {
     if (submitting || panel === "welcome") {
       return;
     }
 
-    setSubmitting(true);
+    try {
+      if (panel === "create") {
+        await signUp({
+          fullName: payload.name ?? "",
+          phone: payload.phone,
+          password: payload.password,
+        });
+        router.push({
+          pathname: "/(auth)/otp",
+          params: { phone: payload.phone },
+        });
+        return;
+      }
 
-    if (panel === "create") {
-      router.push({
-        pathname: "/(auth)/otp",
-        params: { phone: payload.phone },
+      const result = await signIn({
+        phone: payload.phone,
+        password: payload.password,
       });
+
+      if (result.requiresOtp) {
+        router.push({
+          pathname: "/(auth)/otp",
+          params: { phone: payload.phone },
+        });
+        return;
+      }
+
+      router.push("/(auth)/device-security");
+    } catch {
       return;
     }
-
-    router.push("/(auth)/device-security");
   };
 
   const welcomeCopyStyle = useAnimatedStyle(() => ({
@@ -319,24 +351,10 @@ export function WelcomeScreen() {
       <SafeAreaView className="flex-1" edges={["top"]}>
         <View className="flex-1">
           <Animated.View
-            pointerEvents={isWelcome ? "none" : "auto"}
-            className="absolute left-3 top-1 z-20"
-            style={backStyle}
+            pointerEvents="none"
+            className="items-center pt-10"
+            style={brandStyle}
           >
-            <IconButton
-              accessibilityLabel="Back to welcome"
-              variant="ghost"
-              onPress={closePanel}
-            >
-              <Ionicons
-                color={palette.foreground}
-                name="chevron-back"
-                size={22}
-              />
-            </IconButton>
-          </Animated.View>
-
-          <Animated.View className="items-center pt-10" style={brandStyle}>
             <WelcomeLogo size={logoSize} wordmarkWidth={wordmarkWidth} />
           </Animated.View>
 
@@ -396,6 +414,7 @@ export function WelcomeScreen() {
                 showsVerticalScrollIndicator={false}
               >
                 <WelcomeAuthForm
+                  error={error}
                   mode={formMode}
                   reveal={progress}
                   submitting={submitting}
@@ -404,6 +423,25 @@ export function WelcomeScreen() {
                 />
               </ScrollView>
             </KeyboardAvoidingView>
+          </Animated.View>
+
+          <Animated.View
+            pointerEvents={isWelcome ? "none" : "auto"}
+            className="absolute left-2 top-1 z-50"
+            style={[backStyle, { elevation: 24 }]}
+          >
+            <IconButton
+              accessibilityLabel={formMode === "forgot" ? "Back to log in" : "Back to welcome"}
+              hitSlop={12}
+              variant="ghost"
+              onPress={handleBack}
+            >
+              <Ionicons
+                color={palette.foreground}
+                name="chevron-back"
+                size={22}
+              />
+            </IconButton>
           </Animated.View>
         </View>
       </SafeAreaView>
