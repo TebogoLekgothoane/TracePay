@@ -32,6 +32,7 @@ import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
 import { TRACEPAY_ICON_COMPOSITION } from "../tracePayIconComposition";
 import { getPendingPhone } from "../../features/auth/auth.service";
+import { useAppLock } from "../../features/security/AppLockProvider";
 import { useAuth } from "../../hooks/useAuth";
 import { WelcomeAuthForm, type WelcomeAuthMode, type WelcomeAuthPayload } from "./WelcomeAuthForm";
 
@@ -199,11 +200,22 @@ export function WelcomeScreen() {
   const sheetHeight = Math.min(height * 0.72, 640);
 
   const { error, setError, signIn, signUp, submitting } = useAuth();
+  const { hasPin, lockApp, unlockApp } = useAppLock();
   const [panel, setPanel] = useState<Panel>("welcome");
   const [formMode, setFormMode] = useState<WelcomeAuthMode>("create");
   const lockingRef = useRef(false);
   const progress = useSharedValue(0);
   const isWelcome = panel === "welcome";
+
+  const continueAfterLogin = () => {
+    if (hasPin) {
+      lockApp();
+      router.replace("/(auth)/unlock");
+      return;
+    }
+    unlockApp();
+    router.replace("/(tabs)");
+  };
 
   const resetPanel = () => {
     lockingRef.current = false;
@@ -273,7 +285,10 @@ export function WelcomeScreen() {
         });
         router.push({
           pathname: "/(auth)/otp",
-          params: { phone: getPendingPhone() ?? payload.phone },
+          params: {
+            phone: getPendingPhone() ?? payload.phone,
+            flow: "signup",
+          },
         });
         return;
       }
@@ -286,12 +301,15 @@ export function WelcomeScreen() {
       if (result.requiresOtp) {
         router.push({
           pathname: "/(auth)/otp",
-          params: { phone: getPendingPhone() ?? payload.phone },
+          params: {
+            phone: getPendingPhone() ?? payload.phone,
+            flow: "login",
+          },
         });
         return;
       }
 
-      router.push("/(auth)/device-security");
+      continueAfterLogin();
     } catch {
       return;
     }

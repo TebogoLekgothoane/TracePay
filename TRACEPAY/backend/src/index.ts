@@ -8,6 +8,7 @@ import {
   verifyOtpHandler,
 } from "./auth/auth.controller.js";
 import { config } from "./config.js";
+import { ingestReadingsHandler } from "./ingestion/ingestion.controller.js";
 
 const app = express();
 
@@ -31,6 +32,10 @@ app.post("/auth/resend-otp", (req, res) => {
   void resendOtpHandler(req, res);
 });
 
+app.post("/ingestion/readings", (req, res) => {
+  void ingestReadingsHandler(req, res);
+});
+
 app.listen(config.port, "0.0.0.0", () => {
   const sms = config.twilioVerifyServiceSid
     ? "verify"
@@ -39,4 +44,3 @@ app.listen(config.port, "0.0.0.0", () => {
       : "missing";
   console.log(`TRACEPAY auth listening on 0.0.0.0:${config.port} (sms: ${sms})`);
 });
-

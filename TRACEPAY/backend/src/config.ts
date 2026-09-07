@@ -25,13 +25,18 @@ export const config = {
   twilioFrom: read("TWILIO_FROM"),
 };
 
-export function assertAuthConfig(): void {
+export function assertSupabaseConfig(): void {
   if (!config.supabaseUrl || !config.supabaseServiceRoleKey || !config.supabaseAnonKey) {
     throw new AuthHttpError(
       503,
       "Auth server is missing Supabase keys. Set SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY in TRACEPAY/backend/.env.",
     );
   }
+}
+
+export function assertAuthConfig(): void {
+  assertSupabaseConfig();
+
   if (!config.twilioAccountSid || !config.twilioAuthToken) {
     throw new AuthHttpError(
       503,

@@ -17,11 +17,16 @@ import {
   loadBiometricsEnabled,
   saveBiometricsEnabled,
 } from "./biometric.service";
-import { APP_LOCK_TIMEOUT } from "./security.constants";
+import {
+  APP_LOCK_TIMEOUT,
+  PIN_LENGTH,
+  SECURITY_STORAGE_KEYS,
+} from "./security.constants";
 import {
   clearPinRecord,
   createPinRecord,
   loadPinRecord,
+  pinDigitsMatch,
   savePinRecord,
   verifyPinRecord,
 } from "./pin.service";
@@ -30,6 +35,7 @@ import type {
   BiometricAvailability,
   PinRecord,
 } from "./security.types";
+import { secureStorage } from "../../lib/secure-storage";
 
 const unavailableBiometrics: BiometricAvailability = {
   available: false,
@@ -42,7 +48,7 @@ const AppLockContext = createContext<AppLockContextValue | null>(null);
 export function AppLockProvider({ children }: PropsWithChildren): ReactElement {
   const [isHydrated, setIsHydrated] = useState(false);
   const [pinRecord, setPinRecord] = useState<PinRecord | null>(null);
-  const [pendingPinRecord, setPendingPinRecord] = useState<PinRecord | null>(
+  const [pendingPinDigits, setPendingPinDigits] = useState<number[] | null>(
     null,
   );
   const [isLocked, setIsLocked] = useState(true);
@@ -51,6 +57,7 @@ export function AppLockProvider({ children }: PropsWithChildren): ReactElement {
     useState<BiometricAvailability>(unavailableBiometrics);
 
   const hasPinRef = useRef(false);
+  const isLockedRef = useRef(true);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const backgroundedAtRef = useRef<number | null>(null);
 
@@ -67,6 +74,7 @@ export function AppLockProvider({ children }: PropsWithChildren): ReactElement {
       }
 
       hasPinRef.current = storedPinRecord !== null;
+      isLockedRef.current = storedPinRecord !== null;
       setPinRecord(storedPinRecord);
       setBiometricsEnabled(storedBiometricsEnabled);
       setBiometricAvailability(availability);
@@ -94,6 +102,7 @@ export function AppLockProvider({ children }: PropsWithChildren): ReactElement {
           backgroundedAt !== null &&
           Date.now() - backgroundedAt >= APP_LOCK_TIMEOUT
         ) {
+          isLockedRef.current = true;
           setIsLocked(true);
         }
         backgroundedAtRef.current = null;
@@ -106,28 +115,69 @@ export function AppLockProvider({ children }: PropsWithChildren): ReactElement {
   }, []);
 
   const preparePin = useCallback(async (pin: readonly number[]) => {
-    setPendingPinRecord(await createPinRecord(pin));
+    const digits = [...pin];
+    setPendingPinDigits(digits);
+    await secureStorage.set(
+      SECURITY_STORAGE_KEYS.pendingPin,
+      JSON.stringify(digits),
+    );
   }, []);
 
   const confirmPin = useCallback(
     async (pin: readonly number[]) => {
-      if (!pendingPinRecord) {
+      let pending = pendingPinDigits;
+      if (!pending) {
+        const stored = await secureStorage.get(SECURITY_STORAGE_KEYS.pendingPin);
+        if (stored) {
+          try {
+            const parsed: unknown = JSON.parse(stored);
+            if (
+              Array.isArray(parsed) &&
+              parsed.length === PIN_LENGTH &&
+              parsed.every(
+                (digit) =>
+                  typeof digit === "number" &&
+                  Number.isInteger(digit) &&
+                  digit >= 0 &&
+                  digit <= 9,
+              )
+            ) {
+              pending = parsed;
+            }
+          } catch {
+            pending = null;
+          }
+        }
+      }
+
+      if (!pending || !pinDigitsMatch(pin, pending)) {
         return false;
       }
 
-      const matches = await verifyPinRecord(pin, pendingPinRecord);
-      if (!matches) {
-        return false;
-      }
+      const confirmed = [...pin];
+      setPendingPinDigits(null);
+      await secureStorage.remove(SECURITY_STORAGE_KEYS.pendingPin);
 
-      await savePinRecord(pendingPinRecord);
-      setPinRecord(pendingPinRecord);
-      setPendingPinRecord(null);
+      // Unlock and allow navigation immediately; persist verifier in background.
       hasPinRef.current = true;
+      isLockedRef.current = false;
       setIsLocked(false);
+
+      void createPinRecord(confirmed)
+        .then(async (record) => {
+          await savePinRecord(record);
+          setPinRecord(record);
+        })
+        .catch(() => {
+          // Keep the in-memory unlock; next cold start will require PIN setup again
+          // if persistence failed.
+          hasPinRef.current = false;
+          setPinRecord(null);
+        });
+
       return true;
     },
-    [pendingPinRecord],
+    [pendingPinDigits],
   );
 
   const verifyPin = useCallback(
@@ -136,11 +186,7 @@ export function AppLockProvider({ children }: PropsWithChildren): ReactElement {
         return false;
       }
 
-      const matches = await verifyPinRecord(pin, pinRecord);
-      if (matches) {
-        setIsLocked(false);
-      }
-      return matches;
+      return verifyPinRecord(pin, pinRecord);
     },
     [pinRecord],
   );
@@ -172,21 +218,35 @@ export function AppLockProvider({ children }: PropsWithChildren): ReactElement {
 
     const authenticated = await authenticateLocally().catch(() => false);
     if (authenticated) {
+      isLockedRef.current = false;
       setIsLocked(false);
     }
     return authenticated;
   }, [biometricAvailability.available, biometricsEnabled]);
 
+  const lockApp = useCallback(() => {
+    if (hasPinRef.current) {
+      isLockedRef.current = true;
+      setIsLocked(true);
+    }
+  }, []);
+
   const unlockApp = useCallback(() => {
+    isLockedRef.current = false;
     setIsLocked(false);
   }, []);
 
   const clearDeviceLock = useCallback(async () => {
-    await Promise.all([clearPinRecord(), clearBiometricsEnabled()]);
+    await Promise.all([
+      clearPinRecord(),
+      clearBiometricsEnabled(),
+      secureStorage.remove(SECURITY_STORAGE_KEYS.pendingPin),
+    ]);
     setPinRecord(null);
-    setPendingPinRecord(null);
+    setPendingPinDigits(null);
     setBiometricsEnabled(false);
     hasPinRef.current = false;
+    isLockedRef.current = true;
     setIsLocked(true);
   }, []);
 
@@ -202,6 +262,7 @@ export function AppLockProvider({ children }: PropsWithChildren): ReactElement {
     enableBiometrics,
     skipBiometrics,
     authenticateWithBiometrics,
+    lockApp,
     unlockApp,
     clearDeviceLock,
   };

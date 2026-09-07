@@ -35,7 +35,7 @@ async function deriveVerifier(
     return await pbkdf2Async(sha256, pinBytes, salt, {
       c: iterations,
       dkLen: DERIVED_KEY_LENGTH,
-      asyncTick: 8,
+      asyncTick: 25,
     });
   } finally {
     pinBytes.fill(0);
@@ -43,6 +43,18 @@ async function deriveVerifier(
 }
 
 function constantTimeEqual(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    difference |= left[index] ^ right[index];
+  }
+  return difference === 0;
+}
+
+function pinsMatch(left: readonly number[], right: readonly number[]): boolean {
   if (left.length !== right.length) {
     return false;
   }
@@ -64,7 +76,7 @@ function isPinRecord(value: unknown): value is PinRecord {
     record.version === 1 &&
     record.algorithm === "pbkdf2-sha256" &&
     typeof record.iterations === "number" &&
-    record.iterations >= 100_000 &&
+    record.iterations >= 40_000 &&
     typeof record.salt === "string" &&
     typeof record.verifier === "string"
   );
@@ -104,6 +116,13 @@ export async function verifyPinRecord(
   }
 }
 
+export function pinDigitsMatch(
+  left: readonly number[],
+  right: readonly number[],
+): boolean {
+  return pinsMatch(left, right);
+}
+
 export async function loadPinRecord(): Promise<PinRecord | null> {
   const stored = await secureStorage.get(SECURITY_STORAGE_KEYS.pinRecord);
   if (!stored) {
@@ -128,4 +147,3 @@ export async function savePinRecord(record: PinRecord): Promise<void> {
 export async function clearPinRecord(): Promise<void> {
   await secureStorage.remove(SECURITY_STORAGE_KEYS.pinRecord);
 }
-

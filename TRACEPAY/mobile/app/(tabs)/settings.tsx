@@ -101,7 +101,7 @@ function SettingsSection({
         {rows.map((row) => (
           <Pressable
             key={row.id}
-            onPress={() => row.href && router.push(row.href)}
+            onPress={() => row.href && router.push(row.href as never)}
             className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-75"
           >
             <View
@@ -131,7 +131,7 @@ function SettingsSection({
 
 export default function ProfileScreen() {
   const { colorScheme } = useColorScheme();
-  const { clearDeviceLock } = useAppLock();
+  const { lockApp } = useAppLock();
   const [loggingOut, setLoggingOut] = useState(false);
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
@@ -153,7 +153,7 @@ export default function ProfileScreen() {
             setLoggingOut(true);
             try {
               await signOut();
-              await clearDeviceLock();
+              lockApp();
               router.replace("/(auth)/welcome");
             } catch {
               Alert.alert("Could not log out", "Please try again.");

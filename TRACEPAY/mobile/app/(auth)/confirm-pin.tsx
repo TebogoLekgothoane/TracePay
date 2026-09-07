@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { PinEntryScreen } from "../../src/components/auth/PinEntryScreen";
 import { useAppLock } from "../../src/features/security/AppLockProvider";
@@ -10,8 +10,13 @@ export default function ConfirmPinScreen() {
   const [isBusy, setIsBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [resetKey, setResetKey] = useState(0);
+  const navigatingRef = useRef(false);
 
   const handleComplete = async (pin: readonly number[]) => {
+    if (navigatingRef.current) {
+      return;
+    }
+
     setIsBusy(true);
     setErrorMessage(null);
 
@@ -26,6 +31,7 @@ export default function ConfirmPinScreen() {
         return;
       }
 
+      navigatingRef.current = true;
       void Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
       );

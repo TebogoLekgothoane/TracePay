@@ -12,25 +12,30 @@ export default function ResetPinSuccessScreen() {
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <View className="flex-1 items-center justify-center px-7 pb-5">
-        <View className="h-[94px] w-[94px] items-center justify-center">
-          <Ionicons color={palette.primary} name="checkmark-circle" size={72} />
+    <SafeAreaView className="flex-1 bg-background px-7">
+      <View className="flex-1">
+        <View className="flex-1 items-center justify-center">
+          <View className="h-[94px] w-[94px] items-center justify-center">
+            <Ionicons
+              color={palette.primary}
+              name="checkmark-circle"
+              size={72}
+            />
+          </View>
+
+          <Text className="mt-7 text-center text-[28px] font-bold tracking-[-0.6px] text-foreground">
+            PIN reset complete
+          </Text>
+          <Text className="mt-2.5 max-w-[320px] text-center text-[15px] leading-[22px] text-muted-foreground">
+            Your new TracePay PIN is ready to use.
+          </Text>
         </View>
 
-        <Text className="mt-7 text-center text-[28px] font-bold tracking-[-0.6px] text-foreground">
-          PIN reset complete
-        </Text>
-        <Text className="mt-2.5 text-center text-[15px] text-muted-foreground">
-          Your new TracePay PIN is ready to use.
-        </Text>
-
-        <Button
-          className="absolute bottom-5 left-7 right-7"
-          onPress={() => router.replace("/(auth)/unlock")}
-        >
-          Return to unlock
-        </Button>
+        <View className="pb-5">
+          <Button onPress={() => router.replace("/(auth)/unlock")}>
+            Return to unlock
+          </Button>
+        </View>
       </View>
     </SafeAreaView>
   );

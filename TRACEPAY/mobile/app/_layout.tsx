@@ -14,6 +14,14 @@ import {
   TRACEPAY_SPLASH_BACKGROUNDS,
 } from "../src/components/TracePayAnimatedSplash";
 import {
+  hasAuthSession,
+  subscribeSessionPresence,
+} from "../src/features/auth/auth.service";
+import {
+  getSupabase,
+  isSupabaseConfigured,
+} from "../src/lib/supabase";
+import {
   AppLockProvider,
   useAppLock,
 } from "../src/features/security/AppLockProvider";
@@ -50,7 +58,8 @@ function RootNavigator({
   colorScheme: "light" | "dark";
 }) {
   const [showAnimatedSplash, setShowAnimatedSplash] = useState(true);
-  const { hasPin, isHydrated, isLocked } = useAppLock();
+  const [hasSession, setHasSession] = useState<boolean | null>(null);
+  const { hasPin, isHydrated, isLocked, lockApp } = useAppLock();
   const router = useRouter();
   const segments = useSegments();
   const palette = COLORS[colorScheme];
@@ -60,7 +69,13 @@ function RootNavigator({
     const group = segments[0];
     const screen = segments[1];
     const isAuthRoute = group === "(auth)";
+    const isWelcomeRoute = isAuthRoute && screen === "welcome";
     const isUnlockRoute = isAuthRoute && screen === "unlock";
+    const isPinSetupRoute =
+      isAuthRoute &&
+      ["device-security", "confirm-pin", "biometric-setup"].includes(
+        screen ?? "",
+      );
     const isRecoveryRoute =
       isAuthRoute &&
       [
@@ -86,9 +101,64 @@ function RootNavigator({
       isProtectedRoute,
       isRecoveryRoute,
       isPostPinSetupRoute,
+      isPinSetupRoute,
       isUnlockRoute,
+      isWelcomeRoute,
     };
   }, [segments]);
+
+  useEffect(() => {
+    return subscribeSessionPresence((present) => {
+      setHasSession(present);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) {
+      return;
+    }
+
+    let active = true;
+    let unsubscribe: (() => void) | undefined;
+
+    void hasAuthSession()
+      .then((present) => {
+        if (!active) {
+          return;
+        }
+        setHasSession(present);
+        if (present && hasPin) {
+          lockApp();
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setHasSession(false);
+        }
+      });
+
+    if (isSupabaseConfigured()) {
+      const { data } = getSupabase().auth.onAuthStateChange((event, session) => {
+        if (!active) {
+          return;
+        }
+
+        const present = Boolean(session?.access_token);
+        setHasSession(present);
+
+        // Cold start only — interactive login locks explicitly before unlock.
+        if (present && hasPin && event === "INITIAL_SESSION") {
+          lockApp();
+        }
+      });
+      unsubscribe = () => data.subscription.unsubscribe();
+    }
+
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, [hasPin, isHydrated, lockApp]);
 
   const handleAnimatedSplashLayout = useCallback(() => {
     SplashScreen.hideAsync().catch(() => undefined);
@@ -99,7 +169,7 @@ function RootNavigator({
   }, []);
 
   useEffect(() => {
-    if (showAnimatedSplash || !isHydrated) {
+    if (showAnimatedSplash || !isHydrated || hasSession === null) {
       return;
     }
 
@@ -107,23 +177,38 @@ function RootNavigator({
       if (
         !routeState.isUnlockRoute &&
         !routeState.isRecoveryRoute &&
-        !routeState.isPostPinSetupRoute
+        !routeState.isPostPinSetupRoute &&
+        !routeState.isPinSetupRoute
       ) {
         router.replace("/(auth)/unlock");
       }
       return;
     }
 
-    if (!isLocked && routeState.isUnlockRoute) {
-      router.replace("/(tabs)");
+    if (hasPin && !isLocked) {
+      if (
+        routeState.isUnlockRoute ||
+        routeState.isWelcomeRoute
+      ) {
+        router.replace("/(tabs)");
+      }
+      // Stay on PIN setup / reset success / biometric screens until they continue.
       return;
     }
 
-    if (!hasPin && isLocked && routeState.isProtectedRoute) {
-      router.replace("/");
+    if (hasSession && !hasPin) {
+      if (routeState.isUnlockRoute || routeState.isWelcomeRoute) {
+        router.replace("/(tabs)");
+      }
+      return;
+    }
+
+    if (!hasSession && routeState.isProtectedRoute) {
+      router.replace("/(auth)/welcome");
     }
   }, [
     hasPin,
+    hasSession,
     isHydrated,
     isLocked,
     routeState,
@@ -133,7 +218,9 @@ function RootNavigator({
 
   const shouldCoverProtectedContent =
     !showAnimatedSplash &&
-    (!isHydrated || (routeState.isProtectedRoute && isLocked));
+    (!isHydrated ||
+      hasSession === null ||
+      (routeState.isProtectedRoute && isLocked));
 
   return (
     <View

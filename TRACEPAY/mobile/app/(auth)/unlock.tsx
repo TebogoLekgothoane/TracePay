@@ -40,14 +40,16 @@ export default function UnlockScreen() {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const palette = COLORS[isDark ? "dark" : "light"];
-  const snapPoints = useMemo(() => ["52%"], []);
+  const snapPoints = useMemo(() => ["78%"], []);
 
   const canUseBiometrics =
     biometricsEnabled &&
     biometricAvailability.available &&
     biometricAvailability.kind !== null;
 
-  const [phase, setPhase] = useState<BiometricPhase>("authenticating");
+  const [phase, setPhase] = useState<BiometricPhase>(
+    canUseBiometrics ? "authenticating" : "fallback",
+  );
   const [sheetOpen, setSheetOpen] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export default function UnlockScreen() {
   const biometricPromptedRef = useRef(false);
   const unlockFinishedRef = useRef(false);
   const mountedRef = useRef(true);
-  const sheetOpeningRef = useRef(false);
+  const sheetOpenRef = useRef(false);
   const finishAfterDismissRef = useRef(false);
   const sheetRef = useRef<BottomSheetModal>(null);
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -78,24 +80,42 @@ export default function UnlockScreen() {
       return;
     }
     unlockFinishedRef.current = true;
-
     unlockApp();
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     router.replace("/(tabs)");
   }, [unlockApp]);
 
+  const presentPinSheet = useCallback(() => {
+    if (!mountedRef.current || unlockFinishedRef.current) {
+      return;
+    }
+
+    setPhase("fallback");
+    setSheetOpen(true);
+    sheetOpenRef.current = true;
+    requestAnimationFrame(() => {
+      sheetRef.current?.present();
+    });
+  }, []);
+
   const openPinSheet = useCallback(
-    (options?: { animateFailure?: boolean }) => {
-      if (
-        !mountedRef.current ||
-        sheetOpeningRef.current ||
-        unlockFinishedRef.current
-      ) {
+    (options?: { animateFailure?: boolean; immediate?: boolean }) => {
+      if (!mountedRef.current || unlockFinishedRef.current) {
         return;
       }
 
-      sheetOpeningRef.current = true;
-      const animateFailure = options?.animateFailure ?? true;
+      if (sheetOpenRef.current) {
+        sheetRef.current?.present();
+        return;
+      }
+
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = null;
+      }
+
+      const animateFailure = options?.animateFailure ?? false;
+      const immediate = options?.immediate ?? false;
 
       if (animateFailure) {
         setPhase("failed");
@@ -113,24 +133,24 @@ export default function UnlockScreen() {
         setPhase("fallback");
       }
 
+      if (immediate) {
+        presentPinSheet();
+        return;
+      }
+
       fallbackTimerRef.current = setTimeout(
         () => {
-          if (!mountedRef.current || unlockFinishedRef.current) {
-            return;
-          }
-
-          setPhase("fallback");
-          setSheetOpen(true);
-          requestAnimationFrame(() => sheetRef.current?.present());
+          fallbackTimerRef.current = null;
+          presentPinSheet();
         },
-        animateFailure ? FAILURE_TO_SHEET_DELAY_MS : 280,
+        animateFailure ? FAILURE_TO_SHEET_DELAY_MS : 120,
       );
     },
-    [biometricShake],
+    [biometricShake, presentPinSheet],
   );
 
   const handleSheetDismiss = useCallback(() => {
-    sheetOpeningRef.current = false;
+    sheetOpenRef.current = false;
     setSheetOpen(false);
     if (finishAfterDismissRef.current) {
       finishAfterDismissRef.current = false;
@@ -158,7 +178,7 @@ export default function UnlockScreen() {
     biometricPromptedRef.current = true;
 
     if (!canUseBiometrics) {
-      openPinSheet({ animateFailure: false });
+      openPinSheet({ immediate: true });
       return;
     }
 
@@ -233,18 +253,25 @@ export default function UnlockScreen() {
 
   const biometricKind: BiometricKind =
     biometricAvailability.kind ?? "fingerprint";
+  const biometricLabel =
+    biometricAvailability.label ??
+    (biometricKind === "face" ? "Face ID" : "fingerprint");
   const showFailureCopy = phase === "failed" || phase === "fallback";
 
   const iconShakeStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: biometricShake.value }],
   }));
 
-  const statusLine = showFailureCopy
-    ? "Face ID didn't work"
-    : "Please look at your screen";
-  const actionLine = showFailureCopy
-    ? "Use your PIN to continue"
-    : "Authenticating with Face ID";
+  const statusLine = !canUseBiometrics
+    ? "Enter your PIN to continue"
+    : showFailureCopy
+      ? `${biometricLabel} didn't work`
+      : `Please look at your screen`;
+  const actionLine = !canUseBiometrics
+    ? "Unlock with your PIN"
+    : showFailureCopy
+      ? "Unlock with your PIN"
+      : `Authenticating with ${biometricLabel}`;
 
   return (
     <View className="flex-1 overflow-hidden bg-background">
@@ -266,8 +293,8 @@ export default function UnlockScreen() {
               }
               accessibilityRole="button"
               onPress={() => {
-                if (showFailureCopy) {
-                  openPinSheet({ animateFailure: false });
+                if (showFailureCopy || !canUseBiometrics) {
+                  openPinSheet({ immediate: true });
                   return;
                 }
                 void handleBiometricRetry();
@@ -288,6 +315,19 @@ export default function UnlockScreen() {
             <Text className="mt-1 text-center text-[15px] leading-[22px] text-muted-foreground">
               {actionLine}
             </Text>
+
+            {showFailureCopy || !canUseBiometrics ? (
+              <Pressable
+                accessibilityLabel="Unlock with PIN"
+                accessibilityRole="button"
+                className="mt-8 rounded-full bg-primary/10 px-5 py-3 active:opacity-80"
+                onPress={() => openPinSheet({ immediate: true })}
+              >
+                <Text className="text-[15px] font-semibold text-primary">
+                  Unlock with PIN
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
 
           {sheetOpen ? <View className="min-h-[24px]" /> : null}

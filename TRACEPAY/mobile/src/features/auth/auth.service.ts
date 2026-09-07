@@ -11,6 +11,22 @@ import {
 
 let pendingPhone: string | null = null;
 
+type SessionListener = (present: boolean) => void;
+const sessionListeners = new Set<SessionListener>();
+
+function emitSessionPresence(present: boolean): void {
+  for (const listener of sessionListeners) {
+    listener(present);
+  }
+}
+
+export function subscribeSessionPresence(listener: SessionListener): () => void {
+  sessionListeners.add(listener);
+  return () => {
+    sessionListeners.delete(listener);
+  };
+}
+
 export function getPendingPhone(): string | null {
   return pendingPhone;
 }
@@ -41,6 +57,28 @@ export async function signUp({
   pendingPhone = normalizedPhone;
 }
 
+async function persistSession(session: {
+  accessToken: string;
+  refreshToken: string;
+}): Promise<void> {
+  if (!isSupabaseConfigured()) {
+    throw new AuthError(
+      "Supabase is not configured. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.",
+    );
+  }
+
+  const { data, error } = await getSupabase().auth.setSession({
+    access_token: session.accessToken,
+    refresh_token: session.refreshToken,
+  });
+
+  if (error || !data.session?.access_token) {
+    throw new AuthError("Could not save your session. Please try again.");
+  }
+
+  emitSessionPresence(true);
+}
+
 export async function signIn({
   phone,
   password,
@@ -60,10 +98,16 @@ export async function signIn({
 
   if (result.requiresOtp) {
     pendingPhone = normalizedPhone;
-  } else {
-    pendingPhone = null;
+    return result;
   }
 
+  pendingPhone = null;
+
+  if (!result.session) {
+    throw new AuthError("Login succeeded but no session was returned.");
+  }
+
+  await persistSession(result.session);
   return result;
 }
 
@@ -93,8 +137,32 @@ export async function resendPhoneOtp(phone?: string): Promise<void> {
   await authRequest("/auth/resend-otp", { phone: target });
 }
 
+export async function getAuthSession(): Promise<{
+  accessToken: string;
+  refreshToken: string;
+} | null> {
+  if (!isSupabaseConfigured()) {
+    return null;
+  }
+
+  const { data, error } = await getSupabase().auth.getSession();
+  if (error || !data.session?.access_token || !data.session.refresh_token) {
+    return null;
+  }
+
+  return {
+    accessToken: data.session.access_token,
+    refreshToken: data.session.refresh_token,
+  };
+}
+
+export async function hasAuthSession(): Promise<boolean> {
+  return (await getAuthSession()) !== null;
+}
+
 export async function signOut(): Promise<void> {
   pendingPhone = null;
+  emitSessionPresence(false);
 
   if (!isSupabaseConfigured()) {
     return;

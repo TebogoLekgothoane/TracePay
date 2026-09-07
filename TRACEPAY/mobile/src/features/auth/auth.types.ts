@@ -17,4 +17,8 @@ export type SignInInput = {
 
 export type SignInResult = {
   requiresOtp: boolean;
+  session: {
+    accessToken: string;
+    refreshToken: string;
+  } | null;
 };

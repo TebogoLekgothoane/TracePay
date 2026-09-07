@@ -6,11 +6,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../src/hooks/useAuth";
 import { Button } from "../../src/components/ui/Button";
 import { OTPInput } from "../../src/components/ui/OTPInput";
+import { useAppLock } from "../../src/features/security/AppLockProvider";
 
 export default function Screen() {
   const { error, resendPhone, setError, submitting, verifyPhone } = useAuth();
-  const params = useLocalSearchParams<{ phone?: string }>();
+  const { hasPin, lockApp, unlockApp } = useAppLock();
+  const params = useLocalSearchParams<{ phone?: string; flow?: string }>();
   const phone = typeof params.phone === "string" ? params.phone : undefined;
+  const isSignup = params.flow === "signup";
   const [code, setCode] = useState("");
   const verifyingRef = useRef(false);
 
@@ -22,13 +25,26 @@ export default function Screen() {
     verifyingRef.current = true;
     try {
       await verifyPhone(nextCode, phone);
-      router.replace("/(auth)/device-security");
+
+      if (isSignup) {
+        router.replace("/(auth)/device-security");
+        return;
+      }
+
+      if (hasPin) {
+        lockApp();
+        router.replace("/(auth)/unlock");
+        return;
+      }
+
+      unlockApp();
+      router.replace("/(tabs)");
     } catch {
       return;
     } finally {
       verifyingRef.current = false;
     }
-  }, [code, phone, verifyPhone]);
+  }, [code, hasPin, isSignup, lockApp, phone, unlockApp, verifyPhone]);
 
   const handleResend = async () => {
     try {

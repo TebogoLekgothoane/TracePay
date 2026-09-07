@@ -181,7 +181,9 @@ export function PinEntryScreen({
 
     if (next.length === PIN_LENGTH) {
       requestAnimationFrame(() => {
-        submitPin(next);
+        requestAnimationFrame(() => {
+          submitPin(next);
+        });
       });
     }
   };
@@ -209,7 +211,9 @@ export function PinEntryScreen({
 
     if (next.length === PIN_LENGTH) {
       requestAnimationFrame(() => {
-        submitPin(next);
+        requestAnimationFrame(() => {
+          submitPin(next);
+        });
       });
     }
   };
