@@ -31,6 +31,7 @@ import { TRACEPAY, withAlpha } from "../../theme/colors";
 import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
 import { TRACEPAY_ICON_COMPOSITION } from "../tracePayIconComposition";
+import { continueAfterAuth } from "../../features/auth/auth.navigation";
 import { getPendingPhone } from "../../features/auth/auth.service";
 import { useAppLock } from "../../features/security/AppLockProvider";
 import { useAuth } from "../../hooks/useAuth";
@@ -199,7 +200,7 @@ export function WelcomeScreen() {
   const wordmarkWidth = Math.min(width * 0.78, 300);
   const sheetHeight = Math.min(height * 0.72, 640);
 
-  const { error, setError, signIn, signUp, submitting } = useAuth();
+  const { error, requestReset, setError, signIn, signUp, submitting } = useAuth();
   const { hasPin, lockApp, unlockApp } = useAppLock();
   const [panel, setPanel] = useState<Panel>("welcome");
   const [formMode, setFormMode] = useState<WelcomeAuthMode>("create");
@@ -208,13 +209,7 @@ export function WelcomeScreen() {
   const isWelcome = panel === "welcome";
 
   const continueAfterLogin = () => {
-    if (hasPin) {
-      lockApp();
-      router.replace("/(auth)/unlock");
-      return;
-    }
-    unlockApp();
-    router.replace("/(tabs)");
+    continueAfterAuth({ hasPin, lockApp, router, unlockApp });
   };
 
   const resetPanel = () => {
@@ -277,11 +272,23 @@ export function WelcomeScreen() {
     }
 
     try {
+      if (panel === "forgot") {
+        await requestReset(payload.phone);
+        router.push({
+          pathname: "/(auth)/otp",
+          params: {
+            phone: getPendingPhone() ?? payload.phone,
+            flow: "reset",
+          },
+        });
+        return;
+      }
+
       if (panel === "create") {
         await signUp({
           fullName: payload.name ?? "",
           phone: payload.phone,
-          password: payload.password,
+          password: payload.password ?? "",
         });
         router.push({
           pathname: "/(auth)/otp",
@@ -295,7 +302,7 @@ export function WelcomeScreen() {
 
       const result = await signIn({
         phone: payload.phone,
-        password: payload.password,
+        password: payload.password ?? "",
       });
 
       if (result.requiresOtp) {

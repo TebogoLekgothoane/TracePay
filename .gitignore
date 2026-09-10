@@ -1,6 +1,3 @@
-<<<<<<< Updated upstream
-.cursor/mcp.json
-=======
 .env
 .env.*
 !.env.example
@@ -12,5 +9,8 @@ web/backend/.env
 web/backend/.env.*
 web/dashboard/.env
 web/dashboard/.env.*
->>>>>>> Stashed changes
-mobile/.env
+TRACEPAY/mobile/.env
+TRACEPAY/mobile/.env.*
+TRACEPAY/backend/.env
+TRACEPAY/backend/.env.*
+.cursor/mcp.json

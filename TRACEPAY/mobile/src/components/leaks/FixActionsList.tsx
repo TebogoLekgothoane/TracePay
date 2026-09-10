@@ -3,7 +3,11 @@ import { ChevronRight } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { Pressable, Text, View } from "react-native";
 
-import type { FixSection } from "../../features/leaks/fixContent";
+import {
+  getActionDetail,
+  getFixRoute,
+  type FixSection,
+} from "../../features/leaks/fixContent";
 import { COLORS, type ImpactTone, getImpactToneStyles } from "../../theme/colors";
 
 type Props = {
@@ -30,9 +34,10 @@ export function FixActionsList({ leakId, sections, impact }: Props) {
               <Pressable
                 key={action.id}
                 onPress={() => {
-                  if (action.hasDetailFlow) {
-                    router.push(`/leak/${leakId}/fix/${action.id}`);
+                  if (!getActionDetail(action.id) && !action.hasDetailFlow) {
+                    return;
                   }
+                  router.push(getFixRoute(leakId, action.id) as never);
                 }}
                 className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-75"
               >
@@ -53,6 +58,9 @@ export function FixActionsList({ leakId, sections, impact }: Props) {
                     </Text>
                   </Text>
                 </View>
+                <Text className="text-[12px] font-semibold" style={{ color: tone.color }}>
+                  Steps
+                </Text>
                 <ChevronRight color={palette.placeholder} size={16} strokeWidth={2} />
               </Pressable>
             ))}

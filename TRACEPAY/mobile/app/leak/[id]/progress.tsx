@@ -12,18 +12,24 @@ import {
 import {
   getCompletedActions,
   getFixContent,
+  getFixRoute,
 } from "../../../src/features/leaks/fixContent";
 import { COLORS, TRACEPAY, getImpactToneStyles, withAlpha } from "../../../src/theme/colors";
 
 export default function LeakProgressScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const leakId = id ?? "fees";
+  const params = useLocalSearchParams<{ id: string }>();
+  const leakId = (Array.isArray(params.id) ? params.id[0] : params.id) ?? "fees";
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
   const trace = TRACEPAY[scheme];
   const content = getFixContent(leakId);
+
+  if (!content) {
+    return null;
+  }
+
   const tone = getImpactToneStyles(scheme, content.impact);
   const completed = getCompletedActions(leakId);
   const total = content.progressActions.length;
@@ -117,16 +123,10 @@ export default function LeakProgressScreen() {
                   </View>
                 ) : (
                   <Pressable
-                    onPress={() => {
-                      if (action.hasDetailFlow) {
-                        router.push(`/leak/${leakId}/fix/${action.id}`);
-                      } else {
-                        router.push(`/leak/${leakId}/fix`);
-                      }
-                    }}
+                    onPress={() => router.push(getFixRoute(leakId, action.id) as never)}
                     className="flex-row items-center gap-0.5 active:opacity-75"
                   >
-                    <Text className="text-[12px] font-semibold text-primary">Take action</Text>
+                    <Text className="text-[12px] font-semibold text-primary">Show steps</Text>
                     <ChevronRight color={palette.primary} size={14} strokeWidth={2.5} />
                   </Pressable>
                 )}

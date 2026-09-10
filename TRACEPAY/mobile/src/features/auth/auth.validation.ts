@@ -31,3 +31,36 @@ export function normalizeSaPhone(phone: string): string {
 export function isValidSaPhone(phone: string): boolean {
   return /^\+27\d{9}$/.test(normalizeSaPhone(phone));
 }
+
+export function formatSaPhoneDisplay(phone: string | null | undefined): string {
+  if (!phone) {
+    return "";
+  }
+
+  const normalized = normalizeSaPhone(phone);
+  if (!/^\+27\d{9}$/.test(normalized)) {
+    return phone;
+  }
+
+  const local = normalized.slice(3);
+  return `+27 ${local.slice(0, 2)} ${local.slice(2, 5)} ${local.slice(5)}`;
+}
+
+export function initialsFromName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) {
+    return "TP";
+  }
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  const first = parts[0][0] ?? "";
+  const last = parts[parts.length - 1][0] ?? "";
+  return `${first}${last}`.toUpperCase();
+}
+
+export function firstNameFromFullName(name: string): string {
+  const [first] = name.trim().split(/\s+/).filter(Boolean);
+  return first ?? "";
+}

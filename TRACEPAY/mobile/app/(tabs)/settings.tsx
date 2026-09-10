@@ -22,7 +22,13 @@ import { TabScrollView } from "../../src/components/navigation/TabScrollView";
 import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
 import { signOut } from "../../src/features/auth/auth.service";
+import { FALLBACK_PROFILE_NAME } from "../../src/features/auth/auth.constants";
+import {
+  formatSaPhoneDisplay,
+  initialsFromName,
+} from "../../src/features/auth/auth.validation";
 import { useAppLock } from "../../src/features/security/AppLockProvider";
+import { useProfile } from "../../src/hooks/useProfile";
 import { COLORS, TRACEPAY, withAlpha } from "../../src/theme/colors";
 
 type SettingsRow = {
@@ -131,12 +137,17 @@ function SettingsSection({
 
 export default function ProfileScreen() {
   const { colorScheme } = useColorScheme();
-  const { lockApp } = useAppLock();
+  const { clearDeviceLock } = useAppLock();
+  const { error, loading, profile, retry } = useProfile();
   const [loggingOut, setLoggingOut] = useState(false);
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
   const trace = TRACEPAY[scheme];
   const appearanceLabel = scheme === "dark" ? "Dark mode" : "Light mode";
+  const showProfilePlaceholder = loading && !profile;
+  const displayName = profile?.fullName ?? FALLBACK_PROFILE_NAME;
+  const displayPhone = formatSaPhoneDisplay(profile?.phone);
+  const initials = initialsFromName(profile?.fullName ?? "");
 
   const handleLogout = () => {
     if (loggingOut) {
@@ -152,8 +163,8 @@ export default function ProfileScreen() {
           void (async () => {
             setLoggingOut(true);
             try {
+              await clearDeviceLock();
               await signOut();
-              lockApp();
               router.replace("/(auth)/welcome");
             } catch {
               Alert.alert("Could not log out", "Please try again.");
@@ -211,19 +222,48 @@ export default function ProfileScreen() {
                 justifyContent: "center",
               }}
             >
-              <Text className="text-[18px] font-bold text-primary-foreground">TR</Text>
+              <Text className="text-[18px] font-bold text-primary-foreground">
+                {initials}
+              </Text>
             </LinearGradient>
 
             <View className="min-w-0 flex-1">
-              <Text
-                className="text-[18px] font-bold text-foreground"
-                numberOfLines={1}
-              >
-                Tebogo Lekgothoane
-              </Text>
-              <Text className="mt-0.5 text-[13px] text-muted-foreground" numberOfLines={1}>
-                tebogo@tracepay.app
-              </Text>
+              <View className="h-[22px] justify-center">
+                {showProfilePlaceholder ? (
+                  <View
+                    accessibilityLabel="Loading profile"
+                    className="h-3.5 w-40 rounded-full bg-muted-foreground/20"
+                  />
+                ) : (
+                  <Text
+                    className="text-[18px] font-bold text-foreground"
+                    numberOfLines={1}
+                  >
+                    {displayName}
+                  </Text>
+                )}
+              </View>
+              <View className="mt-0.5 h-[18px] justify-center">
+                {showProfilePlaceholder ? (
+                  <View className="h-3 w-32 rounded-full bg-muted-foreground/15" />
+                ) : (
+                  <Text className="text-[13px] text-muted-foreground" numberOfLines={1}>
+                    {error ? "Could not load profile" : displayPhone || "Phone number unavailable"}
+                  </Text>
+                )}
+              </View>
+              {error ? (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={loading}
+                  hitSlop={8}
+                  onPress={retry}
+                >
+                  <Text className="mt-1 text-[13px] font-semibold text-primary">
+                    Retry
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
           </View>
 

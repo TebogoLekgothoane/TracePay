@@ -1,6 +1,6 @@
 ---
 description: React Native best practices for the mobile app
-globs: mobile/**/*.{tsx,ts,jsx,js}
+globs: "**/mobile/**/*.{tsx,ts,jsx,js}"
 alwaysApply: false
 ---
 

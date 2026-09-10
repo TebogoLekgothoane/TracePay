@@ -1,4 +1,3 @@
-import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import type { LucideIcon } from "lucide-react-native";
 import {
@@ -7,18 +6,15 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
-  EllipsisVertical,
   FileText,
   HelpCircle,
   Info,
   Landmark,
   MessageSquare,
   MoreHorizontal,
-  Plus,
   RefreshCw,
   Smartphone,
   Store,
-  Wallet,
   Wifi,
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
@@ -28,13 +24,13 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 
 import { FixActionsList } from "../../src/components/leaks/FixActionsList";
-import {
-  LeakContentTabs,
-  type LeakContentTab,
-} from "../../src/components/leaks/LeakContentTabs";
 import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
-import { getFixContent } from "../../src/features/leaks/fixContent";
+import { InfoSheet } from "../../src/components/ui/Modal";
+import {
+  getFixContent,
+  getFixRoute,
+} from "../../src/features/leaks/fixContent";
 import {
   COLORS,
   TRACEPAY,
@@ -45,6 +41,19 @@ import {
 
 const PERIODS = ["This month", "Last month", "3 months", "Custom"] as const;
 type Period = (typeof PERIODS)[number];
+
+const LEAK_CALC_COPY: Record<string, string> = {
+  fees:
+    "We total monthly account fees, service charges, ATM fees, SMS alerts, and other bank charges from your statements for this period.",
+  subs:
+    "We flag recurring subscription merchants and sum what you paid this month, including unused or inactive plans still billing you.",
+  debit:
+    "We list active debit-order mandates and sum the amounts collected this month that look unused or higher than needed.",
+  airtime:
+    "We add prepaid airtime, data bundles, and out-of-bundle charges from your bank and network-linked spend this month.",
+  atm:
+    "We total cash withdrawals and paid balance enquiries, especially at other banks’ ATMs where fees are highest.",
+};
 
 type BreakdownItem = {
   id: string;
@@ -66,22 +75,6 @@ type SubscriptionItem = {
   markColor: string;
 };
 
-type ActionItem = {
-  id: string;
-  title: string;
-  description: string;
-  link: string;
-  Icon: LucideIcon;
-};
-
-type RecommendedAction = {
-  id: string;
-  title: string;
-  description: string;
-  button: string;
-  Icon: LucideIcon;
-};
-
 type LeakDetail = {
   title: string;
   subtitle: string;
@@ -95,10 +88,7 @@ type LeakDetail = {
   listSectionTitle?: string;
   breakdown?: BreakdownItem[];
   didYouKnow?: string;
-  stopLeaks?: ActionItem[];
   subscriptions?: SubscriptionItem[];
-  savingsAmount?: string;
-  recommended?: RecommendedAction[];
   ctaTitle: string;
   ctaSubtitle: string;
   ctaButton: string;
@@ -158,40 +148,10 @@ const LEAK_DETAILS: Record<string, LeakDetail> = {
       },
     ],
     didYouKnow:
-      "Did you know? You could save up to R712.50 this month by eliminating these unnecessary charges.",
-    stopLeaks: [
-      {
-        id: "account",
-        title: "Switch to a lower-fee account",
-        description: "You could pay less or nothing monthly.",
-        link: "Compare accounts",
-        Icon: Wallet,
-      },
-      {
-        id: "atm",
-        title: "Use free ATM networks",
-        description: "Withdraw from bank ATMs to avoid fees.",
-        link: "View free ATMs",
-        Icon: Landmark,
-      },
-      {
-        id: "sms",
-        title: "Reduce SMS notifications",
-        description: "Use app notifications instead of SMS.",
-        link: "Manage alerts",
-        Icon: MessageSquare,
-      },
-      {
-        id: "services",
-        title: "Review account services",
-        description: "Turn off services you don't use.",
-        link: "Review services",
-        Icon: CreditCard,
-      },
-    ],
-    ctaTitle: "Take action and save",
-    ctaSubtitle: "Stop unnecessary bank fees now",
-    ctaButton: "Fix now",
+      "You could save up to R712.50 this month by cutting unnecessary bank charges.",
+    ctaTitle: "Stop these bank fees",
+    ctaSubtitle: "Open the first step-by-step guide",
+    ctaButton: "Start fixing",
   },
   subs: {
     title: "Subscriptions",
@@ -255,33 +215,9 @@ const LEAK_DETAILS: Record<string, LeakDetail> = {
         markColor: "secondary",
       },
     ],
-    savingsAmount: "R430.00",
-    recommended: [
-      {
-        id: "cancel",
-        title: "Cancel unused subscriptions",
-        description: "Save up to R430.00",
-        button: "Review and cancel",
-        Icon: RefreshCw,
-      },
-      {
-        id: "limits",
-        title: "Set spending limits",
-        description: "Avoid future unnecessary subscriptions",
-        button: "Set limits",
-        Icon: Wallet,
-      },
-      {
-        id: "alerts",
-        title: "Get spending alerts",
-        description: "Be notified of new subscriptions",
-        button: "Turn on alerts",
-        Icon: MessageSquare,
-      },
-    ],
-    ctaTitle: "Take control of your subscriptions",
-    ctaSubtitle: "Stop paying for what you don't use",
-    ctaButton: "Take action",
+    ctaTitle: "Cancel what you don't use",
+    ctaSubtitle: "Open step-by-step cancel guides",
+    ctaButton: "Start cancelling",
   },
   debit: {
     title: "Debit orders",
@@ -326,26 +262,9 @@ const LEAK_DETAILS: Record<string, LeakDetail> = {
         markColor: "secondary",
       },
     ],
-    savingsAmount: "R320.75",
-    recommended: [
-      {
-        id: "pause",
-        title: "Pause unused debit orders",
-        description: "Save up to R320.75",
-        button: "Review and pause",
-        Icon: Calendar,
-      },
-      {
-        id: "limits",
-        title: "Set spending limits",
-        description: "Avoid future unnecessary debits",
-        button: "Set limits",
-        Icon: Wallet,
-      },
-    ],
-    ctaTitle: "Manage your debit orders",
-    ctaSubtitle: "Pause or cancel what you don't need",
-    ctaButton: "Manage debit orders",
+    ctaTitle: "Stop unused debit orders",
+    ctaSubtitle: "Open step-by-step pause guides",
+    ctaButton: "Start pausing",
   },
   airtime: {
     title: "Airtime & data",
@@ -384,33 +303,10 @@ const LEAK_DETAILS: Record<string, LeakDetail> = {
       },
     ],
     didYouKnow:
-      "Did you know? You could save up to R206.15 this month by switching to a better data bundle and reducing ad-hoc top-ups.",
-    stopLeaks: [
-      {
-        id: "bundle",
-        title: "Switch to a better data bundle",
-        description: "Match your bundle to actual usage.",
-        link: "Compare bundles",
-        Icon: Wifi,
-      },
-      {
-        id: "wifi",
-        title: "Use Wi-Fi where possible",
-        description: "Cut down on mobile data usage.",
-        link: "See data tips",
-        Icon: Smartphone,
-      },
-      {
-        id: "alerts",
-        title: "Set data usage alerts",
-        description: "Get warned before you overspend.",
-        link: "Turn on alerts",
-        Icon: MessageSquare,
-      },
-    ],
+      "You could save up to R206.15 by matching your bundle to real usage and avoiding out-of-bundle charges.",
     ctaTitle: "Cut airtime & data costs",
-    ctaSubtitle: "Small changes add up quickly",
-    ctaButton: "Fix now",
+    ctaSubtitle: "Open the first step-by-step guide",
+    ctaButton: "Start fixing",
   },
   atm: {
     title: "Cash withdrawals",
@@ -449,33 +345,31 @@ const LEAK_DETAILS: Record<string, LeakDetail> = {
       },
     ],
     didYouKnow:
-      "Did you know? You could save up to R150.00 this month by using your bank's ATMs and skipping paid balance enquiries.",
-    stopLeaks: [
-      {
-        id: "home-atm",
-        title: "Use your bank's ATMs",
-        description: "Avoid fees at other bank machines.",
-        link: "Find free ATMs",
-        Icon: Landmark,
-      },
-      {
-        id: "cashback",
-        title: "Get cash back at stores",
-        description: "Often cheaper than ATM withdrawals.",
-        link: "View options",
-        Icon: Store,
-      },
-      {
-        id: "card",
-        title: "Pay by card instead",
-        description: "Reduce the need for cash altogether.",
-        link: "See card tips",
-        Icon: CreditCard,
-      },
-    ],
+      "You could save up to R150.00 by using your bank's ATMs and skipping paid balance enquiries.",
     ctaTitle: "Reduce withdrawal fees",
-    ctaSubtitle: "Keep more of your cash",
-    ctaButton: "Fix now",
+    ctaSubtitle: "Open the first step-by-step guide",
+    ctaButton: "Start fixing",
+  },
+};
+
+/** Map a breakdown line item to that leak's fix action (never cross-leak). */
+const BREAKDOWN_FIX_ACTION: Record<string, Record<string, string>> = {
+  fees: {
+    monthly: "account",
+    service: "services",
+    atm: "atm",
+    sms: "sms",
+    other: "services",
+  },
+  airtime: {
+    data: "bundle",
+    airtime: "topups",
+    "out-of-bundle": "data-alerts",
+  },
+  atm: {
+    "other-bank": "home-atm",
+    retail: "cashback",
+    balance: "balance",
   },
 };
 
@@ -642,23 +536,20 @@ function resolveMarkColor(
   if (key === "success") return palette.success;
   return palette.blue;
 }
-
 export default function LeakDetailScreen() {
-  const { id, view } = useLocalSearchParams<{ id: string; view?: string }>();
+  const params = useLocalSearchParams<{ id: string; view?: string }>();
+  const leakId = Array.isArray(params.id) ? params.id[0] : params.id;
+  const view = Array.isArray(params.view) ? params.view[0] : params.view;
   const [period, setPeriod] = useState<Period>("This month");
-  const [contentTab, setContentTab] = useState<LeakContentTab>("Breakdown");
+  const [showCalc, setShowCalc] = useState(false);
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
-  const trace = TRACEPAY[scheme];
 
-  const detail = LEAK_DETAILS[id ?? ""] ?? LEAK_DETAILS.fees;
-  const tone = getImpactToneStyles(scheme, detail.impact);
-  const isCompact = view === "summary" && id === "fees";
-  const hasContentTabs = detail.variant === "breakdown" && !isCompact;
-  const fixContent = getFixContent(id ?? "fees");
-  const listTitle = detail.listSectionTitle ?? "Your subscriptions";
+  const detail = leakId ? LEAK_DETAILS[leakId] : undefined;
+  const fixContent = leakId ? getFixContent(leakId) : null;
+  const tone = getImpactToneStyles(scheme, detail?.impact ?? "high");
 
   const heroSurface = useMemo(
     () =>
@@ -668,11 +559,38 @@ export default function LeakDetailScreen() {
     [scheme, tone.color],
   );
 
+  if (!leakId || !detail || !fixContent) {
+    return (
+      <SafeAreaView
+        className="flex-1 items-center justify-center bg-background px-5"
+        edges={["top"]}
+      >
+        <Text className="text-center text-[16px] font-semibold text-foreground">
+          This leak could not be found.
+        </Text>
+        <Button className="mt-4" size="md" onPress={() => router.back()}>
+          Go back
+        </Button>
+      </SafeAreaView>
+    );
+  }
+
+  const isCompact = view === "summary" && leakId === "fees";
+  const listTitle =
+    detail.listSectionTitle ??
+    (leakId === "debit" ? "Your debit orders" : "Your subscriptions");
+
+  const openBreakdownFix = (itemId: string) => {
+    const actionId = BREAKDOWN_FIX_ACTION[leakId]?.[itemId];
+    if (!actionId) return;
+    router.push(getFixRoute(leakId, actionId) as never);
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
         showsVerticalScrollIndicator={false}
       >
         <View className="px-5 pt-1">
@@ -694,24 +612,7 @@ export default function LeakDetailScreen() {
                 <detail.HeaderIcon color={tone.color} size={22} strokeWidth={2.2} />
               </View>
               <View className="min-w-0 flex-1">
-                <View className="flex-row flex-wrap items-center gap-2">
-                  <Text className="text-[24px] font-bold text-foreground">
-                    {detail.title}
-                  </Text>
-                  {isCompact ? (
-                    <View
-                      className="rounded-full px-2 py-0.5"
-                      style={{ backgroundColor: tone.surface }}
-                    >
-                      <Text
-                        className="text-[10px] font-semibold"
-                        style={{ color: tone.color }}
-                      >
-                        High impact
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
+                <Text className="text-[24px] font-bold text-foreground">{detail.title}</Text>
                 <Text className="mt-0.5 text-[13px] text-muted-foreground">
                   {detail.subtitle}
                 </Text>
@@ -719,21 +620,16 @@ export default function LeakDetailScreen() {
             </View>
 
             <IconButton
-              accessibilityLabel="Help"
+              accessibilityLabel="How we calculate"
               className="mt-1"
               variant="ghost"
+              onPress={() => setShowCalc(true)}
             >
               <HelpCircle color={palette.placeholder} size={20} strokeWidth={2} />
             </IconButton>
           </View>
 
           <PeriodTabs active={period} onChange={setPeriod} toneColor={tone.color} />
-
-          {hasContentTabs ? (
-            <View className="mt-5">
-              <LeakContentTabs active={contentTab} onChange={setContentTab} />
-            </View>
-          ) : null}
 
           {isCompact ? (
             <View className="mt-5 flex-row gap-3">
@@ -742,13 +638,8 @@ export default function LeakDetailScreen() {
                 { label: "vs last month", value: "+18%" },
                 { label: "Frequency", value: "Monthly" },
               ].map((stat) => (
-                <View
-                  key={stat.label}
-                  className="flex-1 rounded-2xl bg-muted p-3"
-                >
-                  <Text className="text-[11px] text-muted-foreground">
-                    {stat.label}
-                  </Text>
+                <View key={stat.label} className="flex-1 rounded-2xl bg-muted p-3">
+                  <Text className="text-[11px] text-muted-foreground">{stat.label}</Text>
                   <Text className="mt-1 text-[15px] font-bold text-foreground">
                     {stat.value}
                   </Text>
@@ -775,10 +666,7 @@ export default function LeakDetailScreen() {
                     className="mt-2 self-start rounded-full px-3 py-1"
                     style={{ backgroundColor: withAlpha(tone.color, 0.14) }}
                   >
-                    <Text
-                      className="text-[12px] font-semibold"
-                      style={{ color: tone.color }}
-                    >
+                    <Text className="text-[12px] font-semibold" style={{ color: tone.color }}>
                       {detail.changeLabel}
                     </Text>
                   </View>
@@ -789,7 +677,12 @@ export default function LeakDetailScreen() {
                     </Text>{" "}
                     of your total leaks
                   </Text>
-                  <Pressable className="mt-2 flex-row items-center gap-1 active:opacity-75">
+                  <Pressable
+                    onPress={() => setShowCalc(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel="How we calculate"
+                    className="mt-2 flex-row items-center gap-1 self-start active:opacity-75"
+                  >
                     <Info color={palette.mutedForeground} size={13} strokeWidth={2} />
                     <Text className="text-[12px] font-medium text-muted-foreground">
                       How we calculate
@@ -799,23 +692,17 @@ export default function LeakDetailScreen() {
 
                 <View className="justify-center">
                   {detail.variant === "breakdown" ? (
-                    id === "airtime" ? (
+                    leakId === "airtime" ? (
                       <AirtimeIllustration accent={tone.color} primary={palette.primary} />
-                    ) : id === "atm" ? (
+                    ) : leakId === "atm" ? (
                       <AtmIllustration accent={tone.color} primary={palette.primary} />
                     ) : (
                       <ReceiptIllustration accent={tone.color} primary={palette.primary} />
                     )
-                  ) : id === "debit" ? (
-                    <DebitCalendarIllustration
-                      accent={tone.color}
-                      primary={palette.primary}
-                    />
+                  ) : leakId === "debit" ? (
+                    <DebitCalendarIllustration accent={tone.color} primary={palette.primary} />
                   ) : (
-                    <SubscriptionBoxIllustration
-                      accent={tone.color}
-                      primary={palette.primary}
-                    />
+                    <SubscriptionBoxIllustration accent={tone.color} primary={palette.primary} />
                   )}
                 </View>
               </View>
@@ -824,66 +711,14 @@ export default function LeakDetailScreen() {
 
           {detail.variant === "breakdown" && detail.breakdown ? (
             <>
-              {hasContentTabs && contentTab === "How to fix" ? (
-                <View className="mt-6">
-                  <FixActionsList
-                    leakId={id ?? "fees"}
-                    sections={fixContent.sections}
-                    impact={fixContent.impact}
-                  />
-                </View>
-              ) : null}
-
-              {hasContentTabs && contentTab === "Insights" ? (
-                <>
-                  {detail.didYouKnow ? (
-                    <View
-                      className="mt-6 flex-row items-center gap-3 rounded-3xl p-4"
-                      style={{ backgroundColor: palette.surfaceSoft }}
-                    >
-                      <Text className="flex-1 text-[13px] leading-5 text-foreground">
-                        {detail.didYouKnow}
-                      </Text>
-                      <ReceiptIllustration accent={tone.color} primary={palette.primary} />
-                    </View>
-                  ) : null}
-                  {detail.stopLeaks ? (
-                    <View className="mt-4 gap-2">
-                      {detail.stopLeaks.map((item) => (
-                        <View
-                          key={item.id}
-                          className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5"
-                        >
-                          <View
-                            className="h-10 w-10 items-center justify-center rounded-xl"
-                            style={{ backgroundColor: tone.surface }}
-                          >
-                            <item.Icon color={tone.color} size={18} strokeWidth={2.2} />
-                          </View>
-                          <View className="min-w-0 flex-1">
-                            <Text className="text-[14px] font-semibold text-foreground">
-                              {item.title}
-                            </Text>
-                            <Text className="mt-0.5 text-[12px] text-muted-foreground">
-                              {item.description}
-                            </Text>
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
-                </>
-              ) : null}
-
-              {(!hasContentTabs || contentTab === "Breakdown") ? (
-                <>
               <Text className="mb-3 mt-7 text-[17px] font-bold text-foreground">
-                Breakdown
+                Where it comes from
               </Text>
               <View className="gap-2">
                 {detail.breakdown.map((item) => (
                   <Pressable
                     key={item.id}
+                    onPress={() => openBreakdownFix(item.id)}
                     className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-75"
                   >
                     <View
@@ -915,83 +750,15 @@ export default function LeakDetailScreen() {
                   </Pressable>
                 ))}
               </View>
-
-              {!isCompact && !hasContentTabs && detail.didYouKnow ? (
+              {detail.didYouKnow ? (
                 <View
-                  className="mt-4 flex-row items-center gap-3 rounded-3xl p-4"
+                  className="mt-4 rounded-3xl p-4"
                   style={{ backgroundColor: palette.surfaceSoft }}
                 >
-                  <Text className="flex-1 text-[13px] leading-5 text-foreground">
+                  <Text className="text-[13px] leading-5 text-foreground">
                     {detail.didYouKnow}
                   </Text>
-                  <ReceiptIllustration accent={tone.color} primary={palette.primary} />
                 </View>
-              ) : null}
-
-              {!isCompact && !hasContentTabs && detail.stopLeaks ? (
-                <>
-                  <Text className="mb-3 mt-7 text-[17px] font-bold text-foreground">
-                    How to stop these leaks
-                  </Text>
-                  <View className="gap-3">
-                    {detail.stopLeaks.map((item) => (
-                      <Pressable
-                        key={item.id}
-                        className="flex-row items-center gap-3 rounded-2xl bg-muted p-4 active:opacity-80"
-                      >
-                        <View
-                          className="h-10 w-10 items-center justify-center rounded-xl"
-                          style={{ backgroundColor: tone.surface }}
-                        >
-                          <item.Icon color={tone.color} size={18} strokeWidth={2.2} />
-                        </View>
-                        <View className="min-w-0 flex-1">
-                          <Text className="text-[14px] font-semibold text-foreground">
-                            {item.title}
-                          </Text>
-                          <Text className="mt-0.5 text-[12px] text-muted-foreground">
-                            {item.description}
-                          </Text>
-                          <Text
-                            className="mt-1 text-[12px] font-semibold"
-                            style={{ color: tone.color }}
-                          >
-                            {item.link}
-                          </Text>
-                        </View>
-                        <ChevronRight color={palette.placeholder} size={16} strokeWidth={2} />
-                      </Pressable>
-                    ))}
-                  </View>
-                </>
-              ) : null}
-
-              {isCompact ? (
-                <View
-                  className="mt-7 rounded-3xl p-4"
-                  style={{ backgroundColor: heroSurface }}
-                >
-                  <Text className="text-[15px] font-bold text-foreground">
-                    Stop this leak
-                  </Text>
-                  <Text className="mt-1 text-[13px] text-muted-foreground">
-                    See practical steps to reduce bank fees
-                  </Text>
-                  <Pressable
-                    onPress={() => router.push("/leak/fees/fix")}
-                    className="mt-4 items-center rounded-xl py-3 active:opacity-85"
-                    style={{ backgroundColor: tone.color }}
-                  >
-                    <Text
-                      style={{ color: trace.primaryForeground }}
-                      className="text-[14px] font-semibold"
-                    >
-                      See how to fix
-                    </Text>
-                  </Pressable>
-                </View>
-              ) : null}
-                </>
               ) : null}
             </>
           ) : null}
@@ -1006,8 +773,12 @@ export default function LeakDetailScreen() {
                   <Pressable
                     key={item.id}
                     onPress={() => {
-                      if (id === "subs") {
+                      if (leakId === "subs") {
                         router.push(`/leak/subscription/${item.id}`);
+                        return;
+                      }
+                      if (leakId === "debit") {
+                        router.push(getFixRoute(leakId, `pause-${item.id}`) as never);
                       }
                     }}
                     className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-75"
@@ -1044,187 +815,42 @@ export default function LeakDetailScreen() {
                         className="mt-0.5 text-[11px] font-semibold"
                         style={{
                           color:
-                            item.status === "Active"
-                              ? palette.success
-                              : palette.blue,
+                            item.status === "Active" ? palette.success : palette.blue,
                         }}
                       >
-                        {item.status}
+                        {leakId === "debit" ? "Tap for steps" : item.status}
                       </Text>
                     </View>
-                    <EllipsisVertical
-                      color={palette.placeholder}
-                      size={16}
-                      strokeWidth={2}
-                    />
+                    <ChevronRight color={palette.placeholder} size={16} strokeWidth={2} />
                   </Pressable>
                 ))}
               </View>
-
-              {id === "subs" ? (
-                <Pressable className="mt-3 flex-row items-center justify-center gap-2 py-2 active:opacity-75">
-                  <Plus color={tone.color} size={18} strokeWidth={2.4} />
-                  <Text className="text-[14px] font-semibold" style={{ color: tone.color }}>
-                    Add subscription manually
-                  </Text>
-                </Pressable>
-              ) : null}
-
-              {detail.savingsAmount ? (
-                <View
-                  className="mt-4 flex-row items-center gap-3 overflow-hidden rounded-3xl p-4"
-                  style={{ backgroundColor: heroSurface }}
-                >
-                  <View
-                    className="h-11 w-11 items-center justify-center rounded-2xl"
-                    style={{ backgroundColor: withAlpha(tone.color, 0.18) }}
-                  >
-                    <Wallet color={tone.color} size={20} strokeWidth={2.2} />
-                  </View>
-                  <View className="min-w-0 flex-1">
-                    <Text className="text-[12px] text-muted-foreground">
-                      You could save up to
-                    </Text>
-                    <Text className="text-[22px] font-bold text-foreground">
-                      {detail.savingsAmount}
-                    </Text>
-                    <Text className="mt-0.5 text-[12px] text-muted-foreground">
-                      {id === "debit"
-                        ? "by pausing unused debit orders"
-                        : "by cancelling unused subscriptions"}
-                    </Text>
-                  </View>
-                  <Pressable
-                    className="rounded-xl px-3 py-2 active:opacity-85"
-                    style={{ backgroundColor: tone.color }}
-                  >
-                    <Text
-                      style={{ color: trace.primaryForeground }}
-                      className="text-[12px] font-semibold"
-                    >
-                      Review all
-                    </Text>
-                  </Pressable>
-                </View>
-              ) : null}
-
-              {detail.recommended ? (
-                <>
-                  <Text className="mb-3 mt-7 text-[17px] font-bold text-foreground">
-                    Recommended actions
-                  </Text>
-                  <View className="gap-3">
-                    {detail.recommended.map((item) => (
-                      <View
-                        key={item.id}
-                        className="flex-row items-center gap-3 rounded-2xl bg-muted p-4"
-                      >
-                        <View
-                          className="h-10 w-10 items-center justify-center rounded-xl"
-                          style={{ backgroundColor: tone.surface }}
-                        >
-                          <item.Icon color={tone.color} size={18} strokeWidth={2.2} />
-                        </View>
-                        <View className="min-w-0 flex-1">
-                          <Text className="text-[14px] font-semibold text-foreground">
-                            {item.title}
-                          </Text>
-                          <Text className="mt-0.5 text-[12px] text-muted-foreground">
-                            {item.description}
-                          </Text>
-                        </View>
-                        <Pressable className="active:opacity-75">
-                          <Text
-                            className="text-[12px] font-semibold"
-                            style={{ color: tone.color }}
-                          >
-                            {item.button}
-                          </Text>
-                        </Pressable>
-                      </View>
-                    ))}
-                  </View>
-                </>
-              ) : null}
             </>
           ) : null}
+
+          <Text className="mb-2 mt-8 text-[17px] font-bold text-foreground">
+            How to stop this
+          </Text>
+          <Text className="mb-4 text-[13px] leading-5 text-muted-foreground">
+            Follow the steps for this leak only. Tap an action to see exactly what to do.
+          </Text>
+          <FixActionsList
+            leakId={leakId}
+            sections={fixContent.sections}
+            impact={fixContent.impact}
+          />
         </View>
       </ScrollView>
 
-      {!isCompact ? (
-        <View
-          className="absolute bottom-0 left-0 right-0 px-5 pt-4"
-          style={{ paddingBottom: Math.max(insets.bottom, 16) }}
-        >
-          {detail.variant === "breakdown" ? (
-            <Pressable
-              onPress={() => router.push(`/leak/${id}/fix`)}
-              className="overflow-hidden rounded-full active:opacity-90"
-            >
-              <LinearGradient
-                colors={[trace.splashAccentPink, trace.accent]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={{ paddingHorizontal: 20, paddingVertical: 16, borderRadius: 999 }}
-              >
-                <Text
-                  style={{ color: trace.primaryForeground }}
-                  className="text-[15px] font-bold"
-                >
-                  {detail.ctaTitle}
-                </Text>
-                <Text
-                  style={{ color: withAlpha(trace.primaryForeground, 0.9) }}
-                  className="mt-0.5 text-[12px]"
-                >
-                  {detail.ctaSubtitle}
-                </Text>
-              </LinearGradient>
-            </Pressable>
-          ) : (
-            <View
-              className="rounded-full px-5 py-4"
-              style={{
-                backgroundColor: tone.color,
-              }}
-            >
-              <View className="flex-row items-center justify-between gap-4">
-                <View className="min-w-0 flex-1">
-                  <Text
-                    style={{ color: trace.primaryForeground }}
-                    className="text-[15px] font-bold"
-                  >
-                    {detail.ctaTitle}
-                  </Text>
-                  <Text
-                    style={{ color: withAlpha(trace.primaryForeground, 0.85) }}
-                    className="mt-0.5 text-[12px]"
-                  >
-                    {detail.ctaSubtitle}
-                  </Text>
-                </View>
-                <Button
-                  size="sm"
-                  onPress={() => {
-                    if (id === "subs") {
-                      router.push("/leak/subs/fix");
-                    }
-                  }}
-                  style={{ backgroundColor: trace.primaryForeground }}
-                  labelClassName="text-[13px] font-semibold"
-                >
-                  <Text
-                    className="text-[13px] font-semibold"
-                    style={{ color: tone.color }}
-                  >
-                    {detail.ctaButton}
-                  </Text>
-                </Button>
-              </View>
-            </View>
-          )}
-        </View>
-      ) : null}
+      <InfoSheet
+        visible={showCalc}
+        title="How we calculate"
+        message={
+          LEAK_CALC_COPY[leakId] ??
+          "We total avoidable charges linked to this leak for the selected period and compare them to your overall leaks."
+        }
+        onClose={() => setShowCalc(false)}
+      />
     </SafeAreaView>
   );
 }

@@ -31,7 +31,7 @@ type LiquidTabBarProps = {
 
 const TAB_ITEMS = [
   { key: "index", label: "Home", systemImage: "house.fill" as const },
-  { key: "budget", label: "Insights", systemImage: "chart.pie.fill" as const },
+  { key: "leaks", label: "Leaks", systemImage: "drop.fill" as const },
   {
     key: "transactions",
     label: "Transactions",

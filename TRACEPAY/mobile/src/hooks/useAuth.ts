@@ -2,7 +2,9 @@ import { useCallback, useState } from "react";
 
 import { AuthError } from "../features/auth/auth.errors";
 import {
+  requestPasswordReset,
   resendPhoneOtp,
+  resetPassword,
   signIn,
   signUp,
   verifyPhoneOtp,
@@ -51,6 +53,16 @@ export function useAuth() {
     [run],
   );
 
+  const requestReset = useCallback(
+    (phone: string) => run(() => requestPasswordReset(phone)),
+    [run],
+  );
+
+  const updatePassword = useCallback(
+    (password: string, phone?: string) => run(() => resetPassword(password, phone)),
+    [run],
+  );
+
   return {
     submitting,
     error,
@@ -59,6 +71,8 @@ export function useAuth() {
     signIn: login,
     verifyPhone,
     resendPhone,
+    requestReset,
+    updatePassword,
   };
 }
 

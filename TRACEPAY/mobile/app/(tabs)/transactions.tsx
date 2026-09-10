@@ -12,7 +12,6 @@ import {
   Filter,
   Fuel,
   List,
-  PieChart,
   Search,
   ShoppingCart,
   Tv,
@@ -447,33 +446,6 @@ export default function TransactionsScreen() {
             </View>
           ))}
 
-          <Pressable
-            onPress={() => router.push("/(tabs)/budget")}
-            className="mt-6 flex-row items-center gap-3 rounded-3xl bg-muted px-4 py-4 active:opacity-80"
-          >
-            <View
-              className="h-11 w-11 items-center justify-center rounded-2xl"
-              style={{ backgroundColor: withAlpha(palette.primary, 0.14) }}
-            >
-              <PieChart color={palette.primary} size={20} strokeWidth={2.2} />
-            </View>
-
-            <View className="flex-1">
-              <Text className="text-[14px] font-semibold text-foreground">
-                You spent R1,820.40 less
-              </Text>
-              <Text className="mt-0.5 text-[12px] text-muted-foreground">
-                This month vs last month
-              </Text>
-            </View>
-
-            <View className="flex-row items-center gap-0.5">
-              <Text className="text-[13px] font-semibold text-primary">
-                View insights
-              </Text>
-              <ChevronRight color={palette.primary} size={16} strokeWidth={2.5} />
-            </View>
-          </Pressable>
         </View>
       </TabScrollView>
     </SafeAreaView>

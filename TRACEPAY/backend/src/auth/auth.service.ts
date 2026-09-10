@@ -4,6 +4,8 @@ import twilio from "twilio";
 import { assertAuthConfig, config } from "../config.js";
 import {
   AuthHttpError,
+  type AuthSession,
+  type ResetPasswordBody,
   type SignInBody,
   type SignInResult,
   type SignUpBody,
@@ -114,7 +116,7 @@ async function sendOtp(phone: string): Promise<void> {
       from: config.twilioFrom,
       body: `Your TRACEPAY code is ${code}`,
     });
-    pendingFallback.set(phone, { code, expiresAt: Date.now() + 10 * 60 * 1000 });
+    pendingFallback.set(phone, { code, expiresAt: Date.now() + OTP_TTL_MS });
   } catch (error) {
     console.error("[auth] Twilio SMS failed", error);
     throw twilioSendError(error);
@@ -150,7 +152,11 @@ function twilioSendError(error: unknown): AuthHttpError {
   }
 }
 
+const OTP_TTL_MS = 10 * 60 * 1000;
+const FORGOT_COOLDOWN_MS = 30 * 1000;
 const pendingFallback = new Map<string, { code: string; expiresAt: number }>();
+const pendingPasswordResets = new Map<string, { userId: string; expiresAt: number }>();
+const lastForgotAt = new Map<string, number>();
 
 async function checkOtp(phone: string, code: string): Promise<void> {
   const token = code.replace(/\s/g, "");
@@ -200,8 +206,6 @@ export async function register(body: SignUpBody): Promise<void> {
     throw new AuthHttpError(409, "This phone number is already registered. Log in instead.");
   }
 
-  await sendOtp(phone);
-
   const { error } = await getAdmin().auth.admin.createUser({
     phone,
     password,
@@ -215,6 +219,8 @@ export async function register(body: SignUpBody): Promise<void> {
     }
     throw new AuthHttpError(400, error.message);
   }
+
+  await sendOtp(phone);
 }
 
 export async function login(body: SignInBody): Promise<SignInResult> {
@@ -239,14 +245,37 @@ export async function login(body: SignInBody): Promise<SignInResult> {
 
   return {
     requiresOtp: false,
-    session: {
-      accessToken: data.session.access_token,
-      refreshToken: data.session.refresh_token,
-    },
+    session: toAuthSession(data.session),
   };
 }
 
-export async function verifyOtp(body: VerifyOtpBody): Promise<void> {
+function toAuthSession(session: {
+  access_token: string;
+  refresh_token: string;
+}): AuthSession {
+  return {
+    accessToken: session.access_token,
+    refreshToken: session.refresh_token,
+  };
+}
+
+async function createPasswordSession(
+  phone: string,
+  password: string,
+): Promise<AuthSession> {
+  const { data, error } = await getAuthClient().auth.signInWithPassword({
+    phone,
+    password,
+  });
+
+  if (error || !data.session) {
+    throw new AuthHttpError(401, "Phone verified. Log in with your password.");
+  }
+
+  return toAuthSession(data.session);
+}
+
+export async function verifyOtp(body: VerifyOtpBody): Promise<SignInResult> {
   const phone = requireValidPhone(body.phone);
   await checkOtp(phone, body.code);
 
@@ -262,9 +291,79 @@ export async function verifyOtp(body: VerifyOtpBody): Promise<void> {
   if (error) {
     throw new AuthHttpError(400, "Could not confirm this phone number.");
   }
+
+  const password = body.password?.trim() ?? "";
+  if (body.purpose === "reset") {
+    pendingPasswordResets.set(phone, {
+      userId: user.id,
+      expiresAt: Date.now() + OTP_TTL_MS,
+    });
+    return { requiresOtp: false, session: null, resetAllowed: true };
+  }
+
+  if (!password) {
+    return { requiresOtp: false, session: null };
+  }
+
+  return {
+    requiresOtp: false,
+    session: await createPasswordSession(phone, password),
+  };
+}
+
+export async function forgotPassword(phoneValue: string): Promise<void> {
+  const phone = requireValidPhone(phoneValue);
+  const lastSent = lastForgotAt.get(phone) ?? 0;
+  if (Date.now() - lastSent < FORGOT_COOLDOWN_MS) {
+    throw new AuthHttpError(429, "Wait a moment before requesting another code.");
+  }
+
+  lastForgotAt.set(phone, Date.now());
+
+  const user = await findUserByPhone(phone);
+  if (!user) {
+    return;
+  }
+
+  await sendOtp(phone);
+}
+
+export async function resetPassword(body: ResetPasswordBody): Promise<SignInResult> {
+  const phone = requireValidPhone(body.phone);
+  const password = body.password;
+
+  if (password.length < 8) {
+    throw new AuthHttpError(400, "Password must be at least 8 characters.");
+  }
+
+  const pending = pendingPasswordResets.get(phone);
+  if (!pending || pending.expiresAt < Date.now()) {
+    pendingPasswordResets.delete(phone);
+    throw new AuthHttpError(400, "Verification session expired. Please start again.");
+  }
+
+  const { error } = await getAdmin().auth.admin.updateUserById(pending.userId, {
+    password,
+    phone_confirm: true,
+  });
+
+  if (error) {
+    throw new AuthHttpError(400, "Could not update your password. Please try again.");
+  }
+
+  pendingPasswordResets.delete(phone);
+
+  return {
+    requiresOtp: false,
+    session: await createPasswordSession(phone, password),
+  };
 }
 
 export async function resendOtp(phoneValue: string): Promise<void> {
   const phone = requireValidPhone(phoneValue);
+  const user = await findUserByPhone(phone);
+  if (!user) {
+    return;
+  }
   await sendOtp(phone);
 }

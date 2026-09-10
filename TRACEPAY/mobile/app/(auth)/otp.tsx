@@ -3,17 +3,20 @@ import { useCallback, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { useAuth } from "../../src/hooks/useAuth";
 import { Button } from "../../src/components/ui/Button";
 import { OTPInput } from "../../src/components/ui/OTPInput";
+import { continueAfterAuth } from "../../src/features/auth/auth.navigation";
 import { useAppLock } from "../../src/features/security/AppLockProvider";
+import { useAuth } from "../../src/hooks/useAuth";
 
 export default function Screen() {
-  const { error, resendPhone, setError, submitting, verifyPhone } = useAuth();
+  const { error, resendPhone, submitting, verifyPhone } = useAuth();
   const { hasPin, lockApp, unlockApp } = useAppLock();
   const params = useLocalSearchParams<{ phone?: string; flow?: string }>();
   const phone = typeof params.phone === "string" ? params.phone : undefined;
-  const isSignup = params.flow === "signup";
+  const flow = typeof params.flow === "string" ? params.flow : undefined;
+  const isSignup = flow === "signup";
+  const isReset = flow === "reset";
   const [code, setCode] = useState("");
   const verifyingRef = useRef(false);
 
@@ -26,25 +29,26 @@ export default function Screen() {
     try {
       await verifyPhone(nextCode, phone);
 
+      if (isReset) {
+        router.replace({
+          pathname: "/(auth)/new-password",
+          params: { phone: phone ?? "" },
+        });
+        return;
+      }
+
       if (isSignup) {
         router.replace("/(auth)/device-security");
         return;
       }
 
-      if (hasPin) {
-        lockApp();
-        router.replace("/(auth)/unlock");
-        return;
-      }
-
-      unlockApp();
-      router.replace("/(tabs)");
+      continueAfterAuth({ hasPin, lockApp, router, unlockApp });
     } catch {
       return;
     } finally {
       verifyingRef.current = false;
     }
-  }, [code, hasPin, isSignup, lockApp, phone, unlockApp, verifyPhone]);
+  }, [code, hasPin, isReset, isSignup, lockApp, phone, unlockApp, verifyPhone]);
 
   const handleResend = async () => {
     try {
@@ -62,7 +66,9 @@ export default function Screen() {
           Verify your phone
         </Text>
         <Text className="mt-3 text-center text-[15px] leading-[22px] text-muted-foreground">
-          Enter the 6-digit code sent to your phone.
+          {isReset
+            ? "Enter the 6-digit reset code sent to your phone."
+            : "Enter the 6-digit code sent to your phone."}
         </Text>
 
         <View className="mt-10">

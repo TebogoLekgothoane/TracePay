@@ -4,6 +4,13 @@ export type AuthUser = {
   fullName: string | null;
 };
 
+export type AuthProfile = {
+  id: string;
+  fullName: string;
+  phone: string | null;
+  currency: string;
+};
+
 export type SignUpInput = {
   fullName: string;
   phone: string;
@@ -17,6 +24,7 @@ export type SignInInput = {
 
 export type SignInResult = {
   requiresOtp: boolean;
+  resetAllowed?: boolean;
   session: {
     accessToken: string;
     refreshToken: string;

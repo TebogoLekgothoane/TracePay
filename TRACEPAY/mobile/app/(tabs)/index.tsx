@@ -12,12 +12,21 @@ import { IconButton } from "../../src/components/ui/IconButton";
 import { BalanceCard } from "../../src/components/dashboard/BalanceCard";
 import { InsightCard } from "../../src/components/dashboard/InsightCard";
 import { LeakSummary } from "../../src/components/dashboard/LeakSummary";
+import {
+  firstNameFromFullName,
+  initialsFromName,
+} from "../../src/features/auth/auth.validation";
+import { useProfile } from "../../src/hooks/useProfile";
 
 export default function HomeScreen() {
   const [balanceHidden, setBalanceHidden] = useState(false);
+  const { profile } = useProfile();
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const firstName = profile ? firstNameFromFullName(profile.fullName) : "";
+  const greetingLabel = firstName ? `${greeting}, ${firstName}` : greeting;
+  const initials = initialsFromName(profile?.fullName ?? "");
 
   const leaks = useMemo(
     () => [
@@ -104,11 +113,14 @@ export default function HomeScreen() {
                   justifyContent: "center",
                 }}
               >
-                <Text className="text-[15px] font-bold text-white">TR</Text>
+                <Text className="text-[15px] font-bold text-white">{initials}</Text>
               </LinearGradient>
               <View>
-                <Text className="text-[13px] text-muted-foreground">
-                  {greeting}, Tebogo
+                <Text
+                  className="h-[18px] text-[13px] leading-[18px] text-muted-foreground"
+                  numberOfLines={1}
+                >
+                  {greetingLabel}
                 </Text>
                 <Text className="text-[20px] font-bold tracking-[-0.4px] text-foreground">
                   Welcome back 👋

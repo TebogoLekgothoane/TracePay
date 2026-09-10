@@ -1,7 +1,6 @@
 import { getAuthApiBaseUrl } from "../constants/config";
+import { AUTH_API_TIMEOUT_MS } from "../features/auth/auth.constants";
 import { AuthError } from "../features/auth/auth.errors";
-
-const DEFAULT_TIMEOUT_MS = 15000;
 
 function apiBaseUrl(): string {
   const value = getAuthApiBaseUrl();
@@ -10,6 +9,7 @@ function apiBaseUrl(): string {
   }
   return value;
 }
+
 type ErrorBody = {
   error?: string;
 };
@@ -19,7 +19,7 @@ export async function authRequest<T>(
   body: Record<string, string>,
 ): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), AUTH_API_TIMEOUT_MS);
 
   try {
     const response = await fetch(`${apiBaseUrl()}${path}`, {

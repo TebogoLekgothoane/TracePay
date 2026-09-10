@@ -1,7 +1,6 @@
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, type Href } from "expo-router";
 import {
   Bell,
-  Calendar,
   ChevronLeft,
   ChevronRight,
   PauseCircle,
@@ -91,11 +90,12 @@ export default function SubscriptionDetailScreen() {
   const accent = palette.destructive;
   const maxSpend = Math.max(...sub.history);
 
+  const cancelActionId = `cancel-${subscriptionId ?? "netflix"}`;
   const actions = [
-    { id: "cancel", title: "Cancel subscription", Icon: XCircle },
-    { id: "snooze", title: "Snooze for 1 month", Icon: PauseCircle },
-    { id: "limit", title: "Set spending limit", Icon: SlidersHorizontal },
-    { id: "remind", title: "Remind me to review", Icon: Bell },
+    { id: "cancel", title: "Cancel subscription", Icon: XCircle, route: `/leak/subs/fix/${cancelActionId}/guide` },
+    { id: "snooze", title: "Snooze for 1 month", Icon: PauseCircle, route: `/leak/subs/fix/${cancelActionId}` },
+    { id: "limit", title: "Set spending limit", Icon: SlidersHorizontal, route: "/leak/subs/fix/limits/guide" },
+    { id: "remind", title: "Remind me to review", Icon: Bell, route: "/leak/subs/fix/alerts/guide" },
   ];
 
   return (
@@ -209,6 +209,7 @@ export default function SubscriptionDetailScreen() {
             {actions.map((item, index) => (
               <Pressable
                 key={item.id}
+                onPress={() => router.push(item.route as Href)}
                 className={`flex-row items-center gap-3 px-4 py-3.5 active:opacity-75 ${
                   index < actions.length - 1 ? "border-b border-border/60" : ""
                 }`}
@@ -229,8 +230,13 @@ export default function SubscriptionDetailScreen() {
         </View>
       </ScrollView>
 
-      <View
-        className="absolute bottom-0 left-0 right-0 px-5 pt-4"
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Cancel ${sub.name} with step-by-step guide`}
+        onPress={() =>
+          router.push(`/leak/subs/fix/${cancelActionId}/guide`)
+        }
+        className="absolute bottom-0 left-0 right-0 px-5 pt-4 active:opacity-90"
         style={{
           paddingBottom: Math.max(insets.bottom, 16),
           backgroundColor: accent,
@@ -246,9 +252,9 @@ export default function SubscriptionDetailScreen() {
           style={{ color: withAlpha(trace.primaryForeground, 0.85) }}
           className="mt-0.5 text-center text-[12px]"
         >
-          It takes less than 1 minute
+          Step-by-step guide · about 5 minutes
         </Text>
-      </View>
+      </Pressable>
     </SafeAreaView>
   );
 }

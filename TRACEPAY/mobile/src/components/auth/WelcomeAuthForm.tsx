@@ -22,7 +22,7 @@ export type WelcomeAuthMode = "create" | "login" | "forgot";
 export type WelcomeAuthPayload = {
   name?: string;
   phone: string;
-  password: string;
+  password?: string;
 };
 
 type FieldErrors = {
@@ -83,11 +83,9 @@ export function WelcomeAuthForm({
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
-  const [resetSent, setResetSent] = useState(false);
 
   useEffect(() => {
     setErrors({});
-    setResetSent(false);
   }, [mode]);
 
   const canSubmit = isForgot
@@ -132,15 +130,10 @@ export function WelcomeAuthForm({
       return;
     }
 
-    if (isForgot) {
-      setResetSent(true);
-      return;
-    }
-
     onSubmit({
       name: isCreate ? name.trim() : undefined,
       phone,
-      password,
+      password: isForgot ? undefined : password,
     });
   };
 
@@ -256,22 +249,17 @@ export function WelcomeAuthForm({
 
       <RevealRow index={isCreate ? 5 : 3} reveal={reveal}>
         <View>
-          {error && !isForgot ? (
+          {error ? (
             <Text className="mb-3 text-center text-[13px] text-destructive">
               {error}
-            </Text>
-          ) : null}
-          {isForgot && resetSent ? (
-            <Text className="mb-3 text-center text-[13px] text-muted-foreground">
-              If that number is registered, we'll send a reset code shortly.
             </Text>
           ) : null}
           <Button
             arrow
             className="mt-1"
-            disabled={!canSubmit || (isForgot && resetSent)}
+            disabled={!canSubmit || submitting}
             gradient
-            loading={submitting && !isForgot}
+            loading={submitting}
             onPress={submit}
           >
           {isForgot ? "Send reset code" : isCreate ? "Create Account" : "Log In"}

@@ -24,6 +24,10 @@ export default function FixCompareScreen() {
     return null;
   }
 
+  const columnHeaders =
+    detail.accounts?.slice(0, 3).map((account) => account.name.split(" ")[0] ?? account.name) ??
+    BANK_HEADERS;
+
   return (
     <LeakFlowShell
       title={detail.primaryCta}
@@ -36,7 +40,7 @@ export default function FixCompareScreen() {
         <View className="mt-5 overflow-hidden rounded-3xl bg-muted p-4">
           <View className="flex-row">
             <View className="w-[34%]" />
-            {BANK_HEADERS.map((bank) => (
+            {columnHeaders.map((bank) => (
               <View key={bank} className="flex-1 items-center">
                 <Text className="text-[11px] font-semibold text-foreground">{bank}</Text>
               </View>
@@ -86,7 +90,12 @@ export default function FixCompareScreen() {
           </>
         </Button>
 
-        <Button className="mt-3" size="md" variant="muted">
+        <Button
+          className="mt-3"
+          size="md"
+          variant="muted"
+          onPress={() => router.push(`/leak/${leakId}/fix/${actionId}/guide`)}
+        >
           Learn more
         </Button>
       </ScrollView>

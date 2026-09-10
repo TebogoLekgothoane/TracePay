@@ -173,7 +173,7 @@ function RootNavigator({
       return;
     }
 
-    if (hasPin && isLocked) {
+    if (hasSession && hasPin && isLocked) {
       if (
         !routeState.isUnlockRoute &&
         !routeState.isRecoveryRoute &&
@@ -185,26 +185,19 @@ function RootNavigator({
       return;
     }
 
-    if (hasPin && !isLocked) {
+    if (!hasSession) {
       if (
+        routeState.isProtectedRoute ||
         routeState.isUnlockRoute ||
-        routeState.isWelcomeRoute
+        routeState.isPinSetupRoute
       ) {
-        router.replace("/(tabs)");
-      }
-      // Stay on PIN setup / reset success / biometric screens until they continue.
-      return;
-    }
-
-    if (hasSession && !hasPin) {
-      if (routeState.isUnlockRoute || routeState.isWelcomeRoute) {
-        router.replace("/(tabs)");
+        router.replace("/(auth)/welcome");
       }
       return;
     }
 
-    if (!hasSession && routeState.isProtectedRoute) {
-      router.replace("/(auth)/welcome");
+    if (routeState.isWelcomeRoute || routeState.isUnlockRoute) {
+      router.replace("/(tabs)");
     }
   }, [
     hasPin,

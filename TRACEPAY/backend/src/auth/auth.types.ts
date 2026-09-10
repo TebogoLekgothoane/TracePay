@@ -12,6 +12,13 @@ export type SignInBody = {
 export type VerifyOtpBody = {
   phone: string;
   code: string;
+  password?: string;
+  purpose?: "signup" | "login" | "reset";
+};
+
+export type ResetPasswordBody = {
+  phone: string;
+  password: string;
 };
 
 export type PhoneBody = {
@@ -26,6 +33,7 @@ export type AuthSession = {
 export type SignInResult = {
   requiresOtp: boolean;
   session: AuthSession | null;
+  resetAllowed?: boolean;
 };
 
 export class AuthHttpError extends Error {

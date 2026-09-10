@@ -1,7 +1,6 @@
 import { router } from "expo-router";
 import {
   Banknote,
-  ChevronLeft,
   CreditCard,
   Download,
   FileText,
@@ -18,8 +17,8 @@ import {
   type LeaksTab,
 } from "../../src/components/leaks/LeaksSegmentTabs";
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
-import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
+import { InfoSheet } from "../../src/components/ui/Modal";
 import { LeaksSummaryCard } from "../../src/components/leaks/LeaksSummaryCard";
 import { TakeActionSection } from "../../src/components/leaks/TakeActionSection";
 import {
@@ -30,6 +29,7 @@ import { COLORS } from "../../src/theme/colors";
 
 export default function LeaksScreen() {
   const [activeTab, setActiveTab] = useState<LeaksTab>("Overview");
+  const [showDownloadInfo, setShowDownloadInfo] = useState(false);
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
 
@@ -97,26 +97,24 @@ export default function LeaksScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View className="px-5 pt-1">
-          <View className="mb-4 flex-row items-center justify-between">
-            <IconButton
-              accessibilityLabel="Go back"
-              variant="outline"
-              onPress={() => router.back()}
-            >
-              <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
-            </IconButton>
+          <View className="mb-1 flex-row items-start justify-between">
+            <View className="flex-1 pr-4">
+              <Text className="text-[30px] font-bold tracking-[-0.6px] text-foreground">
+                Leaks
+              </Text>
+              <Text className="mt-1 text-[14px] leading-5 text-muted-foreground">
+                We found areas where you&apos;re losing money.
+              </Text>
+            </View>
 
-            <IconButton accessibilityLabel="Download report" variant="outline">
+            <IconButton
+              accessibilityLabel="Download report"
+              variant="outline"
+              onPress={() => setShowDownloadInfo(true)}
+            >
               <Download color={palette.foreground} size={20} strokeWidth={2} />
             </IconButton>
           </View>
-
-          <Text className="text-[30px] font-bold tracking-[-0.6px] text-foreground">
-            Leaks
-          </Text>
-          <Text className="mt-1 text-[14px] leading-5 text-muted-foreground">
-            We found areas where you&apos;re losing money.
-          </Text>
 
           <View className="mt-5">
             <LeaksSegmentTabsContainer
@@ -133,14 +131,9 @@ export default function LeaksScreen() {
             />
           </View>
 
-          <View className="mb-3 mt-7 flex-row items-center justify-between">
-            <Text className="text-[17px] font-bold text-foreground">
-              Your top leaks
-            </Text>
-            <Button size="sm" variant="ghost" className="px-0">
-              View all leaks
-            </Button>
-          </View>
+          <Text className="mb-3 mt-7 text-[17px] font-bold text-foreground">
+            Your top leaks
+          </Text>
 
           <View className="overflow-hidden rounded-3xl border border-border bg-card">
             {topLeaks.map((item, index) => (
@@ -158,6 +151,13 @@ export default function LeaksScreen() {
           </View>
         </View>
       </TabScrollView>
+
+      <InfoSheet
+        visible={showDownloadInfo}
+        title="Leaks report"
+        message="PDF export is coming soon. For now, open each leak below to see the breakdown and step-by-step fixes."
+        onClose={() => setShowDownloadInfo(false)}
+      />
     </SafeAreaView>
   );
 }

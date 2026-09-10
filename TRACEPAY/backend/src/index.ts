@@ -2,9 +2,11 @@ import cors from "cors";
 import express from "express";
 
 import {
+  forgotPasswordHandler,
   loginHandler,
   registerHandler,
   resendOtpHandler,
+  resetPasswordHandler,
   verifyOtpHandler,
 } from "./auth/auth.controller.js";
 import { config } from "./config.js";
@@ -30,6 +32,12 @@ app.post("/auth/verify-otp", (req, res) => {
 });
 app.post("/auth/resend-otp", (req, res) => {
   void resendOtpHandler(req, res);
+});
+app.post("/auth/forgot-password", (req, res) => {
+  void forgotPasswordHandler(req, res);
+});
+app.post("/auth/reset-password", (req, res) => {
+  void resetPasswordHandler(req, res);
 });
 
 app.post("/ingestion/readings", (req, res) => {

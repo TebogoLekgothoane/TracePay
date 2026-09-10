@@ -1,6 +1,6 @@
 ---
 description: UI standards — no layout shift, skeletons, accessibility, dark mode
-globs: mobile/**/*.{tsx,ts,jsx,js}
+globs: "**/mobile/**/*.{tsx,ts,jsx,js}"
 alwaysApply: false
 ---
 
