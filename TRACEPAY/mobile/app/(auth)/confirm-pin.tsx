@@ -1,12 +1,14 @@
 import * as Haptics from "expo-haptics";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useRef, useState } from "react";
 
 import { PinEntryScreen } from "../../src/components/auth/PinEntryScreen";
+import { authFlowParams } from "../../src/features/auth/auth.navigation";
 import { useAppLock } from "../../src/features/security/AppLockProvider";
 
 export default function ConfirmPinScreen() {
   const { confirmPin } = useAppLock();
+  const params = useLocalSearchParams<{ flow?: string }>();
   const [isBusy, setIsBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [resetKey, setResetKey] = useState(0);
@@ -35,7 +37,10 @@ export default function ConfirmPinScreen() {
       void Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
       );
-      router.replace("/(auth)/biometric-setup");
+      router.replace({
+        pathname: "/(auth)/biometric-setup",
+        params: authFlowParams(params.flow),
+      });
     } catch {
       setErrorMessage("Could not save your PIN. Please try again.");
       setResetKey((value) => value + 1);

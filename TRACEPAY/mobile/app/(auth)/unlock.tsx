@@ -21,6 +21,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import TracePayIcon from "../../assets/icons/assembled TracePay icon.svg";
 import { UnlockPinSheet } from "../../src/components/auth/UnlockPinSheet";
+import { resolveAuthenticatedHomeHref } from "../../src/features/auth/auth.navigation";
 import { useAppLock } from "../../src/features/security/AppLockProvider";
 import type { BiometricKind } from "../../src/features/security/security.types";
 import { COLORS } from "../../src/theme/colors";
@@ -82,7 +83,9 @@ export default function UnlockScreen() {
     unlockFinishedRef.current = true;
     unlockApp();
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    router.replace("/(tabs)");
+    void resolveAuthenticatedHomeHref().then((href) => {
+      router.replace(href);
+    });
   }, [unlockApp]);
 
   const presentPinSheet = useCallback(() => {

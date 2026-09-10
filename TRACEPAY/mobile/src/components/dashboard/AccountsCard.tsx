@@ -18,6 +18,8 @@ type Props = {
   accounts: AccountPreview[];
   onAddAccount?: () => void;
   onSeeDetails?: () => void;
+  onAccountPress?: (account: AccountPreview) => void;
+  loading?: boolean;
 };
 
 function AccountIcon({
@@ -44,6 +46,8 @@ export function AccountsCard({
   accounts,
   onAddAccount,
   onSeeDetails,
+  onAccountPress,
+  loading = false,
 }: Props) {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
@@ -65,9 +69,27 @@ export function AccountsCard({
         </Button>
       </View>
 
+      {loading && accounts.length === 0 ? (
+        <View className="px-4 py-6">
+          <Text className="text-[14px] text-muted-foreground">
+            Loading your accounts…
+          </Text>
+        </View>
+      ) : null}
+
+      {!loading && accounts.length === 0 ? (
+        <View className="px-4 py-6">
+          <Text className="text-[14px] leading-6 text-muted-foreground">
+            Add your bank accounts manually for now. TracePay will analyse all of
+            them together once transactions are connected.
+          </Text>
+        </View>
+      ) : null}
+
       {accounts.map((account, index) => (
         <Pressable
           key={account.id}
+          onPress={() => onAccountPress?.(account)}
           className={`flex-row items-center gap-3 px-4 py-3.5 active:opacity-70 ${
             index < accounts.length - 1 ? "border-b border-border/40" : ""
           }`}

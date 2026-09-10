@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { ScanFace } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useState } from "react";
@@ -11,6 +11,7 @@ import { Button } from "../../src/components/ui/Button";
 import { COLORS } from "../../src/theme/colors";
 
 export default function BiometricSetupScreen() {
+  const params = useLocalSearchParams<{ flow?: string }>();
   const {
     biometricAvailability,
     enableBiometrics,
@@ -20,9 +21,17 @@ export default function BiometricSetupScreen() {
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const [isBusy, setIsBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const isSignupFlow = params.flow === "signup";
 
   const continueToApp = () => {
-    router.replace("/(tabs)");
+    router.replace(
+      isSignupFlow
+        ? {
+            pathname: "/(auth)/financial-data-consent",
+            params: { flow: "signup" },
+          }
+        : "/(tabs)",
+    );
   };
 
   const handleEnable = async () => {

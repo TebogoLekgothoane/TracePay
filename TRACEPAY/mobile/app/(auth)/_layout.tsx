@@ -69,6 +69,30 @@ export default function AuthLayout() {
       />
 
       <Stack.Screen
+        name="financial-data-consent"
+        options={{
+          headerShown: false,
+          gestureEnabled: false,
+        }}
+      />
+
+      <Stack.Screen
+        name="financial-accounts-setup"
+        options={{
+          headerShown: false,
+          gestureEnabled: false,
+        }}
+      />
+
+      <Stack.Screen
+        name="import-success"
+        options={{
+          headerShown: false,
+          gestureEnabled: false,
+        }}
+      />
+
+      <Stack.Screen
         name="unlock"
         options={{
           headerShown: false,

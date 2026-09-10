@@ -28,6 +28,9 @@ import {
   initialsFromName,
 } from "../../src/features/auth/auth.validation";
 import { useAppLock } from "../../src/features/security/AppLockProvider";
+import { LINKED_ACCOUNTS_HREF } from "../../src/features/accounts/account.navigation";
+import { formatAccountsCount } from "../../src/features/accounts/account.validation";
+import { useAccounts } from "../../src/hooks/useAccounts";
 import { useProfile } from "../../src/hooks/useProfile";
 import { COLORS, TRACEPAY, withAlpha } from "../../src/theme/colors";
 
@@ -49,9 +52,8 @@ const ACCOUNT_ROWS: SettingsRow[] = [
   {
     id: "accounts",
     label: "Linked accounts",
-    value: "3 accounts",
     Icon: Wallet,
-    href: "/settings/account",
+    href: LINKED_ACCOUNTS_HREF,
   },
   {
     id: "security",
@@ -139,6 +141,7 @@ export default function ProfileScreen() {
   const { colorScheme } = useColorScheme();
   const { clearDeviceLock } = useAppLock();
   const { error, loading, profile, retry } = useProfile();
+  const { accounts } = useAccounts();
   const [loggingOut, setLoggingOut] = useState(false);
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
@@ -179,6 +182,11 @@ export default function ProfileScreen() {
 
   const appRows = APP_ROWS.map((row) =>
     row.id === "appearance" ? { ...row, value: appearanceLabel } : row,
+  );
+  const accountRows = ACCOUNT_ROWS.map((row) =>
+    row.id === "accounts"
+      ? { ...row, value: formatAccountsCount(accounts.length) }
+      : row,
   );
 
   return (
@@ -267,7 +275,7 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          <SettingsSection title="Account" rows={ACCOUNT_ROWS} palette={palette} />
+          <SettingsSection title="Account" rows={accountRows} palette={palette} />
           <SettingsSection title="App settings" rows={appRows} palette={palette} />
 
           <Button

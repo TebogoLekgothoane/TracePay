@@ -1,12 +1,14 @@
 import * as Haptics from "expo-haptics";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 
 import { PinEntryScreen } from "../../src/components/auth/PinEntryScreen";
+import { authFlowParams } from "../../src/features/auth/auth.navigation";
 import { useAppLock } from "../../src/features/security/AppLockProvider";
 
 export default function DeviceSecurityScreen() {
   const { preparePin } = useAppLock();
+  const params = useLocalSearchParams<{ flow?: string }>();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [resetKey, setResetKey] = useState(0);
 
@@ -15,7 +17,10 @@ export default function DeviceSecurityScreen() {
 
     try {
       await preparePin(pin);
-      router.replace("/(auth)/confirm-pin");
+      router.replace({
+        pathname: "/(auth)/confirm-pin",
+        params: authFlowParams(params.flow),
+      });
     } catch {
       void Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Error,

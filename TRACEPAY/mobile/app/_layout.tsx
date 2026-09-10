@@ -13,8 +13,10 @@ import {
   TracePayAnimatedSplash,
   TRACEPAY_SPLASH_BACKGROUNDS,
 } from "../src/components/TracePayAnimatedSplash";
+import { resolveAuthenticatedHomeHref } from "../src/features/auth/auth.navigation";
 import {
   hasAuthSession,
+  resetLocalClientForFreshSignup,
   subscribeSessionPresence,
 } from "../src/features/auth/auth.service";
 import {
@@ -58,8 +60,9 @@ function RootNavigator({
   colorScheme: "light" | "dark";
 }) {
   const [showAnimatedSplash, setShowAnimatedSplash] = useState(true);
+  const [clientResetDone, setClientResetDone] = useState(false);
   const [hasSession, setHasSession] = useState<boolean | null>(null);
-  const { hasPin, isHydrated, isLocked, lockApp } = useAppLock();
+  const { clearDeviceLock, hasPin, isHydrated, isLocked, lockApp } = useAppLock();
   const router = useRouter();
   const segments = useSegments();
   const palette = COLORS[colorScheme];
@@ -71,6 +74,13 @@ function RootNavigator({
     const isAuthRoute = group === "(auth)";
     const isWelcomeRoute = isAuthRoute && screen === "welcome";
     const isUnlockRoute = isAuthRoute && screen === "unlock";
+    const isFinancialSetupRoute =
+      isAuthRoute &&
+      [
+        "financial-data-consent",
+        "financial-accounts-setup",
+        "import-success",
+      ].includes(screen ?? "");
     const isPinSetupRoute =
       isAuthRoute &&
       ["device-security", "confirm-pin", "biometric-setup"].includes(
@@ -98,6 +108,7 @@ function RootNavigator({
         group !== "(onboarding)");
 
     return {
+      isFinancialSetupRoute,
       isProtectedRoute,
       isRecoveryRoute,
       isPostPinSetupRoute,
@@ -115,6 +126,25 @@ function RootNavigator({
 
   useEffect(() => {
     if (!isHydrated) {
+      return;
+    }
+
+    let active = true;
+    void resetLocalClientForFreshSignup({ clearDeviceLock })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) {
+          setClientResetDone(true);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [clearDeviceLock, isHydrated]);
+
+  useEffect(() => {
+    if (!isHydrated || !clientResetDone) {
       return;
     }
 
@@ -158,7 +188,7 @@ function RootNavigator({
       active = false;
       unsubscribe?.();
     };
-  }, [hasPin, isHydrated, lockApp]);
+  }, [clientResetDone, hasPin, isHydrated, lockApp]);
 
   const handleAnimatedSplashLayout = useCallback(() => {
     SplashScreen.hideAsync().catch(() => undefined);
@@ -169,7 +199,12 @@ function RootNavigator({
   }, []);
 
   useEffect(() => {
-    if (showAnimatedSplash || !isHydrated || hasSession === null) {
+    if (
+      showAnimatedSplash ||
+      !isHydrated ||
+      !clientResetDone ||
+      hasSession === null
+    ) {
       return;
     }
 
@@ -177,6 +212,7 @@ function RootNavigator({
       if (
         !routeState.isUnlockRoute &&
         !routeState.isRecoveryRoute &&
+        !routeState.isFinancialSetupRoute &&
         !routeState.isPostPinSetupRoute &&
         !routeState.isPinSetupRoute
       ) {
@@ -188,6 +224,7 @@ function RootNavigator({
     if (!hasSession) {
       if (
         routeState.isProtectedRoute ||
+        routeState.isFinancialSetupRoute ||
         routeState.isUnlockRoute ||
         routeState.isPinSetupRoute
       ) {
@@ -197,9 +234,18 @@ function RootNavigator({
     }
 
     if (routeState.isWelcomeRoute || routeState.isUnlockRoute) {
-      router.replace("/(tabs)");
+      let active = true;
+      void resolveAuthenticatedHomeHref().then((href) => {
+        if (active) {
+          router.replace(href);
+        }
+      });
+      return () => {
+        active = false;
+      };
     }
   }, [
+    clientResetDone,
     hasPin,
     hasSession,
     isHydrated,
@@ -212,6 +258,7 @@ function RootNavigator({
   const shouldCoverProtectedContent =
     !showAnimatedSplash &&
     (!isHydrated ||
+      !clientResetDone ||
       hasSession === null ||
       (routeState.isProtectedRoute && isLocked));
 

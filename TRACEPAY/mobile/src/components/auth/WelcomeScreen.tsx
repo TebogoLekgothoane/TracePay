@@ -209,7 +209,7 @@ export function WelcomeScreen() {
   const isWelcome = panel === "welcome";
 
   const continueAfterLogin = () => {
-    continueAfterAuth({ hasPin, lockApp, router, unlockApp });
+    void continueAfterAuth({ hasPin, lockApp, router, unlockApp });
   };
 
   const resetPanel = () => {

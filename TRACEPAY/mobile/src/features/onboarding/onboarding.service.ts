@@ -42,3 +42,7 @@ export async function completeOnboarding(
   await persistOnboardingLanguage(language);
   await secureStorage.set(ONBOARDING_STORAGE_KEYS.completed, "1");
 }
+
+export async function clearOnboardingCompleted(): Promise<void> {
+  await secureStorage.remove(ONBOARDING_STORAGE_KEYS.completed);
+}

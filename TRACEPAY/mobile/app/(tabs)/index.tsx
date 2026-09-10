@@ -16,11 +16,14 @@ import {
   firstNameFromFullName,
   initialsFromName,
 } from "../../src/features/auth/auth.validation";
+import { LINKED_ACCOUNTS_HREF } from "../../src/features/accounts/account.navigation";
+import { useAccounts } from "../../src/hooks/useAccounts";
 import { useProfile } from "../../src/hooks/useProfile";
 
 export default function HomeScreen() {
   const [balanceHidden, setBalanceHidden] = useState(false);
   const { profile } = useProfile();
+  const { previews, loading: accountsLoading } = useAccounts();
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -61,35 +64,7 @@ export default function HomeScreen() {
     [],
   );
 
-  const accounts = useMemo(
-    () => [
-      {
-        id: "nedbank",
-        name: "Nedbank",
-        masked: "•••• 1234",
-        balance: "R5,230.40",
-        color: "#16A34A",
-        kind: "nedbank" as const,
-      },
-      {
-        id: "momo",
-        name: "MTN MoMo",
-        masked: "•••• 5678",
-        balance: "R2,180.35",
-        color: "#EAB308",
-        kind: "wallet" as const,
-      },
-      {
-        id: "capitec",
-        name: "Capitec Bank",
-        masked: "•••• 9101",
-        balance: "R1,130.00",
-        color: "#7C3AED",
-        kind: "bank" as const,
-      },
-    ],
-    [],
-  );
+  const balanceLabel = previews.length > 0 ? "—" : "Add accounts";
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -141,11 +116,15 @@ export default function HomeScreen() {
           </View>
 
           <BalanceCard
-            balance="R 8,540.75"
-            changeLabel="↑ 12% vs last month"
+            balance={balanceLabel}
+            changeLabel={
+              previews.length > 0
+                ? `${previews.length} linked account${previews.length === 1 ? "" : "s"}`
+                : "Connect accounts to start tracking"
+            }
             hidden={balanceHidden}
             onToggleVisibility={() => setBalanceHidden((value) => !value)}
-            onAddAccount={() => undefined}
+            onAddAccount={() => router.push("/transactions/import")}
             onViewInsights={() => router.push("/(tabs)/budget")}
           />
 
@@ -179,9 +158,11 @@ export default function HomeScreen() {
 
           <View className="mt-7">
             <AccountsCard
-              accounts={accounts}
-              onAddAccount={() => undefined}
-              onSeeDetails={() => undefined}
+              accounts={previews}
+              loading={accountsLoading}
+              onAddAccount={() => router.push("/transactions/import")}
+              onSeeDetails={() => router.push(LINKED_ACCOUNTS_HREF)}
+              onAccountPress={() => router.push(LINKED_ACCOUNTS_HREF)}
             />
           </View>
 

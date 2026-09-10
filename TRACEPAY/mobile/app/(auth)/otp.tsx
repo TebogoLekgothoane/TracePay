@@ -38,11 +38,14 @@ export default function Screen() {
       }
 
       if (isSignup) {
-        router.replace("/(auth)/device-security");
+        router.replace({
+          pathname: "/(auth)/device-security",
+          params: { flow: "signup" },
+        });
         return;
       }
 
-      continueAfterAuth({ hasPin, lockApp, router, unlockApp });
+      await continueAfterAuth({ hasPin, lockApp, router, unlockApp });
     } catch {
       return;
     } finally {

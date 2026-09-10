@@ -4,6 +4,9 @@ import {
   DEFAULT_PROFILE_CURRENCY,
   FALLBACK_PROFILE_NAME,
 } from "./auth.constants";
+import { secureStorage } from "../../lib/secure-storage";
+import { resetAccountsSnapshot } from "../accounts/account.store";
+import { clearOnboardingCompleted } from "../onboarding/onboarding.service";
 import { AuthError } from "./auth.errors";
 import {
   getProfileSnapshot,
@@ -469,10 +472,27 @@ export async function loadCurrentProfile(fresh = false): Promise<AuthProfile | n
   return profileRequest;
 }
 
+const FRESH_SIGNUP_RESET_FLAG = "tracepay.dev.reset-new-user.20260910b";
+
+export async function resetLocalClientForFreshSignup(args: {
+  clearDeviceLock: () => Promise<void>;
+}): Promise<void> {
+  const alreadyReset = await secureStorage.get(FRESH_SIGNUP_RESET_FLAG);
+  if (alreadyReset === "1") {
+    return;
+  }
+
+  await args.clearDeviceLock();
+  await clearOnboardingCompleted();
+  await signOut();
+  await secureStorage.set(FRESH_SIGNUP_RESET_FLAG, "1");
+}
+
 export async function signOut(): Promise<void> {
   clearPendingCredentials();
   profileRequest = null;
   resetProfileSnapshot();
+  resetAccountsSnapshot();
 
   if (isSupabaseConfigured()) {
     const { error } = await getSupabase().auth.signOut();
