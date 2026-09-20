@@ -2,7 +2,7 @@ import logging
 import time
 import uuid
 
-from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 
 from app.auth import require_supabase_user
 from pdf_processor.main import PdfProcessingError, process_pdf
@@ -37,6 +37,7 @@ def health() -> dict[str, str]:
 @app.post("/extraction/preview")
 async def extraction_preview(
     file: UploadFile = File(...),
+    password: str | None = Form(default=None),
     _user_id: str = Depends(require_supabase_user),
 ) -> dict[str, object]:
     """Extract and validate a PDF without writing financial data to the database."""
@@ -53,7 +54,7 @@ async def extraction_preview(
         raise HTTPException(status_code=413, detail="Statements must be smaller than 20 MB.")
 
     try:
-        result = process_pdf(content, filename, _user_id)
+        result = process_pdf(content, filename, _user_id, password)
     except PdfProcessingError as error:
         logger.warning("extraction_failed filename=%s reason=%s", filename, error)
         raise HTTPException(status_code=422, detail=str(error)) from error

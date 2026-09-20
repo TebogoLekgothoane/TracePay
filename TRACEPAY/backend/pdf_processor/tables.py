@@ -16,7 +16,7 @@ def table_headers(rows: list[list[str]]) -> tuple[int, list[str]]:
     aliases = {
         "date": {"date", "transaction date", "value date", "trans date"},
         "description": {"description", "details", "narration", "narrative", "merchant"},
-        "amount": {"amount", "debit", "credit", "withdrawal", "deposit"},
+        "amount": {"amount", "debit", "debits", "credit", "credits", "withdrawal", "deposit"},
     }
     for index, row in enumerate(rows[:10]):
         headers = [canonical_header(cell) for cell in row]

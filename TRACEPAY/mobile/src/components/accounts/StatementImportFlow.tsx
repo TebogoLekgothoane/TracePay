@@ -3,7 +3,7 @@ import { router, type Href } from "expo-router";
 import { ChevronLeft, FileText, X } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { SetupBrandHeader } from "../auth/SetupBrandHeader";
@@ -21,6 +21,8 @@ export function StatementImportFlow({ mode, returnTo, institution }: Props) {
   const [file, setFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [password, setPassword] = useState("");
+  const [passwordRequired, setPasswordRequired] = useState(false);
 
   const leave = () => {
     if (mode === "onboarding") return router.replace("/(tabs)");
@@ -30,6 +32,8 @@ export function StatementImportFlow({ mode, returnTo, institution }: Props) {
 
   const pickPdf = async () => {
     setMessage(null);
+    setPasswordRequired(false);
+    setPassword("");
     const result = await DocumentPicker.getDocumentAsync({ type: "application/pdf", copyToCacheDirectory: true, multiple: false });
     if (!result.canceled && result.assets?.[0]) setFile(result.assets[0]);
   };
@@ -39,11 +43,13 @@ export function StatementImportFlow({ mode, returnTo, institution }: Props) {
     setBusy(true);
     setMessage(null);
     try {
-      const result = await preparePdfStatement(file, institution);
+      const result = await preparePdfStatement(file, institution, password);
       console.info("[TracePay][statement] navigating_home_after_save", { statementId: result.statementId, status: result.status });
       router.replace("/(tabs)");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The PDF could not be processed.");
+      const nextMessage = error instanceof Error ? error.message : "The PDF could not be processed.";
+      if (/password protected|password is incorrect/i.test(nextMessage)) setPasswordRequired(true);
+      setMessage(nextMessage);
     } finally {
       setBusy(false);
     }
@@ -69,7 +75,22 @@ export function StatementImportFlow({ mode, returnTo, institution }: Props) {
                 <View className="ml-3 flex-1"><Text className="font-semibold text-foreground" numberOfLines={1}>{file.name}</Text><Text className="mt-1 text-[13px] text-muted-foreground">{file.size ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "Size unavailable"}</Text></View>
                 <Pressable onPress={() => setFile(null)}><X color={palette.mutedForeground} size={22} /></Pressable>
               </View>
-              <View className="mt-6"><Button loading={busy} onPress={() => void process()}>Process statement</Button></View>
+              {passwordRequired ? (
+                <View className="mt-5">
+                  <Text className="mb-2 text-[13px] font-semibold text-foreground">PDF password</Text>
+                  <TextInput
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    className="rounded-2xl border border-border bg-background px-4 py-3 text-foreground"
+                    onChangeText={setPassword}
+                    placeholder="Enter the PDF password"
+                    placeholderTextColor={palette.mutedForeground}
+                    secureTextEntry
+                    value={password}
+                  />
+                </View>
+              ) : null}
+              <View className="mt-6"><Button loading={busy} onPress={() => void process()}>{passwordRequired ? "Unlock and process" : "Process statement"}</Button></View>
             </View>
           )}
           {message ? <View className="mt-5 rounded-2xl bg-destructive/10 px-4 py-3"><Text className="text-center text-[13px] text-destructive">{message}</Text><Pressable className="mt-2" onPress={() => { setMessage(null); setFile(null); }}><Text className="text-center text-[13px] font-semibold text-primary">Choose another PDF</Text></Pressable></View> : null}

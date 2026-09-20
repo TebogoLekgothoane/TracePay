@@ -14,7 +14,16 @@ class ExtractionError(ValueError):
     pass
 
 
-def extract_layers(content: bytes) -> tuple[RawExtraction, str, list[list[list[str]]]]:
+class PasswordRequiredError(ExtractionError):
+    pass
+
+
+class InvalidPasswordError(ExtractionError):
+    pass
+
+
+def extract_layers(content: bytes, password: str | None = None) -> tuple[RawExtraction, str, list[list[list[str]]]]:
+    content = _decrypt_if_needed(content, password)
     try:
         import pdfplumber
     except ImportError as error:
@@ -44,6 +53,35 @@ def extract_layers(content: bytes) -> tuple[RawExtraction, str, list[list[list[s
             method = "unknown"
     pdf.close()
     return RawExtraction(pages=len(text_parts), extraction_method=method, raw_text_available=useful_text > 0, useful_text_characters=useful_text, tables_found=len(tables), rows_found=sum(len(table) for table in tables)), text, tables
+
+
+def _decrypt_if_needed(content: bytes, password: str | None) -> bytes:
+    try:
+        from pypdf import PdfReader, PdfWriter
+    except ImportError as error:
+        raise ExtractionError("pypdf is not installed.") from error
+
+    try:
+        reader = PdfReader(io.BytesIO(content), strict=False)
+    except Exception as error:
+        raise ExtractionError("The PDF could not be opened.") from error
+    if not reader.is_encrypted:
+        return content
+    if not password:
+        raise PasswordRequiredError("This PDF is password protected. Please enter the password to continue.")
+    try:
+        decrypted = reader.decrypt(password)
+    except Exception as error:
+        raise InvalidPasswordError("The PDF password is incorrect. Please try again.") from error
+    if not decrypted:
+        raise InvalidPasswordError("The PDF password is incorrect. Please try again.")
+
+    output = io.BytesIO()
+    writer = PdfWriter()
+    for page in reader.pages:
+        writer.add_page(page)
+    writer.write(output)
+    return output.getvalue()
 
 
 def _extract_camelot(content: bytes) -> list[list[list[str]]]:

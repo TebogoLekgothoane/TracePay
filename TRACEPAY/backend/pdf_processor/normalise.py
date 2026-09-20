@@ -44,9 +44,9 @@ def normalize_row(row: list[str], headers: list[str], row_number: int) -> Transa
     if transaction_date is None:
         return None
 
-    debit = next((parsed for name in values if name in {"debit", "withdrawal", "money out"} and values[name]
+    debit = next((parsed for name in values if name in {"debit", "debits", "withdrawal", "money out"} and values[name]
                   for parsed in [parse_amount(values[name])] if parsed not in (None, Decimal("0"))), None)
-    credit = next((parsed for name in values if name in {"credit", "deposit", "money in"} and values[name]
+    credit = next((parsed for name in values if name in {"credit", "credits", "deposit", "money in"} and values[name]
                    for parsed in [parse_amount(values[name])] if parsed not in (None, Decimal("0"))), None)
     amount_value = next((values[name] for name in values if name in {"amount", "transaction amount", "value"} and values[name]), "")
     amount = parse_amount(amount_value) if amount_value else None

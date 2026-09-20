@@ -92,12 +92,14 @@ function previewKind(account: FinancialAccount): AccountPreview["kind"] {
   return "bank";
 }
 
-export function toAccountPreview(account: FinancialAccount): AccountPreview {
+export function toAccountPreview(account: FinancialAccount, balance: number | null = null): AccountPreview {
   return {
     id: account.id,
     name: account.name,
     masked: formatAccountSubtitle(account),
-    balance: "—",
+    balance: balance === null
+      ? "—"
+      : `R${balance.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
     color: colorForAccount(account),
     kind: previewKind(account),
   };

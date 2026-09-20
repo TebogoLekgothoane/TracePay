@@ -35,10 +35,15 @@ function accountLabelFromFilename(filename: string, preferredInstitution?: strin
   if (preferred) return preferred.slice(0, 80);
   const label = filename
     .replace(/\.pdf$/i, "")
+    .replace(/bankstatement/gi, "Bank Statement")
     .replace(/[_.-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  return (label || "Imported bank statement").slice(0, 80);
+  const words = label.split(" ").filter(Boolean);
+  const bankIndex = words.findIndex((word) => word.toLowerCase() === "bank");
+  if (bankIndex > 0) return `${words[0]} Bank`.slice(0, 80);
+  if (words[0]?.toLowerCase().endsWith("bank")) return words[0].slice(0, 80);
+  return (words[0] || "Imported bank").slice(0, 80);
 }
 
 async function failAndCleanup(statementId: string, filePath: string, message: string): Promise<never> {
@@ -71,6 +76,7 @@ async function persistPreview(preview: PdfStatementPreview, preferredInstitution
   const { error } = await supabase.from("transactions").insert(rows);
   if (error) throw new Error("The extracted transactions could not be saved.");
   const { error: updateError } = await supabase.from("statement_imports").update({
+    account_id: account.id,
     status: "processed",
     extraction_method: preview.extractionMethod,
     transaction_count: rows.length,
@@ -80,7 +86,7 @@ async function persistPreview(preview: PdfStatementPreview, preferredInstitution
   console.info("[TracePay][statement] persist_completed", { statementId: preview.statementId, transactionCount: rows.length });
 }
 
-export async function preparePdfStatement(asset: DocumentPickerAsset, preferredInstitution?: string | null): Promise<PdfStatementPreview> {
+export async function preparePdfStatement(asset: DocumentPickerAsset, preferredInstitution?: string | null, password?: string): Promise<PdfStatementPreview> {
   const name = asset.name || "statement.pdf";
   console.info("[TracePay][statement] import_started", { filename: name, sizeBytes: asset.size ?? null, mimeType: asset.mimeType ?? null });
   if (!name.toLowerCase().endsWith(".pdf")) throw new Error("Choose a PDF bank statement.");
@@ -121,6 +127,7 @@ export async function preparePdfStatement(asset: DocumentPickerAsset, preferredI
     if (!processorUrl) return await failAndCleanup(id, filePath, "The PDF processor is not configured yet.");
     const form = new FormData();
     form.append("file", file, name);
+    if (password?.trim()) form.append("password", password);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 60_000);
     let response: Response;

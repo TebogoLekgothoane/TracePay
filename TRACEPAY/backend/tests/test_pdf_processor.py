@@ -1,6 +1,12 @@
+import io
 from datetime import date
 from decimal import Decimal
 
+import pytest
+from pypdf import PdfReader, PdfWriter
+from reportlab.pdfgen.canvas import Canvas
+
+from pdf_processor.extract import InvalidPasswordError, PasswordRequiredError, extract_layers
 from pdf_processor.models import Transaction
 from pdf_processor.normalise import normalize_row, parse_amount, parse_date
 from pdf_processor.tables import align_row_to_headers
@@ -64,3 +70,37 @@ def test_camelot_separator_columns_are_aligned() -> None:
     assert transaction is not None
     assert transaction.amount == Decimal("-450.00")
     assert transaction.balance == Decimal("12550.00")
+
+
+def test_password_protected_pdf_requires_and_accepts_password() -> None:
+    source = io.BytesIO()
+    canvas = Canvas(source)
+    canvas.drawString(50, 750, "Private statement")
+    canvas.save()
+
+    encrypted = io.BytesIO()
+    reader = PdfReader(io.BytesIO(source.getvalue()))
+    writer = PdfWriter()
+    writer.append_pages_from_reader(reader)
+    writer.encrypt("correct-password")
+    writer.write(encrypted)
+    content = encrypted.getvalue()
+
+    with pytest.raises(PasswordRequiredError, match="password protected"):
+        extract_layers(content)
+    with pytest.raises(InvalidPasswordError, match="password is incorrect"):
+        extract_layers(content, "wrong-password")
+    raw, _, _ = extract_layers(content, "correct-password")
+    assert raw.pages == 1
+
+
+def test_plural_bank_statement_columns_are_normalized() -> None:
+    debit = normalize_row(
+        ["18/09/2026", "WOOLWORTHS", "", "", "450.00", "12550.00"],
+        ["date", "details", "fees", "credits", "debits", "running balance"],
+        2,
+    )
+    assert debit is not None
+    assert debit.description == "WOOLWORTHS"
+    assert debit.amount == Decimal("-450.00")
+    assert debit.balance == Decimal("12550.00")

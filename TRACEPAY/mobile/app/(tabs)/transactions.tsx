@@ -47,7 +47,11 @@ export default function TransactionsScreen() {
             setTransactions([]);
           } else {
             setTransactionsError(null);
-            setTransactions((data ?? []) as TransactionRow[]);
+            const sorted = [...((data ?? []) as TransactionRow[])].sort((left, right) => {
+              const dateDifference = right.date.localeCompare(left.date);
+              return dateDifference !== 0 ? dateDifference : right.id.localeCompare(left.id);
+            });
+            setTransactions(sorted);
           }
           setTransactionsLoading(false);
         });

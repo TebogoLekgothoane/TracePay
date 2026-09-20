@@ -1,7 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Bell, FileText, RefreshCw, Wallet } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -19,11 +19,42 @@ import {
 import { LINKED_ACCOUNTS_HREF } from "../../src/features/accounts/account.navigation";
 import { useAccounts } from "../../src/hooks/useAccounts";
 import { useProfile } from "../../src/hooks/useProfile";
+import { getSupabase } from "../../src/lib/supabase";
 
 export default function HomeScreen() {
   const [balanceHidden, setBalanceHidden] = useState(false);
   const { profile } = useProfile();
   const { previews, loading: accountsLoading } = useAccounts();
+  const [totalBalance, setTotalBalance] = useState<number | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void getSupabase()
+        .from("transactions")
+        .select("balance,date,created_at,statement_imports!inner(account_id)")
+        .not("balance", "is", null)
+        .not("statement_imports.account_id", "is", null)
+        .order("date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .then(({ data, error }) => {
+          if (!active || error) return;
+          const latestByAccount = new Map<string, number>();
+          for (const row of data ?? []) {
+            const relation = Array.isArray(row.statement_imports) ? row.statement_imports[0] : row.statement_imports;
+            const accountId = relation?.account_id;
+            if (typeof accountId === "string" && !latestByAccount.has(accountId)) {
+              const balance = Number(row.balance);
+              if (Number.isFinite(balance)) latestByAccount.set(accountId, balance);
+            }
+          }
+          setTotalBalance(latestByAccount.size > 0 ? [...latestByAccount.values()].reduce((sum, balance) => sum + balance, 0) : null);
+        });
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -64,7 +95,11 @@ export default function HomeScreen() {
     [],
   );
 
-  const balanceLabel = previews.length > 0 ? "—" : "Add accounts";
+  const balanceLabel = totalBalance !== null
+    ? `R${totalBalance.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : previews.length > 0
+      ? "—"
+      : "Add accounts";
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>

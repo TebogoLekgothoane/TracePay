@@ -110,6 +110,32 @@ export async function listAccounts(): Promise<FinancialAccount[]> {
   return readAccountRows(data);
 }
 
+export async function loadAccountBalances(accountIds: readonly string[]): Promise<Record<string, number>> {
+  await requireAuthenticatedUserId();
+  if (accountIds.length === 0) return {};
+
+  const { data, error } = await getSupabase()
+    .from("transactions")
+    .select("balance,date,created_at,statement_imports!inner(account_id)")
+    .in("statement_imports.account_id", [...accountIds])
+    .not("balance", "is", null)
+    .order("date", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (error) throw new AccountError("Could not load account balances. Please try again.");
+
+  const balances: Record<string, number> = {};
+  for (const row of data ?? []) {
+    const relation = Array.isArray(row.statement_imports) ? row.statement_imports[0] : row.statement_imports;
+    const accountId = relation?.account_id;
+    const balance = Number(row.balance);
+    if (typeof accountId === "string" && Number.isFinite(balance) && balances[accountId] === undefined) {
+      balances[accountId] = balance;
+    }
+  }
+  return balances;
+}
+
 export async function loadAccounts(fresh = false): Promise<FinancialAccount[]> {
   const current = getAccountsSnapshot();
   if (!fresh && current.initialized && !current.error) {
@@ -164,15 +190,16 @@ export async function ensureBankAccount(
   }
 
   const accounts = await listAccounts();
+  const target = bank.toLowerCase();
   const existing = accounts.find((account) => {
     const institutionName = (account.institution ?? "").trim().toLowerCase();
     const accountName = account.name.trim().toLowerCase();
-    const target = bank.toLowerCase();
-    return institutionName === target || accountName === target;
+    return institutionName === target || accountName === target || institutionName.startsWith(target) || accountName.startsWith(target);
   });
 
   if (existing) {
-    return existing;
+    if (existing.name === bank && existing.institution === bank) return existing;
+    return updateAccount({ id: existing.id, name: bank, institution: bank });
   }
 
   return createAccount({

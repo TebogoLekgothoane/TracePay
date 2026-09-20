@@ -16,14 +16,14 @@ class PdfProcessingError(ValueError):
 logger = logging.getLogger("tracepay.pdf")
 
 
-def process_pdf(content: bytes, filename: str, authenticated_user_id: str) -> ProcessingResult:
+def process_pdf(content: bytes, filename: str, authenticated_user_id: str, password: str | None = None) -> ProcessingResult:
     logger.info("pdf_processing_started filename=%s size_bytes=%s user_id_prefix=%s", filename, len(content), authenticated_user_id[:8] if authenticated_user_id else "none")
     if not authenticated_user_id:
         raise PdfProcessingError("An authenticated user is required for PDF processing.")
     if PurePath(filename).suffix.lower() != ".pdf":
         raise PdfProcessingError("Only PDF files can be processed.")
     try:
-        raw, text, tables = extract_layers(content)
+        raw, text, tables = extract_layers(content, password)
     except ExtractionError as error:
         raise PdfProcessingError(str(error)) from error
     if raw.extraction_method == "unknown":
