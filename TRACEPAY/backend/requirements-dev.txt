@@ -1,4 +1,5 @@
 -r requirements.txt
-pytest
-httpx
-ruff
+pytest==8.3.4
+httpx==0.28.1
+ruff==0.9.4
+reportlab==4.3.1

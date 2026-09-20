@@ -6,7 +6,7 @@ import {
   parseReturnTo,
 } from "../../../src/features/accounts/account.navigation";
 
-/** Account creation is now bank + CSV import only. */
+/** Account setup is currently entered through the PDF statement flow. */
 export default function AddAccountScreen() {
   const params = useLocalSearchParams<{
     institution?: string;

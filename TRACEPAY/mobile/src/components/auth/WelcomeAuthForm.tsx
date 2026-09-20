@@ -1,11 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import Animated, {
-  Extrapolation,
-  interpolate,
-  type SharedValue,
-  useAnimatedStyle,
-} from "react-native-reanimated";
 
 import {
   isValidName,
@@ -35,43 +29,14 @@ type FieldErrors = {
 type Props = {
   mode: WelcomeAuthMode;
   submitting: boolean;
-  reveal: SharedValue<number>;
   error?: string | null;
   onSubmit: (payload: WelcomeAuthPayload) => void;
   onSwitchMode: (mode: WelcomeAuthMode) => void;
 };
 
-function RevealRow({
-  index,
-  reveal,
-  children,
-}: {
-  index: number;
-  reveal: SharedValue<number>;
-  children: ReactNode;
-}) {
-  const style = useAnimatedStyle(() => {
-    const start = 0.28 + index * 0.1;
-    const t = interpolate(
-      reveal.value,
-      [start, Math.min(1, start + 0.18)],
-      [0, 1],
-      Extrapolation.CLAMP,
-    );
-
-    return {
-      opacity: t,
-      transform: [{ translateY: (1 - t) * 16 }],
-    };
-  });
-
-  return <Animated.View style={style}>{children}</Animated.View>;
-}
-
 export function WelcomeAuthForm({
   mode,
   submitting,
-  reveal,
   error,
   onSubmit,
   onSwitchMode,
@@ -139,170 +104,158 @@ export function WelcomeAuthForm({
 
   return (
     <View className="gap-3.5">
-      <RevealRow index={0} reveal={reveal}>
-        <View className="mb-1 items-center">
-          <Text className="text-center text-[24px] font-bold text-foreground">
-            {isForgot
-              ? "Forgot password"
-              : isCreate
-                ? "Create your account"
-                : "Log in"}
-          </Text>
-          <Text className="mt-1.5 text-center text-[14px] text-muted-foreground">
-            {isForgot
-              ? "Enter the phone number on your account. We'll send a reset code if it exists."
-              : isCreate
-                ? "Set up TracePay with your name, phone number, and a secure password."
-                : "Use the phone number and password from when you created your account."}
-          </Text>
-        </View>
-      </RevealRow>
+      <View className="mb-1 items-center">
+        <Text className="text-center text-[24px] font-bold text-foreground">
+          {isForgot
+            ? "Forgot password"
+            : isCreate
+              ? "Create your account"
+              : "Log in"}
+        </Text>
+        <Text className="mt-1.5 text-center text-[14px] text-muted-foreground">
+          {isForgot
+            ? "Enter the phone number on your account. We'll send a reset code if it exists."
+            : isCreate
+              ? "Set up TracePay with your name, phone number, and a secure password."
+              : "Use the phone number and password from when you created your account."}
+        </Text>
+      </View>
 
       {isCreate ? (
-        <RevealRow index={1} reveal={reveal}>
-          <Input
-            autoCapitalize="words"
-            autoComplete="name"
-            editable={!submitting}
-            error={errors.name}
-            icon="person-outline"
-            label="Full name"
-            onChangeText={(value) => {
-              setName(value);
-              setErrors((current) => ({ ...current, name: undefined }));
-            }}
-            placeholder="Your full name"
-            textContentType="name"
-            value={name}
-          />
-        </RevealRow>
+        <Input
+          autoCapitalize="words"
+          autoComplete="name"
+          editable={!submitting}
+          error={errors.name}
+          icon="person-outline"
+          label="Full name"
+          onChangeText={(value) => {
+            setName(value);
+            setErrors((current) => ({ ...current, name: undefined }));
+          }}
+          placeholder="Your full name"
+          textContentType="name"
+          value={name}
+        />
       ) : null}
 
-      <RevealRow index={isCreate ? 2 : 1} reveal={reveal}>
-        <PhoneInput
-          autoComplete="tel"
-          editable={!submitting}
-          error={errors.phone}
-          onChangeText={(value) => {
-            setPhone(value);
-            setErrors((current) => ({ ...current, phone: undefined }));
-          }}
-          value={phone}
-        />
-      </RevealRow>
+      <PhoneInput
+        autoComplete="tel"
+        editable={!submitting}
+        error={errors.phone}
+        onChangeText={(value) => {
+          setPhone(value);
+          setErrors((current) => ({ ...current, phone: undefined }));
+        }}
+        value={phone}
+      />
 
       {!isForgot ? (
-      <RevealRow index={isCreate ? 3 : 2} reveal={reveal}>
-        <PasswordInput
-          autoCapitalize="none"
-          autoComplete={isCreate ? "new-password" : "password"}
-          autoCorrect={false}
-          editable={!submitting}
-          error={errors.password}
-          label="Password"
-          onChangeText={(value) => {
-            setPassword(value);
-            setErrors((current) => ({ ...current, password: undefined }));
-          }}
-          placeholder={isCreate ? "At least 8 characters" : "Your password"}
-          textContentType={isCreate ? "newPassword" : "password"}
-          value={password}
-        />
-        {!isCreate ? (
-          <Pressable
-            accessibilityRole="button"
-            className="mt-2 self-end"
-            hitSlop={8}
-            onPress={() => onSwitchMode("forgot")}
-          >
-            <Text className="text-[13px] font-semibold text-primary">
-              Forgot your password?
-            </Text>
-          </Pressable>
-        ) : null}
-      </RevealRow>
+        <View>
+          <PasswordInput
+            autoCapitalize="none"
+            autoComplete={isCreate ? "new-password" : "password"}
+            autoCorrect={false}
+            editable={!submitting}
+            error={errors.password}
+            label="Password"
+            onChangeText={(value) => {
+              setPassword(value);
+              setErrors((current) => ({ ...current, password: undefined }));
+            }}
+            placeholder={isCreate ? "At least 8 characters" : "Your password"}
+            textContentType={isCreate ? "newPassword" : "password"}
+            value={password}
+          />
+          {!isCreate ? (
+            <Pressable
+              accessibilityRole="button"
+              className="mt-2 self-end"
+              hitSlop={8}
+              onPress={() => onSwitchMode("forgot")}
+            >
+              <Text className="text-[13px] font-semibold text-primary">
+                Forgot your password?
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
       ) : null}
 
       {isCreate ? (
-        <RevealRow index={4} reveal={reveal}>
-          <PasswordInput
-            autoCapitalize="none"
-            autoComplete="new-password"
-            autoCorrect={false}
-            editable={!submitting}
-            error={errors.confirmPassword}
-            icon="lock-closed-outline"
-            label="Confirm password"
-            onChangeText={(value) => {
-              setConfirmPassword(value);
-              setErrors((current) => ({
-                ...current,
-                confirmPassword: undefined,
-              }));
-            }}
-            placeholder="Re-enter password"
-            textContentType="newPassword"
-            value={confirmPassword}
-          />
-        </RevealRow>
+        <PasswordInput
+          autoCapitalize="none"
+          autoComplete="new-password"
+          autoCorrect={false}
+          editable={!submitting}
+          error={errors.confirmPassword}
+          icon="lock-closed-outline"
+          label="Confirm password"
+          onChangeText={(value) => {
+            setConfirmPassword(value);
+            setErrors((current) => ({
+              ...current,
+              confirmPassword: undefined,
+            }));
+          }}
+          placeholder="Re-enter password"
+          textContentType="newPassword"
+          value={confirmPassword}
+        />
       ) : null}
 
-      <RevealRow index={isCreate ? 5 : 3} reveal={reveal}>
-        <View>
-          {error ? (
-            <Text className="mb-3 text-center text-[13px] text-destructive">
-              {error}
-            </Text>
-          ) : null}
-          <Button
-            arrow
-            className="mt-1"
-            disabled={!canSubmit || submitting}
-            gradient
-            loading={submitting}
-            onPress={submit}
-          >
+      <View>
+        {error ? (
+          <Text className="mb-3 text-center text-[13px] text-destructive">
+            {error}
+          </Text>
+        ) : null}
+        <Button
+          arrow
+          className="mt-1"
+          disabled={!canSubmit || submitting}
+          gradient
+          loading={submitting}
+          onPress={submit}
+        >
           {isForgot ? "Send reset code" : isCreate ? "Create Account" : "Log In"}
         </Button>
-        </View>
-      </RevealRow>
+      </View>
 
-      <RevealRow index={isCreate ? 6 : 4} reveal={reveal}>
-        <View className="mt-2 items-center gap-4">
-          {isForgot ? (
+      <View className="mt-2 items-center gap-4">
+        {isForgot ? (
+          <Pressable
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={() => onSwitchMode("login")}
+          >
+            <Text className="text-center text-[14px] text-muted-foreground">
+              Remembered it?{" "}
+              <Text className="font-semibold text-primary">Log in</Text>
+            </Text>
+          </Pressable>
+        ) : (
+          <>
+            <View className="w-full flex-row items-center gap-3">
+              <View className="h-px flex-1 bg-border" />
+              <Text className="text-[13px] text-muted-foreground">or</Text>
+              <View className="h-px flex-1 bg-border" />
+            </View>
             <Pressable
               accessibilityRole="button"
               hitSlop={8}
-              onPress={() => onSwitchMode("login")}
+              onPress={() => onSwitchMode(isCreate ? "login" : "create")}
             >
               <Text className="text-center text-[14px] text-muted-foreground">
-                Remembered it?{" "}
-                <Text className="font-semibold text-primary">Log in</Text>
+                {isCreate ? "Already have an account? " : "New here? "}
+                <Text className="font-semibold text-primary">
+                  {isCreate ? "Log in" : "Create an account"}
+                </Text>
               </Text>
             </Pressable>
-          ) : (
-            <>
-          <View className="w-full flex-row items-center gap-3">
-            <View className="h-px flex-1 bg-border" />
-            <Text className="text-[13px] text-muted-foreground">or</Text>
-            <View className="h-px flex-1 bg-border" />
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={() => onSwitchMode(isCreate ? "login" : "create")}
-          >
-            <Text className="text-center text-[14px] text-muted-foreground">
-              {isCreate ? "Already have an account? " : "New here? "}
-              <Text className="font-semibold text-primary">
-                {isCreate ? "Log in" : "Create an account"}
-              </Text>
-            </Text>
-          </Pressable>
-            </>
-          )}
-        </View>
-      </RevealRow>
+          </>
+        )}
+      </View>
     </View>
   );
 }

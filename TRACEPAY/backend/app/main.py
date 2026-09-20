@@ -1,8 +1,62 @@
-from fastapi import FastAPI
+import logging
+import time
+import uuid
+
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+
+from app.auth import require_supabase_user
+from pdf_processor.main import PdfProcessingError, process_pdf
 
 app = FastAPI(title="TRACEPAY API", version="1.0.0")
+logger = logging.getLogger("tracepay.api")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+
+
+@app.middleware("http")
+async def request_logging(request: Request, call_next):
+    request_id = uuid.uuid4().hex[:8]
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+        elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+        logger.info("request_complete id=%s method=%s path=%s status=%s duration_ms=%s", request_id, request.method, request.url.path, response.status_code, elapsed_ms)
+        response.headers["X-TracePay-Request-Id"] = request_id
+        return response
+    except Exception:
+        elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+        logger.exception("request_error id=%s method=%s path=%s duration_ms=%s", request_id, request.method, request.url.path, elapsed_ms)
+        raise
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
+    logger.info("health_check")
     return {"status": "ok"}
+
+
+@app.post("/extraction/preview")
+async def extraction_preview(
+    file: UploadFile = File(...),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Extract and validate a PDF without writing financial data to the database."""
+    filename = file.filename or "statement"
+    logger.info("extraction_started filename=%s content_type=%s", filename, file.content_type)
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=415, detail="Only PDF statements are supported.")
+
+    content = await file.read()
+    logger.info("extraction_file_read filename=%s size_bytes=%s", filename, len(content))
+    if not content:
+        raise HTTPException(status_code=400, detail="The uploaded statement is empty.")
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Statements must be smaller than 20 MB.")
+
+    try:
+        result = process_pdf(content, filename, _user_id)
+    except PdfProcessingError as error:
+        logger.warning("extraction_failed filename=%s reason=%s", filename, error)
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    logger.info("extraction_completed filename=%s method=%s status=%s transactions=%s confidence=%s", filename, result.raw_extraction.extraction_method, result.validation.status, len(result.transactions), result.validation.confidence)
+    return result.model_dump(mode="json")

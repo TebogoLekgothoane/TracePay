@@ -1,1 +1,0 @@
-"""Leak detection rules."""

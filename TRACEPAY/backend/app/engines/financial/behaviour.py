@@ -1,1 +1,0 @@
-"""Financial behaviour analysis."""

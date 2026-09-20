@@ -104,8 +104,8 @@ export default function LinkedAccountsScreen() {
           </View>
 
           <Text className="mt-4 text-[14px] leading-6 text-muted-foreground">
-            Choose a bank and upload a CSV statement. No need to type account
-            details.
+            Upload a PDF bank statement. TracePay will extract and save its
+            transaction rows to your account.
           </Text>
 
           {error ? (
@@ -134,7 +134,7 @@ export default function LinkedAccountsScreen() {
                   No statements yet
                 </Text>
                 <Text className="mt-1 text-[14px] leading-6 text-muted-foreground">
-                  Pick your bank and upload a CSV covering about the last 6 months.
+                  Upload a PDF bank statement to get started.
                 </Text>
               </View>
             ) : null}
@@ -206,8 +206,8 @@ export default function LinkedAccountsScreen() {
           <View className="mt-6 flex-row items-start gap-3 rounded-2xl bg-primary/10 px-4 py-3.5">
             <FileSpreadsheet color={palette.primary} size={18} strokeWidth={2.2} />
             <Text className="flex-1 text-[13px] leading-5 text-muted-foreground">
-              Use a CSV export from your bank app or online banking for the last 6
-              months.
+              Statements are kept private in Supabase Storage and processed only
+              through the PDF pipeline.
             </Text>
           </View>
         </View>
