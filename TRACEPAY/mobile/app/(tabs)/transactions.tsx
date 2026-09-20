@@ -19,6 +19,9 @@ type TransactionRow = {
   type: "debit" | "credit";
   balance: number | string | null;
   currency: string | null;
+  category_id: string | null;
+  category_source: "automatic" | "manual";
+  categories: { name: string } | { name: string }[] | null;
 };
 
 export default function TransactionsScreen() {
@@ -36,7 +39,7 @@ export default function TransactionsScreen() {
       setTransactionsLoading(true);
       void getSupabase()
         .from("transactions")
-        .select("id,date,description,amount,type,balance,currency")
+        .select("id,date,description,amount,type,balance,currency,category_id,category_source,categories(name)")
         .order("date", { ascending: false })
         .order("created_at", { ascending: false })
         .limit(100)
@@ -148,6 +151,9 @@ export default function TransactionsScreen() {
                       <Text className={`text-[15px] font-bold ${transaction.type === "debit" ? "text-destructive" : "text-green-600"}`}>
                         {transaction.type === "debit" ? "-" : "+"}{transaction.currency === "ZAR" || !transaction.currency ? "R" : `${transaction.currency} `}{Math.abs(Number(transaction.amount)).toFixed(2)}
                       </Text>
+                    </View>
+                    <View className="mt-2 flex-row items-center">
+                      <Text className="text-[13px] text-muted-foreground">{(() => { const value = Array.isArray(transaction.categories) ? transaction.categories[0] : transaction.categories; return value?.name ?? "Uncategorised"; })()}</Text>
                     </View>
                   </View>
                 ))}

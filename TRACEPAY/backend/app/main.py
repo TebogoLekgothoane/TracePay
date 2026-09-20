@@ -2,9 +2,10 @@ import logging
 import time
 import uuid
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 
 from app.auth import require_supabase_user
+from app.category_catalog import fetch_category_names
 from pdf_processor.main import PdfProcessingError, process_pdf
 
 app = FastAPI(title="TRACEPAY API", version="1.0.0")
@@ -38,6 +39,7 @@ def health() -> dict[str, str]:
 async def extraction_preview(
     file: UploadFile = File(...),
     password: str | None = Form(default=None),
+    authorization: str | None = Header(default=None),
     _user_id: str = Depends(require_supabase_user),
 ) -> dict[str, object]:
     """Extract and validate a PDF without writing financial data to the database."""
@@ -54,7 +56,8 @@ async def extraction_preview(
         raise HTTPException(status_code=413, detail="Statements must be smaller than 20 MB.")
 
     try:
-        result = process_pdf(content, filename, _user_id, password)
+        access_token = (authorization or "").removeprefix("Bearer ").strip()
+        result = process_pdf(content, filename, _user_id, password, fetch_category_names(access_token))
     except PdfProcessingError as error:
         logger.warning("extraction_failed filename=%s reason=%s", filename, error)
         raise HTTPException(status_code=422, detail=str(error)) from error

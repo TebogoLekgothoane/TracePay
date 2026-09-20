@@ -7,6 +7,7 @@ from .models import ProcessingResult, Transaction
 from .normalise import normalize_row, parse_amount, parse_date
 from .tables import align_row_to_headers, table_headers
 from .validate import validate_transactions
+from categorisation.service import CategorisableTransaction, categorise_batch
 
 
 class PdfProcessingError(ValueError):
@@ -16,7 +17,7 @@ class PdfProcessingError(ValueError):
 logger = logging.getLogger("tracepay.pdf")
 
 
-def process_pdf(content: bytes, filename: str, authenticated_user_id: str, password: str | None = None) -> ProcessingResult:
+def process_pdf(content: bytes, filename: str, authenticated_user_id: str, password: str | None = None, category_names: list[str] | None = None) -> ProcessingResult:
     logger.info("pdf_processing_started filename=%s size_bytes=%s user_id_prefix=%s", filename, len(content), authenticated_user_id[:8] if authenticated_user_id else "none")
     if not authenticated_user_id:
         raise PdfProcessingError("An authenticated user is required for PDF processing.")
@@ -48,6 +49,20 @@ def process_pdf(content: bytes, filename: str, authenticated_user_id: str, passw
         transactions, detected_rows = _parse_text_rows(text)
         raw = raw.model_copy(update={"rows_found": detected_rows})
         rows_rejected = max(detected_rows - len(transactions), 0)
+    logger.info("[CATEGORISATION] invoked_after_extraction=true total_transactions=%s live_category_count=%s", len(transactions), len(category_names or []))
+    classifications = categorise_batch([
+        CategorisableTransaction(str(index), transaction.description, transaction.amount, transaction.type)
+        for index, transaction in enumerate(transactions)
+    ], category_names)
+    transactions = [transaction.model_copy(update={
+        "category_name": classifications[str(index)].category_name,
+        "category_confidence": classifications[str(index)].confidence,
+        "category_rule": classifications[str(index)].rule,
+        "transaction_class": classifications[str(index)].transaction_class,
+        "classification_confidence": classifications[str(index)].classification_confidence,
+        "classification_reason": classifications[str(index)].classification_reason,
+        "merchant_name": classifications[str(index)].merchant_name,
+    }) for index, transaction in enumerate(transactions)]
     validation = validate_transactions(transactions, raw.extraction_method, raw.rows_found or len(transactions), rows_rejected)
     logger.info("pdf_processing_completed filename=%s method=%s pages=%s tables=%s rows_detected=%s rows_rejected=%s transactions=%s status=%s confidence=%s", filename, raw.extraction_method, raw.pages, raw.tables_found, validation.rows_detected, validation.rows_rejected, len(transactions), validation.status, validation.confidence)
     return ProcessingResult(filename=filename, raw_extraction=raw.model_copy(update={"rows_found": max(raw.rows_found, len(transactions))}), validation=validation, transactions=transactions)

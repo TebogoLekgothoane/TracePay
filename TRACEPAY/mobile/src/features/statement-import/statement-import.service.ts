@@ -5,6 +5,7 @@ import { ensureBankAccount } from "../accounts/account.service";
 import { getSupabase } from "../../lib/supabase";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
+const PDF_PROCESSOR_TIMEOUT_MS = 180_000;
 
 export type ExtractedTransaction = {
   date: string;
@@ -13,6 +14,13 @@ export type ExtractedTransaction = {
   type: "debit" | "credit";
   balance?: number | string | null;
   currency?: string;
+  category_name?: string | null;
+  category_confidence?: number;
+  category_rule?: string | null;
+  transaction_class?: string;
+  classification_confidence?: number;
+  classification_reason?: string | null;
+  merchant_name?: string | null;
 };
 
 export type PdfStatementPreview = {
@@ -72,9 +80,49 @@ async function persistPreview(preview: PdfStatementPreview, preferredInstitution
     balance: transaction.balance ?? null,
     currency: transaction.currency ?? null,
     source: "pdf",
+    category_source: "automatic",
+    category_confidence: transaction.category_confidence ?? 0,
+    category_rule: transaction.category_rule ?? null,
+    categorized_at: transaction.category_name ? new Date().toISOString() : null,
+    transaction_class: transaction.transaction_class ?? "unknown",
+    classification_confidence: transaction.classification_confidence ?? 0,
+    classification_reason: transaction.classification_reason ?? null,
   }));
-  const { error } = await supabase.from("transactions").insert(rows);
-  if (error) throw new Error("The extracted transactions could not be saved.");
+  let { data: insertedTransactions, error } = await supabase.from("transactions").insert(rows).select("id");
+  if (error && /transaction_class|classification_confidence|classification_reason/i.test(error.message ?? "")) {
+    console.warn("[TracePay][statement] classification_columns_missing", { code: error.code ?? null });
+    const legacyRows = rows.map(({ transaction_class: _transactionClass, classification_confidence: _classificationConfidence, classification_reason: _classificationReason, ...row }) => row);
+    ({ data: insertedTransactions, error } = await supabase.from("transactions").insert(legacyRows).select("id"));
+  }
+  if (error) {
+    console.error("[TracePay][statement] transaction_insert_failed", { code: error.code ?? null, message: error.message ?? "unknown", details: error.details ?? null, hint: error.hint ?? null });
+    throw new Error(`The extracted transactions could not be saved${error.code ? ` (${error.code})` : ""}.`);
+  }
+  const categoryNames = [...new Set(preview.transactions.map((transaction) => transaction.category_name).filter((name): name is string => Boolean(name)))];
+  let databaseUpdates = 0;
+  if (categoryNames.length > 0) {
+    const { data: categories, error: categoryError } = await supabase.from("categories").select("id,name").in("name", categoryNames);
+    if (categoryError) throw new Error("The transactions were saved, but categories could not be loaded.");
+    const categoryIds = new Map((categories ?? []).map((category) => [category.name, category.id]));
+    const missingCategories = categoryNames.filter((name) => !categoryIds.has(name));
+    if (missingCategories.length > 0) {
+      throw new Error(`The categories could not be resolved: ${missingCategories.join(", ")}.`);
+    }
+    for (const [index, transaction] of preview.transactions.entries()) {
+      const categoryId = transaction.category_name ? categoryIds.get(transaction.category_name) : null;
+      if (!categoryId) continue;
+      const transactionId = insertedTransactions?.[index]?.id;
+      if (!transactionId) throw new Error("The saved transaction could not be identified for categorisation.");
+      const { error: categoryUpdateError } = await supabase.from("transactions").update({ category_id: categoryId }).eq("id", transactionId).eq("category_source", "automatic");
+      if (categoryUpdateError) throw new Error("The transactions were saved, but categories could not be assigned.");
+      databaseUpdates += 1;
+    }
+  }
+  console.info("[CATEGORISATION] database_updates", {
+    statementId: preview.statementId,
+    databaseUpdates,
+    unknownAfterAi: preview.transactions.filter((transaction) => !transaction.category_name && (transaction.transaction_class ?? "unknown") === "unknown").length,
+  });
   const { error: updateError } = await supabase.from("statement_imports").update({
     account_id: account.id,
     status: "processed",
@@ -129,11 +177,20 @@ export async function preparePdfStatement(asset: DocumentPickerAsset, preferredI
     form.append("file", file, name);
     if (password?.trim()) form.append("password", password);
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60_000);
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, PDF_PROCESSOR_TIMEOUT_MS);
     let response: Response;
     try {
       console.info("[TracePay][statement] processor_request_started", { statementId: id, processorUrl });
       response = await fetch(`${processorUrl}/extraction/preview`, { method: "POST", headers: { Authorization: `Bearer ${sessionData.session.access_token}` }, body: form, signal: controller.signal });
+    } catch (error) {
+      if (timedOut || (error instanceof Error && error.name === "AbortError")) {
+        throw new Error("PDF processing timed out after 180 seconds. Check that the processor is running and reachable, then try again.");
+      }
+      throw error;
     } finally {
       clearTimeout(timeout);
     }

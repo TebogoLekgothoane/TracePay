@@ -31,7 +31,7 @@ Twilio env vars: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and either `TWILIO_V
 ## Financial API
 
 ```bash
-uvicorn app.main:app --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 The Python API intentionally starts with extraction only. It does not write to Supabase or run ML yet.
@@ -53,7 +53,7 @@ Install the Python dependencies before starting the extraction API:
 
 ```bash
 python -m pip install -r requirements.txt
-uvicorn app.main:app --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 Camelot may require the system PDF rendering dependencies documented by its installation guide. Tesseract must also be installed locally and available on `PATH` for scanned-PDF fallback. Apply `supabase/migrations/202609200001_pdf_statement_ingestion.sql` to the project before testing authenticated uploads.
