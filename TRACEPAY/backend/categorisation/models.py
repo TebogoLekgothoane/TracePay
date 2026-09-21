@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 class CategorisationResult(BaseModel):
     category_name: str | None = None
-    confidence: float = Field(default=0, ge=0, le=1)
+    category_confidence: float = Field(default=0, ge=0, le=1)
     category_source: Literal["automatic"] = "automatic"
     rule: str | None = None
     transaction_class: Literal[
@@ -15,3 +15,8 @@ class CategorisationResult(BaseModel):
     classification_confidence: float = Field(default=0, ge=0, le=1)
     classification_reason: str | None = None
     merchant_name: str | None = None
+
+    @property
+    def confidence(self) -> float:
+        """Backward-compatible alias for the category confidence."""
+        return self.category_confidence

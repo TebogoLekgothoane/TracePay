@@ -22,7 +22,7 @@ def classify_transaction(description: str | None, transaction_type: str | None =
                 category_name = None
             elif rule.name == "description:fixed-deposit":
                 transaction_class = "savings"
-                category_name = None
+                category_name = rule.category_name
             elif rule.name == "description:person-payment":
                 transaction_class = "person_to_person"
                 category_name = None
@@ -37,7 +37,7 @@ def classify_transaction(description: str | None, transaction_type: str | None =
                 category_name = rule.category_name or None
             return CategorisationResult(
                 category_name=category_name,
-                confidence=rule.confidence if category_name else 0,
+                category_confidence=rule.confidence if category_name else 0,
                 classification_confidence=rule.confidence,
                 transaction_class=transaction_class,
                 classification_reason=f"Deterministic rule: {rule.name}",

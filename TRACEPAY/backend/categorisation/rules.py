@@ -60,7 +60,7 @@ RULES: tuple[Rule, ...] = (
     Rule("description:data-bundle", "Airtime & Data", 0.95, contains("DATA BUNDLE")),
     Rule("description:service-fee", "Bank Fees", 0.75, contains("SERVICE FEE", "BANK FEE", "MONTHLY FEE", "ACCOUNT FEE", "TRANSACTION FEE", "ATM FEE")),
     Rule("description:goalsave", "", 0.95, contains("GOALSAVE")),
-    Rule("description:fixed-deposit", "", 0.95, contains("FIXED DEPOSIT")),
+    Rule("description:fixed-deposit", "Savings", 0.95, contains("FIXED DEPOSIT")),
     Rule("description:person-payment", "", 0.85, contains("SENDMONEY", "PAY BENEFICIARY")),
     Rule("description:electricity", "Utilities", 0.75, contains("ELECTRICITY", "ESKOM", "PREPAID POWER")),
     Rule("merchant:salary", "Salary", 1.00, incoming_contains("SALARY", "PAYROLL", "WAGES", "MONTHLY SALARY")),

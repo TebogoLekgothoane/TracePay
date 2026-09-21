@@ -56,7 +56,7 @@ def process_pdf(content: bytes, filename: str, authenticated_user_id: str, passw
     ], category_names)
     transactions = [transaction.model_copy(update={
         "category_name": classifications[str(index)].category_name,
-        "category_confidence": classifications[str(index)].confidence,
+        "category_confidence": classifications[str(index)].category_confidence,
         "category_rule": classifications[str(index)].rule,
         "transaction_class": classifications[str(index)].transaction_class,
         "classification_confidence": classifications[str(index)].classification_confidence,

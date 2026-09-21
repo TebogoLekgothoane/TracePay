@@ -1,6 +1,12 @@
+import io
+
 import pytest
+from decimal import Decimal
 
 from categorisation.classifier import classify_transaction
+from categorisation import ai_classifier
+from categorisation.models import CategorisationResult
+from categorisation.service import CategorisableTransaction, categorise_batch
 
 
 @pytest.mark.parametrize(("description", "category"), [
@@ -48,7 +54,10 @@ def test_salary_advance_is_other_income() -> None:
 def test_non_spending_transaction_classes(description: str, transaction_class: str) -> None:
     result = classify_transaction(description, "debit")
     assert result.transaction_class == transaction_class
-    assert result.category_name is None
+    if description.startswith("Money added to Fixed Deposit"):
+        assert result.category_name == "Savings"
+    else:
+        assert result.category_name is None
 
 
 def test_eft_and_generic_purchase_are_not_deterministic_categories() -> None:
@@ -76,3 +85,266 @@ def test_data_bundle_is_airtime_and_data() -> None:
 ])
 def test_common_statement_descriptions(description: str, category: str) -> None:
     assert classify_transaction(description, "debit").category_name == category
+
+
+def test_blank_description_is_unknown_and_uncategorised(caplog: pytest.LogCaptureFixture) -> None:
+    result = classify_transaction("-", "debit")
+    assert result.transaction_class == "unknown"
+    assert result.category_name is None
+
+
+def test_uncategorised_breakdown_is_logged_without_descriptions(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level("INFO", logger="tracepay.categorisation")
+    categorise_batch(
+        [
+            CategorisableTransaction("0", "-", Decimal("-10"), "debit"),
+            CategorisableTransaction("1", "Pay Beneficiary, Mosto", Decimal("-12"), "debit"),
+        ],
+        [],
+    )
+    message = " ".join(record.getMessage() for record in caplog.records)
+    assert "uncategorised_breakdown total=2" in message
+    assert "placeholder_descriptions=1" in message
+    assert "Pay Beneficiary" not in message
+
+
+def test_ai_low_confidence_category_is_preserved(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", True)
+
+    def fake_classify_batch(*_args: object, **_kwargs: object) -> dict[str, CategorisationResult]:
+        return {"0": CategorisationResult(
+            category_name="Savings",
+            category_confidence=0.62,
+            transaction_class="savings",
+            classification_confidence=0.96,
+            classification_reason="Fixed deposit contribution",
+            rule="ai:gemini",
+        )}
+
+    monkeypatch.setattr("categorisation.service.classify_batch", fake_classify_batch)
+    result = categorise_batch(
+        [CategorisableTransaction("0", "A savings contribution", Decimal("-100"), "debit")],
+        ["Savings"],
+    )["0"]
+    assert result.category_name == "Savings"
+    assert result.category_confidence == 0.62
+    assert result.classification_confidence == 0.96
+
+
+def test_duplicate_ai_pattern_is_applied_to_every_transaction(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", True)
+
+    calls = 0
+
+    def fake_classify_batch(items: list[object], _category_names: list[str]) -> dict[str, CategorisationResult]:
+        nonlocal calls
+        calls += 1
+        item = items[0]
+        return {item.transaction_id: CategorisationResult(
+            category_name="Person to Person",
+            category_confidence=0.81,
+            transaction_class="person_to_person",
+            classification_confidence=0.88,
+            classification_reason="Payment to another person",
+            rule="ai:gemini",
+        )}
+
+    monkeypatch.setattr("categorisation.service.classify_batch", fake_classify_batch)
+    transactions = [
+        CategorisableTransaction(str(index), "PayShap - Pay by Account, T LEKGOTHOANE", Decimal("-50"), "debit")
+        for index in range(3)
+    ]
+    results = categorise_batch(transactions, ["Person to Person"])
+    assert calls == 1
+    assert all(result.transaction_class == "person_to_person" for result in results.values())
+    assert all(result.category_name == "Person to Person" for result in results.values())
+
+
+def test_ai_disabled_skips_providers_and_preserves_deterministic_results(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", False)
+    monkeypatch.setattr("categorisation.service.settings.gemini_api_key", "gemini-test-key")
+    monkeypatch.setattr("categorisation.service.settings.openrouter_api_key", "openrouter-test-key")
+
+    def fail_if_called(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("AI provider should not be called when disabled")
+
+    monkeypatch.setattr("categorisation.service.classify_batch", fail_if_called)
+    caplog.set_level("INFO", logger="tracepay.categorisation")
+    results = categorise_batch(
+        [
+            CategorisableTransaction("known", "WOOLWORTHS", Decimal("-20"), "debit"),
+            CategorisableTransaction("unknown", "Unrecognised merchant", Decimal("-20"), "debit"),
+        ],
+        ["Groceries"],
+    )
+    assert results["known"].category_name == "Groceries"
+    assert results["unknown"].category_name is None
+    assert "skipped reason=disabled" in " ".join(record.getMessage() for record in caplog.records)
+
+
+def test_ai_enabled_keeps_provider_flow_reachable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", True)
+    monkeypatch.setattr("categorisation.service.settings.gemini_api_key", "gemini-test-key")
+    monkeypatch.setattr("categorisation.service.settings.openrouter_api_key", "openrouter-test-key")
+    calls = 0
+
+    def classify(items: list[object], _category_names: list[str]) -> dict[str, CategorisationResult]:
+        nonlocal calls
+        calls += 1
+        item = items[0]
+        return {item.transaction_id: CategorisationResult(
+            category_name="Groceries",
+            category_confidence=0.9,
+            transaction_class="spending",
+            classification_confidence=0.9,
+            classification_reason="AI test result",
+            rule="ai:gemini",
+        )}
+
+    monkeypatch.setattr("categorisation.service.classify_batch", classify)
+    result = categorise_batch(
+        [CategorisableTransaction("0", "Unknown merchant", Decimal("-10"), "debit")],
+        ["Groceries"],
+    )
+    assert calls == 1
+    assert result["0"].rule == "ai:gemini"
+
+
+def test_openrouter_is_used_when_gemini_returns_no_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "gemini-test-key")
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
+    monkeypatch.setattr(ai_classifier, "_request_gemini", lambda *_args: None)
+    monkeypatch.setattr(ai_classifier, "_request_openrouter", lambda *_args: {
+        "choices": [{"message": {"content": '{"transactions":[{"transaction_id":"0","transaction_class":"spending","classification_confidence":0.9,"category_name":"Groceries","category_confidence":0.8,"reason":"Merchant purchase","merchant_name":"Example"}]}'}}],
+    })
+    result = ai_classifier.classify_batch(
+        [ai_classifier.AiTransaction("0", "Purchase at Example", "-10", "debit")],
+        ["Groceries"],
+    )["0"]
+    assert result.rule == "ai:openrouter"
+    assert result.category_name == "Groceries"
+
+
+def test_gemini_success_does_not_call_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "gemini-test-key")
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
+    monkeypatch.setattr(ai_classifier, "_request_gemini", lambda *_args: {
+        "candidates": [{"content": {"parts": [{"text": '{"transactions":[{"transaction_id":"0","transaction_class":"spending","classification_confidence":0.9,"category_name":"Groceries","category_confidence":0.8,"reason":"Merchant purchase","merchant_name":"Example"}]}' }]}}],
+    })
+    openrouter_calls = 0
+
+    def fail_if_called(*_args: object) -> None:
+        nonlocal openrouter_calls
+        openrouter_calls += 1
+
+    monkeypatch.setattr(ai_classifier, "_request_openrouter", fail_if_called)
+    result = ai_classifier.classify_batch(
+        [ai_classifier.AiTransaction("0", "Purchase at Example", "-10", "debit")],
+        ["Groceries"],
+    )["0"]
+    assert openrouter_calls == 0
+    assert result.rule == "ai:gemini"
+
+
+def test_malformed_openrouter_response_is_rejected_safely(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "")
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
+    monkeypatch.setattr(ai_classifier, "_request_gemini", lambda *_args: None)
+    monkeypatch.setattr(ai_classifier, "_request_openrouter", lambda *_args: {
+        "choices": [{"message": {"content": "not-json"}}],
+    })
+    assert ai_classifier.classify_batch(
+        [ai_classifier.AiTransaction("0", "Unknown", "-10", "debit")],
+        ["Groceries"],
+    ) == {}
+
+
+@pytest.mark.parametrize("content", [
+    '{"transactions": []}',
+    'json\n{"transactions": []}',
+    '  ```json\n{"transactions": []}\n```  ',
+])
+def test_openrouter_response_text_accepts_json_variants(content: str) -> None:
+    payload = {"choices": [{"message": {"content": content}}]}
+    assert ai_classifier.json.loads(ai_classifier._openrouter_response_text(payload)) == {"transactions": []}
+
+
+def test_openrouter_response_text_accepts_content_parts() -> None:
+    payload = {"choices": [{"message": {"content": [{"type": "text", "text": '{"transactions": []}'}]}}]}
+    assert ai_classifier._openrouter_response_text(payload) == '{"transactions": []}'
+
+
+@pytest.mark.parametrize("payload", [
+    {"choices": [{"message": {"content": ""}}]},
+    {"choices": [{"message": {"content": None}}]},
+    {"choices": []},
+    {},
+])
+def test_openrouter_response_text_rejects_missing_or_empty_content(payload: dict) -> None:
+    with pytest.raises(ValueError):
+        ai_classifier._openrouter_response_text(payload)
+
+
+def test_invalid_openrouter_category_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "")
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
+    monkeypatch.setattr(ai_classifier, "_request_gemini", lambda *_args: None)
+    monkeypatch.setattr(ai_classifier, "_request_openrouter", lambda *_args: {
+        "choices": [{"message": {"content": '{"transactions":[{"transaction_id":"0","transaction_class":"spending","classification_confidence":0.9,"category_name":"Not A Live Category","category_confidence":0.8,"reason":"Invalid","merchant_name":"Example"}]}'}}],
+    })
+    assert ai_classifier.classify_batch(
+        [ai_classifier.AiTransaction("0", "Unknown", "-10", "debit")],
+        ["Groceries"],
+    ) == {}
+
+
+def test_openrouter_http_failure_fails_cleanly(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise ai_classifier.HTTPError("https://openrouter.ai/api/v1/chat/completions", 503, "Unavailable", {}, io.BytesIO(b"provider unavailable"))
+
+    monkeypatch.setattr(ai_classifier, "urlopen", fail)
+    caplog.set_level("ERROR", logger="tracepay.categorisation.ai")
+    assert ai_classifier._request_openrouter("{}", {}, 1) is None
+    assert "request_failed provider=openrouter" in " ".join(record.getMessage() for record in caplog.records)
+
+
+def test_openrouter_success_uses_configured_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_timeout_seconds", 45)
+
+    class Response:
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"choices":[{"message":{"content":"{\\"transactions\\":[]}"}}]}'
+
+    seen: dict[str, int] = {}
+
+    def succeed(_request: object, *, timeout: int) -> Response:
+        seen["timeout"] = timeout
+        return Response()
+
+    monkeypatch.setattr(ai_classifier, "urlopen", succeed)
+    assert ai_classifier._request_openrouter("{}", {}, 1) is not None
+    assert seen["timeout"] == 45
+
+
+def test_openrouter_timeout_fails_cleanly(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_timeout_seconds", 45)
+
+    def timeout(*_args: object, **_kwargs: object) -> None:
+        raise TimeoutError
+
+    monkeypatch.setattr(ai_classifier, "urlopen", timeout)
+    caplog.set_level("ERROR", logger="tracepay.categorisation.ai")
+    assert ai_classifier._request_openrouter("{}", {}, 1) is None
+    message = " ".join(record.getMessage() for record in caplog.records)
+    assert "request_timeout provider=openrouter" in message
+    assert "timeout_seconds=45" in message

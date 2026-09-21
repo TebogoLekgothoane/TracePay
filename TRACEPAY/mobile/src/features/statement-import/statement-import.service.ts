@@ -5,7 +5,7 @@ import { ensureBankAccount } from "../accounts/account.service";
 import { getSupabase } from "../../lib/supabase";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
-const PDF_PROCESSOR_TIMEOUT_MS = 180_000;
+const PDF_PROCESSOR_TIMEOUT_MS = 300_000;
 
 export type ExtractedTransaction = {
   date: string;
@@ -188,7 +188,7 @@ export async function preparePdfStatement(asset: DocumentPickerAsset, preferredI
       response = await fetch(`${processorUrl}/extraction/preview`, { method: "POST", headers: { Authorization: `Bearer ${sessionData.session.access_token}` }, body: form, signal: controller.signal });
     } catch (error) {
       if (timedOut || (error instanceof Error && error.name === "AbortError")) {
-        throw new Error("PDF processing timed out after 180 seconds. Check that the processor is running and reachable, then try again.");
+        throw new Error("PDF processing timed out after 300 seconds. Check that the processor is running and reachable, then try again.");
       }
       throw error;
     } finally {
