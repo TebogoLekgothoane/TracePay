@@ -82,15 +82,7 @@ export default function FixActionDetailScreen() {
                   key={account.id}
                   className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5"
                 >
-                  <View
-                    className="h-11 w-11 items-center justify-center rounded-2xl"
-                    style={{
-                      backgroundColor: withAlpha(
-                        resolveMarkColor(palette, account.markColor),
-                        0.14,
-                      ),
-                    }}
-                  >
+                  <View className="h-11 w-11 items-center justify-center">
                     <Text
                       className="text-[15px] font-bold"
                       style={{ color: resolveMarkColor(palette, account.markColor) }}

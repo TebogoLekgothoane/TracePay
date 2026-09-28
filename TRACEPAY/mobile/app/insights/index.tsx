@@ -1,4 +1,3 @@
-import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import type { LucideIcon } from "lucide-react-native";
 import {
@@ -9,15 +8,18 @@ import {
   Shirt,
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { COLORS, TRACEPAY, withAlpha } from "../../src/theme/colors";
 import { IconButton } from "../../src/components/ui/IconButton";
+import {
+  PERIODS_WITHOUT_CUSTOM,
+  type PeriodWithoutCustom,
+} from "../../src/features/insights/period";
+import { COLORS, TRACEPAY } from "../../src/theme/colors";
 
-const PERIODS = ["This month", "Last month", "3 months"] as const;
-type Period = (typeof PERIODS)[number];
+type Period = PeriodWithoutCustom;
 
 type InsightTone = "primary" | "success" | "accent";
 
@@ -29,36 +31,105 @@ type InsightItem = {
   tone: InsightTone;
 };
 
-const INSIGHTS: InsightItem[] = [
-  {
-    id: "transport",
-    title: "You spent more on transport",
-    subtitle: "R320 more than last month",
-    Icon: Lightbulb,
-    tone: "primary",
-  },
-  {
-    id: "entertainment",
-    title: "You spent less on entertainment",
-    subtitle: "R80 less than last month",
-    Icon: Shirt,
-    tone: "success",
-  },
-  {
-    id: "savings",
-    title: "You are saving more 🎉",
-    subtitle: "R430 more than last month",
-    Icon: PiggyBank,
-    tone: "accent",
-  },
-  {
-    id: "biggest",
-    title: "Your biggest expense was",
-    subtitle: "Shopping (R1,880)",
-    Icon: Lightbulb,
-    tone: "primary",
-  },
-];
+const INSIGHTS_BY_PERIOD: Record<Period, InsightItem[]> = {
+  "This month": [
+    {
+      id: "transport",
+      title: "You spent more on transport",
+      subtitle: "R320 more than last month",
+      Icon: Lightbulb,
+      tone: "primary",
+    },
+    {
+      id: "entertainment",
+      title: "You spent less on entertainment",
+      subtitle: "R80 less than last month",
+      Icon: Shirt,
+      tone: "success",
+    },
+    {
+      id: "savings",
+      title: "You are saving more 🎉",
+      subtitle: "R430 more than last month",
+      Icon: PiggyBank,
+      tone: "accent",
+    },
+    {
+      id: "biggest",
+      title: "Your biggest expense was",
+      subtitle: "Shopping (R1,880)",
+      Icon: Lightbulb,
+      tone: "primary",
+    },
+  ],
+  "Last month": [
+    {
+      id: "fees-last",
+      title: "Bank fees spiked last month",
+      subtitle: "R180 above your average",
+      Icon: Lightbulb,
+      tone: "primary",
+    },
+    {
+      id: "food-last",
+      title: "Food & dining cooled off",
+      subtitle: "R210 less than the month before",
+      Icon: Shirt,
+      tone: "success",
+    },
+    {
+      id: "subs-last",
+      title: "Two unused subscriptions billed",
+      subtitle: "R258 you could reclaim",
+      Icon: PiggyBank,
+      tone: "accent",
+    },
+    {
+      id: "biggest-last",
+      title: "Your biggest expense was",
+      subtitle: "Transport (R1,640)",
+      Icon: Lightbulb,
+      tone: "primary",
+    },
+  ],
+  "3 months": [
+    {
+      id: "trend-3m",
+      title: "Transport rose for 3 months",
+      subtitle: "Up 22% across the quarter",
+      Icon: Lightbulb,
+      tone: "primary",
+    },
+    {
+      id: "save-3m",
+      title: "You saved R1,120 this quarter",
+      subtitle: "Mostly from fewer cash withdrawals",
+      Icon: PiggyBank,
+      tone: "accent",
+    },
+    {
+      id: "ent-3m",
+      title: "Entertainment stayed steady",
+      subtitle: "Within 4% of your usual spend",
+      Icon: Shirt,
+      tone: "success",
+    },
+    {
+      id: "biggest-3m",
+      title: "Top category this quarter",
+      subtitle: "Transport (R5,120)",
+      Icon: Lightbulb,
+      tone: "primary",
+    },
+    {
+      id: "fees-3m",
+      title: "Fees added up over 3 months",
+      subtitle: "R1,980 in avoidable charges",
+      Icon: Lightbulb,
+      tone: "primary",
+    },
+  ],
+};
 
 function toneColor(
   palette: { primary: string; success: string; accent: string },
@@ -80,46 +151,22 @@ function PeriodTabs({
   const trace = TRACEPAY[colorScheme === "dark" ? "dark" : "light"];
 
   return (
-    <View className="rounded-2xl bg-muted p-1.5">
+    <View className="rounded-full bg-muted p-1.5">
       <View className="flex-row gap-1.5">
-        {PERIODS.map((period) => {
+        {PERIODS_WITHOUT_CUSTOM.map((period) => {
           const selected = period === active;
-
-          if (selected) {
-            return (
-              <Pressable
-                key={period}
-                onPress={() => onChange(period)}
-                className="flex-1 active:opacity-85"
-              >
-                <LinearGradient
-                  colors={[trace.splashPayStart, trace.primary, trace.splashPayEnd]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={{
-                    borderRadius: 999,
-                    paddingVertical: 10,
-                    alignItems: "center",
-                  }}
-                >
-                  <Text
-                    style={{ color: trace.primaryForeground }}
-                    className="text-[13px] font-semibold"
-                  >
-                    {period}
-                  </Text>
-                </LinearGradient>
-              </Pressable>
-            );
-          }
 
           return (
             <Pressable
               key={period}
               onPress={() => onChange(period)}
               className="flex-1 items-center rounded-full py-2.5 active:opacity-75"
+              style={selected ? { backgroundColor: trace.primary } : undefined}
             >
-              <Text className="text-[13px] font-medium text-muted-foreground">
+              <Text
+                className={`text-[13px] ${selected ? "font-semibold" : "font-medium text-muted-foreground"}`}
+                style={selected ? { color: trace.primaryForeground } : undefined}
+              >
                 {period}
               </Text>
             </Pressable>
@@ -134,6 +181,8 @@ export default function AllInsightsScreen() {
   const [period, setPeriod] = useState<Period>("This month");
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
+
+  const insights = useMemo(() => INSIGHTS_BY_PERIOD[period], [period]);
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -161,7 +210,7 @@ export default function AllInsightsScreen() {
           <PeriodTabs active={period} onChange={setPeriod} />
 
           <View className="mt-5 gap-3">
-            {INSIGHTS.map((item) => {
+            {insights.map((item) => {
               const color = toneColor(palette, item.tone);
 
               return (
@@ -169,10 +218,7 @@ export default function AllInsightsScreen() {
                   key={item.id}
                   className="flex-row items-center gap-3 rounded-3xl border border-border bg-card px-4 py-4 active:opacity-80"
                 >
-                  <View
-                    className="h-11 w-11 items-center justify-center rounded-full"
-                    style={{ backgroundColor: withAlpha(color, 0.14) }}
-                  >
+                  <View className="h-11 w-11 items-center justify-center rounded-full">
                     <item.Icon color={color} size={20} strokeWidth={2.2} />
                   </View>
                   <View className="min-w-0 flex-1">
@@ -183,7 +229,11 @@ export default function AllInsightsScreen() {
                       {item.subtitle}
                     </Text>
                   </View>
-                  <ChevronRight color={palette.placeholder} size={18} strokeWidth={2} />
+                  <ChevronRight
+                    color={palette.placeholder}
+                    size={18}
+                    strokeWidth={2}
+                  />
                 </Pressable>
               );
             })}

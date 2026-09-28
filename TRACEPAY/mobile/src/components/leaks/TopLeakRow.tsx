@@ -36,9 +36,7 @@ export function TopLeakRow({ item, isLast, onPress }: Props) {
       }`}
     >
       <View
-        className="h-11 w-11 items-center justify-center rounded-2xl"
-        style={{ backgroundColor: impact.surface }}
-      >
+        className="h-11 w-11 items-center justify-center rounded-2xl"      >
         <item.Icon color={impact.color} size={20} strokeWidth={2.2} />
       </View>
 
@@ -49,10 +47,9 @@ export function TopLeakRow({ item, isLast, onPress }: Props) {
           </Text>
           <View
             className="rounded-full px-2 py-0.5"
-            style={{ backgroundColor: impact.surface }}
           >
             <Text
-              className="text-[10px] font-semibold"
+              className="text-[12px] font-semibold"
               style={{ color: impact.color }}
             >
               {item.impactLabel}
@@ -73,7 +70,7 @@ export function TopLeakRow({ item, isLast, onPress }: Props) {
         </Text>
       </View>
 
-      <ChevronRight color={palette.placeholder} size={18} strokeWidth={2} />
+      <ChevronRight  size={18} strokeWidth={2} color={palette.foreground} />
     </Pressable>
   );
 }

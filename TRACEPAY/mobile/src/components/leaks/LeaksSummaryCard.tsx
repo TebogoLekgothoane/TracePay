@@ -85,11 +85,7 @@ export function LeaksSummaryCard({
           </View>
 
           <View className="items-center justify-center">
-            <LeaksPipeIllustration
-              accent={trace.splashAccentPink}
-              primary={trace.primary}
-              highlight={trace.splashPayStart}
-            />
+            <LeaksPipeIllustration size={112} />
           </View>
         </View>
 

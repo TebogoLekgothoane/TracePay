@@ -1,8 +1,9 @@
-import { Building2, ChevronRight, Diamond, Plus } from "lucide-react-native";
+import { ChevronRight, Plus } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { Pressable, Text, View } from "react-native";
 
 import { COLORS } from "../../theme/colors";
+import { InstitutionLogo } from "../accounts/InstitutionLogo";
 import { Button } from "../ui/Button";
 
 export type AccountPreview = {
@@ -11,7 +12,7 @@ export type AccountPreview = {
   masked: string;
   balance: string;
   color: string;
-  kind: "bank" | "wallet" | "nedbank";
+  logoDomain: string | null;
 };
 
 type Props = {
@@ -20,27 +21,8 @@ type Props = {
   onSeeDetails?: () => void;
   onAccountPress?: (account: AccountPreview) => void;
   loading?: boolean;
+  hideBalances?: boolean;
 };
-
-function AccountIcon({
-  account,
-}: {
-  account: AccountPreview;
-}) {
-  if (account.kind === "nedbank") {
-    return <Diamond color={account.color} size={20} strokeWidth={2.2} fill={account.color} />;
-  }
-
-  if (account.kind === "wallet") {
-    return (
-      <Text className="text-[15px] font-bold" style={{ color: account.color }}>
-        M
-      </Text>
-    );
-  }
-
-  return <Building2 color={account.color} size={20} strokeWidth={2.2} />;
-}
 
 export function AccountsCard({
   accounts,
@@ -48,29 +30,24 @@ export function AccountsCard({
   onSeeDetails,
   onAccountPress,
   loading = false,
+  hideBalances = false,
 }: Props) {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
 
   return (
-    <View
-      className="overflow-hidden rounded-3xl bg-card"
-      style={{
-        borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.06)",
-      }}
-    >
-      <View className="flex-row items-center justify-between px-4 pb-1 pt-4">
+    <View>
+      <View className="mb-3 flex-row items-center justify-between">
         <Text className="text-[17px] font-bold text-foreground">
           Your accounts
         </Text>
         <Button onPress={onSeeDetails} size="sm" variant="ghost" className="px-0">
-          See details
+          See all
         </Button>
       </View>
 
       {loading && accounts.length === 0 ? (
-        <View className="px-4 py-6">
+        <View className="rounded-2xl border border-border/60 bg-card px-4 py-6">
           <Text className="text-[14px] text-muted-foreground">
             Loading your accounts…
           </Text>
@@ -78,7 +55,7 @@ export function AccountsCard({
       ) : null}
 
       {!loading && accounts.length === 0 ? (
-        <View className="px-4 py-6">
+        <View className="rounded-2xl border border-border/60 bg-card px-4 py-6">
           <Text className="text-[14px] leading-6 text-muted-foreground">
             Add your bank accounts manually for now. TracePay will analyse all of
             them together once transactions are connected.
@@ -86,46 +63,46 @@ export function AccountsCard({
         </View>
       ) : null}
 
-      {accounts.map((account, index) => (
-        <Pressable
-          key={account.id}
-          onPress={() => onAccountPress?.(account)}
-          className={`flex-row items-center gap-3 px-4 py-3.5 active:opacity-70 ${
-            index < accounts.length - 1 ? "border-b border-border/40" : ""
-          }`}
-        >
-          <View
-            className="h-11 w-11 items-center justify-center rounded-full"
-            style={{ backgroundColor: `${account.color}22` }}
+      <View className="gap-2.5">
+        {accounts.map((account) => (
+          <Pressable
+            key={account.id}
+            onPress={() => onAccountPress?.(account)}
+            className="flex-row items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5 active:opacity-70"
           >
-            <AccountIcon account={account} />
-          </View>
-          <View className="flex-1">
-            <Text className="text-[15px] font-semibold text-foreground">
-              {account.name}
-            </Text>
-            <Text className="mt-0.5 text-[12px] text-muted-foreground">
-              {account.masked}
-            </Text>
-          </View>
-          <View className="items-end">
+            <InstitutionLogo
+              name={account.name}
+              logoDomain={account.logoDomain}
+              color={account.color}
+            />
+            <View className="min-w-0 flex-1">
+              <Text
+                className="text-[15px] font-semibold text-foreground"
+                numberOfLines={1}
+              >
+                {account.name}
+              </Text>
+              <Text
+                className="mt-0.5 text-[12px] text-muted-foreground"
+                numberOfLines={1}
+              >
+                {account.masked}
+              </Text>
+            </View>
             <Text className="text-[15px] font-bold text-foreground">
-              {account.balance}
+              {hideBalances ? "R ••••••" : account.balance}
             </Text>
-            <Text className="mt-0.5 text-[11px] text-muted-foreground">
-              Current balance
-            </Text>
-          </View>
-          <ChevronRight
-            color={palette.mutedForeground}
-            size={18}
-            strokeWidth={2}
-          />
-        </Pressable>
-      ))}
+            <ChevronRight
+              color={palette.mutedForeground}
+              size={18}
+              strokeWidth={2}
+            />
+          </Pressable>
+        ))}
+      </View>
 
       <Button
-        className="mx-4 mb-4 mt-2 border-dashed border-primary/50"
+        className="mt-3 border-dashed border-primary/50"
         size="md"
         variant="secondary"
         onPress={onAddAccount}

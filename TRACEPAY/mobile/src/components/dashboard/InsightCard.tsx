@@ -51,8 +51,6 @@ export function InsightCard({ onViewAll }: Props) {
         <View
           className="h-11 w-11 items-center justify-center rounded-full"
           style={{
-            backgroundColor: "rgba(139, 92, 246, 0.2)",
-            shadowColor: "#8B5CF6",
             shadowOffset: { width: 0, height: 0 },
             shadowOpacity: 0.4,
             shadowRadius: 8,

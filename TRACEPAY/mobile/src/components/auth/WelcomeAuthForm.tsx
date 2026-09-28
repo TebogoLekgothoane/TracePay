@@ -214,7 +214,6 @@ export function WelcomeAuthForm({
           arrow
           className="mt-1"
           disabled={!canSubmit || submitting}
-          gradient
           loading={submitting}
           onPress={submit}
         >

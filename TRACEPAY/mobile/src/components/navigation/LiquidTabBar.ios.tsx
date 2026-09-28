@@ -1,4 +1,5 @@
 import {
+  Button,
   GlassEffectContainer,
   Host,
   HStack,
@@ -7,6 +8,9 @@ import {
 } from "@expo/ui/swift-ui";
 import {
   animation,
+  accessibilityLabel,
+  accessibilityValue,
+  buttonStyle,
   Animation,
   frame,
   glassEffect,
@@ -19,7 +23,7 @@ import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTabBarScroll } from "../../context/TabBarScrollContext";
-import { COLORS } from "../../theme/colors";
+import { COLORS, withAlpha } from "../../theme/colors";
 
 type LiquidTabBarProps = {
   state: {
@@ -40,9 +44,11 @@ const TAB_ITEMS = [
   { key: "settings", label: "Profile", systemImage: "person.fill" as const },
 ] as const;
 
-const BAR_WIDTH = 288;
-const BAR_HEIGHT = 64;
-const SLOT = (BAR_WIDTH - 24) / TAB_ITEMS.length;
+const BAR_WIDTH = 276;
+const BAR_HEIGHT = 56;
+const BAR_HORIZONTAL_PADDING = 8;
+const TAB_BUTTON_HEIGHT = 44;
+const SLOT = (BAR_WIDTH - BAR_HORIZONTAL_PADDING * 2) / TAB_ITEMS.length;
 
 export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
   const insets = useSafeAreaInsets();
@@ -73,7 +79,7 @@ export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
           right: 0,
           bottom: 0,
           alignItems: "center",
-          paddingBottom: Math.max(insets.bottom, 14),
+          paddingBottom: Math.max(insets.bottom, 10),
         },
         containerStyle,
       ]}
@@ -88,45 +94,42 @@ export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
       >
         <Namespace id={namespaceId}>
           <GlassEffectContainer
-            spacing={18}
-            modifiers={[
-              frame({ width: BAR_WIDTH, height: BAR_HEIGHT }),
-              glassEffect({
-                glass: {
-                  variant: "regular",
-                  interactive: true,
-                },
-                shape: "capsule",
-              }),
-              padding({ horizontal: 12, vertical: 8 }),
-              animation(Animation.spring({ duration: 0.55 }), focusedIndex),
-            ]}
+            spacing={10}
           >
-            <HStack spacing={0}>
+            <HStack
+              spacing={0}
+              modifiers={[
+                frame({ width: BAR_WIDTH, height: BAR_HEIGHT }),
+                padding({ horizontal: BAR_HORIZONTAL_PADDING, vertical: 6 }),
+                glassEffect({
+                  glass: {
+                    variant: "regular",
+                    interactive: true,
+                  },
+                  shape: "capsule",
+                }),
+              ]}
+            >
               {TAB_ITEMS.map((item) => {
                 const selected = focusedKey === item.key;
 
                 return (
-                  <Image
+                  <Button
                     key={item.key}
-                    systemName={item.systemImage}
-                    size={22}
-                    color={
-                      selected ? palette.foreground : palette.mutedForeground
-                    }
                     onPress={() => navigation.navigate(item.key)}
                     modifiers={[
-                      frame({ width: SLOT, height: 48 }),
-                      padding({ all: 12 }),
+                      frame({ width: SLOT, height: TAB_BUTTON_HEIGHT }),
+                      buttonStyle("plain"),
+                      accessibilityLabel(item.label),
+                      accessibilityValue(selected ? "Selected" : ""),
                       ...(selected
                         ? [
                             glassEffect({
                               glass: {
                                 variant: "clear",
                                 interactive: true,
-                                tint: palette.primary,
                               },
-                              shape: "circle",
+                              shape: "capsule",
                             }),
                             glassEffectId("tab-liquid", namespaceId),
                           ]
@@ -136,7 +139,17 @@ export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
                         focusedIndex,
                       ),
                     ]}
-                  />
+                  >
+                    <Image
+                      systemName={item.systemImage}
+                      size={22}
+                      color={
+                        selected
+                          ? palette.foreground
+                          : palette.mutedForeground
+                      }
+                    />
+                  </Button>
                 );
               })}
             </HStack>

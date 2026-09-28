@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { Fingerprint, Lock, ScanFace } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import {
   type ReactElement,
@@ -30,17 +31,23 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import TracePayIcon from "../../../assets/icons/assembled TracePay icon.svg";
 import { PIN_LENGTH } from "../../features/security/security.constants";
+import type { BiometricKind } from "../../features/security/security.types";
 import { COLORS } from "../../theme/colors";
 
 type Props = {
   title: string;
-  subtitle: string;
+  subtitle?: string;
   onComplete: (pin: readonly number[]) => Promise<void>;
   errorMessage?: string | null;
   resetKey?: number;
   isBusy?: boolean;
   footer?: ReactNode;
   useSystemKeyboard?: boolean;
+  showLockIcon?: boolean;
+  showBrandWordmark?: boolean;
+  biometricKind?: BiometricKind | null;
+  onBiometricPress?: () => void;
+  onClearError?: () => void;
 };
 
 function PinDot({
@@ -72,7 +79,7 @@ function PinDot({
       ? errorColor
       : progress.value > 0.5
         ? filledColor
-        : "transparent",
+        : emptyColor,
     borderColor: hasError
       ? errorColor
       : progress.value > 0.5
@@ -83,7 +90,7 @@ function PinDot({
 
   return (
     <Animated.View
-      className="h-[14px] w-[14px] rounded-full border-[1.5px] bg-transparent"
+      className="h-[14px] w-[14px] rounded-full border-[1.5px]"
       style={animatedStyle}
     />
   );
@@ -98,6 +105,11 @@ export function PinEntryScreen({
   isBusy = false,
   footer,
   useSystemKeyboard = false,
+  showLockIcon = false,
+  showBrandWordmark = false,
+  biometricKind = null,
+  onBiometricPress,
+  onClearError,
 }: Props): ReactElement {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
@@ -108,6 +120,10 @@ export function PinEntryScreen({
   const shake = useSharedValue(0);
   const { height } = useWindowDimensions();
   const compact = height < 740;
+  const showBiometric = Boolean(biometricKind && onBiometricPress);
+  const keyHeightClass = compact ? "h-[58px]" : "h-[68px]";
+  const logoWidth = showBrandWordmark ? 58 : 74;
+  const logoHeight = showBrandWordmark ? 44 : 64;
 
   useEffect(() => {
     entrance.value = withTiming(1, {
@@ -175,6 +191,10 @@ export function PinEntryScreen({
       return;
     }
 
+    if (errorMessage) {
+      onClearError?.();
+    }
+
     void Haptics.selectionAsync();
     const next = [...digits, digit];
     setDigits(next);
@@ -192,6 +212,11 @@ export function PinEntryScreen({
     if (isBusy || submittingRef.current || digits.length === 0) {
       return;
     }
+
+    if (errorMessage) {
+      onClearError?.();
+    }
+
     void Haptics.selectionAsync();
     setDigits((current) => current.slice(0, -1));
   };
@@ -218,6 +243,13 @@ export function PinEntryScreen({
     }
   };
 
+  const biometricLabel =
+    biometricKind === "face"
+      ? "Face ID"
+      : biometricKind === "fingerprint"
+        ? "Fingerprint"
+        : "Biometrics";
+
   return (
     <SafeAreaView className="flex-1 bg-background">
       <View
@@ -225,16 +257,40 @@ export function PinEntryScreen({
       >
         <View className="items-center">
           <Animated.View className="items-center justify-center" style={iconStyle}>
-            <TracePayIcon width={74} height={64} />
+            <TracePayIcon width={logoWidth} height={logoHeight} />
           </Animated.View>
+
+          {showBrandWordmark ? (
+            <Text className="mt-1 text-[18px] font-bold tracking-[-0.4px] text-foreground">
+              TracePay
+            </Text>
+          ) : null}
+
+          {showLockIcon ? (
+            <View className="mt-5 items-center justify-center">
+              <Lock color={palette.foreground} size={18} strokeWidth={2.25} />
+            </View>
+          ) : null}
+
           <Text
-            className={`font-bold tracking-[-0.7px] text-foreground ${compact ? "mt-1 text-[26px]" : "mt-3 text-[29px]"}`}
+            className={`text-center font-bold tracking-[-0.7px] text-foreground ${
+              showBrandWordmark
+                ? compact
+                  ? "mt-4 text-[24px] leading-[30px]"
+                  : "mt-5 text-[26px] leading-[32px]"
+                : compact
+                  ? "mt-1 text-[26px]"
+                  : "mt-3 text-[29px]"
+            }`}
           >
             {title}
           </Text>
-          <Text className="mt-2 text-center text-[15px] leading-[21px] text-muted-foreground">
-            {subtitle}
-          </Text>
+
+          {subtitle ? (
+            <Text className="mt-2 text-center text-[15px] leading-[21px] text-muted-foreground">
+              {subtitle}
+            </Text>
+          ) : null}
         </View>
 
         <Pressable
@@ -243,12 +299,22 @@ export function PinEntryScreen({
               inputRef.current?.focus();
             }
           }}
-          className="mt-[26px] min-h-[142px] items-center justify-start"
+          className={`items-center justify-start ${
+            showBrandWordmark
+              ? compact
+                ? "mt-8 min-h-[72px]"
+                : "mt-10 min-h-[80px]"
+              : "mt-[26px] min-h-[142px]"
+          }`}
         >
           <Animated.View className="flex-row gap-[22px]" style={dotsStyle}>
             {Array.from({ length: PIN_LENGTH }, (_, index) => (
               <PinDot
-                emptyColor={palette.border}
+                emptyColor={
+                  colorScheme === "dark"
+                    ? "rgba(255,255,255,0.22)"
+                    : "rgba(148, 163, 184, 0.45)"
+                }
                 errorColor={palette.destructive}
                 filled={index < digits.length}
                 filledColor={palette.pinFilled}
@@ -303,21 +369,48 @@ export function PinEntryScreen({
                 disabled={isBusy}
                 key={digit}
                 onPress={() => addDigit(digit)}
-                className={`w-1/3 items-center justify-center active:opacity-50 ${compact ? "h-[58px]" : "h-[68px]"}`}
+                className={`w-1/3 items-center justify-center active:opacity-50 ${keyHeightClass}`}
               >
                 <Text className="text-[26px] font-medium text-foreground">
                   {digit}
                 </Text>
               </Pressable>
             ))}
-            <View className={`w-1/3 ${compact ? "h-[58px]" : "h-[68px]"}`} />
+
+            {showBiometric ? (
+              <Pressable
+                accessibilityLabel={`Unlock with ${biometricLabel}`}
+                accessibilityRole="button"
+                android_ripple={{ color: "transparent" }}
+                disabled={isBusy}
+                onPress={onBiometricPress}
+                className={`w-1/3 items-center justify-center active:opacity-50 ${keyHeightClass}`}
+              >
+                {biometricKind === "face" ? (
+                  <ScanFace
+                    color={palette.foreground}
+                    size={28}
+                    strokeWidth={1.75}
+                  />
+                ) : (
+                  <Fingerprint
+                    color={palette.foreground}
+                    size={28}
+                    strokeWidth={1.75}
+                  />
+                )}
+              </Pressable>
+            ) : (
+              <View className={`w-1/3 ${keyHeightClass}`} />
+            )}
+
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="0"
               android_ripple={{ color: "transparent" }}
               disabled={isBusy}
               onPress={() => addDigit(0)}
-              className={`w-1/3 items-center justify-center active:opacity-50 ${compact ? "h-[58px]" : "h-[68px]"}`}
+              className={`w-1/3 items-center justify-center active:opacity-50 ${keyHeightClass}`}
             >
               <Text className="text-[26px] font-medium text-foreground">0</Text>
             </Pressable>
@@ -327,7 +420,7 @@ export function PinEntryScreen({
               android_ripple={{ color: "transparent" }}
               disabled={isBusy}
               onPress={removeDigit}
-              className={`w-1/3 items-center justify-center active:opacity-50 ${compact ? "h-[58px]" : "h-[68px]"}`}
+              className={`w-1/3 items-center justify-center active:opacity-50 ${keyHeightClass}`}
             >
               <Ionicons
                 color={palette.mutedForeground}

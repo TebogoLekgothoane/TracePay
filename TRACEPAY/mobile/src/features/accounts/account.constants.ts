@@ -39,7 +39,52 @@ export const INSTITUTION_COLORS: Record<string, string> = {
   nedbank: "#16A34A",
   "standard bank": "#0033A0",
   tymebank: "#FACC15",
+  gotyme: "#14B8A6",
 };
+
+/** Hunter Logo API — same approach as the previous TracePay mobile app. */
+export const HUNTER_LOGO_BASE = "https://logos.hunter.io";
+
+/** SA (and known) institutions → domain for Hunter logo lookup. */
+export const INSTITUTION_LOGO_DOMAINS: Record<string, string> = {
+  absa: "absa.co.za",
+  "african bank": "africanbank.co.za",
+  capitec: "capitec.co.za",
+  "discovery bank": "discovery.co.za",
+  discovery: "discovery.co.za",
+  fnb: "fnb.co.za",
+  investec: "investec.com",
+  nedbank: "nedbank.co.za",
+  "standard bank": "standardbank.co.za",
+  tymebank: "tymebank.co.za",
+  "tyme bank": "tymebank.co.za",
+  gotyme: "gotyme.com.ph",
+  "go tyme": "gotyme.com.ph",
+  "gotyme bank": "gotyme.com.ph",
+  "go tyme bank": "gotyme.com.ph",
+};
+
+export function hunterLogoUrl(domain: string): string {
+  return `${HUNTER_LOGO_BASE}/${domain}`;
+}
+
+export function resolveInstitutionLogoDomain(
+  institution: string | null | undefined,
+): string | null {
+  const text = institution?.trim().toLowerCase();
+  if (!text) return null;
+
+  const exact = INSTITUTION_LOGO_DOMAINS[text];
+  if (exact) return exact;
+
+  for (const [key, domain] of Object.entries(INSTITUTION_LOGO_DOMAINS)) {
+    if (text.includes(key) || key.includes(text)) {
+      return domain;
+    }
+  }
+
+  return null;
+}
 
 export const ACCOUNT_PREVIEW_COLORS = [
   "#6366F1",

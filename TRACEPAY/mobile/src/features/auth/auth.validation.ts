@@ -1,7 +1,22 @@
+import {
+  PROFILE_CURRENCIES,
+  PROFILE_NAME_MAX_LENGTH,
+  type ProfileCurrency,
+} from "./auth.constants";
+
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+export function sanitizeName(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 export function isValidName(value: string): boolean {
-  return value.trim().length >= 2;
+  const trimmed = sanitizeName(value);
+  return trimmed.length >= 2 && trimmed.length <= PROFILE_NAME_MAX_LENGTH;
+}
+
+export function isValidProfileCurrency(value: string): value is ProfileCurrency {
+  return (PROFILE_CURRENCIES as readonly string[]).includes(value);
 }
 
 export function isValidEmail(value: string): boolean {

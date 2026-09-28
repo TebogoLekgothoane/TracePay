@@ -24,13 +24,24 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 
 import { FixActionsList } from "../../src/components/leaks/FixActionsList";
+import { BrandLogo } from "../../src/components/ui/BrandLogo";
 import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
-import { InfoSheet } from "../../src/components/ui/Modal";
+import { InfoSheet, SelectionSheet } from "../../src/components/ui/Modal";
+import { SimpleBrandLogo } from "../../src/components/ui/SimpleBrandLogo";
 import {
   getFixContent,
   getFixRoute,
 } from "../../src/features/leaks/fixContent";
+import {
+  CUSTOM_RANGES,
+  PERIODS,
+  periodChangeLabel,
+  periodFactor,
+  scaleRandAmount,
+  type CustomRange,
+  type Period,
+} from "../../src/features/insights/period";
 import {
   COLORS,
   TRACEPAY,
@@ -38,9 +49,6 @@ import {
   getImpactToneStyles,
   withAlpha,
 } from "../../src/theme/colors";
-
-const PERIODS = ["This month", "Last month", "3 months", "Custom"] as const;
-type Period = (typeof PERIODS)[number];
 
 const LEAK_CALC_COPY: Record<string, string> = {
   fees:
@@ -71,6 +79,9 @@ type SubscriptionItem = {
   billing: string;
   amount: string;
   status: "Active" | "Inactive";
+  /** Simple Icons brand id and/or Hunter domain for logo lookup. */
+  brandId?: string;
+  logoDomain?: string;
   mark: string;
   markColor: string;
 };
@@ -171,6 +182,8 @@ const LEAK_DETAILS: Record<string, LeakDetail> = {
         billing: "Billed monthly",
         amount: "R159.00",
         status: "Active",
+        brandId: "netflix",
+        logoDomain: "netflix.com",
         mark: "N",
         markColor: "destructive",
       },
@@ -181,6 +194,7 @@ const LEAK_DETAILS: Record<string, LeakDetail> = {
         billing: "Billed monthly",
         amount: "R99.00",
         status: "Active",
+        logoDomain: "showmax.com",
         mark: "S",
         markColor: "primary",
       },
@@ -191,6 +205,8 @@ const LEAK_DETAILS: Record<string, LeakDetail> = {
         billing: "Billed monthly",
         amount: "R69.00",
         status: "Active",
+        brandId: "spotify",
+        logoDomain: "spotify.com",
         mark: "♪",
         markColor: "success",
       },
@@ -201,6 +217,7 @@ const LEAK_DETAILS: Record<string, LeakDetail> = {
         billing: "Billed yearly",
         amount: "R519.00",
         status: "Inactive",
+        logoDomain: "adobe.com",
         mark: "A",
         markColor: "destructive",
       },
@@ -211,6 +228,7 @@ const LEAK_DETAILS: Record<string, LeakDetail> = {
         billing: "Billed yearly",
         amount: "R599.00",
         status: "Inactive",
+        logoDomain: "canva.com",
         mark: "C",
         markColor: "secondary",
       },
@@ -238,6 +256,7 @@ const LEAK_DETAILS: Record<string, LeakDetail> = {
         billing: "Billed monthly",
         amount: "R899.00",
         status: "Active",
+        logoDomain: "dstv.com",
         mark: "D",
         markColor: "primary",
       },
@@ -541,6 +560,8 @@ export default function LeakDetailScreen() {
   const leakId = Array.isArray(params.id) ? params.id[0] : params.id;
   const view = Array.isArray(params.view) ? params.view[0] : params.view;
   const [period, setPeriod] = useState<Period>("This month");
+  const [customRange, setCustomRange] = useState<CustomRange>("Last 14 days");
+  const [showCustomSheet, setShowCustomSheet] = useState(false);
   const [showCalc, setShowCalc] = useState(false);
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
@@ -550,6 +571,41 @@ export default function LeakDetailScreen() {
   const detail = leakId ? LEAK_DETAILS[leakId] : undefined;
   const fixContent = leakId ? getFixContent(leakId) : null;
   const tone = getImpactToneStyles(scheme, detail?.impact ?? "high");
+  const factor = periodFactor(period, customRange);
+
+  const scaledDetail = useMemo(() => {
+    if (!detail) return null;
+
+    const changeLabel =
+      period === "This month"
+        ? detail.changeLabel
+        : periodChangeLabel(period);
+
+    return {
+      ...detail,
+      amount: scaleRandAmount(detail.amount, factor),
+      changeLabel,
+      breakdown: detail.breakdown?.map((item) => ({
+        ...item,
+        amount: scaleRandAmount(item.amount, factor),
+      })),
+      subscriptions: detail.subscriptions?.map((item) => ({
+        ...item,
+        amount: scaleRandAmount(item.amount, factor),
+      })),
+      didYouKnow: detail.didYouKnow
+        ? detail.didYouKnow.replace(
+            detail.amount,
+            scaleRandAmount(detail.amount, factor),
+          )
+        : undefined,
+    };
+  }, [detail, factor, period]);
+
+  const handlePeriodChange = (next: Period) => {
+    setPeriod(next);
+    if (next === "Custom") setShowCustomSheet(true);
+  };
 
   const heroSurface = useMemo(
     () =>
@@ -559,7 +615,7 @@ export default function LeakDetailScreen() {
     [scheme, tone.color],
   );
 
-  if (!leakId || !detail || !fixContent) {
+  if (!leakId || !detail || !fixContent || !scaledDetail) {
     return (
       <SafeAreaView
         className="flex-1 items-center justify-center bg-background px-5"
@@ -579,6 +635,14 @@ export default function LeakDetailScreen() {
   const listTitle =
     detail.listSectionTitle ??
     (leakId === "debit" ? "Your debit orders" : "Your subscriptions");
+  const compactChange =
+    period === "This month"
+      ? "+18%"
+      : period === "Last month"
+        ? "-6%"
+        : period === "3 months"
+          ? "+11%"
+          : "Custom";
 
   const openBreakdownFix = (itemId: string) => {
     const actionId = BREAKDOWN_FIX_ACTION[leakId]?.[itemId];
@@ -605,10 +669,7 @@ export default function LeakDetailScreen() {
             </IconButton>
 
             <View className="min-w-0 flex-1 flex-row items-start gap-3">
-              <View
-                className="h-11 w-11 items-center justify-center rounded-2xl"
-                style={{ backgroundColor: tone.surface }}
-              >
+              <View className="h-11 w-11 items-center justify-center">
                 <detail.HeaderIcon color={tone.color} size={22} strokeWidth={2.2} />
               </View>
               <View className="min-w-0 flex-1">
@@ -629,13 +690,27 @@ export default function LeakDetailScreen() {
             </IconButton>
           </View>
 
-          <PeriodTabs active={period} onChange={setPeriod} toneColor={tone.color} />
+          <PeriodTabs
+            active={period}
+            onChange={handlePeriodChange}
+            toneColor={tone.color}
+          />
+          {period === "Custom" ? (
+            <Pressable
+              onPress={() => setShowCustomSheet(true)}
+              className="mt-2 self-start rounded-full bg-muted px-3 py-1.5 active:opacity-75"
+            >
+              <Text className="text-[12px] font-medium text-foreground">
+                Range: {customRange}
+              </Text>
+            </Pressable>
+          ) : null}
 
           {isCompact ? (
             <View className="mt-5 flex-row gap-3">
               {[
-                { label: "You paid", value: detail.amount },
-                { label: "vs last month", value: "+18%" },
+                { label: "You paid", value: scaledDetail.amount },
+                { label: "vs last month", value: compactChange },
                 { label: "Frequency", value: "Monthly" },
               ].map((stat) => (
                 <View key={stat.label} className="flex-1 rounded-2xl bg-muted p-3">
@@ -654,26 +729,28 @@ export default function LeakDetailScreen() {
               <View className="flex-row">
                 <View className="flex-1 pr-2">
                   <Text className="text-[13px] text-muted-foreground">
-                    {detail.variant === "subscriptions" ? "You're paying" : "You leaked"}
+                    {scaledDetail.variant === "subscriptions"
+                      ? "You're paying"
+                      : "You leaked"}
                   </Text>
                   <Text className="mt-1 text-[34px] font-bold tracking-[-0.8px] text-foreground">
-                    {detail.amount}
+                    {scaledDetail.amount}
                   </Text>
                   <Text className="mt-1 text-[13px] text-muted-foreground">
-                    {detail.onLabel}
+                    {scaledDetail.onLabel}
                   </Text>
                   <View
                     className="mt-2 self-start rounded-full px-3 py-1"
                     style={{ backgroundColor: withAlpha(tone.color, 0.14) }}
                   >
                     <Text className="text-[12px] font-semibold" style={{ color: tone.color }}>
-                      {detail.changeLabel}
+                      {scaledDetail.changeLabel}
                     </Text>
                   </View>
                   <Text className="mt-3 text-[12px] text-muted-foreground">
                     That&apos;s{" "}
                     <Text className="font-bold" style={{ color: tone.color }}>
-                      {detail.percentOfLeaks}
+                      {scaledDetail.percentOfLeaks}
                     </Text>{" "}
                     of your total leaks
                   </Text>
@@ -691,7 +768,7 @@ export default function LeakDetailScreen() {
                 </View>
 
                 <View className="justify-center">
-                  {detail.variant === "breakdown" ? (
+                  {scaledDetail.variant === "breakdown" ? (
                     leakId === "airtime" ? (
                       <AirtimeIllustration accent={tone.color} primary={palette.primary} />
                     ) : leakId === "atm" ? (
@@ -709,22 +786,19 @@ export default function LeakDetailScreen() {
             </View>
           )}
 
-          {detail.variant === "breakdown" && detail.breakdown ? (
+          {scaledDetail.variant === "breakdown" && scaledDetail.breakdown ? (
             <>
               <Text className="mb-3 mt-7 text-[17px] font-bold text-foreground">
                 Where it comes from
               </Text>
               <View className="gap-2">
-                {detail.breakdown.map((item) => (
+                {scaledDetail.breakdown.map((item) => (
                   <Pressable
                     key={item.id}
                     onPress={() => openBreakdownFix(item.id)}
                     className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-75"
                   >
-                    <View
-                      className="h-10 w-10 items-center justify-center rounded-xl"
-                      style={{ backgroundColor: tone.surface }}
-                    >
+                    <View className="h-10 w-10 items-center justify-center">
                       <item.Icon color={tone.color} size={18} strokeWidth={2.2} />
                     </View>
                     <View className="min-w-0 flex-1">
@@ -750,26 +824,26 @@ export default function LeakDetailScreen() {
                   </Pressable>
                 ))}
               </View>
-              {detail.didYouKnow ? (
+              {scaledDetail.didYouKnow ? (
                 <View
                   className="mt-4 rounded-3xl p-4"
                   style={{ backgroundColor: palette.surfaceSoft }}
                 >
                   <Text className="text-[13px] leading-5 text-foreground">
-                    {detail.didYouKnow}
+                    {scaledDetail.didYouKnow}
                   </Text>
                 </View>
               ) : null}
             </>
           ) : null}
 
-          {detail.variant === "subscriptions" && detail.subscriptions ? (
+          {scaledDetail.variant === "subscriptions" && scaledDetail.subscriptions ? (
             <>
               <Text className="mb-3 mt-7 text-[17px] font-bold text-foreground">
                 {listTitle}
               </Text>
               <View className="gap-2">
-                {detail.subscriptions.map((item) => (
+                {scaledDetail.subscriptions.map((item) => (
                   <Pressable
                     key={item.id}
                     onPress={() => {
@@ -783,22 +857,32 @@ export default function LeakDetailScreen() {
                     }}
                     className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-75"
                   >
-                    <View
-                      className="h-10 w-10 items-center justify-center rounded-xl"
-                      style={{
-                        backgroundColor: withAlpha(
-                          resolveMarkColor(palette, item.markColor),
-                          0.14,
-                        ),
-                      }}
-                    >
-                      <Text
-                        className="text-[14px] font-bold"
-                        style={{ color: resolveMarkColor(palette, item.markColor) }}
-                      >
-                        {item.mark}
-                      </Text>
-                    </View>
+                    {item.logoDomain ? (
+                      <BrandLogo
+                        name={item.name}
+                        logoDomain={item.logoDomain}
+                        size={40}
+                        fallbackColor={resolveMarkColor(palette, item.markColor)}
+                        shape="squircle"
+                      />
+                    ) : item.brandId ? (
+                      <SimpleBrandLogo
+                        name={item.name}
+                        brandId={item.brandId}
+                        size={40}
+                        fallbackColor={resolveMarkColor(palette, item.markColor)}
+                        shape="squircle"
+                      />
+                    ) : (
+                      <View className="h-10 w-10 items-center justify-center">
+                        <Text
+                          className="text-[14px] font-bold"
+                          style={{ color: resolveMarkColor(palette, item.markColor) }}
+                        >
+                          {item.mark}
+                        </Text>
+                      </View>
+                    )}
                     <View className="min-w-0 flex-1">
                       <Text className="text-[14px] font-semibold text-foreground">
                         {item.name}
@@ -850,6 +934,17 @@ export default function LeakDetailScreen() {
           "We total avoidable charges linked to this leak for the selected period and compare them to your overall leaks."
         }
         onClose={() => setShowCalc(false)}
+      />
+      <SelectionSheet
+        visible={showCustomSheet}
+        title="Custom range"
+        selected={customRange}
+        onSelect={setCustomRange}
+        onClose={() => setShowCustomSheet(false)}
+        options={CUSTOM_RANGES.map((range) => ({
+          value: range,
+          label: range,
+        }))}
       />
     </SafeAreaView>
   );

@@ -4,6 +4,7 @@ import {
   ACCOUNT_TYPE_LABELS,
   DEFAULT_ACCOUNT_CURRENCY,
   INSTITUTION_COLORS,
+  resolveInstitutionLogoDomain,
 } from "./account.constants";
 import { ACCOUNT_TYPES, type AccountType, type FinancialAccount } from "./account.types";
 
@@ -73,26 +74,24 @@ function hashString(value: string): number {
 
 export function colorForAccount(account: FinancialAccount): string {
   const institutionKey = account.institution?.trim().toLowerCase() ?? "";
-  if (institutionKey && INSTITUTION_COLORS[institutionKey]) {
-    return INSTITUTION_COLORS[institutionKey];
+  if (institutionKey) {
+    const exact = INSTITUTION_COLORS[institutionKey];
+    if (exact) return exact;
+
+    for (const [key, color] of Object.entries(INSTITUTION_COLORS)) {
+      if (institutionKey.includes(key) || key.includes(institutionKey)) {
+        return color;
+      }
+    }
   }
 
   const seed = institutionKey || account.name.toLowerCase();
   return ACCOUNT_PREVIEW_COLORS[hashString(seed) % ACCOUNT_PREVIEW_COLORS.length];
 }
 
-function previewKind(account: FinancialAccount): AccountPreview["kind"] {
-  const institution = account.institution?.toLowerCase() ?? "";
-  if (institution.includes("nedbank")) {
-    return "nedbank";
-  }
-  if (account.accountType === "other") {
-    return "wallet";
-  }
-  return "bank";
-}
-
 export function toAccountPreview(account: FinancialAccount, balance: number | null = null): AccountPreview {
+  const logoSource = account.institution || account.name;
+
   return {
     id: account.id,
     name: account.name,
@@ -101,7 +100,7 @@ export function toAccountPreview(account: FinancialAccount, balance: number | nu
       ? "—"
       : `R${balance.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
     color: colorForAccount(account),
-    kind: previewKind(account),
+    logoDomain: resolveInstitutionLogoDomain(logoSource),
   };
 }
 

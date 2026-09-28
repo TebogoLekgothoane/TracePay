@@ -22,18 +22,39 @@ import Svg, { Circle, G, Line, Path, Rect } from "react-native-svg";
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
 import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
+import { SelectionSheet } from "../../src/components/ui/Modal";
+import {
+  CUSTOM_RANGES,
+  PERIODS,
+  formatRandAmount,
+  periodChangeLabel,
+  periodComparisonCopy,
+  periodFactor,
+  scaleRandAmount,
+  type CustomRange,
+  type Period,
+} from "../../src/features/insights/period";
 import { COLORS, TRACEPAY, withAlpha } from "../../src/theme/colors";
 
-const PERIODS = ["This month", "Last month", "3 months", "Custom"] as const;
-type Period = (typeof PERIODS)[number];
+type MetricMode = "Spending" | "Income";
+type TrendGrain = "By week" | "By month" | "By day";
+type InsightFilter = "All" | "Spending" | "Fees" | "Savings";
 
-const CATEGORIES = [
+const BASE_CATEGORIES = [
   { name: "Transport", amount: "R1,816.74", percent: "31%", colorKey: "primary" as const, Icon: Car },
   { name: "Food & Dining", amount: "R1,406.51", percent: "24%", colorKey: "accent" as const, Icon: UtensilsCrossed },
   { name: "Shopping", amount: "R879.07", percent: "15%", colorKey: "warning" as const, Icon: ShoppingBag },
   { name: "Bills & utilities", amount: "R761.86", percent: "13%", colorKey: "success" as const, Icon: Zap },
   { name: "Entertainment", amount: "R644.65", percent: "11%", colorKey: "blue" as const, Icon: Film },
   { name: "Other", amount: "R351.62", percent: "6%", colorKey: "destructive" as const, Icon: Receipt },
+];
+
+const INCOME_CATEGORIES = [
+  { name: "Salary", amount: "R28,500.00", percent: "82%", colorKey: "success" as const, Icon: Zap },
+  { name: "Side income", amount: "R3,200.00", percent: "9%", colorKey: "primary" as const, Icon: TrendingUp },
+  { name: "Transfers in", amount: "R1,850.00", percent: "5%", colorKey: "blue" as const, Icon: Receipt },
+  { name: "Refunds", amount: "R920.00", percent: "3%", colorKey: "accent" as const, Icon: ShoppingBag },
+  { name: "Other", amount: "R430.00", percent: "1%", colorKey: "warning" as const, Icon: Film },
 ];
 
 const INSIGHT_ITEMS = [
@@ -45,6 +66,7 @@ const INSIGHT_ITEMS = [
     link: "View transport insights",
     Icon: TrendingUp,
     tone: "primary" as const,
+    filter: "Spending" as const,
   },
   {
     id: "fees",
@@ -54,6 +76,7 @@ const INSIGHT_ITEMS = [
     link: "Review bank fees",
     Icon: Receipt,
     tone: "accent" as const,
+    filter: "Fees" as const,
   },
   {
     id: "subs",
@@ -63,6 +86,7 @@ const INSIGHT_ITEMS = [
     link: "View subscriptions",
     Icon: Lightbulb,
     tone: "warning" as const,
+    filter: "Savings" as const,
   },
 ];
 
@@ -74,6 +98,26 @@ const WEEKLY_TRENDS = [
   { current: 1100, previous: 980 },
 ];
 
+const MONTHLY_TRENDS = [
+  { current: 4200, previous: 3900 },
+  { current: 5100, previous: 4700 },
+  { current: 5860, previous: 5140 },
+];
+
+const DAILY_TRENDS = [
+  { current: 180, previous: 150 },
+  { current: 220, previous: 190 },
+  { current: 310, previous: 240 },
+  { current: 160, previous: 170 },
+  { current: 290, previous: 210 },
+  { current: 140, previous: 130 },
+  { current: 250, previous: 200 },
+];
+
+const BASE_SPENDING = 5860.45;
+const BASE_INCOME = 34900;
+const BASE_DAILY = 195.35;
+
 function toneColor(
   palette: {
     primary: string;
@@ -83,7 +127,7 @@ function toneColor(
     blue: string;
     destructive: string;
   },
-  key: (typeof CATEGORIES)[number]["colorKey"] | (typeof INSIGHT_ITEMS)[number]["tone"],
+  key: (typeof BASE_CATEGORIES)[number]["colorKey"] | (typeof INSIGHT_ITEMS)[number]["tone"],
 ) {
   if (key === "primary") return palette.primary;
   if (key === "accent") return palette.accent;
@@ -113,37 +157,17 @@ function PeriodTabs({
         {PERIODS.map((period) => {
           const selected = period === active;
 
-          if (selected) {
-            return (
-              <Pressable key={period} onPress={() => onChange(period)}>
-                <LinearGradient
-                  colors={[trace.splashPayStart, trace.primary, trace.splashPayEnd]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={{
-                    borderRadius: 999,
-                    paddingHorizontal: 16,
-                    paddingVertical: 10,
-                  }}
-                >
-                  <Text
-                    style={{ color: trace.primaryForeground }}
-                    className="text-[13px] font-semibold"
-                  >
-                    {period}
-                  </Text>
-                </LinearGradient>
-              </Pressable>
-            );
-          }
-
           return (
             <Pressable
               key={period}
               onPress={() => onChange(period)}
               className="rounded-full px-4 py-2.5 active:opacity-75"
+              style={selected ? { backgroundColor: trace.primary } : undefined}
             >
-              <Text className="text-[13px] font-medium text-muted-foreground">
+              <Text
+                className={`text-[13px] ${selected ? "font-semibold" : "font-medium text-muted-foreground"}`}
+                style={selected ? { color: trace.primaryForeground } : undefined}
+              >
                 {period}
               </Text>
             </Pressable>
@@ -267,19 +291,26 @@ function InsightMiniCard({
 function TrendsChart({
   currentColor,
   previousColor,
+  points,
 }: {
   currentColor: string;
   previousColor: string;
+  points: { current: number; previous: number }[];
 }) {
-  const max = 1200;
-  const barWidth = 10;
-  const gap = 6;
-  const groupGap = 18;
+  const max = Math.max(
+    1,
+    ...points.flatMap((point) => [point.current, point.previous]),
+  );
+  const barWidth = points.length > 5 ? 8 : 10;
+  const gap = points.length > 5 ? 4 : 6;
+  const groupGap = points.length > 5 ? 10 : 18;
   const chartHeight = 120;
+  const gridSteps = 4;
 
   return (
     <Svg width="100%" height={150} viewBox="0 0 320 150">
-      {[0, 300, 600, 900, 1200].map((value, index) => {
+      {Array.from({ length: gridSteps + 1 }, (_, index) => {
+        const value = (max / gridSteps) * index;
         const y = 118 - (value / max) * chartHeight;
         return (
           <Line
@@ -294,7 +325,7 @@ function TrendsChart({
         );
       })}
 
-      {WEEKLY_TRENDS.map((week, index) => {
+      {points.map((week, index) => {
         const x = 24 + index * (barWidth * 2 + gap + groupGap);
         const currentHeight = (week.current / max) * chartHeight;
         const previousHeight = (week.previous / max) * chartHeight;
@@ -326,26 +357,115 @@ function TrendsChart({
 
 export default function InsightsScreen() {
   const [period, setPeriod] = useState<Period>("This month");
+  const [customRange, setCustomRange] = useState<CustomRange>("Last 14 days");
+  const [metricMode, setMetricMode] = useState<MetricMode>("Spending");
+  const [trendGrain, setTrendGrain] = useState<TrendGrain>("By week");
+  const [insightFilter, setInsightFilter] = useState<InsightFilter>("All");
+  const [showMetricSheet, setShowMetricSheet] = useState(false);
+  const [showTrendSheet, setShowTrendSheet] = useState(false);
+  const [showFilterSheet, setShowFilterSheet] = useState(false);
+  const [showCustomSheet, setShowCustomSheet] = useState(false);
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const trace = TRACEPAY[colorScheme === "dark" ? "dark" : "light"];
 
+  const factor = periodFactor(period, customRange);
+
+  const handlePeriodChange = (next: Period) => {
+    setPeriod(next);
+    if (next === "Custom") setShowCustomSheet(true);
+  };
+
+  const categories = useMemo(() => {
+    const source = metricMode === "Spending" ? BASE_CATEGORIES : INCOME_CATEGORIES;
+    return source.map((item) => ({
+      ...item,
+      amount: scaleRandAmount(item.amount, factor),
+    }));
+  }, [factor, metricMode]);
+
+  const heroTotal = useMemo(
+    () =>
+      formatRandAmount(
+        (metricMode === "Spending" ? BASE_SPENDING : BASE_INCOME) * factor,
+      ),
+    [factor, metricMode],
+  );
+
+  const dailyAverage = useMemo(() => {
+    if (metricMode === "Income") {
+      return formatRandAmount((BASE_INCOME / 30) * factor);
+    }
+    return formatRandAmount(BASE_DAILY * factor);
+  }, [factor, metricMode]);
+
+  const peakDay = useMemo(() => {
+    if (period === "Last month") return "12 Apr • R540.00";
+    if (period === "3 months") return "3 Mar • R890.00";
+    if (period === "Custom") {
+      if (customRange === "Last 7 days") return "Yesterday • R310.00";
+      if (customRange === "Year to date") return "18 May • R1,120.00";
+      return "2 days ago • R420.00";
+    }
+    return metricMode === "Income" ? "25 May • R28,500.00" : "18 May • R620.00";
+  }, [customRange, metricMode, period]);
+
+  const visibleInsights = useMemo(() => {
+    const filtered =
+      insightFilter === "All"
+        ? INSIGHT_ITEMS
+        : INSIGHT_ITEMS.filter((item) => item.filter === insightFilter);
+
+    return filtered.map((item) => {
+      if (!item.highlight.startsWith("R")) return item;
+      return {
+        ...item,
+        highlight: scaleRandAmount(item.highlight, factor),
+      };
+    });
+  }, [factor, insightFilter]);
+
+  const trendPoints = useMemo(() => {
+    const source =
+      trendGrain === "By month"
+        ? MONTHLY_TRENDS
+        : trendGrain === "By day"
+          ? DAILY_TRENDS
+          : WEEKLY_TRENDS;
+
+    return source.map((point) => ({
+      current: Math.round(point.current * factor),
+      previous: Math.round(point.previous * factor),
+    }));
+  }, [factor, trendGrain]);
+
+  const trendLabels = useMemo(() => {
+    if (trendGrain === "By month") return ["Mar", "Apr", "May"];
+    if (trendGrain === "By day") {
+      return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    }
+    return ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5"];
+  }, [trendGrain]);
+
   const donutSegments = useMemo(() => {
-    const total = CATEGORIES.reduce(
+    const total = categories.reduce(
       (sum, item) => sum + Number(item.percent.replace("%", "")),
       0,
     );
     const circumference = 2 * Math.PI * 46;
     let offset = 0;
 
-    return CATEGORIES.map((item) => {
+    return categories.map((item) => {
       const share = Number(item.percent.replace("%", "")) / total;
       const length = circumference * share;
       const segment = { color: toneColor(palette, item.colorKey), offset, length };
       offset += length;
       return segment;
     });
-  }, [palette]);
+  }, [categories, palette]);
+
+  const periodLabel =
+    period === "Custom" ? customRange : period;
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -364,14 +484,28 @@ export default function InsightsScreen() {
                 Understand your money story
               </Text>
             </View>
-            <IconButton accessibilityLabel="Filter insights" variant="outline">
+            <IconButton
+              accessibilityLabel="Filter insights"
+              variant="outline"
+              onPress={() => setShowFilterSheet(true)}
+            >
               <SlidersHorizontal color={palette.primary} size={18} strokeWidth={2} />
             </IconButton>
           </View>
 
           <View className="mt-5">
-            <PeriodTabs active={period} onChange={setPeriod} />
+            <PeriodTabs active={period} onChange={handlePeriodChange} />
           </View>
+          {period === "Custom" ? (
+            <Pressable
+              onPress={() => setShowCustomSheet(true)}
+              className="mt-2 self-start rounded-full bg-muted px-3 py-1.5 active:opacity-75"
+            >
+              <Text className="text-[12px] font-medium text-foreground">
+                Range: {customRange}
+              </Text>
+            </Pressable>
+          ) : null}
 
           <LinearGradient
             colors={[...trace.summaryGradient]}
@@ -387,13 +521,13 @@ export default function InsightsScreen() {
             <View className="flex-row items-start justify-between">
               <View className="flex-1">
                 <Text style={{ color: trace.heroMuted }} className="text-[13px]">
-                  You spent
+                  {metricMode === "Spending" ? "You spent" : "You earned"}
                 </Text>
                 <Text
                   style={{ color: trace.heroForeground }}
                   className="mt-1 text-[34px] font-bold tracking-[-0.8px]"
                 >
-                  R5,860.45
+                  {heroTotal}
                 </Text>
                 <View
                   className="mt-2 self-start rounded-full px-3 py-1"
@@ -403,12 +537,15 @@ export default function InsightsScreen() {
                     className="text-[12px] font-semibold"
                     style={{ color: trace.splashAccentPink }}
                   >
-                    ↑ 14% vs last month
+                    {periodChangeLabel(period)}
                   </Text>
                 </View>
               </View>
 
               <Pressable
+                onPress={() => setShowMetricSheet(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Choose spending or income"
                 className="flex-row items-center gap-1 rounded-full px-3 py-1.5 active:opacity-80"
                 style={{ backgroundColor: trace.heroSubtle }}
               >
@@ -416,7 +553,7 @@ export default function InsightsScreen() {
                   style={{ color: trace.heroForeground }}
                   className="text-[12px] font-medium"
                 >
-                  Spending
+                  {metricMode}
                 </Text>
                 <ChevronDown color={trace.heroForeground} size={14} strokeWidth={2} />
               </Pressable>
@@ -442,7 +579,7 @@ export default function InsightsScreen() {
                   style={{ color: trace.heroForeground }}
                   className="mt-1 text-[15px] font-bold"
                 >
-                  R195.35
+                  {dailyAverage}
                 </Text>
               </View>
               <View
@@ -451,13 +588,15 @@ export default function InsightsScreen() {
               />
               <View className="flex-1 pl-3">
                 <Text style={{ color: trace.heroMuted }} className="text-[11px]">
-                  Highest spending day
+                  {metricMode === "Spending"
+                    ? "Highest spending day"
+                    : "Highest income day"}
                 </Text>
                 <Text
                   style={{ color: trace.heroForeground }}
                   className="mt-1 text-[15px] font-bold"
                 >
-                  18 May • R620.00
+                  {peakDay}
                 </Text>
               </View>
             </View>
@@ -465,17 +604,19 @@ export default function InsightsScreen() {
 
           <View className="mb-3 mt-7 flex-row items-center justify-between">
             <Text className="text-[17px] font-bold text-foreground">
-              Spending by category
+              {metricMode === "Spending"
+                ? "Spending by category"
+                : "Income by category"}
             </Text>
             <Button size="sm" variant="ghost" className="px-0">
-              View all
+              {periodLabel}
             </Button>
           </View>
           <View className="rounded-3xl border border-border bg-card p-4">
             <View className="flex-row items-center gap-3">
-              <DonutChart segments={donutSegments} total="R5,860.45" />
+              <DonutChart segments={donutSegments} total={heroTotal} />
               <View className="min-w-0 flex-1 gap-3">
-                {CATEGORIES.map((item) => {
+                {categories.map((item) => {
                   const color = toneColor(palette, item.colorKey);
                   return (
                     <View key={item.name} className="flex-row items-center gap-2.5">
@@ -518,31 +659,42 @@ export default function InsightsScreen() {
               View all
             </Button>
           </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingRight: 8 }}
-          >
-            {INSIGHT_ITEMS.map((item) => (
-              <InsightMiniCard key={item.id} item={item} palette={palette} />
-            ))}
-          </ScrollView>
+          {visibleInsights.length === 0 ? (
+            <View className="rounded-3xl border border-border bg-card px-4 py-6">
+              <Text className="text-[14px] text-muted-foreground">
+                No insights match this filter.
+              </Text>
+            </View>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingRight: 8 }}
+            >
+              {visibleInsights.map((item) => (
+                <InsightMiniCard key={item.id} item={item} palette={palette} />
+              ))}
+            </ScrollView>
+          )}
 
           <View className="mb-3 mt-7 flex-row items-center justify-between">
             <Text className="text-[17px] font-bold text-foreground">
-              Spending trends
+              {metricMode} trends
             </Text>
-            <Pressable className="active:opacity-70">
-              <Text className="text-[13px] font-semibold text-primary">
-                View full report
-              </Text>
-            </Pressable>
+            <Button
+              onPress={() => router.push("/insights")}
+              size="sm"
+              variant="ghost"
+              className="px-0"
+            >
+              View full report
+            </Button>
           </View>
           <View className="rounded-3xl border border-border bg-card p-4">
             <View className="mb-4 flex-row items-start justify-between gap-3">
               <View className="flex-1">
                 <Text className="text-[13px] text-muted-foreground">
-                  This month vs last month
+                  {periodComparisonCopy(period)}
                 </Text>
                 <View className="mt-2 flex-row flex-wrap gap-3">
                   <View className="flex-row items-center gap-1.5">
@@ -550,19 +702,30 @@ export default function InsightsScreen() {
                       className="h-2.5 w-2.5 rounded-full"
                       style={{ backgroundColor: palette.primary }}
                     />
-                    <Text className="text-[11px] text-muted-foreground">This month</Text>
+                    <Text className="text-[11px] text-muted-foreground">
+                      Current
+                    </Text>
                   </View>
                   <View className="flex-row items-center gap-1.5">
                     <View
                       className="h-2.5 w-2.5 rounded-full"
                       style={{ backgroundColor: withAlpha(palette.primary, 0.25) }}
                     />
-                    <Text className="text-[11px] text-muted-foreground">Last month</Text>
+                    <Text className="text-[11px] text-muted-foreground">
+                      Previous
+                    </Text>
                   </View>
                 </View>
               </View>
-              <Pressable className="flex-row items-center gap-1 rounded-full bg-muted px-3 py-1.5 active:opacity-75">
-                <Text className="text-[12px] font-medium text-foreground">By week</Text>
+              <Pressable
+                onPress={() => setShowTrendSheet(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Choose trend grouping"
+                className="flex-row items-center gap-1 rounded-full bg-muted px-3 py-1.5 active:opacity-75"
+              >
+                <Text className="text-[12px] font-medium text-foreground">
+                  {trendGrain}
+                </Text>
                 <ChevronDown color={palette.mutedForeground} size={14} strokeWidth={2} />
               </Pressable>
             </View>
@@ -570,10 +733,11 @@ export default function InsightsScreen() {
             <TrendsChart
               currentColor={palette.primary}
               previousColor={withAlpha(palette.primary, 0.22)}
+              points={trendPoints}
             />
 
             <View className="mt-1 flex-row justify-between px-2">
-              {["Week 1", "Week 2", "Week 3", "Week 4", "Week 5"].map((label) => (
+              {trendLabels.map((label) => (
                 <Text key={label} className="text-[10px] text-muted-foreground">
                   {label}
                 </Text>
@@ -582,6 +746,54 @@ export default function InsightsScreen() {
           </View>
         </View>
       </TabScrollView>
+
+      <SelectionSheet
+        visible={showMetricSheet}
+        title="Show totals for"
+        selected={metricMode}
+        onSelect={setMetricMode}
+        onClose={() => setShowMetricSheet(false)}
+        options={[
+          { value: "Spending", label: "Spending", description: "Money out" },
+          { value: "Income", label: "Income", description: "Money in" },
+        ]}
+      />
+      <SelectionSheet
+        visible={showTrendSheet}
+        title="Group trends"
+        selected={trendGrain}
+        onSelect={setTrendGrain}
+        onClose={() => setShowTrendSheet(false)}
+        options={[
+          { value: "By week", label: "By week" },
+          { value: "By month", label: "By month" },
+          { value: "By day", label: "By day" },
+        ]}
+      />
+      <SelectionSheet
+        visible={showFilterSheet}
+        title="Filter insights"
+        selected={insightFilter}
+        onSelect={setInsightFilter}
+        onClose={() => setShowFilterSheet(false)}
+        options={[
+          { value: "All", label: "All insights" },
+          { value: "Spending", label: "Spending" },
+          { value: "Fees", label: "Fees" },
+          { value: "Savings", label: "Savings" },
+        ]}
+      />
+      <SelectionSheet
+        visible={showCustomSheet}
+        title="Custom range"
+        selected={customRange}
+        onSelect={setCustomRange}
+        onClose={() => setShowCustomSheet(false)}
+        options={CUSTOM_RANGES.map((range) => ({
+          value: range,
+          label: range,
+        }))}
+      />
     </SafeAreaView>
   );
 }

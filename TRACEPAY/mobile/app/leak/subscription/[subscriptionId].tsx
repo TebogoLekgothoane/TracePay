@@ -12,12 +12,16 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { COLORS, TRACEPAY, type ColorScheme, withAlpha } from "../../../src/theme/colors";
+import { BrandLogo } from "../../../src/components/ui/BrandLogo";
 import { IconButton } from "../../../src/components/ui/IconButton";
+import { SimpleBrandLogo } from "../../../src/components/ui/SimpleBrandLogo";
 
 const SUBSCRIPTIONS: Record<
   string,
   {
     name: string;
+    brandId?: string;
+    logoDomain?: string;
     mark: string;
     markColor: "destructive" | "primary" | "success" | "secondary";
     category: string;
@@ -31,6 +35,8 @@ const SUBSCRIPTIONS: Record<
 > = {
   netflix: {
     name: "Netflix",
+    brandId: "netflix",
+    logoDomain: "netflix.com",
     mark: "N",
     markColor: "destructive",
     category: "Entertainment",
@@ -43,6 +49,7 @@ const SUBSCRIPTIONS: Record<
   },
   showmax: {
     name: "Showmax",
+    logoDomain: "showmax.com",
     mark: "S",
     markColor: "primary",
     category: "Entertainment",
@@ -55,6 +62,8 @@ const SUBSCRIPTIONS: Record<
   },
   spotify: {
     name: "Spotify Premium",
+    brandId: "spotify",
+    logoDomain: "spotify.com",
     mark: "♪",
     markColor: "success",
     category: "Music",
@@ -120,19 +129,32 @@ export default function SubscriptionDetailScreen() {
           </Text>
 
           <View className="mt-5 flex-row items-center gap-3">
-            <View
-              className="h-14 w-14 items-center justify-center rounded-2xl"
-              style={{
-                backgroundColor: withAlpha(markColor(palette, sub.markColor), 0.14),
-              }}
-            >
-              <Text
-                className="text-[20px] font-bold"
-                style={{ color: markColor(palette, sub.markColor) }}
-              >
-                {sub.mark}
-              </Text>
-            </View>
+            {sub.logoDomain ? (
+              <BrandLogo
+                name={sub.name}
+                logoDomain={sub.logoDomain}
+                size={56}
+                fallbackColor={markColor(palette, sub.markColor)}
+                shape="squircle"
+              />
+            ) : sub.brandId ? (
+              <SimpleBrandLogo
+                name={sub.name}
+                brandId={sub.brandId}
+                size={56}
+                fallbackColor={markColor(palette, sub.markColor)}
+                shape="squircle"
+              />
+            ) : (
+              <View className="h-14 w-14 items-center justify-center">
+                <Text
+                  className="text-[20px] font-bold"
+                  style={{ color: markColor(palette, sub.markColor) }}
+                >
+                  {sub.mark}
+                </Text>
+              </View>
+            )}
             <View className="flex-1">
               <Text className="text-[20px] font-bold text-foreground">{sub.name}</Text>
               <Text className="mt-0.5 text-[13px] text-muted-foreground">

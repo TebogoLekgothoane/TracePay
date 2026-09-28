@@ -41,10 +41,7 @@ export function FixActionsList({ leakId, sections, impact }: Props) {
                 }}
                 className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-75"
               >
-                <View
-                  className="h-10 w-10 items-center justify-center rounded-xl"
-                  style={{ backgroundColor: tone.surface }}
-                >
+                <View className="h-10 w-10 items-center justify-center">
                   <action.Icon color={tone.color} size={18} strokeWidth={2.2} />
                 </View>
                 <View className="min-w-0 flex-1">

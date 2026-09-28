@@ -93,9 +93,7 @@ export default function SignInScreen() {
             Sign in to{"\n"}
             <AppText variant="displayAccent">TracePay</AppText>
           </AppText>
-          <AppText variant="lead" className="mt-3">
-            Use the phone number and password from when you created your account.
-          </AppText>
+        
 
           <View className="mt-8 gap-5">
             <View>

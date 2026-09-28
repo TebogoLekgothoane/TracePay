@@ -22,6 +22,11 @@ export type SignInInput = {
   password: string;
 };
 
+export type UpdateProfileInput = {
+  fullName: string;
+  currency?: string;
+};
+
 export type SignInResult = {
   requiresOtp: boolean;
   resetAllowed?: boolean;

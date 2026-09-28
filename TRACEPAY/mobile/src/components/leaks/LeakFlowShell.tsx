@@ -1,16 +1,15 @@
-import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import type { ReactNode } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { COLORS } from "../../theme/colors";
 import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
-import { COLORS, TRACEPAY, withAlpha } from "../../theme/colors";
 
-type Props = {
+type ShellProps = {
   title: string;
   subtitle?: string;
   children: ReactNode;
@@ -26,17 +25,16 @@ export function LeakFlowShell({
   footer,
   accentColor,
   onBack,
-}: Props) {
+}: ShellProps) {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
-  const trace = TRACEPAY[colorScheme === "dark" ? "dark" : "light"];
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
       <View className="flex-1 px-5 pt-1">
         <IconButton
           accessibilityLabel="Go back"
-          className="mb-4"
+          className="mb-3 self-start"
           variant="muted"
           onPress={onBack ?? (() => router.back())}
         >
@@ -72,7 +70,9 @@ type PrimaryFooterProps = {
   subtitle: string;
   buttonLabel: string;
   onPress: () => void;
-  accentColor: string;
+  /** @deprecated Kept for call-site compatibility; primary buttons use theme purple. */
+  accentColor?: string;
+  /** @deprecated Accent gradient CTAs removed; always renders primary Button. */
   variant?: "primary" | "accent";
 };
 
@@ -81,54 +81,16 @@ export function LeakPrimaryFooter({
   subtitle,
   buttonLabel,
   onPress,
-  accentColor,
-  variant = "primary",
 }: PrimaryFooterProps) {
-  const { colorScheme } = useColorScheme();
-  const trace = TRACEPAY[colorScheme === "dark" ? "dark" : "light"];
-
-  if (variant === "accent") {
-    return (
-      <Pressable onPress={onPress} className="overflow-hidden rounded-full active:opacity-90">
-        <LinearGradient
-          colors={[trace.splashAccentPink, trace.accent]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{ paddingHorizontal: 20, paddingVertical: 16, borderRadius: 999 }}
-        >
-          <Text style={{ color: trace.primaryForeground }} className="text-[15px] font-bold">
-            {title}
-          </Text>
-          <Text
-            style={{ color: withAlpha(trace.primaryForeground, 0.9) }}
-            className="mt-0.5 text-[12px]"
-          >
-            {subtitle}
-          </Text>
-          <View
-            className="mt-3 self-start rounded-full px-4 py-2"
-            style={{ backgroundColor: withAlpha(trace.primaryForeground, 0.2) }}
-          >
-            <Text style={{ color: trace.primaryForeground }} className="text-[13px] font-semibold">
-              {buttonLabel}
-            </Text>
-          </View>
-        </LinearGradient>
-      </Pressable>
-    );
-  }
-
   return (
     <View className="flex-row items-center justify-between gap-3">
       <View className="flex-1">
         <Text className="text-[15px] font-bold text-foreground">{title}</Text>
-        <Text className="mt-0.5 text-[12px] text-muted-foreground">{subtitle}</Text>
+        <Text className="mt-0.5 text-[12px] text-muted-foreground">
+          {subtitle}
+        </Text>
       </View>
-      <Button
-        onPress={onPress}
-        size="sm"
-        style={{ backgroundColor: accentColor }}
-      >
+      <Button onPress={onPress} size="sm">
         {buttonLabel}
       </Button>
     </View>

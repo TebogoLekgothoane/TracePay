@@ -80,10 +80,7 @@ export default function LeakFixScreen() {
             <Text className="mt-1 text-[30px] font-bold text-foreground">{content.savings}</Text>
             <Text className="mt-0.5 text-[13px] text-muted-foreground">this month</Text>
           </View>
-          <View
-            className="h-14 w-14 items-center justify-center rounded-2xl"
-            style={{ backgroundColor: withAlpha(tone.color, 0.15) }}
-          >
+          <View className="h-14 w-14 items-center justify-center">
             <HeroIcon color={tone.color} size={24} strokeWidth={2.2} />
           </View>
         </View>

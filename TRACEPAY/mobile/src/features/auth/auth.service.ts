@@ -18,12 +18,15 @@ import type {
   SignInInput,
   SignInResult,
   SignUpInput,
+  UpdateProfileInput,
 } from "./auth.types";
 import {
   isValidName,
   isValidPassword,
+  isValidProfileCurrency,
   isValidSaPhone,
   normalizeSaPhone,
+  sanitizeName,
 } from "./auth.validation";
 
 let pendingPhone: string | null = null;
@@ -472,6 +475,122 @@ export async function loadCurrentProfile(fresh = false): Promise<AuthProfile | n
   return profileRequest;
 }
 
+let profileUpdateRequest: Promise<AuthProfile> | null = null;
+
+export async function updateCurrentProfile(
+  input: UpdateProfileInput,
+): Promise<AuthProfile> {
+  if (profileUpdateRequest) {
+    throw new AuthError("Your profile is already being saved.");
+  }
+
+  const fullName = sanitizeName(input.fullName);
+
+  if (!isValidName(fullName)) {
+    throw new AuthError("Enter your full name (2–80 characters).");
+  }
+
+  const currencyInput =
+    typeof input.currency === "string" ? input.currency.trim().toUpperCase() : null;
+  if (currencyInput && !isValidProfileCurrency(currencyInput)) {
+    throw new AuthError("Choose a supported currency.");
+  }
+
+  if (!isSupabaseConfigured()) {
+    throw new AuthError(
+      "Supabase is not configured. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.",
+    );
+  }
+
+  profileUpdateRequest = (async () => {
+    const supabase = getSupabase();
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData.user) {
+      throw new AuthError("Your session expired. Please sign in again.");
+    }
+
+    const userId = userData.user.id;
+    const phone =
+      typeof userData.user.phone === "string" ? userData.user.phone : null;
+
+    const current = getProfileSnapshot().profile;
+    const currency =
+      currencyInput ??
+      (current && isValidProfileCurrency(current.currency)
+        ? current.currency
+        : DEFAULT_PROFILE_CURRENCY);
+
+    const payload = {
+      full_name: fullName,
+      currency,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .update(payload)
+      .eq("id", userId)
+      .select("id, full_name, currency")
+      .maybeSingle();
+
+    if (error) {
+      throw new AuthError("Could not save your profile. Please try again.");
+    }
+
+    let row = readProfileRow(data);
+    if (!row) {
+      row = await ensureProfileRow(userId, fullName);
+      if (!row) {
+        throw new AuthError("Could not save your profile. Please try again.");
+      }
+
+      const { data: updated, error: retryError } = await supabase
+        .from("profiles")
+        .update(payload)
+        .eq("id", userId)
+        .select("id, full_name, currency")
+        .maybeSingle();
+
+      if (retryError) {
+        throw new AuthError("Could not save your profile. Please try again.");
+      }
+
+      row = readProfileRow(updated);
+      if (!row) {
+        throw new AuthError("Could not save your profile. Please try again.");
+      }
+    }
+
+    const { error: metadataError } = await supabase.auth.updateUser({
+      data: { full_name: fullName },
+    });
+    if (metadataError) {
+      throw new AuthError("Could not save your profile. Please try again.");
+    }
+
+    const profile: AuthProfile = {
+      id: row.id,
+      fullName: row.fullName || FALLBACK_PROFILE_NAME,
+      phone,
+      currency: row.currency,
+    };
+
+    setProfileSnapshot({
+      profile,
+      loading: false,
+      error: null,
+    });
+
+    return profile;
+  })();
+
+  try {
+    return await profileUpdateRequest;
+  } finally {
+    profileUpdateRequest = null;
+  }
+}
+
 const FRESH_SIGNUP_RESET_FLAG = "tracepay.dev.reset-new-user.20260910b";
 
 export async function resetLocalClientForFreshSignup(args: {
@@ -491,6 +610,7 @@ export async function resetLocalClientForFreshSignup(args: {
 export async function signOut(): Promise<void> {
   clearPendingCredentials();
   profileRequest = null;
+  profileUpdateRequest = null;
   resetProfileSnapshot();
   resetAccountsSnapshot();
 

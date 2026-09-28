@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useColorScheme } from "nativewind";
 import type { ReactNode } from "react";
 import {
@@ -12,7 +11,7 @@ import {
   type ViewStyle,
 } from "react-native";
 
-import { COLORS, TRACEPAY } from "../../theme/colors";
+import { COLORS } from "../../theme/colors";
 
 export type ButtonVariant =
   | "primary"
@@ -30,7 +29,6 @@ type Props = Omit<PressableProps, "children" | "style"> & {
   size?: ButtonSize;
   loading?: boolean;
   arrow?: boolean;
-  gradient?: boolean;
   className?: string;
   labelClassName?: string;
   style?: StyleProp<ViewStyle>;
@@ -72,7 +70,6 @@ export function Button({
   size = "lg",
   loading = false,
   arrow = false,
-  gradient = false,
   disabled,
   className = "",
   labelClassName = "",
@@ -83,65 +80,39 @@ export function Button({
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
-  const trace = TRACEPAY[scheme];
   const isDisabled = Boolean(disabled || loading);
   const spinnerColor =
+    variant === "primary" ? COLORS.white : palette.primary;
+  const iconColor =
     variant === "primary" ? COLORS.white : palette.primary;
 
   return (
     <Pressable
       accessibilityRole={accessibilityRole}
       disabled={isDisabled}
-      className={`relative overflow-hidden flex-row items-center justify-center gap-2 rounded-full ${SIZE[size]} ${CONTAINER[variant]} ${isDisabled ? "opacity-50" : ""} ${className}`}
+      className={`flex-row items-center justify-center gap-2 rounded-full active:opacity-80 ${SIZE[size]} ${CONTAINER[variant]} ${isDisabled ? "opacity-50" : ""} ${className}`}
       style={style}
       {...props}
     >
-      {({ pressed }) => {
-        const showGradient = (gradient || pressed) && !isDisabled;
-        const labelTone = showGradient
-          ? "text-primary-foreground"
-          : LABEL[variant];
-        const iconColor = showGradient
-          ? COLORS.white
-          : variant === "primary"
-            ? COLORS.white
-            : palette.primary;
-
-        return (
-          <>
-            {showGradient ? (
-              <LinearGradient
-                colors={[
-                  trace.splashPayStart,
-                  trace.primary,
-                  trace.splashPayEnd,
-                ]}
-                pointerEvents="none"
-                start={{ x: 0, y: 0.5 }}
-                end={{ x: 1, y: 0.5 }}
-                style={StyleSheet.absoluteFill}
-              />
-            ) : null}
-            {loading ? (
-              <ActivityIndicator color={spinnerColor} />
-            ) : typeof children === "string" || typeof children === "number" ? (
-              <Text className={`${LABEL_SIZE[size]} ${labelTone} ${labelClassName}`}>
-                {children}
-              </Text>
-            ) : (
-              children
-            )}
-            {arrow && !loading ? (
-              <Ionicons
-                color={iconColor}
-                name="arrow-forward"
-                size={18}
-                style={styles.arrow}
-              />
-            ) : null}
-          </>
-        );
-      }}
+      {loading ? (
+        <ActivityIndicator color={spinnerColor} />
+      ) : typeof children === "string" || typeof children === "number" ? (
+        <Text
+          className={`${LABEL_SIZE[size]} ${LABEL[variant]} ${labelClassName}`}
+        >
+          {children}
+        </Text>
+      ) : (
+        children
+      )}
+      {arrow && !loading ? (
+        <Ionicons
+          color={iconColor}
+          name="arrow-forward"
+          size={18}
+          style={styles.arrow}
+        />
+      ) : null}
     </Pressable>
   );
 }
