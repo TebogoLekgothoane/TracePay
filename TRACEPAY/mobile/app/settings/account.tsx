@@ -240,7 +240,6 @@ export default function PersonalDetailsScreen() {
                 maxLength={PROFILE_NAME_MAX_LENGTH}
                 placeholder="Name and surname"
                 returnKeyType="done"
-                textContentType="name"
                 value={fullName}
                 onChangeText={(value) => {
                   setFullName(value);

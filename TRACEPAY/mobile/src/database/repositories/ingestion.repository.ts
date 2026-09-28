@@ -1,3 +1,4 @@
+import { decrypt, encrypt } from "../encryption";
 import { database } from "../database";
 
 export type IngestionRecord = {
@@ -21,6 +22,9 @@ type QueuedIngestionRow = {
   body: string;
   metadata: string;
 };
+
+/** Unsynced SMS/notification bodies must not linger indefinitely in local SQLite. */
+const MAX_QUEUE_AGE_MS = 72 * 60 * 60 * 1000;
 
 let initialized = false;
 
@@ -46,7 +50,19 @@ function ensureIngestionTable(): void {
   initialized = true;
 }
 
-function toRecord(row: QueuedIngestionRow): IngestionRecord {
+async function purgeExpiredQueueRows(): Promise<void> {
+  const cutoff = new Date(Date.now() - MAX_QUEUE_AGE_MS).toISOString();
+  // Clear sensitive columns before delete so freelist pages do not retain SMS bodies.
+  await database.runAsync(
+    `UPDATE ingestion_queue
+     SET body = '', title = NULL, metadata = '{}'
+     WHERE received_at < ?`,
+    [cutoff],
+  );
+  await database.runAsync(`DELETE FROM ingestion_queue WHERE received_at < ?`, [cutoff]);
+}
+
+async function toRecord(row: QueuedIngestionRow): Promise<IngestionRecord> {
   return {
     clientId: row.client_id,
     source: row.source,
@@ -54,13 +70,14 @@ function toRecord(row: QueuedIngestionRow): IngestionRecord {
     sender: row.sender ?? undefined,
     appIdentifier: row.app_identifier ?? undefined,
     title: row.title ?? undefined,
-    body: row.body,
+    body: await decrypt(row.body),
     metadata: JSON.parse(row.metadata) as Record<string, unknown>,
   };
 }
 
 export async function saveIngestionRecord(record: IngestionRecord): Promise<void> {
   ensureIngestionTable();
+  await purgeExpiredQueueRows();
   await database.runAsync(
     `INSERT OR IGNORE INTO ingestion_queue
       (client_id, source, received_at, sender, app_identifier, title, body, metadata)
@@ -72,7 +89,7 @@ export async function saveIngestionRecord(record: IngestionRecord): Promise<void
       record.sender ?? null,
       record.appIdentifier ?? null,
       record.title ?? null,
-      record.body,
+      await encrypt(record.body),
       JSON.stringify(record.metadata ?? {}),
     ],
   );
@@ -86,6 +103,7 @@ export async function saveIngestionRecords(records: readonly IngestionRecord[]):
 
 export async function getQueuedIngestionRecords(limit = 100): Promise<IngestionRecord[]> {
   ensureIngestionTable();
+  await purgeExpiredQueueRows();
   const rows = await database.getAllAsync<QueuedIngestionRow>(
     `SELECT client_id, source, received_at, sender, app_identifier, title, body, metadata
      FROM ingestion_queue
@@ -93,7 +111,7 @@ export async function getQueuedIngestionRecords(limit = 100): Promise<IngestionR
      LIMIT ?`,
     [limit],
   );
-  return rows.map(toRecord);
+  return Promise.all(rows.map(toRecord));
 }
 
 export async function deleteQueuedIngestionRecords(
@@ -102,8 +120,14 @@ export async function deleteQueuedIngestionRecords(
   ensureIngestionTable();
   for (const record of records) {
     await database.runAsync(
-      "DELETE FROM ingestion_queue WHERE source = ? AND client_id = ?",
+      `UPDATE ingestion_queue
+       SET body = '', title = NULL, metadata = '{}'
+       WHERE source = ? AND client_id = ?`,
       [record.source, record.clientId],
     );
+    await database.runAsync("DELETE FROM ingestion_queue WHERE source = ? AND client_id = ?", [
+      record.source,
+      record.clientId,
+    ]);
   }
 }

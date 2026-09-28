@@ -19,6 +19,7 @@ export type VerifyOtpBody = {
 export type ResetPasswordBody = {
   phone: string;
   password: string;
+  resetToken: string;
 };
 
 export type PhoneBody = {
@@ -34,6 +35,7 @@ export type SignInResult = {
   requiresOtp: boolean;
   session: AuthSession | null;
   resetAllowed?: boolean;
+  resetToken?: string;
 };
 
 export class AuthHttpError extends Error {

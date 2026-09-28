@@ -1,18 +1,31 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useColorScheme } from "nativewind";
-import { Text, TextInput, View, type TextInputProps } from "react-native";
+import { Text, View } from "react-native";
 
 import { COLORS } from "../../theme/colors";
+import { BridgedTextField } from "../ui/BridgedTextField";
 
-type Props = Omit<TextInputProps, "keyboardType"> & {
+type Props = {
   label?: string;
   error?: string | null;
+  value?: string;
+  defaultValue?: string;
+  onChangeText?: (text: string) => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
+  onSubmitEditing?: (text: string) => void;
+  placeholder?: string;
+  editable?: boolean;
+  autoFocus?: boolean;
+  autoComplete?: "tel" | "off";
+  maxLength?: number;
 };
 
 export function PhoneInput({
   label = "SA phone number",
   error,
   editable = true,
+  placeholder,
   ...props
 }: Props) {
   const { colorScheme } = useColorScheme();
@@ -36,15 +49,20 @@ export function PhoneInput({
         <Text className="mr-2 text-[16px] font-medium text-muted-foreground">
           +27
         </Text>
-        <TextInput
-          accessibilityLabel={label}
-          editable={editable}
-          keyboardType="phone-pad"
-          placeholder="72 123 4567"
-          placeholderTextColor={palette.placeholder}
-          textContentType="telephoneNumber"
-          className="h-[52px] flex-1 pr-4 text-[16px] text-foreground"
+        <BridgedTextField
           {...props}
+          autoComplete="tel"
+          editable={editable}
+          hostStyle={{ height: 52 }}
+          inputStyle={{
+            height: 52,
+            paddingHorizontal: 0,
+            paddingRight: 16,
+            backgroundColor: "transparent",
+            borderWidth: 0,
+          }}
+          keyboardType="phone-pad"
+          placeholder={placeholder ?? "72 123 4567"}
         />
       </View>
       {hasError ? (

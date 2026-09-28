@@ -83,7 +83,19 @@ export async function flushIngestionQueue(): Promise<number> {
   }
 
   const result = await uploadReadings(readings);
-  await deleteQueuedIngestionRecords(readings);
+  const submitted = new Set(readings.map((reading) => `${reading.source}:${reading.clientId}`));
+  const acknowledged = result.readings.filter(
+    (reading) =>
+      (reading.source === "sms" || reading.source === "notification") &&
+      typeof reading.clientId === "string" &&
+      reading.clientId.length > 0 &&
+      submitted.has(`${reading.source}:${reading.clientId}`),
+  );
+
+  if (acknowledged.length > 0) {
+    await deleteQueuedIngestionRecords(acknowledged);
+  }
+
   return result.accepted;
 }
 

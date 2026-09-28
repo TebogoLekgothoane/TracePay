@@ -106,6 +106,7 @@ def test_uncategorised_breakdown_is_logged_without_descriptions(caplog: pytest.L
     assert "uncategorised_breakdown total=2" in message
     assert "placeholder_descriptions=1" in message
     assert "Pay Beneficiary" not in message
+    assert "transaction_ids=" not in message
 
 
 def test_ai_low_confidence_category_is_preserved(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -180,6 +181,7 @@ def test_ai_disabled_skips_providers_and_preserves_deterministic_results(monkeyp
     assert results["known"].category_name == "Groceries"
     assert results["unknown"].category_name is None
     assert "skipped reason=disabled" in " ".join(record.getMessage() for record in caplog.records)
+    assert "candidate_collected" not in " ".join(record.getMessage() for record in caplog.records)
 
 
 def test_ai_enabled_keeps_provider_flow_reachable(monkeypatch: pytest.MonkeyPatch) -> None:

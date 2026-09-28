@@ -1,34 +1,39 @@
-import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useState } from "react";
 import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from "react-native";
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import AssembledTracePayIcon from "../../../assets/icons/assembled TracePay icon.svg";
 import PayWordmark from "../../../assets/wordmark/PAY.svg";
 import TraceWordmark from "../../../assets/wordmark/trace white wordmark.svg";
-import { TRACEPAY } from "../../theme/colors";
-import { Button } from "../ui/Button";
-import { IconButton } from "../ui/IconButton";
-import { TRACEPAY_ICON_COMPOSITION } from "../tracePayIconComposition";
 import { continueAfterAuth } from "../../features/auth/auth.navigation";
 import { getPendingPhone } from "../../features/auth/auth.service";
 import { useAppLock } from "../../features/security/AppLockProvider";
 import { useAuth } from "../../hooks/useAuth";
-import { WelcomeAuthForm, type WelcomeAuthMode, type WelcomeAuthPayload } from "./WelcomeAuthForm";
+import { TRACEPAY } from "../../theme/colors";
+import { Button } from "../ui/Button";
+import { TRACEPAY_ICON_COMPOSITION } from "../tracePayIconComposition";
+import {
+  WelcomeAuthForm,
+  type WelcomeAuthMode,
+  type WelcomeAuthPayload,
+} from "./WelcomeAuthForm";
+import { WelcomeAuthSheet } from "./WelcomeAuthSheet";
 
 const SUBTITLE = "Take control of your money.\nFind the leaks. Save your money.";
-
-type Panel = "welcome" | WelcomeAuthMode;
+const AUTH_SHEET_HEIGHT_RATIO = 0.7;
 
 function usePalette() {
   const { colorScheme } = useColorScheme();
@@ -43,7 +48,7 @@ function WelcomeWordmark({ width }: { width: number }) {
   return (
     <View
       accessibilityLabel="TRACEPAY"
-      className="relative mt-3"
+      className="relative mt-2"
       style={{ width, height }}
     >
       <View className="absolute left-0 top-0" style={{ width: columnWidth, height }}>
@@ -68,12 +73,18 @@ function WelcomeWordmark({ width }: { width: number }) {
   );
 }
 
-function WelcomeLogo({ size, wordmarkWidth }: { size: number; wordmarkWidth: number }) {
-  const palette = usePalette();
+function WelcomeLogo({
+  size,
+  wordmarkWidth,
+}: {
+  size: number;
+  wordmarkWidth: number;
+}) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const height =
     size * (TRACEPAY_ICON_COMPOSITION.height / TRACEPAY_ICON_COMPOSITION.width);
+  const palette = usePalette();
 
   return (
     <View className="items-center">
@@ -83,11 +94,15 @@ function WelcomeLogo({ size, wordmarkWidth }: { size: number; wordmarkWidth: num
         style={{
           width: size,
           height,
-          shadowColor: palette.accent,
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: isDark ? 0.55 : 0.28,
-          shadowRadius: 28,
-          elevation: isDark ? 18 : 10,
+          ...(isDark
+            ? {}
+            : {
+                shadowColor: palette.accent,
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.28,
+                shadowRadius: size > 100 ? 28 : 14,
+                elevation: 10,
+              }),
         }}
       >
         <AssembledTracePayIcon
@@ -102,65 +117,76 @@ function WelcomeLogo({ size, wordmarkWidth }: { size: number; wordmarkWidth: num
 }
 
 export function WelcomeScreen() {
-  const { width, height } = useWindowDimensions();
+  const { width } = useWindowDimensions();
   const palette = usePalette();
-  const logoSize = Math.min(width * 0.52, 210);
-  const wordmarkWidth = Math.min(width * 0.78, 300);
-  const sheetHeight = Math.min(height * 0.72, 640);
+  const heroLogoSize = Math.min(width * 0.52, 210);
+  const heroWordmarkWidth = Math.min(width * 0.78, 300);
+  const compactLogoSize = Math.min(width * 0.36, 132);
+  const compactScale = compactLogoSize / heroLogoSize;
 
   const { error, requestReset, setError, signIn, signUp, submitting } = useAuth();
   const { hasPin, lockApp, unlockApp } = useAppLock();
-  const [panel, setPanel] = useState<Panel>("welcome");
-  const [formMode, setFormMode] = useState<WelcomeAuthMode>("create");
-  const isWelcome = panel === "welcome";
+  const [authMode, setAuthMode] = useState<WelcomeAuthMode | null>(null);
+  const sheetOpen = authMode !== null;
+  /** 0 = hero (sheet closed), 1 = compact (sheet open). Scrubs with sheet drag. */
+  const sheetProgress = useSharedValue(0);
+
+  const brandStyle = useAnimatedStyle(() => {
+    const t = sheetProgress.value;
+    return {
+      paddingTop: interpolate(t, [0, 1], [40, 16], Extrapolation.CLAMP),
+      transform: [
+        {
+          scale: interpolate(t, [0, 1], [1, compactScale], Extrapolation.CLAMP),
+        },
+      ],
+    };
+  });
+
+  const heroContentStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      sheetProgress.value,
+      [0, 0.55, 1],
+      [1, 0.15, 0],
+      Extrapolation.CLAMP,
+    ),
+  }));
 
   const continueAfterLogin = () => {
     void continueAfterAuth({ hasPin, lockApp, router, unlockApp });
   };
 
-  const openPanel = (next: WelcomeAuthMode) => {
-    if (panel !== "welcome") {
+  const openSheet = (mode: WelcomeAuthMode) => {
+    if (submitting) {
       return;
     }
-
-    setFormMode(next);
-    setPanel(next);
-  };
-
-  const switchMode = (next: WelcomeAuthMode) => {
-    if (panel === "welcome" || submitting) {
-      return;
-    }
-
     setError(null);
-    setFormMode(next);
-    setPanel(next);
+    setAuthMode(mode);
   };
 
-  const closePanel = () => {
-    if (panel === "welcome" || submitting) {
+  const switchMode = (mode: WelcomeAuthMode) => {
+    if (submitting) {
       return;
     }
-
     setError(null);
-    setPanel("welcome");
+    setAuthMode(mode);
   };
 
-  const handleBack = () => {
-    if (formMode === "forgot") {
-      switchMode("login");
+  const closeSheet = () => {
+    if (submitting) {
       return;
     }
-    closePanel();
+    setError(null);
+    setAuthMode(null);
   };
 
   const submitForm = async (payload: WelcomeAuthPayload) => {
-    if (submitting || panel === "welcome") {
+    if (submitting || !authMode) {
       return;
     }
 
     try {
-      if (panel === "forgot") {
+      if (authMode === "forgot") {
         await requestReset(payload.phone);
         router.push({
           pathname: "/(auth)/otp",
@@ -172,7 +198,7 @@ export function WelcomeScreen() {
         return;
       }
 
-      if (panel === "create") {
+      if (authMode === "create") {
         await signUp({
           fullName: payload.name ?? "",
           phone: payload.phone,
@@ -211,86 +237,63 @@ export function WelcomeScreen() {
   };
 
   return (
-    <View
-      style={[styles.flex, { backgroundColor: palette.background }]}
-    >
+    <View style={[styles.flex, { backgroundColor: palette.background }]}>
       <SafeAreaView style={styles.flex} edges={["top"]}>
         <View style={styles.flex}>
-          <View className="items-center pt-10">
-            <WelcomeLogo size={logoSize} wordmarkWidth={wordmarkWidth} />
-          </View>
+          <Animated.View
+            className="items-center"
+            style={[{ transformOrigin: "top" }, brandStyle]}
+          >
+            <WelcomeLogo
+              size={heroLogoSize}
+              wordmarkWidth={heroWordmarkWidth}
+            />
+          </Animated.View>
 
-          {isWelcome ? (
-            <View style={styles.flex}>
-              <View className="mt-10 items-center px-7">
-                <Text className="text-center text-[32px] font-medium text-foreground">
-                  Welcome
-                </Text>
-                <Text className="mt-3 text-center text-[16px] leading-[24px] text-muted-foreground">
-                  {SUBTITLE}
-                </Text>
-              </View>
-
-              <View style={styles.flex} />
-
-              <View className="gap-3.5 px-7 pb-10">
-                <Button arrow onPress={() => openPanel("create")}>
-                  Create Account
-                </Button>
-                <Button
-                  arrow
-                  variant="outline"
-                  onPress={() => openPanel("login")}
-                >
-                  Log In
-                </Button>
-              </View>
+          <Animated.View
+            pointerEvents={sheetOpen ? "none" : "auto"}
+            style={[styles.flex, heroContentStyle]}
+          >
+            <View className="mt-10 items-center px-7">
+              <Text className="text-center text-[32px] font-medium text-foreground">
+                Welcome
+              </Text>
+              <Text className="mt-3 text-center text-[16px] leading-[24px] text-muted-foreground">
+                {SUBTITLE}
+              </Text>
             </View>
-          ) : (
-            <View style={styles.flex}>
-              <View style={styles.backButton}>
-                <IconButton
-                  accessibilityLabel={formMode === "forgot" ? "Back to log in" : "Back to welcome"}
-                  hitSlop={12}
-                  variant="ghost"
-                  onPress={handleBack}
-                >
-                  <Ionicons
-                    color={palette.foreground}
-                    name="chevron-back"
-                    size={22}
-                  />
-                </IconButton>
-              </View>
 
-              <View
-                className="overflow-hidden bg-card px-7 pt-8"
-                style={[styles.sheet, { height: sheetHeight }]}
-              >
-                <KeyboardAvoidingView
-                  behavior={Platform.OS === "ios" ? "padding" : undefined}
-                  style={styles.flex}
-                >
-                  <ScrollView
-                    style={styles.flex}
-                    contentContainerStyle={styles.sheetContent}
-                    keyboardShouldPersistTaps="handled"
-                    showsVerticalScrollIndicator={false}
-                  >
-                    <WelcomeAuthForm
-                      error={error}
-                      mode={formMode}
-                      submitting={submitting}
-                      onSubmit={submitForm}
-                      onSwitchMode={switchMode}
-                    />
-                  </ScrollView>
-                </KeyboardAvoidingView>
-              </View>
+            <View style={styles.flex} />
+
+            <View className="gap-3.5 px-7 pb-10">
+              <Button arrow onPress={() => openSheet("create")}>
+                Create Account
+              </Button>
+              <Button arrow variant="outline" onPress={() => openSheet("login")}>
+                Log In
+              </Button>
             </View>
-          )}
+          </Animated.View>
         </View>
       </SafeAreaView>
+
+      <WelcomeAuthSheet
+        dismissible={!submitting}
+        heightRatio={AUTH_SHEET_HEIGHT_RATIO}
+        progress={sheetProgress}
+        visible={sheetOpen}
+        onClose={closeSheet}
+      >
+        {authMode ? (
+          <WelcomeAuthForm
+            error={error}
+            mode={authMode}
+            submitting={submitting}
+            onSubmit={submitForm}
+            onSwitchMode={switchMode}
+          />
+        ) : null}
+      </WelcomeAuthSheet>
     </View>
   );
 }
@@ -298,28 +301,5 @@ export function WelcomeScreen() {
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
-  },
-  backButton: {
-    position: "absolute",
-    left: 8,
-    top: 4,
-    zIndex: 50,
-  },
-  sheet: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-    borderTopLeftRadius: 36,
-    borderTopRightRadius: 36,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 24,
-    elevation: 16,
-  },
-  sheetContent: {
-    paddingBottom: 40,
   },
 });

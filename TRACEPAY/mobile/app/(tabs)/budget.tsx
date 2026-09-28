@@ -20,12 +20,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, G, Line, Path, Rect } from "react-native-svg";
 
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
+import { PeriodTabs } from "../../src/components/insights/PeriodTabs";
 import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
 import { SelectionSheet } from "../../src/components/ui/Modal";
 import {
   CUSTOM_RANGES,
-  PERIODS,
   formatRandAmount,
   periodChangeLabel,
   periodComparisonCopy,
@@ -135,47 +135,6 @@ function toneColor(
   if (key === "success") return palette.success;
   if (key === "blue") return palette.blue;
   return palette.destructive;
-}
-
-function PeriodTabs({
-  active,
-  onChange,
-}: {
-  active: Period;
-  onChange: (period: Period) => void;
-}) {
-  const { colorScheme } = useColorScheme();
-  const trace = TRACEPAY[colorScheme === "dark" ? "dark" : "light"];
-
-  return (
-    <View className="rounded-2xl bg-muted p-1.5">
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 6, paddingHorizontal: 4 }}
-      >
-        {PERIODS.map((period) => {
-          const selected = period === active;
-
-          return (
-            <Pressable
-              key={period}
-              onPress={() => onChange(period)}
-              className="rounded-full px-4 py-2.5 active:opacity-75"
-              style={selected ? { backgroundColor: trace.primary } : undefined}
-            >
-              <Text
-                className={`text-[13px] ${selected ? "font-semibold" : "font-medium text-muted-foreground"}`}
-                style={selected ? { color: trace.primaryForeground } : undefined}
-              >
-                {period}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
 }
 
 function HeroSpendingChart({

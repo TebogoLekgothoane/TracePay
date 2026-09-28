@@ -1,13 +1,13 @@
-import { router, useFocusEffect } from "expo-router";
+import { router } from "expo-router";
 import {
   Bell,
   ChevronRight,
   Info,
   Landmark,
-  ShoppingCart,
+  CreditCard,
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -21,63 +21,21 @@ import {
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
 import { IconButton } from "../../src/components/ui/IconButton";
 import { LINKED_ACCOUNTS_HREF } from "../../src/features/accounts/account.navigation";
+import { sumAccountBalances } from "../../src/features/accounts/account.service";
 import { firstNameFromFullName } from "../../src/features/auth/auth.validation";
 import { usePrivacyPreferences } from "../../src/features/privacy/privacy.preferences";
 import { useAccounts } from "../../src/hooks/useAccounts";
 import { useProfile } from "../../src/hooks/useProfile";
-import { getSupabase } from "../../src/lib/supabase";
 import { COLORS } from "../../src/theme/colors";
+import { formatRandAmount } from "../../src/utils/currency";
 
 export default function HomeScreen() {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const { hideBalances, toggleHideBalances } = usePrivacyPreferences();
   const { profile } = useProfile();
-  const { previews, loading: accountsLoading } = useAccounts();
-  const [totalBalance, setTotalBalance] = useState<number | null>(null);
-
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      void getSupabase()
-        .from("transactions")
-        .select("balance,date,created_at,statement_imports!inner(account_id)")
-        .not("balance", "is", null)
-        .not("statement_imports.account_id", "is", null)
-        .order("date", { ascending: false })
-        .order("created_at", { ascending: false })
-        .then(({ data, error }) => {
-          if (!active || error) return;
-          const latestByAccount = new Map<string, number>();
-          for (const row of data ?? []) {
-            const relation = Array.isArray(row.statement_imports)
-              ? row.statement_imports[0]
-              : row.statement_imports;
-            const accountId = relation?.account_id;
-            if (
-              typeof accountId === "string" &&
-              !latestByAccount.has(accountId)
-            ) {
-              const balance = Number(row.balance);
-              if (Number.isFinite(balance)) {
-                latestByAccount.set(accountId, balance);
-              }
-            }
-          }
-          setTotalBalance(
-            latestByAccount.size > 0
-              ? [...latestByAccount.values()].reduce(
-                  (sum, balance) => sum + balance,
-                  0,
-                )
-              : null,
-          );
-        });
-      return () => {
-        active = false;
-      };
-    }, []),
-  );
+  const { previews, balances, loading: accountsLoading } = useAccounts();
+  const totalBalance = sumAccountBalances(balances);
 
   const hour = new Date().getHours();
   const greeting =
@@ -133,21 +91,19 @@ export default function HomeScreen() {
         ],
       },
       {
-        id: "shopping",
-        title: "Shopping",
-        amount: "R1,240",
-        change: "↑ 22%",
+        id: "debit",
+        title: "Debit orders",
+        amount: "R320.75",
+        change: "↑ 5%",
         changeDirection: "up",
-        Icon: ShoppingCart,
+        Icon: CreditCard,
         iconTone: "solid",
         tint: "#2563EB",
         tintBg: "transparent",
         merchants: [
-          { id: "shopee", name: "Shopee", logoDomain: "shopee.co.za" },
-          { id: "takealot", name: "Takealot", logoDomain: "takealot.com" },
-          { id: "mrp", name: "Mr Price", logoDomain: "mrpricegroup.com" },
+          { id: "dstv", name: "DStv", logoDomain: "dstv.com" },
         ],
-        moreCount: 3,
+        moreCount: 2,
       },
     ],
     [],
@@ -155,10 +111,7 @@ export default function HomeScreen() {
 
   const balanceLabel =
     totalBalance !== null
-      ? `R${totalBalance.toLocaleString("en-ZA", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })}`
+      ? formatRandAmount(totalBalance)
       : previews.length > 0
         ? "—"
         : "Add accounts";
@@ -239,19 +192,11 @@ export default function HomeScreen() {
           <LeakSummary
             items={leaks}
             onItemPress={(item) => {
-              if (item.id === "fees") {
-                router.push("/leak/fees?view=summary");
-                return;
-              }
-              if (item.id === "subs") {
-                router.push("/leak/subs");
-                return;
-              }
-              if (item.id === "airtime") {
-                router.push("/leak/debit");
-                return;
-              }
-              router.push("/leak/debit");
+              router.push(
+                (item.id === "fees"
+                  ? "/leak/fees?view=summary"
+                  : `/leak/${item.id}`) as never,
+              );
             }}
           />
 

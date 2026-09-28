@@ -1,21 +1,17 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-
-import { assertSupabaseConfig, config } from "../config.js";
 import { AuthHttpError } from "../auth/auth.types.js";
+import { getAdminClient, getUserClient } from "../supabase.js";
+import {
+  MAX_APP_IDENTIFIER,
+  MAX_BATCH_SIZE,
+  MAX_BODY,
+  MAX_CLIENT_ID,
+  MAX_FUTURE_MS,
+  MAX_METADATA_BYTES,
+  MAX_SENDER,
+  MAX_TITLE,
+} from "./ingestion.limits.js";
 import type { IngestionBatchBody, IngestionReadingInput, IngestionResult, IngestionSource } from "./ingestion.types.js";
 import { parseIngestionReadings } from "./ingestion.parser.js";
-
-const MAX_BATCH_SIZE = 100;
-const MAX_CLIENT_ID = 128;
-const MAX_BODY = 4000;
-const MAX_SENDER = 128;
-const MAX_APP_IDENTIFIER = 256;
-const MAX_TITLE = 256;
-const MAX_METADATA_BYTES = 8192;
-const MAX_FUTURE_MS = 5 * 60 * 1000;
-
-let adminClient: SupabaseClient | null = null;
-let userClient: SupabaseClient | null = null;
 
 type ValidReading = {
   client_id: string;
@@ -39,26 +35,6 @@ type StoredReading = {
   title: string | null;
   body: string;
 };
-
-function getAdmin(): SupabaseClient {
-  assertSupabaseConfig();
-  if (!adminClient) {
-    adminClient = createClient(config.supabaseUrl, config.supabaseServiceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-  }
-  return adminClient;
-}
-
-function getUserClient(): SupabaseClient {
-  assertSupabaseConfig();
-  if (!userClient) {
-    userClient = createClient(config.supabaseUrl, config.supabaseAnonKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-  }
-  return userClient;
-}
 
 function readBearerToken(authorization: string | undefined): string {
   const [scheme, token] = (authorization ?? "").split(" ");
@@ -193,7 +169,8 @@ export async function ingestReadings(userId: string, body: IngestionBatchBody): 
     updated_at: new Date().toISOString(),
   }));
 
-  const { data, error } = await getAdmin()
+  const admin = getAdminClient();
+  const { data, error } = await admin
     .from("ingestion_readings")
     .upsert(readings, { onConflict: "user_id,source,client_id" })
     .select("id, user_id, client_id, source, received_at, sender, app_identifier, title, body");
@@ -202,11 +179,23 @@ export async function ingestReadings(userId: string, body: IngestionBatchBody): 
     throw new AuthHttpError(500, "Could not sync phone readings. Please try again.");
   }
 
-  await parseIngestionReadings(getAdmin(), data as StoredReading[]);
+  const stored = (data as StoredReading[]) ?? [];
+  try {
+    await parseIngestionReadings(admin, stored);
+  } catch (parseError) {
+    console.error("[ingestion] parse persistence failed", {
+      message: parseError instanceof Error ? parseError.message : "unknown",
+      acceptedReadings: stored.length,
+    });
+    throw new AuthHttpError(
+      500,
+      "Phone readings were received but could not be fully processed. Please try again.",
+    );
+  }
 
   return {
-    accepted: readings.length,
-    readings: (data as StoredReading[]).map((reading) => ({
+    accepted: stored.length,
+    readings: stored.map((reading) => ({
       id: reading.id,
       clientId: reading.client_id,
       source: reading.source,

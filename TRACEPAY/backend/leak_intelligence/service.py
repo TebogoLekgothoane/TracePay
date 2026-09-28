@@ -1,5 +1,4 @@
 from collections import Counter, defaultdict
-from datetime import date
 from decimal import Decimal
 from statistics import median
 

@@ -12,7 +12,6 @@ import {
   Alert,
   Pressable,
   ScrollView,
-  Switch,
   Text,
   View,
 } from "react-native";
@@ -20,8 +19,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
+import { NativeSwitch } from "../../src/components/ui/NativeSwitch";
 import { usePrivacyPreferences } from "../../src/features/privacy/privacy.preferences";
 import { useAppLock } from "../../src/features/security/AppLockProvider";
+import { biometricUnavailableCopy } from "../../src/features/security/biometric.service";
 import { COLORS } from "../../src/theme/colors";
 
 export default function SecurityScreen() {
@@ -55,11 +56,12 @@ export default function SecurityScreen() {
     void (async () => {
       try {
         if (enabled) {
-          const ok = await enableBiometrics();
-          if (!ok) {
+          const result = await enableBiometrics();
+          if (!result.enabled) {
             Alert.alert(
               `Could not enable ${biometricLabel}`,
-              "Authenticate with your device biometrics and try again.",
+              result.message ??
+                "Authenticate with your device biometrics and try again.",
             );
           }
           return;
@@ -192,13 +194,15 @@ export default function SecurityScreen() {
               </Text>
               <Text className="mt-0.5 text-[13px] text-muted-foreground">
                 {!canUseBiometrics
-                  ? "Not available on this device"
+                  ? biometricUnavailableCopy(
+                      biometricAvailability.unavailableReason,
+                    )
                   : !hasPin
                     ? "Set up a PIN first"
                     : `Unlock TracePay with ${biometricLabel}`}
               </Text>
             </View>
-            <Switch
+            <NativeSwitch
               accessibilityLabel={`Toggle ${biometricLabel}`}
               disabled={
                 !isHydrated ||
@@ -206,12 +210,8 @@ export default function SecurityScreen() {
                 !canUseBiometrics ||
                 updatingBiometrics
               }
-              onValueChange={handleBiometricsChange}
-              trackColor={{
-                false: palette.border,
-                true: palette.primary,
-              }}
               value={biometricsEnabled && canUseBiometrics}
+              onValueChange={handleBiometricsChange}
             />
           </View>
 
@@ -230,15 +230,11 @@ export default function SecurityScreen() {
                 Mask total and account balances until you reveal them
               </Text>
             </View>
-            <Switch
+            <NativeSwitch
               accessibilityLabel="Hide balances on Home"
               disabled={!privacyHydrated || updatingBalances}
-              onValueChange={handleHideBalancesChange}
-              trackColor={{
-                false: palette.border,
-                true: palette.primary,
-              }}
               value={hideBalances}
+              onValueChange={handleHideBalancesChange}
             />
           </View>
 

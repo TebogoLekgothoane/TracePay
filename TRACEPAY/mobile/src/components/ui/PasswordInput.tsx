@@ -1,14 +1,29 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useColorScheme } from "nativewind";
 import { useState } from "react";
-import { Pressable, Text, TextInput, View, type TextInputProps } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 import { COLORS } from "../../theme/colors";
+import { BridgedTextField } from "./BridgedTextField";
 
-type Props = Omit<TextInputProps, "secureTextEntry"> & {
+type Props = {
   label: string;
   error?: string | null;
   icon?: keyof typeof Ionicons.glyphMap;
+  value?: string;
+  defaultValue?: string;
+  onChangeText?: (text: string) => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
+  onSubmitEditing?: (text: string) => void;
+  placeholder?: string;
+  editable?: boolean;
+  autoFocus?: boolean;
+  autoCapitalize?: "none" | "sentences" | "words" | "characters";
+  autoCorrect?: boolean;
+  autoComplete?: "password" | "new-password" | "off";
+  returnKeyType?: "done" | "next" | "go" | "search" | "send";
+  maxLength?: number;
 };
 
 export function PasswordInput({
@@ -39,15 +54,18 @@ export function PasswordInput({
             style={{ marginLeft: 16, marginRight: 10 }}
           />
         ) : null}
-        <TextInput
-          accessibilityLabel={label}
-          editable={editable}
-          placeholderTextColor={palette.placeholder}
-          secureTextEntry={!visible}
-          className={`h-[52px] flex-1 text-[16px] text-foreground ${
-            icon ? "pr-4" : "px-4"
-          }`}
+        <BridgedTextField
           {...props}
+          editable={editable}
+          hostStyle={{ height: 52 }}
+          inputStyle={{
+            height: 52,
+            paddingHorizontal: 0,
+            paddingRight: 8,
+            backgroundColor: "transparent",
+            borderWidth: 0,
+          }}
+          secureTextEntry={!visible}
         />
         <Pressable
           accessibilityLabel={visible ? "Hide password" : "Show password"}

@@ -8,10 +8,21 @@ export type PinRecord = {
 
 export type BiometricKind = "face" | "fingerprint";
 
+export type BiometricUnavailableReason =
+  | "no_hardware"
+  | "not_enrolled"
+  | "unsupported";
+
 export type BiometricAvailability = {
   available: boolean;
   kind: BiometricKind | null;
   label: string | null;
+  unavailableReason: BiometricUnavailableReason | null;
+};
+
+export type BiometricEnableResult = {
+  enabled: boolean;
+  message?: string;
 };
 
 export type AppLockContextValue = {
@@ -23,7 +34,7 @@ export type AppLockContextValue = {
   preparePin: (pin: readonly number[]) => Promise<void>;
   confirmPin: (pin: readonly number[]) => Promise<boolean>;
   verifyPin: (pin: readonly number[]) => Promise<boolean>;
-  enableBiometrics: () => Promise<boolean>;
+  enableBiometrics: () => Promise<BiometricEnableResult>;
   skipBiometrics: () => Promise<void>;
   authenticateWithBiometrics: () => Promise<boolean>;
   lockApp: () => void;

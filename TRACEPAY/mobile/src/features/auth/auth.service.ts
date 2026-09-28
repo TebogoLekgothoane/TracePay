@@ -32,6 +32,7 @@ import {
 let pendingPhone: string | null = null;
 let pendingPassword: string | null = null;
 let pendingPurpose: "signup" | "login" | "reset" | null = null;
+let pendingResetToken: string | null = null;
 let profileRequest: Promise<AuthProfile | null> | null = null;
 
 type SessionListener = (present: boolean) => void;
@@ -68,6 +69,7 @@ function clearPendingCredentials(): void {
   pendingPhone = null;
   pendingPassword = null;
   pendingPurpose = null;
+  pendingResetToken = null;
 }
 
 function readAuthSession(
@@ -105,11 +107,13 @@ function readSignInResult(value: unknown): SignInResult {
   const body = value as {
     requiresOtp?: unknown;
     resetAllowed?: unknown;
+    resetToken?: unknown;
     session?: unknown;
   };
   return {
     requiresOtp: body.requiresOtp === true,
     resetAllowed: body.resetAllowed === true,
+    resetToken: typeof body.resetToken === "string" && body.resetToken.length > 0 ? body.resetToken : undefined,
     session: readAuthSession(body.session),
   };
 }
@@ -290,6 +294,8 @@ export async function signIn({
 
   if (result.requiresOtp) {
     rememberPendingCredentials(normalizedPhone, password, "login");
+    // OTP is not sent by /auth/login — request it via the rate-limited resend endpoint.
+    await resendPhoneOtp(normalizedPhone);
     return result;
   }
 
@@ -334,10 +340,15 @@ export async function resetPassword(password: string, phone?: string): Promise<v
     throw new AuthError("Verification session expired. Please start again.");
   }
 
+  if (!pendingResetToken) {
+    throw new AuthError("Verification session expired. Please start again.");
+  }
+
   const result = readSignInResult(
     await authRequest<unknown>("/auth/reset-password", {
       phone: target,
       password,
+      resetToken: pendingResetToken,
     }),
   );
 
@@ -369,6 +380,7 @@ export async function verifyPhoneOtp(code: string, phone?: string): Promise<void
   if (result.resetAllowed) {
     pendingPassword = null;
     pendingPurpose = "reset";
+    pendingResetToken = result.resetToken ?? null;
     return;
   }
 

@@ -1,2 +1,0 @@
-/** database.types.ts */
-

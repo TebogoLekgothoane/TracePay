@@ -114,26 +114,29 @@ export async function loadAccountBalances(accountIds: readonly string[]): Promis
   await requireAuthenticatedUserId();
   if (accountIds.length === 0) return {};
 
-  const { data, error } = await getSupabase()
-    .from("transactions")
-    .select("balance,date,created_at,statement_imports!inner(account_id)")
-    .in("statement_imports.account_id", [...accountIds])
-    .not("balance", "is", null)
-    .order("date", { ascending: false })
-    .order("created_at", { ascending: false });
+  const { data, error } = await getSupabase().rpc("latest_account_balances", {
+    account_ids: [...accountIds],
+  });
 
   if (error) throw new AccountError("Could not load account balances. Please try again.");
 
   const balances: Record<string, number> = {};
   for (const row of data ?? []) {
-    const relation = Array.isArray(row.statement_imports) ? row.statement_imports[0] : row.statement_imports;
-    const accountId = relation?.account_id;
-    const balance = Number(row.balance);
-    if (typeof accountId === "string" && Number.isFinite(balance) && balances[accountId] === undefined) {
+    const accountId = row?.account_id;
+    const balance = Number(row?.balance);
+    if (typeof accountId === "string" && Number.isFinite(balance)) {
       balances[accountId] = balance;
     }
   }
   return balances;
+}
+
+export function sumAccountBalances(balances: Record<string, number>): number | null {
+  const values = Object.values(balances);
+  if (values.length === 0) {
+    return null;
+  }
+  return values.reduce((sum, value) => sum + value, 0);
 }
 
 export async function loadAccounts(fresh = false): Promise<FinancialAccount[]> {

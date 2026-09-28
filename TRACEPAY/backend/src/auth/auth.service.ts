@@ -1,7 +1,9 @@
-import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
+import { createHash, randomInt, timingSafeEqual } from "node:crypto";
+import type { User } from "@supabase/supabase-js";
 import twilio from "twilio";
 
-import { assertAuthConfig, config } from "../config.js";
+import { assertAuthConfig, config, otpFallbackAllowed } from "../config.js";
+import { getAdminClient, getUserClient } from "../supabase.js";
 import {
   AuthHttpError,
   type AuthSession,
@@ -11,6 +13,7 @@ import {
   type SignUpBody,
   type VerifyOtpBody,
 } from "./auth.types.js";
+import { createResetToken, consumeResetToken } from "./reset-token.js";
 
 const PHONE = /^\+27\d{9}$/;
 
@@ -38,32 +41,14 @@ function requireValidPhone(phone: string): string {
   return normalized;
 }
 
-function phoneDigits(value: string | undefined): string {
-  return (value ?? "").replace(/\D/g, "");
-}
-
-let adminClient: SupabaseClient | null = null;
-let authClient: SupabaseClient | null = null;
 let twilioClient: ReturnType<typeof twilio> | null = null;
 
-function getAdmin(): SupabaseClient {
-  assertAuthConfig();
-  if (!adminClient) {
-    adminClient = createClient(config.supabaseUrl, config.supabaseServiceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-  }
-  return adminClient;
+function getAdmin() {
+  return getAdminClient();
 }
 
-function getAuthClient(): SupabaseClient {
-  assertAuthConfig();
-  if (!authClient) {
-    authClient = createClient(config.supabaseUrl, config.supabaseAnonKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-  }
-  return authClient;
+function getAuthClient() {
+  return getUserClient();
 }
 
 function getTwilio() {
@@ -75,28 +60,24 @@ function getTwilio() {
 }
 
 async function findUserByPhone(phone: string): Promise<User | undefined> {
-  const client = getAdmin();
-  let page = 1;
+  const { data, error } = await getAdmin()
+    .from("profiles")
+    .select("id")
+    .eq("phone", phone)
+    .maybeSingle();
 
-  while (page <= 10) {
-    const { data, error } = await client.auth.admin.listUsers({ page, perPage: 200 });
-    if (error) {
-      throw new AuthHttpError(500, "Could not look up that account.");
-    }
-
-    const match = data.users.find(
-      (user) => phoneDigits(user.phone) === phoneDigits(phone),
-    );
-    if (match) {
-      return match;
-    }
-    if (data.users.length < 200) {
-      return undefined;
-    }
-    page += 1;
+  if (error) {
+    throw new AuthHttpError(500, "Could not look up that account.");
+  }
+  if (!data?.id || typeof data.id !== "string") {
+    return undefined;
   }
 
-  return undefined;
+  const { data: userData, error: userError } = await getAdmin().auth.admin.getUserById(data.id);
+  if (userError || !userData.user) {
+    return undefined;
+  }
+  return userData.user;
 }
 
 async function sendOtp(phone: string): Promise<void> {
@@ -110,15 +91,25 @@ async function sendOtp(phone: string): Promise<void> {
       return;
     }
 
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    if (!otpFallbackAllowed()) {
+      throw new AuthHttpError(
+        503,
+        "OTP fallback is disabled. Set TWILIO_VERIFY_SERVICE_SID, or AUTH_ALLOW_OTP_FALLBACK=true for local development only.",
+      );
+    }
+
+    const code = String(randomInt(100000, 1000000));
     await client.messages.create({
       to: phone,
       from: config.twilioFrom,
       body: `Your TRACEPAY code is ${code}`,
     });
-    pendingFallback.set(phone, { code, expiresAt: Date.now() + OTP_TTL_MS });
+    pendingFallback.set(phone, { codeHash: hashOtp(code), expiresAt: Date.now() + OTP_TTL_MS });
   } catch (error) {
-    console.error("[auth] Twilio SMS failed", error);
+    if (error instanceof AuthHttpError) {
+      throw error;
+    }
+    console.error("[auth] Twilio SMS failed", { code: twilioErrorCode(error) });
     throw twilioSendError(error);
   }
 }
@@ -154,9 +145,12 @@ function twilioSendError(error: unknown): AuthHttpError {
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const FORGOT_COOLDOWN_MS = 30 * 1000;
-const pendingFallback = new Map<string, { code: string; expiresAt: number }>();
-const pendingPasswordResets = new Map<string, { userId: string; expiresAt: number }>();
+const pendingFallback = new Map<string, { codeHash: string; expiresAt: number }>();
 const lastForgotAt = new Map<string, number>();
+
+function hashOtp(code: string): string {
+  return createHash("sha256").update(code, "utf8").digest("hex");
+}
 
 async function checkOtp(phone: string, code: string): Promise<void> {
   const token = code.replace(/\s/g, "");
@@ -182,11 +176,24 @@ async function checkOtp(phone: string, code: string): Promise<void> {
     }
   }
 
+  if (!otpFallbackAllowed()) {
+    throw new AuthHttpError(
+      503,
+      "OTP fallback is disabled. Set TWILIO_VERIFY_SERVICE_SID, or AUTH_ALLOW_OTP_FALLBACK=true for local development only.",
+    );
+  }
+
   const pending = pendingFallback.get(phone);
-  if (!pending || pending.expiresAt < Date.now() || pending.code !== token) {
+  if (!pending || pending.expiresAt < Date.now() || !codesEqual(pending.codeHash, hashOtp(token))) {
     throw new AuthHttpError(400, "Invalid verification code. Please try again.");
   }
   pendingFallback.delete(phone);
+}
+
+function codesEqual(expected: string, received: string): boolean {
+  const left = Buffer.from(expected);
+  const right = Buffer.from(received);
+  return left.length === right.length && timingSafeEqual(left, right);
 }
 
 export async function register(body: SignUpBody): Promise<void> {
@@ -237,7 +244,7 @@ export async function login(body: SignInBody): Promise<SignInResult> {
   if (error || !data.session) {
     const user = await findUserByPhone(phone);
     if (user && !user.phone_confirmed_at) {
-      await sendOtp(phone);
+      // Do not send OTP on a failed password attempt. Client must use rate-limited /auth/resend-otp.
       return { requiresOtp: true, session: null };
     }
     throw new AuthHttpError(401, "Incorrect phone number or password.");
@@ -294,11 +301,7 @@ export async function verifyOtp(body: VerifyOtpBody): Promise<SignInResult> {
 
   const password = body.password?.trim() ?? "";
   if (body.purpose === "reset") {
-    pendingPasswordResets.set(phone, {
-      userId: user.id,
-      expiresAt: Date.now() + OTP_TTL_MS,
-    });
-    return { requiresOtp: false, session: null, resetAllowed: true };
+    return { requiresOtp: false, session: null, resetAllowed: true, resetToken: createResetToken(user.id, phone) };
   }
 
   if (!password) {
@@ -335,14 +338,12 @@ export async function resetPassword(body: ResetPasswordBody): Promise<SignInResu
   if (password.length < 8) {
     throw new AuthHttpError(400, "Password must be at least 8 characters.");
   }
-
-  const pending = pendingPasswordResets.get(phone);
-  if (!pending || pending.expiresAt < Date.now()) {
-    pendingPasswordResets.delete(phone);
+  if (!body.resetToken) {
     throw new AuthHttpError(400, "Verification session expired. Please start again.");
   }
 
-  const { error } = await getAdmin().auth.admin.updateUserById(pending.userId, {
+  const userId = consumeResetToken(body.resetToken, phone);
+  const { error } = await getAdmin().auth.admin.updateUserById(userId, {
     password,
     phone_confirm: true,
   });
@@ -350,8 +351,6 @@ export async function resetPassword(body: ResetPasswordBody): Promise<SignInResu
   if (error) {
     throw new AuthHttpError(400, "Could not update your password. Please try again.");
   }
-
-  pendingPasswordResets.delete(phone);
 
   return {
     requiresOtp: false,

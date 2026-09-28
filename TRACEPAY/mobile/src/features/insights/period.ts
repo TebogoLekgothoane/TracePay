@@ -1,3 +1,5 @@
+import { formatRandAmount, parseRandAmount } from "../../utils/currency";
+
 export const PERIODS = ["This month", "Last month", "3 months", "Custom"] as const;
 export type Period = (typeof PERIODS)[number];
 
@@ -30,19 +32,7 @@ export const CUSTOM_RANGE_FACTORS: Record<CustomRange, number> = {
   "Year to date": 7.4,
 };
 
-export function parseRandAmount(value: string): number {
-  const parsed = Number(value.replace(/[R,\s]/g, ""));
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-export function formatRandAmount(value: number): string {
-  const absolute = Math.abs(value);
-  const formatted = absolute.toLocaleString("en-ZA", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  return `R${formatted}`;
-}
+export { formatRandAmount, parseRandAmount };
 
 export function scaleRandAmount(value: string, scale: number): string {
   return formatRandAmount(parseRandAmount(value) * scale);

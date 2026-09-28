@@ -24,6 +24,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 
 import { FixActionsList } from "../../src/components/leaks/FixActionsList";
+import { PeriodTabs } from "../../src/components/insights/PeriodTabs";
 import { BrandLogo } from "../../src/components/ui/BrandLogo";
 import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
@@ -35,7 +36,6 @@ import {
 } from "../../src/features/leaks/fixContent";
 import {
   CUSTOM_RANGES,
-  PERIODS,
   periodChangeLabel,
   periodFactor,
   scaleRandAmount,
@@ -44,7 +44,6 @@ import {
 } from "../../src/features/insights/period";
 import {
   COLORS,
-  TRACEPAY,
   type ImpactTone,
   getImpactToneStyles,
   withAlpha,
@@ -484,63 +483,6 @@ function AtmIllustration({ accent, primary }: { accent: string; primary: string 
   );
 }
 
-function PeriodTabs({
-  active,
-  onChange,
-  toneColor,
-}: {
-  active: Period;
-  onChange: (period: Period) => void;
-  toneColor: string;
-}) {
-  const { colorScheme } = useColorScheme();
-  const trace = TRACEPAY[colorScheme === "dark" ? "dark" : "light"];
-
-  return (
-    <View className="rounded-2xl bg-muted p-1.5">
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 6, paddingHorizontal: 4 }}
-      >
-        {PERIODS.map((period) => {
-          const selected = period === active;
-
-          if (selected) {
-            return (
-              <Pressable key={period} onPress={() => onChange(period)}>
-                <View
-                  className="rounded-full px-4 py-2.5"
-                  style={{ backgroundColor: toneColor }}
-                >
-                  <Text
-                    style={{ color: trace.primaryForeground }}
-                    className="text-[13px] font-semibold"
-                  >
-                    {period}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          }
-
-          return (
-            <Pressable
-              key={period}
-              onPress={() => onChange(period)}
-              className="rounded-full px-4 py-2.5 active:opacity-75"
-            >
-              <Text className="text-[13px] font-medium text-muted-foreground">
-                {period}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
-}
-
 function resolveMarkColor(
   palette: {
     destructive: string;
@@ -693,7 +635,7 @@ export default function LeakDetailScreen() {
           <PeriodTabs
             active={period}
             onChange={handlePeriodChange}
-            toneColor={tone.color}
+            selectedColor={tone.color}
           />
           {period === "Custom" ? (
             <Pressable

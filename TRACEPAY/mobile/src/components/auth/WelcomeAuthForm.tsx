@@ -134,7 +134,6 @@ export function WelcomeAuthForm({
             setErrors((current) => ({ ...current, name: undefined }));
           }}
           placeholder="Your full name"
-          textContentType="name"
           value={name}
         />
       ) : null}
@@ -164,7 +163,6 @@ export function WelcomeAuthForm({
               setErrors((current) => ({ ...current, password: undefined }));
             }}
             placeholder={isCreate ? "At least 8 characters" : "Your password"}
-            textContentType={isCreate ? "newPassword" : "password"}
             value={password}
           />
           {!isCreate ? (
@@ -199,7 +197,6 @@ export function WelcomeAuthForm({
             }));
           }}
           placeholder="Re-enter password"
-          textContentType="newPassword"
           value={confirmPassword}
         />
       ) : null}

@@ -1,4 +1,18 @@
 # TracePay
+
+The **active product** is in [`TRACEPAY/`](./TRACEPAY/): Expo mobile app, Node auth API, Python PDF extraction API, and Supabase migrations.
+
+This repository also contains an older hackathon stack:
+
+- `mobile/` — Expo 54 SMS prototype
+- `web/backend` — FastAPI forensic engine (port 8001)
+- `web/dashboard` — Next.js admin UI
+
+Use `TRACEPAY/` unless you are specifically working on that older stack.
+
+---
+
+# Legacy Expo starter notes
 A React Native hackathon prototype that uses Open Banking and optional telco data to reveal hidden money leaks, show users where their money goes, and help them take control. Features include money autopsy cards, voice explanations in IsiXhosa, and freeze controls for accounts and subscriptions. Designed for financial inclusion in the Eastern Cape.
 
 ## Get started

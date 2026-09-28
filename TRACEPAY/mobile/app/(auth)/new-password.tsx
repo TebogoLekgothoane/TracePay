@@ -102,7 +102,6 @@ export default function Screen() {
                   setPasswordError(null);
                 }}
                 placeholder="At least 8 characters"
-                textContentType="newPassword"
                 value={password}
               />
               <PasswordInput
@@ -117,7 +116,6 @@ export default function Screen() {
                   setConfirmError(null);
                 }}
                 placeholder="Re-enter password"
-                textContentType="newPassword"
                 value={confirmPassword}
               />
             </View>

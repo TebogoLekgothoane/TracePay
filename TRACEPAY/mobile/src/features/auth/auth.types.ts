@@ -30,6 +30,7 @@ export type UpdateProfileInput = {
 export type SignInResult = {
   requiresOtp: boolean;
   resetAllowed?: boolean;
+  resetToken?: string;
   session: {
     accessToken: string;
     refreshToken: string;

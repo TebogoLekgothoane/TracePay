@@ -43,6 +43,7 @@ export default function UnlockScreen() {
   const [isBusy, setIsBusy] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinResetKey, setPinResetKey] = useState(0);
+  const [biometricHint, setBiometricHint] = useState<string | null>(null);
 
   const biometricPromptedRef = useRef(false);
   const unlockFinishedRef = useRef(false);
@@ -73,6 +74,8 @@ export default function UnlockScreen() {
     });
   }, [unlockApp]);
 
+  const biometricLabel = biometricAvailability.label ?? "Face ID";
+
   const runBiometrics = useCallback(async () => {
     if (
       !canUseBiometrics ||
@@ -84,13 +87,24 @@ export default function UnlockScreen() {
 
     biometricInFlightRef.current = true;
     try {
-      return await authenticateWithBiometrics();
+      const authenticated = await authenticateWithBiometrics();
+      if (!authenticated && mountedRef.current) {
+        setBiometricHint(
+          `Use your TracePay PIN, or tap ${biometricLabel} to try again.`,
+        );
+      }
+      return authenticated;
     } catch {
+      if (mountedRef.current) {
+        setBiometricHint(
+          `Use your TracePay PIN, or tap ${biometricLabel} to try again.`,
+        );
+      }
       return false;
     } finally {
       biometricInFlightRef.current = false;
     }
-  }, [authenticateWithBiometrics, canUseBiometrics]);
+  }, [authenticateWithBiometrics, biometricLabel, canUseBiometrics]);
 
   useEffect(() => {
     if (biometricPromptedRef.current || !canUseBiometrics) {
@@ -147,6 +161,7 @@ export default function UnlockScreen() {
 
     setIsBusy(true);
     setPinError(null);
+    setBiometricHint(null);
 
     try {
       const authenticated = await runBiometrics();
@@ -167,6 +182,11 @@ export default function UnlockScreen() {
   const biometricKind: BiometricKind | null = canUseBiometrics
     ? (biometricAvailability.kind ?? null)
     : null;
+
+  const subtitle = canUseBiometrics
+    ? (biometricHint ??
+      `${biometricLabel} will unlock TracePay. You can also enter your PIN.`)
+    : undefined;
 
   return (
     <View className="flex-1 bg-background">
@@ -203,6 +223,7 @@ export default function UnlockScreen() {
         resetKey={pinResetKey}
         showBrandWordmark
         showLockIcon
+        subtitle={subtitle}
         title={greeting}
       />
     </View>

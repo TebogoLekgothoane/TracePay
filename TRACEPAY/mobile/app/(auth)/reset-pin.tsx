@@ -2,10 +2,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useRef, useState } from "react";
-import { Text, TextInput, View } from "react-native";
+import { Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Button } from "../../src/components/ui/Button";
+import { BridgedTextField } from "../../src/components/ui/BridgedTextField";
 import { IconButton } from "../../src/components/ui/IconButton";
 import { COLORS } from "../../src/theme/colors";
 
@@ -62,17 +63,30 @@ export default function ResetPinScreen() {
           number.
         </Text>
 
-        <TextInput
-          accessibilityLabel="Verification code"
-          autoFocus
-          keyboardType="number-pad"
-          maxLength={CODE_LENGTH}
-          onChangeText={handleChangeText}
-          placeholder="000000"
-          placeholderTextColor={palette.placeholder}
-          className="mt-[38px] h-[60px] w-[258px] rounded-2xl border-[1.5px] border-input-border bg-input pl-[25px] text-center text-[25px] font-semibold tracking-[18px] text-foreground"
-          value={code}
-        />
+        <View className="mt-[38px] h-[60px] w-[258px] overflow-hidden rounded-2xl border-[1.5px] border-input-border bg-input">
+          <BridgedTextField
+            autoFocus
+            hostStyle={{ height: 60, width: 258 }}
+            inputStyle={{
+              height: 60,
+              width: 258,
+              backgroundColor: "transparent",
+              borderWidth: 0,
+              paddingHorizontal: 25,
+            }}
+            keyboardType="number-pad"
+            maxLength={CODE_LENGTH}
+            placeholder="000000"
+            textStyle={{
+              fontSize: 25,
+              fontWeight: "600",
+              letterSpacing: 18,
+              textAlign: "center",
+            }}
+            value={code}
+            onChangeText={handleChangeText}
+          />
+        </View>
 
         <Button size="sm" variant="ghost">
           Resend code

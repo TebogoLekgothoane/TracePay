@@ -1,4 +1,4 @@
-import { router, useFocusEffect } from "expo-router";
+import { router } from "expo-router";
 import {
   CheckCircle2,
   ChevronRight,
@@ -7,97 +7,25 @@ import {
   Upload,
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { useCallback, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, Text, View, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
 import { TransactionListIcon } from "../../src/components/transactions/TransactionListIcon";
 import { Button } from "../../src/components/ui/Button";
-import { getSupabase } from "../../src/lib/supabase";
+import {
+  categoryName,
+  formatTransactionAmount,
+} from "../../src/features/transactions/transaction.service";
+import { useTransactions } from "../../src/hooks/useTransactions";
 import { COLORS, TRACEPAY } from "../../src/theme/colors";
-
-type TransactionRow = {
-  id: string;
-  date: string;
-  description: string;
-  amount: number | string;
-  type: "debit" | "credit";
-  balance: number | string | null;
-  currency: string | null;
-  category_id: string | null;
-  category_source: "automatic" | "manual";
-  categories: { name: string } | { name: string }[] | null;
-};
-
-function categoryName(transaction: TransactionRow): string {
-  const value = Array.isArray(transaction.categories)
-    ? transaction.categories[0]
-    : transaction.categories;
-  return value?.name ?? "Uncategorised";
-}
-
-function formatAmount(transaction: TransactionRow): string {
-  const currency =
-    transaction.currency === "ZAR" || !transaction.currency
-      ? "R"
-      : `${transaction.currency} `;
-  const amount = Math.abs(Number(transaction.amount)).toFixed(2);
-  return `${transaction.type === "debit" ? "-" : "+"}${currency}${amount}`;
-}
 
 export default function TransactionsScreen() {
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
   const trace = TRACEPAY[scheme];
-  const [transactions, setTransactions] = useState<TransactionRow[]>([]);
-  const [transactionsLoading, setTransactionsLoading] = useState(true);
-  const [transactionsError, setTransactionsError] = useState<string | null>(
-    null,
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      setTransactionsLoading(true);
-      void getSupabase()
-        .from("transactions")
-        .select(
-          "id,date,description,amount,type,balance,currency,category_id,category_source,categories(name)",
-        )
-        .order("date", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(100)
-        .then(({ data, error }) => {
-          if (!active) return;
-          if (error) {
-            setTransactionsError("Could not load your imported transactions.");
-            setTransactions([]);
-          } else {
-            setTransactionsError(null);
-            const sorted = [...((data ?? []) as TransactionRow[])].sort(
-              (left, right) => {
-                const dateDifference = right.date.localeCompare(left.date);
-                return dateDifference !== 0
-                  ? dateDifference
-                  : right.id.localeCompare(left.id);
-              },
-            );
-            setTransactions(sorted);
-          }
-          setTransactionsLoading(false);
-        });
-      return () => {
-        active = false;
-      };
-    }, []),
-  );
+  const { transactions, loading, error, retry } = useTransactions();
 
   const openImport = () => router.push("/transactions/import");
 
@@ -192,18 +120,25 @@ export default function TransactionsScreen() {
               </Text>
             </View>
 
-            {transactionsLoading ? (
+            {loading ? (
               <View className="items-center rounded-3xl border border-border/60 bg-card px-4 py-8">
                 <ActivityIndicator color={trace.primary} />
                 <Text className="mt-3 text-[13px] text-muted-foreground">
                   Loading transactions…
                 </Text>
               </View>
-            ) : transactionsError ? (
+            ) : error ? (
               <View className="rounded-3xl bg-destructive/10 px-4 py-6">
-                <Text className="text-[14px] text-destructive">
-                  {transactionsError}
-                </Text>
+                <Text className="text-[14px] text-destructive">{error}</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  className="mt-3 self-start active:opacity-70"
+                  onPress={retry}
+                >
+                  <Text className="text-[14px] font-semibold text-foreground">
+                    Try again
+                  </Text>
+                </Pressable>
               </View>
             ) : transactions.length === 0 ? (
               <View className="rounded-3xl border border-border/60 bg-card px-4 py-6">
@@ -253,7 +188,7 @@ export default function TransactionsScreen() {
                             : "text-green-600"
                         }`}
                       >
-                        {formatAmount(transaction)}
+                        {formatTransactionAmount(transaction)}
                       </Text>
                       <ChevronRight
                         color={palette.mutedForeground}

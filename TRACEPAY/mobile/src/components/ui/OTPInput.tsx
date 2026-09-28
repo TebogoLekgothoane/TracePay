@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef } from "react";
+import { Pressable, Text, View } from "react-native";
+
 import {
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+  BridgedTextField,
+  type BridgedTextFieldRef,
+} from "./BridgedTextField";
 
 type Props = {
   length?: number;
@@ -22,7 +22,7 @@ export function OTPInput({
   onComplete,
 }: Props) {
   const digits = value.replace(/\D/g, "").slice(0, length);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<BridgedTextFieldRef>(null);
   const completedRef = useRef(false);
 
   useEffect(() => {
@@ -59,7 +59,9 @@ export function OTPInput({
     >
       <View className="flex-row justify-between gap-2" pointerEvents="none">
         {Array.from({ length }, (_, index) => {
-          const focused = digits.length === index || (digits.length === length && index === length - 1);
+          const focused =
+            digits.length === index ||
+            (digits.length === length && index === length - 1);
 
           return (
             <View
@@ -75,19 +77,20 @@ export function OTPInput({
           );
         })}
       </View>
-      <TextInput
-        ref={inputRef}
-        autoFocus
-        caretHidden
-        contextMenuHidden
-        editable={editable}
-        keyboardType="number-pad"
-        maxLength={length}
-        onChangeText={handleChange}
-        textContentType="oneTimeCode"
-        value={digits}
-        className="absolute h-px w-px opacity-[0.01]"
-      />
+      <View className="absolute h-px w-px opacity-[0.01]" pointerEvents="none">
+        <BridgedTextField
+          autoFocus
+          caretHidden
+          editable={editable}
+          hostStyle={{ height: 1, width: 1 }}
+          inputRef={inputRef}
+          inputStyle={{ height: 1, width: 1, opacity: 0.01 }}
+          keyboardType="number-pad"
+          maxLength={length}
+          value={digits}
+          onChangeText={handleChange}
+        />
+      </View>
     </Pressable>
   );
 }

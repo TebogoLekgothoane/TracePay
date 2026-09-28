@@ -1,14 +1,22 @@
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import Constants from "expo-constants";
 import { ScanFace } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { useState } from "react";
-import { Text, View } from "react-native";
+import { useCallback, useState } from "react";
+import { Platform, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import TracePayIcon from "../../assets/icons/assembled TracePay icon.svg";
-import { useAppLock } from "../../src/features/security/AppLockProvider";
 import { Button } from "../../src/components/ui/Button";
+import { useAppLock } from "../../src/features/security/AppLockProvider";
+import {
+  biometricUnavailableCopy,
+  getBiometricAvailability,
+} from "../../src/features/security/biometric.service";
 import { COLORS } from "../../src/theme/colors";
+
+const isExpoGo = Constants.appOwnership === "expo";
+const faceIdBlockedInExpoGo = Platform.OS === "ios" && isExpoGo;
 
 export default function BiometricSetupScreen() {
   const params = useLocalSearchParams<{ flow?: string }>();
@@ -21,7 +29,26 @@ export default function BiometricSetupScreen() {
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const [isBusy, setIsBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [availability, setAvailability] = useState(biometricAvailability);
   const isSignupFlow = params.flow === "signup";
+  const biometricName = availability.label ?? "biometrics";
+  const canEnable = availability.available && !faceIdBlockedInExpoGo;
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void getBiometricAvailability()
+        .then((next) => {
+          if (active) {
+            setAvailability(next);
+          }
+        })
+        .catch(() => undefined);
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
 
   const continueToApp = () => {
     router.replace(
@@ -37,14 +64,17 @@ export default function BiometricSetupScreen() {
   const handleEnable = async () => {
     setIsBusy(true);
     setMessage(null);
-    const enabled = await enableBiometrics();
+    const result = await enableBiometrics();
     setIsBusy(false);
 
-    if (enabled) {
+    if (result.enabled) {
       continueToApp();
       return;
     }
-    setMessage("Biometric authentication was not completed.");
+    setMessage(
+      result.message ??
+        `${biometricName} authentication was not completed.`,
+    );
   };
 
   const handleSkip = async () => {
@@ -52,6 +82,12 @@ export default function BiometricSetupScreen() {
     await skipBiometrics();
     continueToApp();
   };
+
+  const description = faceIdBlockedInExpoGo
+    ? "Face ID cannot run inside Expo Go. Continue with your PIN for now, then install a TracePay development build to enable Face ID."
+    : availability.available
+      ? `Use ${biometricName} to unlock TracePay on this device. Your PIN will always remain available.`
+      : biometricUnavailableCopy(availability.unavailableReason);
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -65,9 +101,7 @@ export default function BiometricSetupScreen() {
           Unlock faster
         </Text>
         <Text className="mt-3 max-w-[340px] text-center text-[15px] leading-[23px] text-muted-foreground">
-          {biometricAvailability.available
-            ? "Use Face ID to unlock TracePay on this device. Your PIN will always remain available."
-            : "Biometric authentication is not available or enrolled on this device. You can continue using your PIN."}
+          {description}
         </Text>
 
         {message ? (
@@ -80,9 +114,9 @@ export default function BiometricSetupScreen() {
         ) : null}
 
         <View className="mt-auto w-full max-w-[360px] gap-3">
-          {biometricAvailability.available ? (
+          {canEnable ? (
             <Button loading={isBusy} onPress={handleEnable}>
-              Enable Face ID
+              {`Enable ${biometricName}`}
             </Button>
           ) : null}
 
@@ -90,10 +124,10 @@ export default function BiometricSetupScreen() {
             disabled={isBusy}
             onPress={handleSkip}
             size="md"
-            variant="ghost"
-            labelClassName="text-muted-foreground"
+            variant={canEnable ? "ghost" : "primary"}
+            labelClassName={canEnable ? "text-muted-foreground" : undefined}
           >
-            {biometricAvailability.available ? "Not now" : "Continue with PIN"}
+            {canEnable ? "Not now" : "Continue with PIN"}
           </Button>
         </View>
       </View>

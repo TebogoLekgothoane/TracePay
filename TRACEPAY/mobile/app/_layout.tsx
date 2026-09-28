@@ -1,7 +1,7 @@
 import "../src/theme/global.css";
 
+import { BottomSheetModalProvider } from "@expo/ui/community/bottom-sheet";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";

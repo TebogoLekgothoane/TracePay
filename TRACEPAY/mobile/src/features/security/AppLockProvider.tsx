@@ -13,6 +13,7 @@ import { AppState, type AppStateStatus } from "react-native";
 import {
   authenticateLocally,
   clearBiometricsEnabled,
+  enableBiometricsOnDevice,
   getBiometricAvailability,
   loadBiometricsEnabled,
   saveBiometricsEnabled,
@@ -41,6 +42,7 @@ const unavailableBiometrics: BiometricAvailability = {
   available: false,
   kind: null,
   label: null,
+  unavailableReason: "unsupported",
 };
 
 const AppLockContext = createContext<AppLockContextValue | null>(null);
@@ -106,6 +108,10 @@ export function AppLockProvider({ children }: PropsWithChildren): ReactElement {
           setIsLocked(true);
         }
         backgroundedAtRef.current = null;
+
+        void getBiometricAvailability()
+          .then(setBiometricAvailability)
+          .catch(() => undefined);
       }
 
       appStateRef.current = nextState;
@@ -192,19 +198,16 @@ export function AppLockProvider({ children }: PropsWithChildren): ReactElement {
   );
 
   const enableBiometrics = useCallback(async () => {
-    if (!biometricAvailability.available) {
-      return false;
+    const result = await enableBiometricsOnDevice();
+    if (result.enabled) {
+      setBiometricsEnabled(true);
+      const availability = await getBiometricAvailability().catch(
+        () => unavailableBiometrics,
+      );
+      setBiometricAvailability(availability);
     }
-
-    const authenticated = await authenticateLocally().catch(() => false);
-    if (!authenticated) {
-      return false;
-    }
-
-    await saveBiometricsEnabled(true);
-    setBiometricsEnabled(true);
-    return true;
-  }, [biometricAvailability.available]);
+    return result;
+  }, []);
 
   const skipBiometrics = useCallback(async () => {
     await saveBiometricsEnabled(false);
@@ -216,13 +219,24 @@ export function AppLockProvider({ children }: PropsWithChildren): ReactElement {
       return false;
     }
 
-    const authenticated = await authenticateLocally().catch(() => false);
-    if (authenticated) {
+    const label = biometricAvailability.label ?? "Face ID";
+    const attempt = await authenticateLocally({
+      promptMessage: `Unlock TracePay with ${label}`,
+      cancelLabel: "Use PIN",
+      biometricLabel: label,
+    }).catch((): { success: false } => ({ success: false }));
+
+    if (attempt.success) {
       isLockedRef.current = false;
       setIsLocked(false);
+      return true;
     }
-    return authenticated;
-  }, [biometricAvailability.available, biometricsEnabled]);
+    return false;
+  }, [
+    biometricAvailability.available,
+    biometricAvailability.label,
+    biometricsEnabled,
+  ]);
 
   const lockApp = useCallback(() => {
     if (hasPinRef.current) {

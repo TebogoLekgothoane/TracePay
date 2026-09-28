@@ -1,10 +1,13 @@
-import { useColorScheme } from "nativewind";
-import type { ReactNode } from "react";
 import {
-  Modal as RNModal,
+  BottomSheetModal,
+  BottomSheetScrollView,
+  BottomSheetView,
+} from "@expo/ui/community/bottom-sheet";
+import { useColorScheme } from "nativewind";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import {
   Pressable,
   Text,
-  View,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
@@ -12,6 +15,24 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { COLORS, withAlpha } from "../../theme/colors";
 import { Button } from "./Button";
+
+function useSheetRef(visible: boolean) {
+  const ref = useRef<BottomSheetModal>(null);
+
+  useEffect(() => {
+    const sheet = ref.current;
+    if (!sheet) {
+      return;
+    }
+    if (visible) {
+      sheet.present();
+      return;
+    }
+    sheet.dismiss();
+  }, [visible]);
+
+  return ref;
+}
 
 type InfoSheetProps = {
   visible: boolean;
@@ -21,7 +42,7 @@ type InfoSheetProps = {
   confirmLabel?: string;
 };
 
-/** Lightweight bottom sheet for short explanations (no navigation). */
+/** Native Expo UI community bottom sheet for short explanations. */
 export function InfoSheet({
   visible,
   title,
@@ -32,45 +53,32 @@ export function InfoSheet({
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
+  const ref = useSheetRef(visible);
 
   return (
-    <RNModal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-      statusBarTranslucent
+    <BottomSheetModal
+      ref={ref}
+      backgroundStyle={{ backgroundColor: palette.card }}
+      enableDynamicSizing
+      enablePanDownToClose
+      handleIndicatorStyle={{ backgroundColor: palette.border, width: 36 }}
+      onDismiss={onClose}
     >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Dismiss"
-        onPress={onClose}
-        className="flex-1 justify-end"
-        style={{ backgroundColor: "rgba(15, 10, 30, 0.45)" }}
+      <BottomSheetView
+        style={{
+          paddingHorizontal: 20,
+          paddingBottom: Math.max(insets.bottom, 20),
+        }}
       >
-        <Pressable
-          onPress={(event) => event.stopPropagation()}
-          className="rounded-t-3xl border-t border-border bg-card px-5 pt-5"
-          style={{ paddingBottom: Math.max(insets.bottom, 20) }}
-        >
-          <View
-            className="mb-4 self-center rounded-full"
-            style={{
-              width: 36,
-              height: 4,
-              backgroundColor: palette.border,
-            }}
-          />
-          <Text className="text-[17px] font-bold text-foreground">{title}</Text>
-          <Text className="mt-2 text-[14px] leading-6 text-muted-foreground">
-            {message}
-          </Text>
-          <Button className="mt-5" size="md" onPress={onClose}>
-            {confirmLabel}
-          </Button>
-        </Pressable>
-      </Pressable>
-    </RNModal>
+        <Text className="text-[17px] font-bold text-foreground">{title}</Text>
+        <Text className="mt-2 text-[14px] leading-6 text-muted-foreground">
+          {message}
+        </Text>
+        <Button className="mt-5" size="md" onPress={onClose}>
+          {confirmLabel}
+        </Button>
+      </BottomSheetView>
+    </BottomSheetModal>
   );
 }
 
@@ -81,26 +89,34 @@ type ModalProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-/** Generic transparent modal wrapper. Prefer InfoSheet for short copy. */
+/** Native Expo UI community bottom sheet wrapper. */
 export function Modal({ visible, onClose, children, style }: ModalProps) {
+  const insets = useSafeAreaInsets();
+  const { colorScheme } = useColorScheme();
+  const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
+  const ref = useSheetRef(visible);
+
   return (
-    <RNModal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-      statusBarTranslucent
+    <BottomSheetModal
+      ref={ref}
+      backgroundStyle={{ backgroundColor: palette.card }}
+      enableDynamicSizing
+      enablePanDownToClose
+      handleIndicatorStyle={{ backgroundColor: palette.border, width: 36 }}
+      onDismiss={onClose}
     >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Dismiss"
-        onPress={onClose}
-        className="flex-1 items-center justify-center px-6"
-        style={[{ backgroundColor: "rgba(15, 10, 30, 0.45)" }, style]}
+      <BottomSheetView
+        style={[
+          {
+            paddingHorizontal: 20,
+            paddingBottom: Math.max(insets.bottom, 20),
+          },
+          style,
+        ]}
       >
-        <Pressable onPress={(event) => event.stopPropagation()}>{children}</Pressable>
-      </Pressable>
-    </RNModal>
+        {children}
+      </BottomSheetView>
+    </BottomSheetModal>
   );
 }
 
@@ -114,12 +130,12 @@ type SelectionSheetProps<T extends string> = {
   visible: boolean;
   title: string;
   options: SelectionOption<T>[];
-  selected: T;
+  selected: T | null;
   onSelect: (value: T) => void;
   onClose: () => void;
 };
 
-/** Bottom sheet for single-choice filters and dropdowns. */
+/** Native Expo UI community bottom sheet for single-choice filters. */
 export function SelectionSheet<T extends string>({
   visible,
   title,
@@ -131,75 +147,113 @@ export function SelectionSheet<T extends string>({
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
+  const ref = useSheetRef(visible);
+  const snapPoints = useMemo(() => ["50%", "75%"], []);
 
   return (
-    <RNModal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-      statusBarTranslucent
+    <BottomSheetModal
+      ref={ref}
+      backgroundStyle={{ backgroundColor: palette.card }}
+      enablePanDownToClose
+      handleIndicatorStyle={{ backgroundColor: palette.border, width: 36 }}
+      snapPoints={snapPoints}
+      onDismiss={onClose}
     >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Dismiss"
-        onPress={onClose}
-        className="flex-1 justify-end"
-        style={{ backgroundColor: "rgba(15, 10, 30, 0.45)" }}
+      <BottomSheetScrollView
+        contentContainerStyle={{
+          gap: 8,
+          paddingHorizontal: 20,
+          paddingBottom: Math.max(insets.bottom, 20),
+        }}
       >
-        <Pressable
-          onPress={(event) => event.stopPropagation()}
-          className="rounded-t-3xl border-t border-border bg-card px-5 pt-5"
-          style={{ paddingBottom: Math.max(insets.bottom, 20) }}
-        >
-          <View
-            className="mb-4 self-center rounded-full"
-            style={{
-              width: 36,
-              height: 4,
-              backgroundColor: palette.border,
-            }}
-          />
-          <Text className="mb-3 text-[17px] font-bold text-foreground">{title}</Text>
-          <View className="gap-2">
-            {options.map((option) => {
-              const isSelected = option.value === selected;
-              return (
-                <Pressable
-                  key={option.value}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isSelected }}
-                  onPress={() => {
-                    onSelect(option.value);
-                    onClose();
-                  }}
-                  className="rounded-2xl border px-4 py-3.5 active:opacity-80"
-                  style={{
-                    borderColor: isSelected ? palette.primary : palette.border,
-                    backgroundColor: isSelected
-                      ? withAlpha(palette.primary, 0.12)
-                      : palette.card,
-                  }}
-                >
-                  <Text
-                    className="text-[15px] font-semibold"
-                    style={{
-                      color: isSelected ? palette.primary : palette.foreground,
-                    }}
-                  >
-                    {option.label}
-                  </Text>
-                  {option.description ? (
-                    <Text className="mt-0.5 text-[13px] text-muted-foreground">
-                      {option.description}
-                    </Text>
-                  ) : null}
-                </Pressable>
-              );
-            })}
-          </View>
-        </Pressable>
-      </Pressable>
-    </RNModal>
+        <Text className="mb-1 text-[17px] font-bold text-foreground">{title}</Text>
+        {options.map((option) => {
+          const isSelected = option.value === selected;
+          return (
+            <Pressable
+              key={option.value}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isSelected }}
+              className="rounded-2xl border px-4 py-3.5 active:opacity-80"
+              style={{
+                borderColor: isSelected ? palette.primary : palette.border,
+                backgroundColor: isSelected
+                  ? withAlpha(palette.primary, 0.12)
+                  : palette.card,
+              }}
+              onPress={() => {
+                onSelect(option.value);
+                onClose();
+              }}
+            >
+              <Text
+                className="text-[15px] font-semibold"
+                style={{
+                  color: isSelected ? palette.primary : palette.foreground,
+                }}
+              >
+                {option.label}
+              </Text>
+              {option.description ? (
+                <Text className="mt-0.5 text-[13px] text-muted-foreground">
+                  {option.description}
+                </Text>
+              ) : null}
+            </Pressable>
+          );
+        })}
+      </BottomSheetScrollView>
+    </BottomSheetModal>
+  );
+}
+
+type FormSheetProps = {
+  visible: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  /** When false, swipe-to-dismiss and backdrop tap are locked (e.g. while submitting). */
+  dismissible?: boolean;
+  snapPoints?: Array<string | number>;
+};
+
+/** Dismissible Expo UI community bottom sheet for forms (auth, filters, etc.). */
+export function FormSheet({
+  visible,
+  onClose,
+  children,
+  dismissible = true,
+  snapPoints: snapPointsProp,
+}: FormSheetProps) {
+  const insets = useSafeAreaInsets();
+  const { colorScheme } = useColorScheme();
+  const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
+  const ref = useSheetRef(visible);
+  const snapPoints = useMemo(
+    () => snapPointsProp ?? ["72%", "92%"],
+    [snapPointsProp],
+  );
+
+  return (
+    <BottomSheetModal
+      ref={ref}
+      backgroundStyle={{ backgroundColor: palette.card }}
+      enablePanDownToClose={dismissible}
+      handleIndicatorStyle={{ backgroundColor: palette.border, width: 36 }}
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
+      snapPoints={snapPoints}
+      onDismiss={onClose}
+    >
+      <BottomSheetScrollView
+        contentContainerStyle={{
+          paddingHorizontal: 28,
+          paddingTop: 8,
+          paddingBottom: Math.max(insets.bottom, 28),
+        }}
+        keyboardShouldPersistTaps="handled"
+      >
+        {children}
+      </BottomSheetScrollView>
+    </BottomSheetModal>
   );
 }

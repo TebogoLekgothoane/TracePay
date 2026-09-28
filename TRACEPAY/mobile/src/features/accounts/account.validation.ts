@@ -1,4 +1,5 @@
 import type { AccountPreview } from "../../components/dashboard/AccountsCard";
+import { formatRandAmount } from "../../utils/currency";
 import {
   ACCOUNT_PREVIEW_COLORS,
   ACCOUNT_TYPE_LABELS,
@@ -96,9 +97,7 @@ export function toAccountPreview(account: FinancialAccount, balance: number | nu
     id: account.id,
     name: account.name,
     masked: formatAccountSubtitle(account),
-    balance: balance === null
-      ? "—"
-      : `R${balance.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    balance: balance === null ? "—" : formatRandAmount(balance),
     color: colorForAccount(account),
     logoDomain: resolveInstitutionLogoDomain(logoSource),
   };

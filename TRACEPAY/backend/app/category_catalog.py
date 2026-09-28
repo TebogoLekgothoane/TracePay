@@ -11,7 +11,7 @@ logger = logging.getLogger("tracepay.categories")
 def fetch_category_names(access_token: str) -> list[str]:
     """Read the live taxonomy; the AI never receives a code-defined category list."""
     project_url = settings.supabase_url.rstrip("/")
-    publishable_key = settings.supabase_anon_key or settings.supabase_key
+    publishable_key = settings.supabase_publishable_key()
     if not project_url or not publishable_key:
         logger.warning("[CATEGORISATION] category_catalog_unavailable reason=missing_supabase_config")
         return []

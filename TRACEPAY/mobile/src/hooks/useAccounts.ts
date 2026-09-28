@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 
 import type { AccountPreview } from "../components/dashboard/AccountsCard";
 import { loadAccountBalances, loadAccounts } from "../features/accounts/account.service";
@@ -13,15 +14,35 @@ export function useAccounts() {
     void loadAccounts(true);
   }, []);
 
-  useEffect(() => {
-    void loadAccounts(false).then((accounts) => loadAccountBalances(accounts.map((account) => account.id))).then(setBalances).catch(() => setBalances({}));
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      void loadAccounts(false)
+        .then((accounts) => loadAccountBalances(accounts.map((account) => account.id)))
+        .then((next) => {
+          if (!cancelled) {
+            setBalances(next);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setBalances({});
+          }
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
 
-  const previews: AccountPreview[] = snapshot.accounts.map((account) => toAccountPreview(account, balances[account.id] ?? null));
+  const previews: AccountPreview[] = snapshot.accounts.map((account) =>
+    toAccountPreview(account, balances[account.id] ?? null),
+  );
 
   return {
     accounts: snapshot.accounts,
     previews,
+    balances,
     loading: snapshot.loading,
     error: snapshot.error,
     retry,

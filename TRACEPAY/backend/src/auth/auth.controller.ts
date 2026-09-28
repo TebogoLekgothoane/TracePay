@@ -8,20 +8,10 @@ import {
   resetPassword,
   verifyOtp,
 } from "./auth.service.js";
-import { AuthHttpError } from "./auth.types.js";
+import { handleRouteError } from "../http.js";
 
 function readString(value: unknown): string {
   return typeof value === "string" ? value : "";
-}
-
-function handleError(error: unknown, res: Response): void {
-  if (error instanceof AuthHttpError) {
-    res.status(error.status).json({ error: error.message });
-    return;
-  }
-
-  console.error("[auth]", error);
-  res.status(500).json({ error: "Something went wrong. Please try again." });
 }
 
 export async function registerHandler(req: Request, res: Response): Promise<void> {
@@ -33,7 +23,7 @@ export async function registerHandler(req: Request, res: Response): Promise<void
     });
     res.status(201).json({ ok: true });
   } catch (error) {
-    handleError(error, res);
+    handleRouteError(error, res, "auth");
   }
 }
 
@@ -45,7 +35,7 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
     });
     res.status(200).json(result);
   } catch (error) {
-    handleError(error, res);
+    handleRouteError(error, res, "auth");
   }
 }
 
@@ -61,7 +51,7 @@ export async function verifyOtpHandler(req: Request, res: Response): Promise<voi
     });
     res.status(200).json(result);
   } catch (error) {
-    handleError(error, res);
+    handleRouteError(error, res, "auth");
   }
 }
 
@@ -70,7 +60,7 @@ export async function forgotPasswordHandler(req: Request, res: Response): Promis
     await forgotPassword(readString(req.body?.phone));
     res.status(200).json({ ok: true });
   } catch (error) {
-    handleError(error, res);
+    handleRouteError(error, res, "auth");
   }
 }
 
@@ -79,10 +69,11 @@ export async function resetPasswordHandler(req: Request, res: Response): Promise
     const result = await resetPassword({
       phone: readString(req.body?.phone),
       password: readString(req.body?.password),
+      resetToken: readString(req.body?.resetToken),
     });
     res.status(200).json(result);
   } catch (error) {
-    handleError(error, res);
+    handleRouteError(error, res, "auth");
   }
 }
 
@@ -91,6 +82,6 @@ export async function resendOtpHandler(req: Request, res: Response): Promise<voi
     await resendOtp(readString(req.body?.phone));
     res.status(200).json({ ok: true });
   } catch (error) {
-    handleError(error, res);
+    handleRouteError(error, res, "auth");
   }
 }

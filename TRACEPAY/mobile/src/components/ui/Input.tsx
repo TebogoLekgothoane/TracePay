@@ -1,20 +1,42 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useColorScheme } from "nativewind";
-import { Text, TextInput, View, type TextInputProps } from "react-native";
+import { Text, View } from "react-native";
 
 import { COLORS } from "../../theme/colors";
+import { BridgedTextField } from "./BridgedTextField";
 
-type Props = TextInputProps & {
+type Props = {
   label: string;
   error?: string | null;
   icon?: keyof typeof Ionicons.glyphMap;
+  value?: string;
+  defaultValue?: string;
+  onChangeText?: (text: string) => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
+  onSubmitEditing?: (text: string) => void;
+  placeholder?: string;
+  editable?: boolean;
+  autoFocus?: boolean;
+  autoCapitalize?: "none" | "sentences" | "words" | "characters";
+  autoCorrect?: boolean;
+  autoComplete?:
+    | "name"
+    | "email"
+    | "password"
+    | "new-password"
+    | "tel"
+    | "off"
+    | "username";
+  keyboardType?: "default" | "email-address" | "numeric" | "phone-pad" | "number-pad";
+  returnKeyType?: "done" | "next" | "go" | "search" | "send";
+  maxLength?: number;
 };
 
 export function Input({
   label,
   error,
   icon,
-  className = "",
   editable = true,
   ...props
 }: Props) {
@@ -38,14 +60,17 @@ export function Input({
             style={{ marginLeft: 16, marginRight: 10 }}
           />
         ) : null}
-        <TextInput
-          accessibilityLabel={label}
-          editable={editable}
-          placeholderTextColor={palette.placeholder}
-          className={`h-[52px] flex-1 text-[16px] text-foreground ${
-            icon ? "pr-4" : "px-4"
-          } ${className}`}
+        <BridgedTextField
           {...props}
+          editable={editable}
+          hostStyle={{ height: 52 }}
+          inputStyle={{
+            height: 52,
+            paddingHorizontal: icon ? 0 : 16,
+            paddingRight: 16,
+            backgroundColor: "transparent",
+            borderWidth: 0,
+          }}
         />
       </View>
       {hasError ? (

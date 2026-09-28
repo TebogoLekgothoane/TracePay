@@ -41,14 +41,6 @@ type ParsedTransactionRow = {
   normalised_at: string;
 };
 
-type LeakCandidate = {
-  user_id: string;
-  merchant_key: string;
-  merchant: string;
-  monthly_amount: number;
-  count: number;
-};
-
 function parseAmount(body: string): number | null {
   const match = body.match(AMOUNT);
   if (!match?.[1]) {
@@ -146,64 +138,6 @@ function toParsedTransaction(reading: ReadingRow): ParsedTransactionRow | null {
   };
 }
 
-async function refreshRecurringLeaks(client: SupabaseClient, userId: string): Promise<void> {
-  const since = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await client
-    .from("parsed_transactions")
-    .select("merchant, merchant_key, amount")
-    .eq("user_id", userId)
-    .eq("type", "debit")
-    .not("merchant_key", "is", null)
-    .gte("occurred_at", since);
-
-  if (error || !data) {
-    return;
-  }
-
-  const grouped = new Map<string, LeakCandidate>();
-  for (const row of data as Array<{ merchant: string | null; merchant_key: string | null; amount: number | string }>) {
-    if (!row.merchant || !row.merchant_key) {
-      continue;
-    }
-    const amount = Number(row.amount);
-    const current = grouped.get(row.merchant_key) ?? {
-      user_id: userId,
-      merchant_key: row.merchant_key,
-      merchant: row.merchant,
-      monthly_amount: 0,
-      count: 0,
-    };
-    current.monthly_amount += Number.isFinite(amount) ? amount : 0;
-    current.count += 1;
-    grouped.set(row.merchant_key, current);
-  }
-
-  const leaks = [...grouped.values()]
-    .filter((candidate) => candidate.count >= 2 && candidate.monthly_amount > 0)
-    .map((candidate) => ({
-      user_id: userId,
-      fi_code: "FI-001",
-      subject_key: candidate.merchant_key,
-      status: "active",
-      detection_rule: "recurring_ingestion_debit_v1",
-      resolution_rule: "merchant_stops_recurring_v1",
-      evidence: {
-        source: "device_ingestion",
-        transactionCount: candidate.count,
-      },
-      merchant: candidate.merchant,
-      amount_monthly: Number(candidate.monthly_amount.toFixed(2)),
-      amount_annual: Number((candidate.monthly_amount * 12).toFixed(2)),
-      exact_action: `Review recurring payments to ${candidate.merchant} and cancel or downgrade anything you no longer need.`,
-    }));
-
-  if (leaks.length > 0) {
-    await client.from("leaks").upsert(leaks, {
-      onConflict: "user_id,subject_key,detection_rule",
-    });
-  }
-}
-
 export async function parseIngestionReadings(
   client: SupabaseClient,
   readings: readonly ReadingRow[],
@@ -218,9 +152,8 @@ export async function parseIngestionReadings(
   });
 
   if (error) {
-    return;
+    throw new Error(
+      `Could not store parsed transactions (${error.code ?? "unknown"}): ${error.message}`,
+    );
   }
-
-  const userIds = [...new Set(parsed.map((row) => row.user_id))];
-  await Promise.all(userIds.map((userId) => refreshRecurringLeaks(client, userId)));
 }

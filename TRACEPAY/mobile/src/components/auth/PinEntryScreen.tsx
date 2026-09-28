@@ -14,7 +14,6 @@ import {
   Platform,
   Pressable,
   Text,
-  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -28,11 +27,14 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
-
 import TracePayIcon from "../../../assets/icons/assembled TracePay icon.svg";
 import { PIN_LENGTH } from "../../features/security/security.constants";
 import type { BiometricKind } from "../../features/security/security.types";
 import { COLORS } from "../../theme/colors";
+import {
+  BridgedTextField,
+  type BridgedTextFieldRef,
+} from "../ui/BridgedTextField";
 
 type Props = {
   title: string;
@@ -115,7 +117,7 @@ export function PinEntryScreen({
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const [digits, setDigits] = useState<number[]>([]);
   const submittingRef = useRef(false);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<BridgedTextFieldRef>(null);
   const entrance = useSharedValue(0);
   const shake = useSharedValue(0);
   const { height } = useWindowDimensions();
@@ -326,23 +328,22 @@ export function PinEntryScreen({
           </Animated.View>
 
           {useSystemKeyboard ? (
-            <TextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoFocus
-              blurOnSubmit={false}
-              caretHidden
-              contextMenuHidden
-              editable={!isBusy}
-              keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
-              maxLength={PIN_LENGTH}
-              onChangeText={handleSystemChange}
-              ref={inputRef}
-              showSoftInputOnFocus
-              className="absolute h-px w-px opacity-[0.01]"
-              textContentType="oneTimeCode"
-              value={digits.join("")}
-            />
+            <View className="absolute h-px w-px opacity-[0.01]">
+              <BridgedTextField
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoFocus
+                caretHidden
+                editable={!isBusy}
+                hostStyle={{ height: 1, width: 1 }}
+                inputRef={inputRef}
+                inputStyle={{ height: 1, width: 1, opacity: 0.01 }}
+                keyboardType={Platform.OS === "ios" ? "number-pad" : "numeric"}
+                maxLength={PIN_LENGTH}
+                value={digits.join("")}
+                onChangeText={handleSystemChange}
+              />
+            </View>
           ) : null}
 
           <View className="mt-2 h-[34px] items-center justify-center">
