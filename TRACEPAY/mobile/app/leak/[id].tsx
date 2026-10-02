@@ -24,6 +24,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 
 import { FixActionsList } from "../../src/components/leaks/FixActionsList";
+import { resolveMarkColor } from "../../src/components/leaks/LeakFlowShell";
 import { PeriodTabs } from "../../src/components/insights/PeriodTabs";
 import { BrandLogo } from "../../src/components/ui/BrandLogo";
 import { Button } from "../../src/components/ui/Button";
@@ -483,20 +484,6 @@ function AtmIllustration({ accent, primary }: { accent: string; primary: string 
   );
 }
 
-function resolveMarkColor(
-  palette: {
-    destructive: string;
-    primary: string;
-    success: string;
-    blue: string;
-  },
-  key: SubscriptionItem["markColor"],
-) {
-  if (key === "destructive") return palette.destructive;
-  if (key === "primary") return palette.primary;
-  if (key === "success") return palette.success;
-  return palette.blue;
-}
 export default function LeakDetailScreen() {
   const params = useLocalSearchParams<{ id: string; view?: string }>();
   const leakId = Array.isArray(params.id) ? params.id[0] : params.id;

@@ -7,6 +7,7 @@ import {
 import { secureStorage } from "../../lib/secure-storage";
 import { resetAccountsSnapshot } from "../accounts/account.store";
 import { clearOnboardingCompleted } from "../onboarding/onboarding.service";
+import { clearFinancialAccountsSetupDismissed } from "../accounts/account-setup.service";
 import { AuthError } from "./auth.errors";
 import {
   getProfileSnapshot,
@@ -625,6 +626,7 @@ export async function signOut(): Promise<void> {
   profileUpdateRequest = null;
   resetProfileSnapshot();
   resetAccountsSnapshot();
+  await clearFinancialAccountsSetupDismissed().catch(() => undefined);
 
   if (isSupabaseConfigured()) {
     const { error } = await getSupabase().auth.signOut();

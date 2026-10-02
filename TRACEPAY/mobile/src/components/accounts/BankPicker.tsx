@@ -4,11 +4,14 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import {
+  INSTITUTION_COLORS,
   SA_INSTITUTIONS,
+  resolveInstitutionLogoDomain,
   type SaInstitution,
 } from "../../features/accounts/account.constants";
 import { COLORS } from "../../theme/colors";
 import { SelectionSheet } from "../ui/Modal";
+import { InstitutionLogo } from "./InstitutionLogo";
 
 type Props = {
   value: SaInstitution | null;
@@ -16,6 +19,10 @@ type Props = {
   error?: string | null;
   disabled?: boolean;
 };
+
+function institutionColor(institution: SaInstitution): string {
+  return INSTITUTION_COLORS[institution.toLowerCase()] ?? "#6366F1";
+}
 
 export function BankPicker({ value, onChange, error, disabled }: Props) {
   const { colorScheme } = useColorScheme();
@@ -28,19 +35,29 @@ export function BankPicker({ value, onChange, error, disabled }: Props) {
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ disabled: Boolean(disabled) }}
-        className={`h-[52px] flex-row items-center justify-between rounded-2xl border bg-card px-4 ${
+        className={`min-h-[52px] flex-row items-center justify-between rounded-2xl border bg-card px-4 py-3 ${
           error ? "border-destructive" : "border-border"
         } ${disabled ? "opacity-50" : ""}`}
         disabled={disabled}
         onPress={() => setOpen(true)}
       >
-        <Text
-          className={`text-[16px] ${
-            value ? "font-medium text-foreground" : "text-muted-foreground"
-          }`}
-        >
-          {value ?? "Select your bank"}
-        </Text>
+        <View className="flex-1 flex-row items-center gap-3">
+          {value ? (
+            <InstitutionLogo
+              name={value}
+              logoDomain={resolveInstitutionLogoDomain(value)}
+              color={institutionColor(value)}
+              size={36}
+            />
+          ) : null}
+          <Text
+            className={`text-[16px] ${
+              value ? "font-semibold text-foreground" : "text-muted-foreground"
+            }`}
+          >
+            {value ?? "Select your bank"}
+          </Text>
+        </View>
         <ChevronDown color={palette.mutedForeground} size={18} />
       </Pressable>
       {error ? (

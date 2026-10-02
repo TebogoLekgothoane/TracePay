@@ -37,14 +37,6 @@ export default function AuthLayout() {
       />
 
       <Stack.Screen
-        name="create-account"
-        options={{
-          headerShown: false,
-          gestureEnabled: true,
-        }}
-      />
-
-      <Stack.Screen
         name="device-security"
         options={{
           headerShown: false,
@@ -129,22 +121,6 @@ export default function AuthLayout() {
         options={{
           headerShown: false,
           gestureEnabled: false,
-        }}
-      />
-
-      <Stack.Screen
-        name="password"
-        options={{
-          headerShown: false,
-          gestureEnabled: true,
-        }}
-      />
-
-      <Stack.Screen
-        name="restore-account"
-        options={{
-          headerShown: false,
-          gestureEnabled: true,
         }}
       />
 

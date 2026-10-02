@@ -4,8 +4,6 @@ import {
   type ProfileCurrency,
 } from "./auth.constants";
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 export function sanitizeName(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
@@ -17,10 +15,6 @@ export function isValidName(value: string): boolean {
 
 export function isValidProfileCurrency(value: string): value is ProfileCurrency {
   return (PROFILE_CURRENCIES as readonly string[]).includes(value);
-}
-
-export function isValidEmail(value: string): boolean {
-  return EMAIL_PATTERN.test(value.trim());
 }
 
 export function isValidPassword(value: string): boolean {

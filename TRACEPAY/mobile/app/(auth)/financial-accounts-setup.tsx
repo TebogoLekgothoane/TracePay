@@ -1,5 +1,5 @@
-import { StatementImportFlow } from "../../src/components/accounts/StatementImportFlow";
+import { AccountStatementSetupFlow } from "../../src/components/accounts/AccountStatementSetupFlow";
 
 export default function FinancialAccountsSetupScreen() {
-  return <StatementImportFlow mode="onboarding" />;
+  return <AccountStatementSetupFlow mode="onboarding" />;
 }

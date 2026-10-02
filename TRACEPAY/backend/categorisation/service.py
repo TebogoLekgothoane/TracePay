@@ -39,13 +39,13 @@ def categorise_batch(transactions: list[CategorisableTransaction], category_name
     ai_results: dict[str, CategorisationResult] = {}
     ai_requests = 0
     ai_enabled = settings.ai_categorisation_enabled
-    has_provider_key = bool(settings.gemini_api_key.strip() or settings.openrouter_api_key.strip())
+    has_provider_key = bool(settings.openai_api_key.strip())
     if not ai_enabled:
         logger.info("[AI] skipped reason=disabled config=AI_CATEGORISATION_ENABLED")
     elif not unknown_items:
         logger.info("[AI] requests=0 reason=no_candidates")
     elif not has_provider_key:
-        logger.warning("[AI] requests=0 reason=missing_api_keys expected_env=GEMINI_API_KEY,OPENROUTER_API_KEY")
+        logger.warning("[AI] requests=0 reason=missing_api_keys expected_env=OPENAI_API_KEY")
     elif not category_names:
         logger.warning("[AI] requests=0 reason=empty_live_category_catalog")
     else:

@@ -1,5 +1,3 @@
-import { hunterLogoUrl } from "../accounts/account.constants";
-
 export type MerchantCatalogEntry = {
   id: string;
   domain: string;
@@ -50,8 +48,4 @@ export function resolveMerchantLogoDomain(
   }
 
   return null;
-}
-
-export function merchantLogoUrl(domain: string): string {
-  return hunterLogoUrl(domain);
 }

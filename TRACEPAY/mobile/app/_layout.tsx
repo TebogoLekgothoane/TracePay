@@ -89,13 +89,11 @@ function RootNavigator({
     const isRecoveryRoute =
       isAuthRoute &&
       [
-        "password",
         "otp",
         "reset-pin",
         "reset-pin-create",
         "reset-pin-confirm",
         "reset-pin-success",
-        "restore-account",
         "new-password",
         "password-updated",
       ].includes(screen ?? "");

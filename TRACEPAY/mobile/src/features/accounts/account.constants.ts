@@ -65,7 +65,7 @@ export const INSTITUTION_LOGO_DOMAINS: Record<string, string> = {
 };
 
 export function hunterLogoUrl(domain: string): string {
-  return `${HUNTER_LOGO_BASE}/${domain}`;
+  return `${HUNTER_LOGO_BASE}/${domain.trim().toLowerCase()}`;
 }
 
 export function resolveInstitutionLogoDomain(

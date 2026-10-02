@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import { listRecentTransactions } from "../features/transactions/transaction.service";
 import type { TransactionRow } from "../features/transactions/transaction.types";
 
-export function useTransactions() {
+export function useTransactions(accountId?: string | null) {
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -13,7 +13,7 @@ export function useTransactions() {
   const load = useCallback(() => {
     const id = ++requestId.current;
     setLoading(true);
-    void listRecentTransactions()
+    void listRecentTransactions(100, accountId)
       .then((rows) => {
         if (requestId.current !== id) return;
         setError(null);
@@ -33,7 +33,7 @@ export function useTransactions() {
           setLoading(false);
         }
       });
-  }, []);
+  }, [accountId]);
 
   useFocusEffect(
     useCallback(() => {

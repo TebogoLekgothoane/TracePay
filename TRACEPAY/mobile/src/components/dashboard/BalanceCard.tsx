@@ -7,7 +7,9 @@ import { Button } from "../ui/Button";
 
 type Props = {
   balance: string;
+  sourceLabel: string;
   changeLabel: string;
+  warningLabel?: string | null;
   hidden?: boolean;
   onToggleVisibility?: () => void;
   onScanLeaks?: () => void;
@@ -74,7 +76,9 @@ function BalanceWaves() {
 
 export function BalanceCard({
   balance,
+  sourceLabel,
   changeLabel,
+  warningLabel = null,
   hidden = false,
   onToggleVisibility,
   onScanLeaks,
@@ -97,15 +101,21 @@ export function BalanceCard({
         onPress={onToggleVisibility}
         className="flex-row items-center gap-2 self-start active:opacity-70"
       >
-        <Text className="text-[13px] text-white/70">
-          Total balance (all accounts)
-        </Text>
+        <Text className="text-[13px] text-white/70">Statement balance</Text>
         <Eye color="rgba(255,255,255,0.7)" size={15} strokeWidth={2} />
       </Pressable>
+
+      <Text className="mt-1 text-[12px] text-white/55">{sourceLabel}</Text>
 
       <View className="mt-2.5">
         <BalanceAmount balance={balance} hidden={hidden} />
       </View>
+
+      {warningLabel ? (
+        <Text className="mt-2 text-[12px] leading-5 text-amber-200/90">
+          {warningLabel}
+        </Text>
+      ) : null}
 
       <View className="mt-2.5 self-start rounded-full bg-emerald-500/15 px-3 py-1.5">
         <Text className="text-[12px] font-semibold text-emerald-400">

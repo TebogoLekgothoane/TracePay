@@ -61,7 +61,12 @@ export function parseExtractedTransaction(value: unknown): ExtractedTransaction 
   const date = asDate(row.date);
   const description = typeof row.description === "string" ? row.description.trim() : "";
   const amount = asAmount(row.amount);
-  const type = row.type;
+  const type =
+    row.type === "debit" || row.type === "credit"
+      ? row.type
+      : row.direction === "debit" || row.direction === "credit"
+        ? row.direction
+        : null;
 
   if (!date || description.length < 1 || description.length > 500 || amount === null) {
     return null;
@@ -70,9 +75,10 @@ export function parseExtractedTransaction(value: unknown): ExtractedTransaction 
     return null;
   }
 
+  const rawBalance = row.balance ?? row.balance_after;
   const balance =
-    row.balance === undefined || row.balance === null ? null : asAmount(row.balance);
-  if (row.balance !== undefined && row.balance !== null && balance === null) {
+    rawBalance === undefined || rawBalance === null ? null : asAmount(rawBalance);
+  if (rawBalance !== undefined && rawBalance !== null && balance === null) {
     return null;
   }
 
@@ -131,6 +137,12 @@ export function parseExtractedTransaction(value: unknown): ExtractedTransaction 
         ? null
         : typeof row.merchant_name === "string"
           ? row.merchant_name
+          : null,
+    reference:
+      row.reference === undefined || row.reference === null
+        ? null
+        : typeof row.reference === "string"
+          ? row.reference.trim().slice(0, 80)
           : null,
   };
 }

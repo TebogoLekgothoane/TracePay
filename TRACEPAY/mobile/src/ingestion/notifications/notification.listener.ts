@@ -16,7 +16,3 @@ export async function openNotificationListenerSettings(): Promise<void> {
   }
   await getTracePayIngestionNative().openNotificationListenerSettings();
 }
-
-export function startNotificationListener(): () => void {
-  return () => undefined;
-}

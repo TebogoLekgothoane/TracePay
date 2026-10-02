@@ -47,7 +47,7 @@ The extraction response uses one canonical transaction shape for both file types
 transaction_date, description, amount, transaction_type, currency, balance
 ```
 
-PDF processing tries pdfplumber first, then Camelot table extraction, then Tesseract OCR when the PDF has insufficient text. It returns raw extraction metadata, normalized transactions, and a validation result. The mobile app uploads the original PDF to the private `statements` bucket and stores only normalized `pdf` transactions in PostgreSQL.
+PDF processing tries PyMuPDF first, then Camelot for structured tables in text-based PDFs. Scanned pages are preprocessed with OpenCV/Pillow and read with PaddleOCR 3.x; Tesseract is only used when PaddleOCR fails or returns low confidence. The response includes `extraction_method` and `extraction_confidence` plus normalized transactions and a validation result. The mobile app uploads the original PDF to the private `statements` bucket and stores only normalized `pdf` transactions in PostgreSQL.
 
 Install the Python dependencies before starting the extraction API:
 
@@ -56,12 +56,12 @@ python -m pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Camelot may require the system PDF rendering dependencies documented by its installation guide. Tesseract must also be installed locally and available on `PATH` for scanned-PDF fallback. Apply `supabase/migrations/202609200001_pdf_statement_ingestion.sql` to the project before testing authenticated uploads.
+Camelot may require Ghostscript. PaddleOCR needs the PaddlePaddle CPU package from `requirements.txt`. Tesseract is optional and used only as an OCR fallback. Apply `supabase/migrations/202609200001_pdf_statement_ingestion.sql` to the project before testing authenticated uploads.
 
 Tests:
 
 ```bash
-python -m pytest tests/test_pdf_processor.py
+python -m pytest tests/test_pdf_processor.py tests/test_pdf_ocr.py
 ```
 
-Known limitations: the first parser is generic, Camelot/OCR output still requires review, scanned PDFs need a working local Tesseract installation, and balance reconciliation is reserved for the next parser-validation pass.
+Known limitations: the first parser is generic, Camelot/OCR output still requires review, and scanned PDFs are more reliable when PaddleOCR models can be downloaded on first use.

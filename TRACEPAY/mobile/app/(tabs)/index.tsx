@@ -1,6 +1,5 @@
 import { router } from "expo-router";
 import {
-  Bell,
   ChevronRight,
   Info,
   Landmark,
@@ -19,23 +18,26 @@ import {
   type LeakPreview,
 } from "../../src/components/dashboard/LeakSummary";
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
-import { IconButton } from "../../src/components/ui/IconButton";
-import { LINKED_ACCOUNTS_HREF } from "../../src/features/accounts/account.navigation";
-import { sumAccountBalances } from "../../src/features/accounts/account.service";
+import {
+  ADD_ACCOUNT_HREF,
+  LINKED_ACCOUNTS_HREF,
+} from "../../src/features/accounts/account.navigation";
+import { formatBalanceAmountLabel } from "../../src/features/accounts/account-balance";
+import { formatOverviewAmount } from "../../src/features/analytics/financial-overview.service";
 import { firstNameFromFullName } from "../../src/features/auth/auth.validation";
 import { usePrivacyPreferences } from "../../src/features/privacy/privacy.preferences";
 import { useAccounts } from "../../src/hooks/useAccounts";
+import { useFinancialOverview } from "../../src/hooks/useFinancialOverview";
 import { useProfile } from "../../src/hooks/useProfile";
 import { COLORS } from "../../src/theme/colors";
-import { formatRandAmount } from "../../src/utils/currency";
 
 export default function HomeScreen() {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const { hideBalances, toggleHideBalances } = usePrivacyPreferences();
   const { profile } = useProfile();
-  const { previews, balances, loading: accountsLoading } = useAccounts();
-  const totalBalance = sumAccountBalances(balances);
+  const { previews, balanceTotals, loading: accountsLoading } = useAccounts();
+  const { overview } = useFinancialOverview();
 
   const hour = new Date().getHours();
   const greeting =
@@ -110,11 +112,21 @@ export default function HomeScreen() {
   );
 
   const balanceLabel =
-    totalBalance !== null
-      ? formatRandAmount(totalBalance)
+    balanceTotals.total !== null
+      ? formatBalanceAmountLabel(balanceTotals.total)
       : previews.length > 0
         ? "—"
         : "Add accounts";
+
+  const flowLabel =
+    overview && overview.transactionCount > 0
+      ? `In ${formatOverviewAmount(overview.moneyIn)} · Out ${formatOverviewAmount(overview.moneyOut)}`
+      : "Import statements to see cash flow";
+
+  const sourceLabel =
+    previews.length === 0
+      ? "Add a statement to see balance"
+      : balanceTotals.subtitle;
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -126,7 +138,6 @@ export default function HomeScreen() {
         <View className="px-5 pt-2">
           <View className="mb-5 flex-row items-center justify-between">
             <View className="flex-row items-center gap-3">
-              
               <View>
                 <Text
                   className="h-[18px] text-[13px] leading-[18px] text-muted-foreground"
@@ -139,22 +150,13 @@ export default function HomeScreen() {
                 </Text>
               </View>
             </View>
-
-            <IconButton
-              accessibilityLabel="Notifications"
-              className="relative"
-              variant="ghost"
-              size="md"
-              onPress={() => router.push("/notifications/1")}
-            >
-              <Bell color={palette.foreground} size={22} strokeWidth={2} />
-              <View className="absolute right-2 top-2 h-2 w-2 rounded-full bg-primary" />
-            </IconButton>
           </View>
 
           <BalanceCard
             balance={balanceLabel}
-            changeLabel="↑ 12% vs last month"
+            sourceLabel={sourceLabel}
+            changeLabel={flowLabel}
+            warningLabel={balanceTotals.warningReason}
             hidden={hideBalances}
             onToggleVisibility={() => {
               void toggleHideBalances();
@@ -205,9 +207,11 @@ export default function HomeScreen() {
               accounts={previews}
               hideBalances={hideBalances}
               loading={accountsLoading}
-              onAddAccount={() => router.push("/transactions/import")}
+              onAddAccount={() => router.push(ADD_ACCOUNT_HREF)}
               onSeeDetails={() => router.push(LINKED_ACCOUNTS_HREF)}
-              onAccountPress={() => router.push(LINKED_ACCOUNTS_HREF)}
+              onAccountPress={(account) =>
+                router.push(`/settings/accounts/${account.id}` as never)
+              }
             />
           </View>
 

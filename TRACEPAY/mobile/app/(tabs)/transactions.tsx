@@ -7,16 +7,21 @@ import {
   Upload,
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { Pressable, Text, View, ActivityIndicator } from "react-native";
+import { useState } from "react";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
+import { AccountFilterBar } from "../../src/components/transactions/AccountFilterBar";
 import { TransactionListIcon } from "../../src/components/transactions/TransactionListIcon";
 import { Button } from "../../src/components/ui/Button";
+import { ADD_ACCOUNT_HREF } from "../../src/features/accounts/account.navigation";
 import {
   categoryName,
   formatTransactionAmount,
+  transactionAccountLabel,
 } from "../../src/features/transactions/transaction.service";
+import { useAccounts } from "../../src/hooks/useAccounts";
 import { useTransactions } from "../../src/hooks/useTransactions";
 import { COLORS, TRACEPAY } from "../../src/theme/colors";
 
@@ -25,9 +30,12 @@ export default function TransactionsScreen() {
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
   const trace = TRACEPAY[scheme];
-  const { transactions, loading, error, retry } = useTransactions();
+  const { accounts } = useAccounts();
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const { transactions, loading, error, retry } = useTransactions(selectedAccountId);
 
-  const openImport = () => router.push("/transactions/import");
+  const openImport = () => router.push(ADD_ACCOUNT_HREF);
+  const showingAllAccounts = selectedAccountId === null;
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -41,8 +49,14 @@ export default function TransactionsScreen() {
             Transactions
           </Text>
           <Text className="mt-1 text-[14px] leading-5 text-muted-foreground">
-            Import a bank statement to add transactions to TracePay.
+            All of your accounts in one list. Switch to a single account to filter.
           </Text>
+
+          <AccountFilterBar
+            accounts={accounts}
+            selectedAccountId={selectedAccountId}
+            onSelect={setSelectedAccountId}
+          />
 
           <View className="mt-5 rounded-3xl border border-border/60 bg-card p-5">
             <Text className="text-[20px] font-bold text-foreground">
@@ -113,7 +127,7 @@ export default function TransactionsScreen() {
           <View className="mt-7">
             <View className="mb-3 flex-row items-center justify-between">
               <Text className="text-[17px] font-bold text-foreground">
-                Imported transactions
+                {showingAllAccounts ? "Recent across accounts" : "Imported transactions"}
               </Text>
               <Text className="text-[12px] text-muted-foreground">
                 {transactions.length} loaded
@@ -179,6 +193,9 @@ export default function TransactionsScreen() {
                         </Text>
                         <Text className="mt-0.5 text-[12px] text-muted-foreground">
                           {category}
+                          {showingAllAccounts
+                            ? ` · ${transactionAccountLabel(transaction)}`
+                            : ""}
                         </Text>
                       </View>
                       <Text

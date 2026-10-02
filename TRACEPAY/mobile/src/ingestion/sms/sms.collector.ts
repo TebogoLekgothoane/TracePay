@@ -9,6 +9,3 @@ export async function collectSmsReadings(limit = DEFAULT_SMS_LIMIT): Promise<Sms
   }
   return getTracePayIngestionNative().readSmsInbox(limit);
 }
-export async function collectSms(): Promise<void> {
-  return undefined;
-}

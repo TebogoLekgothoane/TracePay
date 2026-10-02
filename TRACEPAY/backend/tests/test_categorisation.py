@@ -119,7 +119,7 @@ def test_ai_low_confidence_category_is_preserved(monkeypatch: pytest.MonkeyPatch
             transaction_class="savings",
             classification_confidence=0.96,
             classification_reason="Fixed deposit contribution",
-            rule="ai:gemini",
+            rule="ai:openai",
         )}
 
     monkeypatch.setattr("categorisation.service.classify_batch", fake_classify_batch)
@@ -147,7 +147,7 @@ def test_duplicate_ai_pattern_is_applied_to_every_transaction(monkeypatch: pytes
             transaction_class="person_to_person",
             classification_confidence=0.88,
             classification_reason="Payment to another person",
-            rule="ai:gemini",
+            rule="ai:openai",
         )}
 
     monkeypatch.setattr("categorisation.service.classify_batch", fake_classify_batch)
@@ -163,8 +163,7 @@ def test_duplicate_ai_pattern_is_applied_to_every_transaction(monkeypatch: pytes
 
 def test_ai_disabled_skips_providers_and_preserves_deterministic_results(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
     monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", False)
-    monkeypatch.setattr("categorisation.service.settings.gemini_api_key", "gemini-test-key")
-    monkeypatch.setattr("categorisation.service.settings.openrouter_api_key", "openrouter-test-key")
+    monkeypatch.setattr("categorisation.service.settings.openai_api_key", "openai-test-key")
 
     def fail_if_called(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("AI provider should not be called when disabled")
@@ -186,8 +185,7 @@ def test_ai_disabled_skips_providers_and_preserves_deterministic_results(monkeyp
 
 def test_ai_enabled_keeps_provider_flow_reachable(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", True)
-    monkeypatch.setattr("categorisation.service.settings.gemini_api_key", "gemini-test-key")
-    monkeypatch.setattr("categorisation.service.settings.openrouter_api_key", "openrouter-test-key")
+    monkeypatch.setattr("categorisation.service.settings.openai_api_key", "openai-test-key")
     calls = 0
 
     def classify(items: list[object], _category_names: list[str]) -> dict[str, CategorisationResult]:
@@ -200,7 +198,7 @@ def test_ai_enabled_keeps_provider_flow_reachable(monkeypatch: pytest.MonkeyPatc
             transaction_class="spending",
             classification_confidence=0.9,
             classification_reason="AI test result",
-            rule="ai:gemini",
+            rule="ai:openai",
         )}
 
     monkeypatch.setattr("categorisation.service.classify_batch", classify)
@@ -209,50 +207,34 @@ def test_ai_enabled_keeps_provider_flow_reachable(monkeypatch: pytest.MonkeyPatc
         ["Groceries"],
     )
     assert calls == 1
-    assert result["0"].rule == "ai:gemini"
+    assert result["0"].rule == "ai:openai"
 
 
-def test_openrouter_is_used_when_gemini_returns_no_results(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "gemini-test-key")
-    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
-    monkeypatch.setattr(ai_classifier, "_request_gemini", lambda *_args: None)
-    monkeypatch.setattr(ai_classifier, "_request_openrouter", lambda *_args: {
+def test_openai_failure_returns_empty_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "openai-test-key")
+    monkeypatch.setattr(ai_classifier, "_request_openai", lambda *_args: None)
+    assert ai_classifier.classify_batch(
+        [ai_classifier.AiTransaction("0", "Purchase at Example", "-10", "debit")],
+        ["Groceries"],
+    ) == {}
+
+
+def test_openai_success_returns_validated_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "openai-test-key")
+    monkeypatch.setattr(ai_classifier, "_request_openai", lambda *_args: {
         "choices": [{"message": {"content": '{"transactions":[{"transaction_id":"0","transaction_class":"spending","classification_confidence":0.9,"category_name":"Groceries","category_confidence":0.8,"reason":"Merchant purchase","merchant_name":"Example"}]}'}}],
     })
     result = ai_classifier.classify_batch(
         [ai_classifier.AiTransaction("0", "Purchase at Example", "-10", "debit")],
         ["Groceries"],
     )["0"]
-    assert result.rule == "ai:openrouter"
+    assert result.rule == "ai:openai"
     assert result.category_name == "Groceries"
 
 
-def test_gemini_success_does_not_call_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "gemini-test-key")
-    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
-    monkeypatch.setattr(ai_classifier, "_request_gemini", lambda *_args: {
-        "candidates": [{"content": {"parts": [{"text": '{"transactions":[{"transaction_id":"0","transaction_class":"spending","classification_confidence":0.9,"category_name":"Groceries","category_confidence":0.8,"reason":"Merchant purchase","merchant_name":"Example"}]}' }]}}],
-    })
-    openrouter_calls = 0
-
-    def fail_if_called(*_args: object) -> None:
-        nonlocal openrouter_calls
-        openrouter_calls += 1
-
-    monkeypatch.setattr(ai_classifier, "_request_openrouter", fail_if_called)
-    result = ai_classifier.classify_batch(
-        [ai_classifier.AiTransaction("0", "Purchase at Example", "-10", "debit")],
-        ["Groceries"],
-    )["0"]
-    assert openrouter_calls == 0
-    assert result.rule == "ai:gemini"
-
-
-def test_malformed_openrouter_response_is_rejected_safely(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "")
-    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
-    monkeypatch.setattr(ai_classifier, "_request_gemini", lambda *_args: None)
-    monkeypatch.setattr(ai_classifier, "_request_openrouter", lambda *_args: {
+def test_malformed_openai_response_is_rejected_safely(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "openai-test-key")
+    monkeypatch.setattr(ai_classifier, "_request_openai", lambda *_args: {
         "choices": [{"message": {"content": "not-json"}}],
     })
     assert ai_classifier.classify_batch(
@@ -266,14 +248,14 @@ def test_malformed_openrouter_response_is_rejected_safely(monkeypatch: pytest.Mo
     'json\n{"transactions": []}',
     '  ```json\n{"transactions": []}\n```  ',
 ])
-def test_openrouter_response_text_accepts_json_variants(content: str) -> None:
+def test_openai_response_text_accepts_json_variants(content: str) -> None:
     payload = {"choices": [{"message": {"content": content}}]}
-    assert ai_classifier.json.loads(ai_classifier._openrouter_response_text(payload)) == {"transactions": []}
+    assert ai_classifier.json.loads(ai_classifier._openai_response_text(payload)) == {"transactions": []}
 
 
-def test_openrouter_response_text_accepts_content_parts() -> None:
+def test_openai_response_text_accepts_content_parts() -> None:
     payload = {"choices": [{"message": {"content": [{"type": "text", "text": '{"transactions": []}'}]}}]}
-    assert ai_classifier._openrouter_response_text(payload) == '{"transactions": []}'
+    assert ai_classifier._openai_response_text(payload) == '{"transactions": []}'
 
 
 @pytest.mark.parametrize("payload", [
@@ -282,16 +264,14 @@ def test_openrouter_response_text_accepts_content_parts() -> None:
     {"choices": []},
     {},
 ])
-def test_openrouter_response_text_rejects_missing_or_empty_content(payload: dict) -> None:
+def test_openai_response_text_rejects_missing_or_empty_content(payload: dict) -> None:
     with pytest.raises(ValueError):
-        ai_classifier._openrouter_response_text(payload)
+        ai_classifier._openai_response_text(payload)
 
 
-def test_invalid_openrouter_category_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "")
-    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
-    monkeypatch.setattr(ai_classifier, "_request_gemini", lambda *_args: None)
-    monkeypatch.setattr(ai_classifier, "_request_openrouter", lambda *_args: {
+def test_invalid_openai_category_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "openai-test-key")
+    monkeypatch.setattr(ai_classifier, "_request_openai", lambda *_args: {
         "choices": [{"message": {"content": '{"transactions":[{"transaction_id":"0","transaction_class":"spending","classification_confidence":0.9,"category_name":"Not A Live Category","category_confidence":0.8,"reason":"Invalid","merchant_name":"Example"}]}'}}],
     })
     assert ai_classifier.classify_batch(
@@ -300,21 +280,21 @@ def test_invalid_openrouter_category_is_rejected(monkeypatch: pytest.MonkeyPatch
     ) == {}
 
 
-def test_openrouter_http_failure_fails_cleanly(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
-    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
+def test_openai_http_failure_fails_cleanly(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "openai-test-key")
 
     def fail(*_args: object, **_kwargs: object) -> None:
-        raise ai_classifier.HTTPError("https://openrouter.ai/api/v1/chat/completions", 503, "Unavailable", {}, io.BytesIO(b"provider unavailable"))
+        raise ai_classifier.HTTPError("https://api.openai.com/v1/chat/completions", 503, "Unavailable", {}, io.BytesIO(b"provider unavailable"))
 
     monkeypatch.setattr(ai_classifier, "urlopen", fail)
     caplog.set_level("ERROR", logger="tracepay.categorisation.ai")
-    assert ai_classifier._request_openrouter("{}", {}, 1) is None
-    assert "request_failed provider=openrouter" in " ".join(record.getMessage() for record in caplog.records)
+    assert ai_classifier._request_openai("{}", {}, 1) is None
+    assert "request_failed provider=openai" in " ".join(record.getMessage() for record in caplog.records)
 
 
-def test_openrouter_success_uses_configured_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
-    monkeypatch.setattr(ai_classifier.settings, "openrouter_timeout_seconds", 45)
+def test_openai_success_uses_configured_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "openai-test-key")
+    monkeypatch.setattr(ai_classifier.settings, "openai_timeout_seconds", 45)
 
     class Response:
         def __enter__(self) -> "Response":
@@ -333,20 +313,20 @@ def test_openrouter_success_uses_configured_timeout(monkeypatch: pytest.MonkeyPa
         return Response()
 
     monkeypatch.setattr(ai_classifier, "urlopen", succeed)
-    assert ai_classifier._request_openrouter("{}", {}, 1) is not None
+    assert ai_classifier._request_openai("{}", {}, 1) is not None
     assert seen["timeout"] == 45
 
 
-def test_openrouter_timeout_fails_cleanly(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
-    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
-    monkeypatch.setattr(ai_classifier.settings, "openrouter_timeout_seconds", 45)
+def test_openai_timeout_fails_cleanly(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "openai-test-key")
+    monkeypatch.setattr(ai_classifier.settings, "openai_timeout_seconds", 45)
 
     def timeout(*_args: object, **_kwargs: object) -> None:
         raise TimeoutError
 
     monkeypatch.setattr(ai_classifier, "urlopen", timeout)
     caplog.set_level("ERROR", logger="tracepay.categorisation.ai")
-    assert ai_classifier._request_openrouter("{}", {}, 1) is None
+    assert ai_classifier._request_openai("{}", {}, 1) is None
     message = " ".join(record.getMessage() for record in caplog.records)
-    assert "request_timeout provider=openrouter" in message
+    assert "request_timeout provider=openai" in message
     assert "timeout_seconds=45" in message

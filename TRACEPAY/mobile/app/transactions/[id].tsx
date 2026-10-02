@@ -9,6 +9,7 @@ import {
   categoryName,
   formatTransactionAmount,
   getTransactionById,
+  transactionAccountLabel,
 } from "../../src/features/transactions/transaction.service";
 import type { TransactionRow } from "../../src/features/transactions/transaction.types";
 import { COLORS } from "../../src/theme/colors";
@@ -92,7 +93,7 @@ export default function TransactionDetailScreen() {
               {formatTransactionAmount(transaction)}
             </Text>
             <Text className="mt-4 text-[14px] text-muted-foreground">
-              {category}
+              {category} · {transactionAccountLabel(transaction)}
             </Text>
           </View>
         )}

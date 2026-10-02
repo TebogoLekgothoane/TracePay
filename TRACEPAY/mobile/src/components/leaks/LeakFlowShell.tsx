@@ -14,7 +14,6 @@ type ShellProps = {
   subtitle?: string;
   children: ReactNode;
   footer?: ReactNode;
-  accentColor?: string;
   onBack?: () => void;
 };
 
@@ -23,7 +22,6 @@ export function LeakFlowShell({
   subtitle,
   children,
   footer,
-  accentColor,
   onBack,
 }: ShellProps) {
   const { colorScheme } = useColorScheme();
@@ -56,7 +54,7 @@ export function LeakFlowShell({
       {footer ? (
         <View
           className="px-5 py-4"
-          style={{ backgroundColor: accentColor ?? palette.surfaceSoft }}
+          style={{ backgroundColor: palette.surfaceSoft }}
         >
           {footer}
         </View>
@@ -70,10 +68,6 @@ type PrimaryFooterProps = {
   subtitle: string;
   buttonLabel: string;
   onPress: () => void;
-  /** @deprecated Kept for call-site compatibility; primary buttons use theme purple. */
-  accentColor?: string;
-  /** @deprecated Accent gradient CTAs removed; always renders primary Button. */
-  variant?: "primary" | "accent";
 };
 
 export function LeakPrimaryFooter({

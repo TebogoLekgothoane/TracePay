@@ -64,6 +64,20 @@ test("parseExtractedTransaction rejects invalid type", () => {
   assertEqual(parseExtractedTransaction({ ...valid, type: "transfer" }), null, "invalid type");
 });
 
+test("parseExtractedTransaction accepts TRACEPAY direction and balance_after aliases", () => {
+  const { type: _ignoredType, balance: _ignoredBalance, ...rest } = valid;
+  const row = parseExtractedTransaction({
+    ...rest,
+    direction: "debit",
+    balance_after: 12500.0,
+    reference: "NETFLIX",
+  });
+  assert(row, "expected a validated transaction");
+  assertEqual(row.type, "debit", "type from direction");
+  assertEqual(row.balance, 12500.0, "balance from balance_after");
+  assertEqual(row.reference, "NETFLIX", "reference");
+});
+
 test("parseExtractedTransaction rejects confidence outside 0..1", () => {
   assertEqual(
     parseExtractedTransaction({ ...valid, category_confidence: 1.5 }),

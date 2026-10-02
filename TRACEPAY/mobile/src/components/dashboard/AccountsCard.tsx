@@ -11,6 +11,8 @@ export type AccountPreview = {
   name: string;
   masked: string;
   balance: string;
+  asOfLabel: string | null;
+  hasWarning: boolean;
   color: string;
   logoDomain: string | null;
 };
@@ -89,9 +91,16 @@ export function AccountsCard({
                 {account.masked}
               </Text>
             </View>
-            <Text className="text-[15px] font-bold text-foreground">
-              {hideBalances ? "R ••••••" : account.balance}
-            </Text>
+            <View className="items-end">
+              <Text className="text-[15px] font-bold text-foreground">
+                {hideBalances ? "R ••••••" : account.balance}
+              </Text>
+              {account.asOfLabel ? (
+                <Text className="mt-0.5 text-[11px] text-muted-foreground">
+                  {account.asOfLabel}
+                </Text>
+              ) : null}
+            </View>
             <ChevronRight
               color={palette.mutedForeground}
               size={18}

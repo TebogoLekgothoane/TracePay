@@ -20,7 +20,7 @@ import {
   getFixRoute,
   getPrimaryFixActionId,
 } from "../../../../src/features/leaks/fixContent";
-import { TRACEPAY, getImpactToneStyles, withAlpha } from "../../../../src/theme/colors";
+import { getImpactToneStyles, withAlpha } from "../../../../src/theme/colors";
 
 const LEAK_ICONS = {
   fees: FileText,
@@ -36,7 +36,6 @@ export default function LeakFixScreen() {
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === "dark" ? "dark" : "light";
-  const trace = TRACEPAY[scheme];
   const content = getFixContent(leakId);
 
   if (!content) {
@@ -58,8 +57,6 @@ export default function LeakFixScreen() {
           title="Start with the easiest fix"
           subtitle="Open the first step-by-step guide"
           buttonLabel="Show steps"
-          accentColor={trace.splashAccentPink}
-          variant="accent"
           onPress={() => {
             if (!primaryActionId) return;
             router.push(getFixRoute(leakId, primaryActionId) as never);

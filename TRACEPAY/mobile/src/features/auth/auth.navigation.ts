@@ -1,4 +1,5 @@
 import { FINANCIAL_ACCOUNTS_SETUP_HREF } from "../accounts/account.navigation";
+import { loadFinancialAccountsSetupDismissed } from "../accounts/account-setup.service";
 import { listAccounts } from "../accounts/account.service";
 
 export type AuthenticatedHomeHref =
@@ -13,8 +14,14 @@ export function authFlowParams(flow: unknown): { flow: string } | Record<string,
 
 export async function resolveAuthenticatedHomeHref(): Promise<AuthenticatedHomeHref> {
   try {
-    const accounts = await listAccounts();
-    return accounts.length === 0 ? FINANCIAL_ACCOUNTS_SETUP_HREF : "/(tabs)";
+    const [accounts, setupDismissed] = await Promise.all([
+      listAccounts(),
+      loadFinancialAccountsSetupDismissed(),
+    ]);
+    if (accounts.length > 0 || setupDismissed) {
+      return "/(tabs)";
+    }
+    return FINANCIAL_ACCOUNTS_SETUP_HREF;
   } catch {
     return "/(tabs)";
   }

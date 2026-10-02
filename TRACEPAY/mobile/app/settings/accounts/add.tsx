@@ -1,30 +1,34 @@
-import { Redirect, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 
+import { AccountStatementSetupFlow } from "../../../src/components/accounts/AccountStatementSetupFlow";
+import { isSaInstitution } from "../../../src/features/accounts/account.constants";
 import {
   LINKED_ACCOUNTS_HREF,
-  TRANSACTIONS_IMPORT_HREF,
+  parseAccountId,
   parseReturnTo,
 } from "../../../src/features/accounts/account.navigation";
 
-/** Account setup is currently entered through the PDF statement flow. */
 export default function AddAccountScreen() {
   const params = useLocalSearchParams<{
     institution?: string;
     returnTo?: string;
+    accountId?: string;
   }>();
-  const returnTo = parseReturnTo(params.returnTo) ?? LINKED_ACCOUNTS_HREF;
   const institution =
-    typeof params.institution === "string" ? params.institution : undefined;
+    typeof params.institution === "string" && isSaInstitution(params.institution)
+      ? params.institution
+      : null;
+  const existingAccountId = parseAccountId(params.accountId);
 
   return (
-    <Redirect
-      href={{
-        pathname: TRANSACTIONS_IMPORT_HREF,
-        params: {
-          returnTo,
-          ...(institution ? { institution } : {}),
-        },
-      }}
+    <AccountStatementSetupFlow
+      existingAccountId={existingAccountId}
+      initialInstitution={institution}
+      mode="app"
+      returnTo={
+        parseReturnTo(params.returnTo) ??
+        (existingAccountId ? `/settings/accounts/${existingAccountId}` : LINKED_ACCOUNTS_HREF)
+      }
     />
   );
 }

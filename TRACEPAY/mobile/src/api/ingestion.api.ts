@@ -72,18 +72,16 @@ async function uploadReadings(readings: readonly IngestionRecord[]): Promise<Ing
   }
 }
 
-export async function enqueueIngestionReadings(readings: readonly IngestionRecord[]): Promise<void> {
+export async function syncIngestionReadings(readings: readonly IngestionRecord[]): Promise<number> {
   await saveIngestionRecords(readings);
-}
 
-export async function flushIngestionQueue(): Promise<number> {
-  const readings = await getQueuedIngestionRecords();
-  if (readings.length === 0) {
+  const queued = await getQueuedIngestionRecords();
+  if (queued.length === 0) {
     return 0;
   }
 
-  const result = await uploadReadings(readings);
-  const submitted = new Set(readings.map((reading) => `${reading.source}:${reading.clientId}`));
+  const result = await uploadReadings(queued);
+  const submitted = new Set(queued.map((reading) => `${reading.source}:${reading.clientId}`));
   const acknowledged = result.readings.filter(
     (reading) =>
       (reading.source === "sms" || reading.source === "notification") &&
@@ -97,10 +95,5 @@ export async function flushIngestionQueue(): Promise<number> {
   }
 
   return result.accepted;
-}
-
-export async function syncIngestionReadings(readings: readonly IngestionRecord[]): Promise<number> {
-  await enqueueIngestionReadings(readings);
-  return flushIngestionQueue();
 }
 

@@ -41,7 +41,7 @@ export function InstitutionLogo({
         <Image
           source={{ uri }}
           style={{ width: size, height: size, borderRadius: size / 2 }}
-          resizeMode="cover"
+          resizeMode="contain"
           onError={() => setFailed(true)}
         />
       ) : (

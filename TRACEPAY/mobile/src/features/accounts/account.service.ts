@@ -1,6 +1,10 @@
 import { getSupabase, isSupabaseConfigured } from "../../lib/supabase";
 import { AccountError } from "./account.errors";
 import {
+  readAccountBalanceRow,
+  type AccountBalanceSummary,
+} from "./account-balance";
+import {
   getAccountsSnapshot,
   resetAccountsSnapshot,
   setAccountsSnapshot,
@@ -8,15 +12,10 @@ import {
 import type {
   CreateAccountInput,
   FinancialAccount,
-  UpdateAccountInput,
 } from "./account.types";
 import {
-  isValidAccountName,
   isValidAccountType,
-  isValidInstitution,
   normalizeCreateAccountInput,
-  sanitizeAccountName,
-  sanitizeInstitution,
 } from "./account.validation";
 
 let accountsRequest: Promise<FinancialAccount[]> | null = null;
@@ -34,6 +33,8 @@ function readAccountRow(value: unknown): FinancialAccount | null {
     institution?: unknown;
     account_type?: unknown;
     currency?: unknown;
+    last_four_digits?: unknown;
+    connection_source?: unknown;
     created_at?: unknown;
     updated_at?: unknown;
   };
@@ -55,6 +56,14 @@ function readAccountRow(value: unknown): FinancialAccount | null {
     return null;
   }
 
+  const lastFourDigits =
+    typeof row.last_four_digits === "string" ? row.last_four_digits : null;
+  const connectionSource =
+    row.connection_source === "open_banking" ||
+    row.connection_source === "statement_import"
+      ? row.connection_source
+      : "manual";
+
   return {
     id: row.id,
     userId: row.user_id,
@@ -62,6 +71,8 @@ function readAccountRow(value: unknown): FinancialAccount | null {
     institution: typeof row.institution === "string" ? row.institution : null,
     accountType: row.account_type,
     currency: row.currency,
+    lastFourDigits,
+    connectionSource,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -99,7 +110,7 @@ export async function listAccounts(): Promise<FinancialAccount[]> {
   const { data, error } = await getSupabase()
     .from("accounts")
     .select(
-      "id, user_id, name, institution, account_type, currency, created_at, updated_at",
+      "id, user_id, name, institution, account_type, currency, last_four_digits, connection_source, created_at, updated_at",
     )
     .order("created_at", { ascending: true });
 
@@ -110,7 +121,9 @@ export async function listAccounts(): Promise<FinancialAccount[]> {
   return readAccountRows(data);
 }
 
-export async function loadAccountBalances(accountIds: readonly string[]): Promise<Record<string, number>> {
+export async function loadAccountBalances(
+  accountIds: readonly string[],
+): Promise<Record<string, AccountBalanceSummary>> {
   await requireAuthenticatedUserId();
   if (accountIds.length === 0) return {};
 
@@ -120,23 +133,14 @@ export async function loadAccountBalances(accountIds: readonly string[]): Promis
 
   if (error) throw new AccountError("Could not load account balances. Please try again.");
 
-  const balances: Record<string, number> = {};
+  const balances: Record<string, AccountBalanceSummary> = {};
   for (const row of data ?? []) {
-    const accountId = row?.account_id;
-    const balance = Number(row?.balance);
-    if (typeof accountId === "string" && Number.isFinite(balance)) {
-      balances[accountId] = balance;
+    const summary = readAccountBalanceRow(row);
+    if (summary) {
+      balances[summary.accountId] = summary;
     }
   }
   return balances;
-}
-
-export function sumAccountBalances(balances: Record<string, number>): number | null {
-  const values = Object.values(balances);
-  if (values.length === 0) {
-    return null;
-  }
-  return values.reduce((sum, value) => sum + value, 0);
 }
 
 export async function loadAccounts(fresh = false): Promise<FinancialAccount[]> {
@@ -184,32 +188,36 @@ export async function loadAccounts(fresh = false): Promise<FinancialAccount[]> {
   return accountsRequest;
 }
 
-export async function ensureBankAccount(
-  institution: string,
+export async function getAccountById(accountId: string): Promise<FinancialAccount | null> {
+  await requireAuthenticatedUserId();
+  if (!accountId) return null;
+
+  const { data, error } = await getSupabase()
+    .from("accounts")
+    .select(
+      "id, user_id, name, institution, account_type, currency, last_four_digits, connection_source, created_at, updated_at",
+    )
+    .eq("id", accountId)
+    .maybeSingle();
+
+  if (error) {
+    throw new AccountError("Could not load this account.");
+  }
+
+  return readAccountRow(data);
+}
+
+export async function requireAccountForImport(
+  accountId: string | null | undefined,
 ): Promise<FinancialAccount> {
-  const bank = sanitizeInstitution(institution);
-  if (!bank) {
-    throw new AccountError("Choose a bank before uploading a statement.");
+  if (!accountId) {
+    throw new AccountError("Choose an account before importing a statement.");
   }
-
-  const accounts = await listAccounts();
-  const target = bank.toLowerCase();
-  const existing = accounts.find((account) => {
-    const institutionName = (account.institution ?? "").trim().toLowerCase();
-    const accountName = account.name.trim().toLowerCase();
-    return institutionName === target || accountName === target || institutionName.startsWith(target) || accountName.startsWith(target);
-  });
-
-  if (existing) {
-    if (existing.name === bank && existing.institution === bank) return existing;
-    return updateAccount({ id: existing.id, name: bank, institution: bank });
+  const account = await getAccountById(accountId);
+  if (!account) {
+    throw new AccountError("The selected account could not be found.");
   }
-
-  return createAccount({
-    name: bank,
-    institution: bank,
-    accountType: "cheque",
-  });
+  return account;
 }
 
 export async function createAccount(
@@ -235,9 +243,11 @@ export async function createAccount(
       institution: normalized.institution,
       account_type: normalized.accountType,
       currency: normalized.currency,
+      last_four_digits: normalized.lastFourDigits,
+      connection_source: normalized.connectionSource,
     })
     .select(
-      "id, user_id, name, institution, account_type, currency, created_at, updated_at",
+      "id, user_id, name, institution, account_type, currency, last_four_digits, connection_source, created_at, updated_at",
     )
     .single();
 
@@ -263,92 +273,51 @@ export async function createAccount(
   return account;
 }
 
-export async function updateAccount(
-  input: UpdateAccountInput,
-): Promise<FinancialAccount> {
-  await requireAuthenticatedUserId();
-
-  const patch: Record<string, string | null> = {};
-  if (input.name !== undefined) {
-    const name = sanitizeAccountName(input.name);
-    if (!isValidAccountName(name)) {
-      throw new AccountError("Enter an account name between 2 and 80 characters.");
-    }
-    patch.name = name;
-  }
-
-  if (input.institution !== undefined) {
-    if (input.institution === null || input.institution.trim() === "") {
-      patch.institution = null;
-    } else {
-      const institution = sanitizeInstitution(input.institution);
-      if (!isValidInstitution(institution)) {
-        throw new AccountError("Institution must be between 2 and 80 characters.");
-      }
-      patch.institution = institution;
-    }
-  }
-
-  if (input.accountType !== undefined) {
-    if (!isValidAccountType(input.accountType)) {
-      throw new AccountError("Choose a valid account type.");
-    }
-    patch.account_type = input.accountType;
-  }
-
-  if (Object.keys(patch).length === 0) {
-    throw new AccountError("Nothing to update.");
-  }
-
-  const mutationId = ++mutationCounter;
-  const { data, error } = await getSupabase()
-    .from("accounts")
-    .update(patch)
-    .eq("id", input.id)
-    .select(
-      "id, user_id, name, institution, account_type, currency, created_at, updated_at",
-    )
-    .single();
-
-  if (error || !data) {
-    throw new AccountError("Could not update your account. Please try again.");
-  }
-
-  const account = readAccountRow(data);
-  if (!account) {
-    throw new AccountError("Could not read the updated account. Please try again.");
-  }
-
-  if (mutationId === mutationCounter) {
-    const current = getAccountsSnapshot();
-    setAccountsSnapshot({
-      accounts: current.accounts.map((item) =>
-        item.id === account.id ? account : item,
-      ),
-      loading: false,
-      error: null,
-      initialized: true,
-    });
-  }
-
-  return account;
-}
-
 export async function deleteAccount(accountId: string): Promise<void> {
-  await requireAuthenticatedUserId();
+  const userId = await requireAuthenticatedUserId();
 
   if (!accountId) {
     throw new AccountError("Account not found.");
   }
 
+  const supabase = getSupabase();
   const mutationId = ++mutationCounter;
-  const { error } = await getSupabase()
+
+  const { data: statements, error: statementsError } = await supabase
+    .from("statement_imports")
+    .select("file_path")
+    .eq("account_id", accountId)
+    .eq("user_id", userId);
+
+  if (statementsError) {
+    throw new AccountError("Could not remove your account. Please try again.");
+  }
+
+  const filePaths = (statements ?? [])
+    .map((row) => (typeof row.file_path === "string" ? row.file_path : null))
+    .filter((path): path is string => typeof path === "string" && path.length > 0);
+
+  const { data: deletedRows, error } = await supabase
     .from("accounts")
     .delete()
-    .eq("id", accountId);
+    .eq("id", accountId)
+    .eq("user_id", userId)
+    .select("id");
 
-  if (error) {
+  if (error || !deletedRows || deletedRows.length === 0) {
     throw new AccountError("Could not remove your account. Please try again.");
+  }
+
+  if (filePaths.length > 0) {
+    const { error: storageError } = await supabase.storage
+      .from("statements")
+      .remove(filePaths);
+    if (storageError) {
+      console.warn("[TracePay][accounts] statement_storage_cleanup_failed", {
+        accountId,
+        count: filePaths.length,
+      });
+    }
   }
 
   if (mutationId === mutationCounter) {

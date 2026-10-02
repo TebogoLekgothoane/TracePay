@@ -1,1 +1,1 @@
-"""Free/open-source PDF statement processing pipeline."""
+"""Bank-statement PDF processing: PyMuPDF, Camelot, PaddleOCR, Tesseract fallback."""

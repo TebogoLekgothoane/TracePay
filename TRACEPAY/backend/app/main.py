@@ -8,7 +8,6 @@ from fastapi.responses import JSONResponse
 
 from app.auth import require_supabase_user
 from app.category_catalog import fetch_category_names
-from app.config import settings
 from app.rate_limit import enforce_rate_limit
 from pdf_processor.main import PdfProcessingError, process_pdf
 
@@ -115,9 +114,9 @@ async def extraction_preview(
         access_token = (authorization or "").removeprefix("Bearer ").strip()
 
         def extract_statement():
-            category_names = (
-                fetch_category_names(access_token) if settings.ai_categorisation_enabled else []
-            )
+            # Always load the live catalog so statement categories can be mapped.
+            # AI categorisation still respects AI_CATEGORISATION_ENABLED inside categorise_batch.
+            category_names = fetch_category_names(access_token) if access_token else []
             return process_pdf(
                 content,
                 filename,

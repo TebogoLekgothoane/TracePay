@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { SetupBrandHeader } from "../../src/components/auth/SetupBrandHeader";
 import { SuccessCelebration } from "../../src/components/feedback/SuccessCelebration";
 import { Button } from "../../src/components/ui/Button";
+import { ADD_ACCOUNT_HREF } from "../../src/features/accounts/account.navigation";
 
 function parseCount(value: unknown): number {
   if (typeof value !== "string") {
@@ -34,7 +35,22 @@ export default function ImportSuccessScreen() {
           subtitle={`${countLabel} transaction${count === 1 ? "" : "s"} imported for ${accountName}.`}
           title="Transactions added"
         />
-        <View className="pb-4">
+        <Text className="mb-4 text-center text-[14px] leading-6 text-muted-foreground">
+          Use another bank? Add a separate account for each bank — TracePay combines them on
+          your dashboard.
+        </Text>
+        <View className="gap-3 pb-4">
+          <Button
+            onPress={() =>
+              router.replace({
+                pathname: ADD_ACCOUNT_HREF,
+                params: { returnTo: "/(tabs)" },
+              })
+            }
+            variant="secondary"
+          >
+            Add another bank account
+          </Button>
           <Button onPress={() => router.replace("/(tabs)")}>
             Continue to TracePay
           </Button>

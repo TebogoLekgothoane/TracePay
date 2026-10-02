@@ -47,8 +47,6 @@ export default function LeakProgressScreen() {
           title="Take action on remaining leaks"
           subtitle="Keep going — you're already making progress"
           buttonLabel="Continue"
-          accentColor={trace.splashAccentPink}
-          variant="accent"
           onPress={() => router.push(`/leak/${leakId}/fix`)}
         />
       }

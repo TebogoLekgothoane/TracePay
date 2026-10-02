@@ -46,13 +46,34 @@ export function formatAccountTypeLabel(type: AccountType): string {
   return ACCOUNT_TYPE_LABELS[type];
 }
 
+export function formatAccountHeading(account: FinancialAccount): string {
+  return account.institution?.trim() || account.name;
+}
+
 export function formatAccountSubtitle(account: FinancialAccount): string {
+  const heading = formatAccountHeading(account);
+  const typeLabel = formatAccountTypeLabel(account.accountType);
+  const nickname = account.name.trim();
+  const showNickname =
+    nickname.length > 0 && nickname !== heading && nickname !== typeLabel;
   const parts = [
-    account.institution,
-    formatAccountTypeLabel(account.accountType),
+    showNickname ? nickname : null,
+    typeLabel,
+    account.lastFourDigits ? `••••${account.lastFourDigits}` : null,
   ].filter(Boolean);
 
   return parts.join(" · ");
+}
+
+export function formatStatementCount(count: number): string {
+  if (count === 1) {
+    return "1 statement";
+  }
+  return `${count} statements`;
+}
+
+export function isValidLastFourDigits(value: string): boolean {
+  return /^\d{4}$/.test(value.trim());
 }
 
 export function formatAccountsCount(count: number): string {
@@ -90,7 +111,11 @@ export function colorForAccount(account: FinancialAccount): string {
   return ACCOUNT_PREVIEW_COLORS[hashString(seed) % ACCOUNT_PREVIEW_COLORS.length];
 }
 
-export function toAccountPreview(account: FinancialAccount, balance: number | null = null): AccountPreview {
+export function toAccountPreview(
+  account: FinancialAccount,
+  balance: number | null = null,
+  options?: { asOfLabel?: string | null; hasWarning?: boolean },
+): AccountPreview {
   const logoSource = account.institution || account.name;
 
   return {
@@ -98,6 +123,8 @@ export function toAccountPreview(account: FinancialAccount, balance: number | nu
     name: account.name,
     masked: formatAccountSubtitle(account),
     balance: balance === null ? "—" : formatRandAmount(balance),
+    asOfLabel: options?.asOfLabel ?? null,
+    hasWarning: options?.hasWarning ?? false,
     color: colorForAccount(account),
     logoDomain: resolveInstitutionLogoDomain(logoSource),
   };
@@ -108,16 +135,30 @@ export function normalizeCreateAccountInput(input: {
   institution?: string;
   accountType: AccountType;
   currency?: string;
+  lastFourDigits?: string;
+  connectionSource?: FinancialAccount["connectionSource"];
 }): {
   name: string;
   institution: string | null;
   accountType: AccountType;
   currency: string;
+  lastFourDigits: string | null;
+  connectionSource: FinancialAccount["connectionSource"];
 } {
   const name = sanitizeAccountName(input.name);
   const institutionRaw = sanitizeInstitution(input.institution ?? "");
   const institution = institutionRaw.length > 0 ? institutionRaw : null;
   const currency = (input.currency ?? DEFAULT_ACCOUNT_CURRENCY).toUpperCase();
+  const lastFourRaw = input.lastFourDigits?.trim() ?? "";
+  const lastFourDigits =
+    lastFourRaw.length > 0
+      ? isValidLastFourDigits(lastFourRaw)
+        ? lastFourRaw
+        : (() => {
+            throw new Error("Last 4 digits must be exactly 4 numbers.");
+          })()
+      : null;
+  const connectionSource = input.connectionSource ?? "manual";
 
   if (!isValidAccountName(name)) {
     throw new Error("Enter an account name between 2 and 80 characters.");
@@ -137,5 +178,7 @@ export function normalizeCreateAccountInput(input: {
     institution,
     accountType: input.accountType,
     currency,
+    lastFourDigits,
+    connectionSource,
   };
 }
