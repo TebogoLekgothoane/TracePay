@@ -285,6 +285,14 @@ def _monthly_features(transactions: list[FeatureTransaction]) -> list[MonthlyFea
                     ZERO,
                 ),
                 transaction_count=len(items),
+                outflow_transaction_count=sum(
+                    item.transaction_type == "debit"
+                    or (
+                        item.transaction_type is None
+                        and item.categorisation.transaction_class != "income"
+                    )
+                    for item in items
+                ),
                 category_totals=dict(category_totals),
                 merchant_totals=dict(merchant_totals),
                 bank_fee_total=sum((amount_of(item) for item in items if item.categorisation.transaction_class == "bank_fee"), ZERO),

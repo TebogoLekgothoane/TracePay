@@ -10,6 +10,8 @@ from .engine import build_financial_features
 from .leak_engine import detect_leaks
 from .leak_models import LeakDetection, LeakDetectionResult
 from .models import FeatureTransaction, FinancialFeatureSnapshot, SpendingProfile
+from .reasoning_engine import analyze_financial_reasoning
+from .reasoning_models import FinancialReasoning, FinancialReasoningResult
 from .service import build_spending_profile
 
 __all__ = [
@@ -20,7 +22,10 @@ __all__ = [
     "BehaviourObservation",
     "LeakDetection",
     "LeakDetectionResult",
+    "FinancialReasoning",
+    "FinancialReasoningResult",
     "analyze_behaviour",
+    "analyze_financial_reasoning",
     "build_financial_features",
     "build_spending_profile",
     "detect_leaks",

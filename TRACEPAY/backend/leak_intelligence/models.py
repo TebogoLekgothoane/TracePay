@@ -126,6 +126,7 @@ class MonthlyFeature(BaseModel):
     total_income: Decimal = Decimal("0")
     total_outflow: Decimal = Decimal("0")
     transaction_count: int = 0
+    outflow_transaction_count: int = 0
     category_totals: dict[str, Decimal] = Field(default_factory=dict)
     merchant_totals: dict[str, Decimal] = Field(default_factory=dict)
     bank_fee_total: Decimal = Decimal("0")

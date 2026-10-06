@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from calendar import monthrange
 from datetime import datetime, time, timezone
 from decimal import Decimal
 
@@ -12,6 +11,7 @@ from .leak_models import LeakDetection, LeakDetectionResult, LeakType
 from .leak_scoring import leak_confidence, severity_for_impact, support_ratio
 from .merchant_display import is_reliable_merchant_display_name, recurring_leak_title
 from .models import FinancialFeatureSnapshot, MerchantFeature
+from .periods import completed_months
 from .recurrence_rules import matches_plausible_recurring_interval
 from .service import FOOD_CATEGORIES, TRANSPORT_CATEGORIES
 
@@ -360,7 +360,7 @@ def _cash_leaks(
     cash_observations = observations.get("cash_dependency", [])
     if not cash_observations:
         return []
-    months = max(1, len(_completed_months(snapshot)))
+    months = max(1, len(completed_months(snapshot)))
     impact = cash.atm_fee_total / Decimal(months)
     confidence = leak_confidence(
         support=None,
@@ -493,18 +493,8 @@ def _leak(
     )
 
 
-def _completed_months(snapshot: FinancialFeatureSnapshot):
-    months = list(snapshot.months)
-    if not months or snapshot.date_end is None:
-        return months
-    last_day = monthrange(snapshot.date_end.year, snapshot.date_end.month)[1]
-    if months[-1].month == snapshot.date_end.strftime("%Y-%m") and snapshot.date_end.day < last_day:
-        return months[:-1]
-    return months
-
-
 def _completed_month_average(snapshot: FinancialFeatureSnapshot, selector):
-    months = _completed_months(snapshot)
+    months = completed_months(snapshot)
     if not months:
         return None
     return sum((selector(month) for month in months), Decimal("0")) / Decimal(len(months))

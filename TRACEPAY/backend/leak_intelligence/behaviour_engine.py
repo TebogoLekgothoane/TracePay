@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from calendar import monthrange
 from datetime import date
@@ -52,7 +53,14 @@ def _result(
 
 def _spending_observations(snapshot: FinancialFeatureSnapshot) -> list[BehaviourObservation]:
     compare = _period_compare(
-        [(month.month, month.total_outflow, month.transaction_count) for month in snapshot.months],
+        [
+            (
+                month.month,
+                month.total_outflow,
+                month.outflow_transaction_count,
+            )
+            for month in snapshot.months
+        ],
         snapshot.date_end,
     )
     if compare is None:
@@ -63,7 +71,10 @@ def _spending_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviour
         subject="total spending",
         compare=compare,
         support=None,
-        supporting_features=["months[].total_outflow"],
+        supporting_features=[
+            "months[].total_outflow",
+            "months[].outflow_transaction_count",
+        ],
         period_start=snapshot.date_start,
         period_end=snapshot.date_end,
     )
@@ -695,7 +706,10 @@ def _observation(
     period_end,
 ) -> BehaviourObservation:
     return BehaviourObservation(
-        observation_id=f"{behavior_type}:{_key(evidence.get('merchant_key') or evidence.get('subject') or title)}",
+        observation_id=_observation_id(
+            behavior_type,
+            evidence.get("merchant_key") or evidence.get("subject") or title,
+        ),
         behavior_type=behavior_type,
         title=title,
         description=description,
@@ -708,5 +722,7 @@ def _observation(
     )
 
 
-def _key(value: object) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", str(value).lower()).strip("-")[:120] or "overall"
+def _observation_id(behavior_type: BehaviorType, subject: object) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "-", str(subject).lower()).strip("-")
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+    return f"{behavior_type}:{digest}"
