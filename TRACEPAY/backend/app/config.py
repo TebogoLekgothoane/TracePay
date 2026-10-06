@@ -1,7 +1,21 @@
 import base64
 import json
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_PDF_EXTRACTION_TRUE = {"1", "true", "yes", "on"}
+
+
+def _explicit_pdf_extraction_opt_in(value: object) -> bool:
+    """Enable AI PDF extraction only for an explicit true. Anything else stays off."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value == 1
+    if value is None:
+        return False
+    return str(value).strip().lower() in _PDF_EXTRACTION_TRUE
 
 
 class Settings(BaseSettings):
@@ -23,10 +37,15 @@ class Settings(BaseSettings):
     anthropic_base_url: str = "https://api.anthropic.com"
     anthropic_timeout_seconds: int = 45
     ai_categorisation_enabled: bool = False
-    ai_extraction_enabled: bool = True
+    ai_pdf_extraction_enabled: bool = False
     ai_extraction_timeout_seconds: int = 180
     ai_extraction_max_pages: int = 20
     gemini_fallback_models: str = "gemini-3.8-flash,gemini-2.5-flash"
+
+    @field_validator("ai_pdf_extraction_enabled", mode="before")
+    @classmethod
+    def _parse_ai_pdf_extraction_enabled(cls, value: object) -> bool:
+        return _explicit_pdf_extraction_opt_in(value)
 
     def supabase_publishable_key(self) -> str:
         """Return the anon/publishable key only. A service-role value is treated as missing."""

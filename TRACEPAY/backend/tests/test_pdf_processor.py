@@ -166,9 +166,13 @@ def test_description_category_header_is_normalised() -> None:
     assert transaction.amount == Decimal("-450.00")
 
 
-def test_usable_classical_extract_skips_ai_fallback() -> None:
+def test_usable_classical_extract_skips_ai_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.config import settings
     from pdf_processor.main import _needs_ai_fallback
     from pdf_processor.models import ValidationResult
+
+    monkeypatch.setattr(settings, "ai_pdf_extraction_enabled", True)
+    monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
 
     transactions = [
         Transaction(
@@ -192,10 +196,13 @@ def test_usable_classical_extract_skips_ai_fallback() -> None:
     assert _needs_ai_fallback("table", validation, transactions) is False
 
 
-def test_empty_or_unknown_extract_still_requests_ai() -> None:
+def test_empty_or_unknown_extract_still_requests_ai(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.config import settings
     from pdf_processor.main import _needs_ai_fallback
     from pdf_processor.models import ValidationResult
 
+    monkeypatch.setattr(settings, "ai_pdf_extraction_enabled", True)
+    monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
     empty = ValidationResult(
         status="failed",
         confidence=0,

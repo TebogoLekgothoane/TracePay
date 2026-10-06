@@ -107,7 +107,7 @@ class AiExtractionError(ValueError):
 
 
 def ai_extraction_available() -> bool:
-    if not settings.ai_extraction_enabled:
+    if not settings.ai_pdf_extraction_enabled:
         return False
     return bool(
         settings.anthropic_api_key.strip()

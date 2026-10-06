@@ -47,7 +47,7 @@ The extraction response uses one canonical transaction shape for both file types
 transaction_date, description, amount, transaction_type, currency, balance
 ```
 
-PDF processing tries PyMuPDF first, then Camelot for structured tables in text-based PDFs. Scanned pages are preprocessed with OpenCV/Pillow and read with PaddleOCR 3.x; Tesseract is only used when PaddleOCR fails or returns low confidence. The response includes `extraction_method` and `extraction_confidence` plus normalized transactions and a validation result. The mobile app uploads the original PDF to the private `statements` bucket and stores only normalized `pdf` transactions in PostgreSQL.
+PDF processing tries PyMuPDF first, then Camelot for structured tables in text-based PDFs. Scanned pages are preprocessed with OpenCV/Pillow and read with PaddleOCR 3.x; Tesseract is only used when PaddleOCR fails or returns low confidence. AI-assisted PDF extraction runs only when `AI_PDF_EXTRACTION_ENABLED=true` and classical extraction still cannot produce a usable result. It is disabled by default because the PDF may contain sensitive financial information. That flag is independent of `AI_CATEGORISATION_ENABLED`, which only classifies unknown transactions after extraction and never receives the statement PDF. The response includes `extraction_method` and `extraction_confidence` plus normalized transactions and a validation result. The mobile app uploads the original PDF to the private `statements` bucket and stores only normalized `pdf` transactions in PostgreSQL.
 
 Install the Python dependencies before starting the extraction API:
 
