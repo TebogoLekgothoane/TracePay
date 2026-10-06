@@ -430,39 +430,6 @@ export function AccountStatementSetupFlow({
             </View>
           ) : null}
 
-          {(importOnly || loadedAccount) && heroAccount ? (
-            <View className="mt-6 items-center rounded-3xl bg-card px-5 py-6">
-              <InstitutionLogo
-                name={formatAccountHeading(heroAccount)}
-                logoDomain={resolveInstitutionLogoDomain(heroAccount.institution)}
-                color={colorForAccount(heroAccount)}
-                size={72}
-              />
-              <Text className="mt-4 text-[20px] font-bold text-foreground">
-                {formatAccountHeading(heroAccount)}
-              </Text>
-              <Text className="mt-1 text-[13px] text-muted-foreground">
-                {formatAccountSubtitle(heroAccount)}
-              </Text>
-            </View>
-          ) : null}
-
-          {!importOnly && creatingNew && heroBank && !loadedAccount ? (
-            <View className="mt-5 items-center rounded-3xl bg-card px-5 py-6">
-              <InstitutionLogo
-                name={heroBank}
-                logoDomain={resolveInstitutionLogoDomain(heroBank)}
-                color={institutionColor(heroBank)}
-                size={72}
-              />
-              <Text className="mt-4 text-[20px] font-bold text-foreground">{heroBank}</Text>
-              <Text className="mt-1 text-[13px] text-muted-foreground">
-                {formatAccountTypeLabel(accountType)}
-                {nickname.trim() ? ` · ${nickname.trim()}` : ""}
-              </Text>
-            </View>
-          ) : null}
-
           {(importOnly && heroAccount) || loadedAccount || (!importOnly && creatingNew && heroBank) ? (
             <View className="mt-6">
               <StatementImportPanel

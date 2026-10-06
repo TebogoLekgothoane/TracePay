@@ -1,46 +1,39 @@
-import re
+"""Deterministic transaction classification."""
 
-from .models import CategorisationResult
-from .rules import RULES
+from __future__ import annotations
 
+from categorisation.models import CategorisationResult
+from categorisation.normalize import extract_merchant_name, normalize_description, normalize_for_matching
+from categorisation.rules import RULES
 
-def normalize_description(value: str | None) -> str:
-    """Normalize bank descriptions without removing meaningful merchant tokens."""
-    text = (value or "").upper().strip()
-    text = text.replace("’", "'")
-    text = re.sub(r"\s+", " ", text)
-    return text
+# Re-export for callers/tests that imported normalize_description from classifier.
+__all__ = ["classify_transaction", "normalize_description", "normalize_for_matching"]
 
 
-def classify_transaction(description: str | None, transaction_type: str | None = None) -> CategorisationResult:
+def classify_transaction(
+    description: str | None,
+    transaction_type: str | None = None,
+) -> CategorisationResult:
     normalized = normalize_description(description)
+    matching_text = normalize_for_matching(description) or normalized
     kind = (transaction_type or "").lower()
+    merchant = extract_merchant_name(description)
+
     for rule in RULES:
-        if rule.matcher(normalized, kind):
-            if rule.name == "description:goalsave":
-                transaction_class = "internal_transfer"
-                category_name = None
-            elif rule.name == "description:fixed-deposit":
-                transaction_class = "savings"
-                category_name = rule.category_name
-            elif rule.name == "description:person-payment":
-                transaction_class = "person_to_person"
-                category_name = None
-            elif rule.name == "description:service-fee":
-                transaction_class = "bank_fee"
-                category_name = rule.category_name
-            elif rule.category_name in {"Salary", "Other Income"}:
-                transaction_class = "income"
-                category_name = rule.category_name
-            else:
-                transaction_class = "spending"
-                category_name = rule.category_name or None
+        if rule.matcher(matching_text, kind) or (
+            matching_text != normalized and rule.matcher(normalized, kind)
+        ):
             return CategorisationResult(
-                category_name=category_name,
-                category_confidence=rule.confidence if category_name else 0,
+                category_name=rule.category_name or None,
+                category_confidence=rule.confidence if rule.category_name else 0,
                 classification_confidence=rule.confidence,
-                transaction_class=transaction_class,
-                classification_reason=f"Deterministic rule: {rule.name}",
+                transaction_class=rule.transaction_class,  # type: ignore[arg-type]
+                classification_reason=f"Matched deterministic rule: {rule.name}",
                 rule=rule.name,
+                merchant_name=merchant,
             )
-    return CategorisationResult()
+    return CategorisationResult(
+        merchant_name=merchant,
+        classification_reason=None,
+        transaction_class="unknown",
+    )

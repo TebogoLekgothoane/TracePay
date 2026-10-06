@@ -5,10 +5,17 @@ import uuid
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from app.auth import require_supabase_user
 from app.category_catalog import fetch_category_names
 from app.rate_limit import enforce_rate_limit
+from categorisation.reprocess import (
+    as_categorisable,
+    classification_update_payload,
+    metrics_dict,
+    reprocess_transactions,
+)
 from pdf_processor.main import PdfProcessingError, process_pdf
 
 PDF_MAGIC = b"%PDF"
@@ -123,6 +130,7 @@ async def extraction_preview(
                 _user_id,
                 password,
                 category_names,
+                access_token,
             )
 
         result = await asyncio.to_thread(extract_statement)
@@ -132,3 +140,51 @@ async def extraction_preview(
 
     logger.info("extraction_completed filename=%s method=%s status=%s transactions=%s confidence=%s", filename, result.raw_extraction.extraction_method, result.validation.status, len(result.transactions), result.validation.confidence)
     return result.model_dump(mode="json")
+
+
+class ReprocessTransactionIn(BaseModel):
+    transaction_id: str = Field(min_length=1, max_length=80)
+    description: str = Field(min_length=1, max_length=500)
+    amount: float
+    transaction_type: str = Field(pattern="^(debit|credit)$")
+
+
+class ReprocessRequest(BaseModel):
+    transactions: list[ReprocessTransactionIn] = Field(min_length=1, max_length=500)
+
+
+@app.post("/categorisation/reprocess")
+async def categorisation_reprocess(
+    payload: ReprocessRequest,
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Re-run categorisation for existing transactions without creating duplicates."""
+    enforce_rate_limit(f"categorise-user:{_user_id}", 10, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+
+    def run_reprocess() -> dict[str, object]:
+        category_names = fetch_category_names(access_token) if access_token else []
+        items = [
+            as_categorisable(
+                item.transaction_id,
+                item.description,
+                item.amount,
+                item.transaction_type,
+            )
+            for item in payload.transactions
+        ]
+        run = reprocess_transactions(items, category_names, access_token=access_token)
+        return {
+            "classifications": classification_update_payload(run.results),
+            "metrics": metrics_dict(run.metrics),
+        }
+
+    result = await asyncio.to_thread(run_reprocess)
+    logger.info(
+        "categorisation_reprocess_completed user_id_prefix=%s total=%s categorised=%s",
+        _user_id[:8],
+        result["metrics"]["total_transactions"],  # type: ignore[index]
+        result["metrics"]["categorised_transactions"],  # type: ignore[index]
+    )
+    return result

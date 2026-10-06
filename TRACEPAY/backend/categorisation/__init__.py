@@ -1,6 +1,11 @@
-"""Deterministic transaction categorisation."""
+"""Deterministic transaction categorisation with merchant memory and AI fallback."""
 
-from .classifier import classify_transaction, normalize_description
-from .models import CategorisationResult
+from categorisation.models import CategorisationResult
+from categorisation.service import CategorisableTransaction, categorise_batch, categorise_batch_with_metrics
 
-__all__ = ["CategorisationResult", "classify_transaction", "normalize_description"]
+__all__ = [
+    "CategorisableTransaction",
+    "CategorisationResult",
+    "categorise_batch",
+    "categorise_batch_with_metrics",
+]

@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     ai_extraction_enabled: bool = True
     ai_extraction_timeout_seconds: int = 180
     ai_extraction_max_pages: int = 20
-    gemini_fallback_models: str = "gemini-3.8-flash,gemini-2.0-flash"
+    gemini_fallback_models: str = "gemini-3.8-flash,gemini-2.5-flash"
 
     def supabase_publishable_key(self) -> str:
         """Return the anon/publishable key only. A service-role value is treated as missing."""

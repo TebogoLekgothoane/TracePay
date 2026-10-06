@@ -28,6 +28,7 @@ def process_pdf(
     authenticated_user_id: str,
     password: str | None = None,
     category_names: list[str] | None = None,
+    access_token: str | None = None,
 ) -> ProcessingResult:
     logger.info(
         "pdf_processing_started filename=%s size_bytes=%s user_id_prefix=%s",
@@ -160,10 +161,13 @@ def process_pdf(
                 transaction.description,
                 transaction.amount,
                 transaction.type,
+                statement_category=transaction.category_name,
+                bank=ai_statement.bank if ai_statement else None,
             )
             for index, transaction in enumerate(transactions)
         ],
         category_names,
+        access_token=access_token,
     )
     catalog = {name.casefold(): name for name in (category_names or [])}
     transactions = [
@@ -223,24 +227,19 @@ def process_pdf(
 
 
 def _with_category(transaction: Transaction, classification, catalog: dict[str, str]) -> Transaction:
+    """Apply TracePay classification. Statement category is evidence only (handled in categorise_batch)."""
     category = classification.category_name
-    confidence = classification.category_confidence
-    rule = classification.rule
-    if category is None and transaction.category_name:
-        key = transaction.category_name.casefold().strip()
-        mapped = catalog.get(key) or catalog.get("other") or transaction.category_name
-        category = mapped
-        confidence = max(transaction.category_confidence, 0.85)
-        rule = "statement:category"
+    if category and catalog:
+        category = catalog.get(category.casefold(), category)
     return transaction.model_copy(
         update={
             "category_name": category,
-            "category_confidence": confidence,
-            "category_rule": rule,
+            "category_confidence": classification.category_confidence,
+            "category_rule": classification.rule,
             "transaction_class": classification.transaction_class,
             "classification_confidence": classification.classification_confidence,
             "classification_reason": classification.classification_reason,
-            "merchant_name": classification.merchant_name,
+            "merchant_name": classification.merchant_name or transaction.merchant_name,
         },
     )
 
