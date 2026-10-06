@@ -12,6 +12,7 @@ from app.behaviour_analysis import build_user_behaviour_analysis
 from app.category_catalog import fetch_category_names
 from app.financial_features import build_user_feature_snapshot
 from app.financial_reasoning import build_user_financial_reasoning
+from app.financial_recommendations import build_user_financial_recommendations
 from app.leak_detection import build_user_leak_detections
 from app.rate_limit import enforce_rate_limit
 from categorisation.reprocess import (
@@ -263,5 +264,22 @@ async def financial_reasoning(
         _user_id[:8],
         result.transaction_count,
         len(result.analyses),
+    )
+    return result.model_dump(mode="json")
+
+
+@app.get("/financial-recommendations")
+async def financial_recommendations(
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Return sanitized, non-automated next steps for current financial reasoning."""
+    enforce_rate_limit(f"recommendations-user:{_user_id}", 20, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    result = await build_user_financial_recommendations(_user_id, access_token)
+    logger.info(
+        "financial_recommendations_completed user_id_prefix=%s recommendations=%s",
+        _user_id[:8],
+        result.recommendation_count,
     )
     return result.model_dump(mode="json")

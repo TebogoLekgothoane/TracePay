@@ -44,6 +44,7 @@ const LANGUAGE_HREF = "/settings/language";
 const HELP_HREF = "/settings/help";
 const LEAK_INTELLIGENCE_DEBUG_HREF = "/debug/leak-intelligence";
 const FINANCIAL_REASONING_DEBUG_HREF = "/debug/financial-reasoning";
+const FINANCIAL_RECOMMENDATIONS_DEBUG_HREF = "/debug/financial-recommendations";
 
 type SettingsRow = {
   id: string;
@@ -261,6 +262,13 @@ export default function ProfileScreen() {
           value: "Dev only",
           Icon: FlaskConical,
           href: FINANCIAL_REASONING_DEBUG_HREF,
+        },
+        {
+          id: "financial-recommendations-debug",
+          label: "Recommendation & Action (debug)",
+          value: "Dev only",
+          Icon: FlaskConical,
+          href: FINANCIAL_RECOMMENDATIONS_DEBUG_HREF,
         },
       ]
     : [];
