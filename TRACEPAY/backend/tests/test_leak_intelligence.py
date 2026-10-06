@@ -20,6 +20,7 @@ def _result(**overrides: object) -> CategorisationResult:
 
 def _transaction(
     transaction_id: str = "tx-1",
+    user_id: str = "test-user",
     amount: Decimal = Decimal("50.00"),
     categorisation: CategorisationResult | None = None,
     description: str = "CHECKERS SANDTON",
@@ -28,6 +29,7 @@ def _transaction(
 ) -> FeatureTransaction:
     return FeatureTransaction(
         transaction_id=transaction_id,
+        user_id=user_id,
         amount=amount,
         categorisation=categorisation or _result(),
         description=description,

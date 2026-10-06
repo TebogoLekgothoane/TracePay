@@ -8,7 +8,9 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.auth import require_supabase_user
+from app.behaviour_analysis import build_user_behaviour_analysis
 from app.category_catalog import fetch_category_names
+from app.financial_features import build_user_feature_snapshot
 from app.rate_limit import enforce_rate_limit
 from categorisation.reprocess import (
     as_categorisable,
@@ -188,3 +190,40 @@ async def categorisation_reprocess(
         result["metrics"]["categorised_transactions"],  # type: ignore[index]
     )
     return result
+
+
+@app.get("/financial-features")
+async def financial_features(
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Return user-scoped financial observations without making leak decisions."""
+    enforce_rate_limit(f"features-user:{_user_id}", 20, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    snapshot = await build_user_feature_snapshot(_user_id, access_token)
+    logger.info(
+        "financial_features_completed user_id_prefix=%s transactions=%s merchants=%s categories=%s",
+        _user_id[:8],
+        snapshot.transaction_count,
+        len(snapshot.merchants),
+        len(snapshot.categories),
+    )
+    return snapshot.model_dump(mode="json")
+
+
+@app.get("/behaviour-analysis")
+async def behaviour_analysis(
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Return neutral, user-scoped behavioural observations."""
+    enforce_rate_limit(f"behaviour-user:{_user_id}", 20, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    result = await build_user_behaviour_analysis(_user_id, access_token)
+    logger.info(
+        "behaviour_analysis_completed user_id_prefix=%s transactions=%s observations=%s",
+        _user_id[:8],
+        result.transaction_count,
+        len(result.observations),
+    )
+    return result.model_dump(mode="json")
