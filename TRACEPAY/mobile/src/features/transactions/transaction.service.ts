@@ -73,3 +73,23 @@ export async function listRecentTransactions(
   );
   return mergeRecentTransactions(batches.flat(), limit);
 }
+
+export async function getTransactionById(transactionId: string): Promise<TransactionRow | null> {
+  await requireAuthenticatedUserId();
+  if (!transactionId) {
+    return null;
+  }
+
+  const { data, error } = await getSupabase()
+    .from("transactions")
+    .select(TRANSACTION_SELECT)
+    .eq("id", transactionId)
+    .eq("is_duplicate", false)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error("Could not load this transaction.");
+  }
+
+  return readTransactionRow(data);
+}
