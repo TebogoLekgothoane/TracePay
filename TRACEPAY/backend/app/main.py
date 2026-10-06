@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from app.auth import require_supabase_user
 from app.behaviour_analysis import build_user_behaviour_analysis
 from app.category_catalog import fetch_category_names
-from app.financial_features import build_user_feature_snapshot
+from app.financial_features import build_user_feature_snapshot, public_feature_payload
 from app.financial_reasoning import build_user_financial_reasoning
 from app.financial_recommendations import build_user_financial_recommendations
 from app.leak_detection import build_user_leak_detections
@@ -211,7 +211,7 @@ async def financial_features(
         len(snapshot.merchants),
         len(snapshot.categories),
     )
-    return snapshot.model_dump(mode="json")
+    return public_feature_payload(snapshot)
 
 
 @app.get("/behaviour-analysis")

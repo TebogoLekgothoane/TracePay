@@ -10,6 +10,7 @@ from leak_intelligence.behaviour_engine import analyze_behaviour
 from leak_intelligence.behaviour_report import render_behaviour_report
 from leak_intelligence.engine import build_financial_features
 from leak_intelligence.models import FeatureTransaction
+from leak_intelligence.periods import completed_months
 
 
 def _transaction(
@@ -210,6 +211,27 @@ def test_analysis_isolated_between_separate_user_snapshots() -> None:
     user_b = build_financial_features("user-b", [user_b_transaction])
     assert analyze_behaviour(user_a).user_id == "user-a"
     assert analyze_behaviour(user_b).user_id == "user-b"
+
+
+def test_behaviour_and_completed_months_drop_the_same_incomplete_final_month() -> None:
+    snapshot = build_financial_features(
+        "user-a",
+        [
+            _transaction("jul", "100", date(2026, 7, 31)),
+            _transaction("aug", "100", date(2026, 8, 31)),
+            _transaction("sep", "400", date(2026, 9, 30)),
+            _transaction("oct", "20", date(2026, 10, 10)),
+        ],
+    )
+    months = [month.month for month in completed_months(snapshot)]
+    assert months == ["2026-07", "2026-08", "2026-09"]
+    observation = next(
+        item
+        for item in analyze_behaviour(snapshot).observations
+        if item.behavior_type == "spending_increase"
+    )
+    assert observation.evidence["current_period"] == months[-1]
+    assert observation.evidence["months_compared"] == len(months)
 
 
 def test_behaviour_endpoint_requires_authentication() -> None:

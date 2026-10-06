@@ -6,7 +6,11 @@ from .common import ZERO, amount_of, merchant_group_key
 from .models import FeatureTransaction, SpendingProfile
 
 DEFAULT_SMALL_TRANSACTION_THRESHOLD = Decimal("100")
-FOOD_CATEGORIES = {"Groceries", "Restaurants", "Fast Food"}
+# All food spending, including groceries. Used for spending totals.
+FOOD_CATEGORIES = frozenset({"Groceries", "Restaurants", "Fast Food"})
+# Fast Food and Restaurants only. Groceries stay in FOOD_CATEGORIES and do not
+# become convenience-food leaks or frequency recommendations.
+CONVENIENCE_FOOD_CATEGORIES = FOOD_CATEGORIES - frozenset({"Groceries"})
 TRANSPORT_CATEGORIES = {"Ride Hailing", "Public Transport", "Fuel"}
 CASH_WITHDRAWAL_CATEGORIES = {"Cash Withdrawal", "Cash Withdrawals", "ATM Cash Withdrawal"}
 

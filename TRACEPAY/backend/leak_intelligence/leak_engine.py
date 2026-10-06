@@ -13,7 +13,7 @@ from .merchant_display import is_reliable_merchant_display_name, recurring_leak_
 from .models import FinancialFeatureSnapshot, MerchantFeature
 from .periods import completed_months
 from .recurrence_rules import matches_plausible_recurring_interval
-from .service import FOOD_CATEGORIES, TRANSPORT_CATEGORIES
+from .service import CONVENIENCE_FOOD_CATEGORIES, TRANSPORT_CATEGORIES
 
 DETECTOR_VERSION = "1.0"
 MIN_HISTORY_DAYS = 28
@@ -321,7 +321,7 @@ def _category_leak_definition(
             "Airtime and data spending increased materially with repeated purchase activity.",
             5,
         )
-    if category in FOOD_CATEGORIES - {"Groceries"}:
+    if category in CONVENIENCE_FOOD_CATEGORIES:
         return (
             "food_spending_leak",
             "Potential convenience food spending escalation",

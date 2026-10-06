@@ -206,6 +206,73 @@ def test_feature_endpoint_returns_sanitized_snapshot(monkeypatch: pytest.MonkeyP
     assert "123456789" not in response.text
 
 
+def test_feature_endpoint_hides_transaction_identifiers(monkeypatch: pytest.MonkeyPatch) -> None:
+    transaction_ids = ("txn-feature-dup-1", "txn-feature-dup-2", "txn-feature-income")
+    snapshot = build_financial_features(
+        "user-a",
+        [
+            _transaction(
+                transaction_ids[2],
+                "5000",
+                date(2026, 7, 1),
+                merchant="EMPLOYER",
+                category="Salary",
+                transaction_class="income",
+                transaction_type="credit",
+                description="SALARY",
+            ),
+            _transaction(
+                transaction_ids[0],
+                "50",
+                date(2026, 8, 1),
+                merchant="COFFEE",
+                category="Fast Food",
+                description="COFFEE",
+            ),
+            _transaction(
+                transaction_ids[1],
+                "50",
+                date(2026, 8, 1),
+                merchant="COFFEE",
+                category="Fast Food",
+                description="COFFEE",
+            ),
+        ],
+    )
+    assert snapshot.duplicate_candidates[0].transaction_ids == [
+        transaction_ids[0],
+        transaction_ids[1],
+    ]
+    assert set(snapshot.income.days_since_last_income) == set(transaction_ids)
+
+    async def fake_snapshot(user_id: str, token: str):
+        assert user_id == "user-a"
+        assert token == "test-token"
+        return snapshot
+
+    monkeypatch.setattr("app.main.build_user_feature_snapshot", fake_snapshot)
+    app.dependency_overrides[require_supabase_user] = lambda: "user-a"
+    try:
+        response = TestClient(app).get(
+            "/financial-features",
+            headers={"Authorization": "Bearer test-token"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.text
+    assert "transaction_ids" not in body
+    assert "days_since_last_income" not in body
+    for transaction_id in transaction_ids:
+        assert transaction_id not in body
+    assert "COFFEE" in body
+    assert snapshot.duplicate_candidates[0].transaction_ids == [
+        transaction_ids[0],
+        transaction_ids[1],
+    ]
+
+
 def test_feature_report_is_aggregate_only() -> None:
     snapshot = build_financial_features(
         "user-a",

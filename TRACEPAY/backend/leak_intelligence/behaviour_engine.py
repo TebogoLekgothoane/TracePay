@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import re
-from calendar import monthrange
 from datetime import date
 from decimal import Decimal
 
 from .behaviour_models import BehaviourAnalysisResult, BehaviourObservation, BehaviorType
 from .merchant_display import is_reliable_merchant_display_name
 from .models import ConfidenceSupport, FinancialFeatureSnapshot
+from .periods import exclude_incomplete_final_month
 from .recurrence_rules import matches_plausible_recurring_interval
 
 MIN_TREND_MONTHS = 3
@@ -605,16 +605,11 @@ def _count_compare(
 def _completed_entries(
     entries: list[tuple[str, Decimal, int]], observation_end: date | None
 ) -> list[tuple[str, Decimal, int]]:
-    ordered = sorted(entries)
-    if not ordered or observation_end is None:
-        return ordered
-    final_month = observation_end.strftime("%Y-%m")
-    if (
-        ordered[-1][0] == final_month
-        and observation_end.day < monthrange(observation_end.year, observation_end.month)[1]
-    ):
-        return ordered[:-1]
-    return ordered
+    return exclude_incomplete_final_month(
+        sorted(entries),
+        observation_end,
+        lambda entry: entry[0],
+    )
 
 
 def _change_observation(

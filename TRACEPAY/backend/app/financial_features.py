@@ -46,6 +46,18 @@ async def build_user_feature_snapshot(
     return build_financial_features(user_id, transactions)
 
 
+def public_feature_payload(snapshot: FinancialFeatureSnapshot) -> dict[str, Any]:
+    """API view of a snapshot without internal transaction identifiers."""
+    payload = snapshot.model_dump(mode="json")
+    income = payload.get("income")
+    if isinstance(income, dict):
+        income.pop("days_since_last_income", None)
+    for candidate in payload.get("duplicate_candidates") or []:
+        if isinstance(candidate, dict):
+            candidate.pop("transaction_ids", None)
+    return payload
+
+
 def _fetch_transaction_rows(user_id: str, access_token: str) -> list[dict[str, Any]]:
     project_url = settings.supabase_url.rstrip("/")
     publishable_key = settings.supabase_publishable_key()

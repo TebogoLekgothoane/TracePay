@@ -23,6 +23,7 @@ from leak_intelligence.reasoning_models import (
     ImpactAssessment,
 )
 from leak_intelligence.recommendation_engine import recommend_actions
+from leak_intelligence.service import CONVENIENCE_FOOD_CATEGORIES, FOOD_CATEGORIES
 
 FORBIDDEN_LANGUAGE = re.compile(
     r"waste|you lost|definitely|unnecessary|fraud|unauthori[sz]ed|switch bank|"
@@ -162,6 +163,38 @@ def test_recurring_commitment_is_a_review_not_a_subscription_instruction() -> No
             )
         )
     )
+
+
+def test_convenience_food_excludes_groceries_and_includes_restaurants() -> None:
+    assert FOOD_CATEGORIES == frozenset({"Groceries", "Restaurants", "Fast Food"})
+    assert CONVENIENCE_FOOD_CATEGORIES == frozenset({"Fast Food", "Restaurants"})
+    restaurant = _one(
+        recommend_actions(
+            _result(
+                _analysis(
+                    reasoning_id="d" * 32,
+                    root_cause_type="frequency_increase",
+                    avoidability="medium",
+                    evidence={"category": "Restaurants"},
+                )
+            )
+        )
+    )
+    groceries = _one(
+        recommend_actions(
+            _result(
+                _analysis(
+                    reasoning_id="e" * 32,
+                    leak_id="c" * 32,
+                    root_cause_type="frequency_increase",
+                    avoidability="medium",
+                    evidence={"category": "Groceries"},
+                )
+            )
+        )
+    )
+    assert restaurant.recommendation_type == "review_high_frequency_spending"
+    assert groceries.recommendation_type == "monitor_spending_pattern"
 
 
 def test_frequency_driven_food_recommendation_does_not_set_a_budget() -> None:

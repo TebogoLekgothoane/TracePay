@@ -100,6 +100,10 @@ export function formatImpactValue(recommendation: Recommendation): string {
   return `${amount} / month`;
 }
 
+// Debug-screen wording only. API `recommended_action` is not modified.
+// verify_potential_duplicate, review_recurring_payment, and review_bank_fees
+// replace the server sentence. Other types drop sentences that start with
+// "TracePay will not" or "TracePay is not".
 export function formatRecommendedAction(recommendation: Recommendation): string {
   const concise = DISPLAY_ACTIONS[recommendation.recommendation_type];
   if (concise) {

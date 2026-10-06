@@ -7,7 +7,6 @@ import re
 from dataclasses import dataclass
 from decimal import Decimal
 
-from .reasoning_models import FinancialReasoning, FinancialReasoningResult
 from .recommendation_models import (
     FinancialRecommendationResult,
     FindingScope,
@@ -17,9 +16,10 @@ from .recommendation_models import (
     RecommendationMetadata,
     RecommendationType,
 )
+from .reasoning_models import FinancialReasoning, FinancialReasoningResult
+from .service import CONVENIENCE_FOOD_CATEGORIES
 
 RECOMMENDATION_VERSION = "1.0"
-CONVENIENCE_FOOD_CATEGORIES = frozenset({"Fast Food", "Restaurants"})
 AIRTIME_CATEGORY = "Airtime & Data"
 ESCALATION_CAUSES = frozenset(
     {
