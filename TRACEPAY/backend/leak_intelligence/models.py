@@ -103,6 +103,7 @@ class MerchantFeature(BaseModel):
     merchant_transaction_frequency: Decimal | None = None
     merchant_monthly_totals: dict[str, Decimal] = Field(default_factory=dict)
     merchant_monthly_transaction_count: dict[str, int] = Field(default_factory=dict)
+    merchant_category_transaction_count: dict[str, int] = Field(default_factory=dict)
     merchant_amount_trend: AmountTrend | None = None
     merchant_frequency_trend: Decimal | None = None
     recurrence: RecurrenceFeature

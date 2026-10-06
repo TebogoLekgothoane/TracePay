@@ -11,6 +11,7 @@ from app.auth import require_supabase_user
 from app.behaviour_analysis import build_user_behaviour_analysis
 from app.category_catalog import fetch_category_names
 from app.financial_features import build_user_feature_snapshot
+from app.leak_detection import build_user_leak_detections
 from app.rate_limit import enforce_rate_limit
 from categorisation.reprocess import (
     as_categorisable,
@@ -225,5 +226,23 @@ async def behaviour_analysis(
         _user_id[:8],
         result.transaction_count,
         len(result.observations),
+    )
+    return result.model_dump(mode="json")
+
+
+@app.get("/leak-detections")
+async def leak_detections(
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Return current deterministic potential leaks without persisting state."""
+    enforce_rate_limit(f"leaks-user:{_user_id}", 20, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    result = await build_user_leak_detections(_user_id, access_token)
+    logger.info(
+        "leak_detections_completed user_id_prefix=%s transactions=%s leaks=%s",
+        _user_id[:8],
+        result.transaction_count,
+        len(result.leaks),
     )
     return result.model_dump(mode="json")

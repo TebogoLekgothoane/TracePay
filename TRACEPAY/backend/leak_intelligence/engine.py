@@ -197,6 +197,10 @@ def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantF
     for merchant, items in groups.items():
         amounts = [amount_of(item) for item in items]
         monthly_totals, monthly_counts = _monthly_amounts(items)
+        category_counts: defaultdict[str, int] = defaultdict(int)
+        for item in items:
+            if category := item.categorisation.category_name:
+                category_counts[category] += 1
         dated = [item.transaction_date for item in items if item.transaction_date is not None]
         features.append(
             MerchantFeature(
@@ -213,6 +217,7 @@ def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantF
                 merchant_transaction_frequency=_frequency(items),
                 merchant_monthly_totals=monthly_totals,
                 merchant_monthly_transaction_count=monthly_counts,
+                merchant_category_transaction_count=dict(category_counts),
                 merchant_amount_trend=_amount_trend(items),
                 merchant_frequency_trend=_monthly_frequency_trend(monthly_counts),
                 recurrence=_recurrence(items),

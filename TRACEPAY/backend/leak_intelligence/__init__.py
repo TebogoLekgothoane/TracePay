@@ -7,6 +7,8 @@ transactions → categorisation → leak intelligence → leak_detections → Fa
 from .behaviour_engine import analyze_behaviour
 from .behaviour_models import BehaviourAnalysisResult, BehaviourObservation
 from .engine import build_financial_features
+from .leak_engine import detect_leaks
+from .leak_models import LeakDetection, LeakDetectionResult
 from .models import FeatureTransaction, FinancialFeatureSnapshot, SpendingProfile
 from .service import build_spending_profile
 
@@ -16,7 +18,10 @@ __all__ = [
     "SpendingProfile",
     "BehaviourAnalysisResult",
     "BehaviourObservation",
+    "LeakDetection",
+    "LeakDetectionResult",
     "analyze_behaviour",
     "build_financial_features",
     "build_spending_profile",
+    "detect_leaks",
 ]
