@@ -73,7 +73,9 @@ def test_bank_fee_leak_annualizes_material_fee_escalation() -> None:
 def test_subscription_and_unknown_recurring_leaks_are_separate() -> None:
     subscriptions = [
         _transaction(f"netflix-{index}", "199", when, merchant="NETFLIX", category="Subscriptions")
-        for index, when in enumerate((date(2026, 7, 1), date(2026, 8, 1), date(2026, 9, 30)))
+        for index, when in enumerate(
+            (date(2026, 7, 1), date(2026, 8, 1), date(2026, 9, 1), date(2026, 10, 1))
+        )
     ]
     subscription = next(
         item for item in _detect(subscriptions).leaks if item.leak_type == "subscription_leak"
@@ -83,7 +85,9 @@ def test_subscription_and_unknown_recurring_leaks_are_separate() -> None:
 
     unknown = [
         _transaction(f"unknown-{index}", "99", when, merchant="PAYMENT SERVICE", category="Other")
-        for index, when in enumerate((date(2026, 7, 1), date(2026, 8, 1), date(2026, 9, 30)))
+        for index, when in enumerate(
+            (date(2026, 7, 1), date(2026, 8, 1), date(2026, 9, 1), date(2026, 10, 1))
+        )
     ]
     unknown_leak = next(
         item

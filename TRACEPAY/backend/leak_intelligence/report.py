@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from .models import FinancialFeatureSnapshot
+from .recurrence_rules import matches_plausible_recurring_interval
 
 
 def render_feature_report(snapshot: FinancialFeatureSnapshot) -> str:
     """Render a development report without descriptions, references, or account data."""
     recurring = sum(
         feature.recurrence.recurrence_strength in {"medium", "high"}
+        and matches_plausible_recurring_interval(feature.recurrence.average_interval_days)
         for feature in snapshot.merchants
     )
     price_changes = sum(

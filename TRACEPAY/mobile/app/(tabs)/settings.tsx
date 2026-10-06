@@ -4,6 +4,7 @@ import { router, useFocusEffect } from "expo-router";
 import type { LucideIcon } from "lucide-react-native";
 import {
   ChevronRight,
+  FlaskConical,
   Globe,
   HelpCircle,
   LogOut,
@@ -41,6 +42,7 @@ const SECURITY_HREF = "/settings/security";
 const PRIVACY_HREF = "/settings/privacy";
 const LANGUAGE_HREF = "/settings/language";
 const HELP_HREF = "/settings/help";
+const LEAK_INTELLIGENCE_DEBUG_HREF = "/debug/leak-intelligence";
 
 type SettingsRow = {
   id: string;
@@ -242,6 +244,19 @@ export default function ProfileScreen() {
   const preferenceRows = PREFERENCE_ROWS.map((row) =>
     row.id === "language" ? { ...row, value: languageLabel } : row,
   );
+
+  const developerRows: SettingsRow[] = __DEV__
+    ? [
+        {
+          id: "leak-intelligence-debug",
+          label: "Leak Intelligence (debug)",
+          value: "Dev only",
+          Icon: FlaskConical,
+          href: LEAK_INTELLIGENCE_DEBUG_HREF,
+        },
+      ]
+    : [];
+
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <TabScrollView
@@ -284,6 +299,13 @@ export default function ProfileScreen() {
             rows={preferenceRows}
             palette={palette}
           />
+          {developerRows.length > 0 ? (
+            <SettingsSection
+              title="Developer"
+              rows={developerRows}
+              palette={palette}
+            />
+          ) : null}
 
           <Button
             className="mt-6"

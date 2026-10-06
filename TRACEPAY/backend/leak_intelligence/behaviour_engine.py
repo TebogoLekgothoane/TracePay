@@ -8,7 +8,9 @@ from datetime import date
 from decimal import Decimal
 
 from .behaviour_models import BehaviourAnalysisResult, BehaviourObservation, BehaviorType
+from .merchant_display import is_reliable_merchant_display_name
 from .models import ConfidenceSupport, FinancialFeatureSnapshot
+from .recurrence_rules import matches_plausible_recurring_interval
 
 MIN_TREND_MONTHS = 3
 MIN_RELATIVE_CHANGE_PERCENT = Decimal("10")
@@ -246,12 +248,19 @@ def _recurring_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviou
         recurrence = feature.recurrence
         if recurrence.recurrence_strength not in {"medium", "high"}:
             continue
+        if not matches_plausible_recurring_interval(recurrence.average_interval_days):
+            continue
         if _support_ratio(feature.confidence_support) < MIN_HIGH_CONFIDENCE_RATIO:
             continue
+        merchant_label = (
+            feature.merchant_name
+            if is_reliable_merchant_display_name(feature.merchant_name)
+            else "unidentified merchant"
+        )
         observations.append(
             _observation(
                 "recurring_payment_pattern",
-                f"Recurring payment pattern at {feature.merchant_name}",
+                f"Recurring payment pattern at {merchant_label}",
                 "Payments followed a consistent interval and amount pattern.",
                 "medium" if recurrence.recurrence_strength == "medium" else "high",
                 _confidence(

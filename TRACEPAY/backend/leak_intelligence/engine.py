@@ -27,6 +27,7 @@ from .models import (
     RecurrenceFeature,
     WeekendSpendingFeatures,
 )
+from .recurrence_rules import recurrence_strength_cap_for_interval
 from .service import build_spending_profile
 
 HIGH_CONFIDENCE = 0.85
@@ -180,9 +181,13 @@ def _recurrence(transactions: list[FeatureTransaction]) -> RecurrenceFeature:
     interval_cv = (feature.interval_variance or ZERO).sqrt() / average_interval
     amount_cv = (feature.amount_variance or ZERO).sqrt() / average_amount
     if average_interval <= Decimal("400") and interval_cv <= Decimal("0.15") and amount_cv <= Decimal("0.10"):
-        feature.recurrence_strength = "high"
+        feature.recurrence_strength = recurrence_strength_cap_for_interval(
+            average_interval, "high"
+        )
     elif average_interval <= Decimal("400") and interval_cv <= Decimal("0.35") and amount_cv <= Decimal("0.25"):
-        feature.recurrence_strength = "medium"
+        feature.recurrence_strength = recurrence_strength_cap_for_interval(
+            average_interval, "medium"
+        )
     else:
         feature.recurrence_strength = "low"
     return feature

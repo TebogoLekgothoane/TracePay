@@ -10,7 +10,9 @@ from .behaviour_models import BehaviourAnalysisResult, BehaviourObservation
 from .leak_keys import leak_fingerprint, subject_key
 from .leak_models import LeakDetection, LeakDetectionResult, LeakType
 from .leak_scoring import leak_confidence, severity_for_impact, support_ratio
+from .merchant_display import is_reliable_merchant_display_name, recurring_leak_title
 from .models import FinancialFeatureSnapshot, MerchantFeature
+from .recurrence_rules import matches_plausible_recurring_interval
 from .service import FOOD_CATEGORIES, TRANSPORT_CATEGORIES
 
 DETECTOR_VERSION = "1.0"
@@ -96,7 +98,7 @@ def _bank_fee_leaks(
             leak_type="bank_fee_leak",
             subject="bank-fees",
             title="Potential recurring banking fee burden",
-            description="Repeated banking fees show a material ongoing cost pattern.",
+            description="Repeated banking fees may represent a material ongoing cost pattern.",
             monthly_impact=impact,
             annual_impact=impact * Decimal("12"),
             impact_kind="recurring",
@@ -107,6 +109,7 @@ def _bank_fee_leaks(
                 "bank_fee_transaction_count": fees.bank_fee_transaction_count,
                 "bank_fee_ratio": ratio,
                 "fee_change_amount": change if change > 0 else None,
+                "finding_kind": "potential_leak",
             },
             behaviour_ids=_observation_ids(fee_observations),
             feature_refs=["fees", "months[].bank_fee_total", "spending_profile.bank_fee_ratio"],
@@ -126,9 +129,11 @@ def _recurring_leaks(
     }
     for merchant in snapshot.merchants:
         recurrence = merchant.recurrence
+        interval = recurrence.average_interval_days
         if (
             recurrence.recurrence_strength not in {"medium", "high"}
             or recurrence.observation_count < 3
+            or not matches_plausible_recurring_interval(interval)
             or support_ratio(merchant.confidence_support) < Decimal("0.60")
             or merchant.merchant_name in duplicate_merchants
         ):
@@ -137,22 +142,35 @@ def _recurring_leaks(
         if impact is None or impact < MIN_IMPACT:
             continue
         categories = merchant.merchant_category_transaction_count
-        is_subscription = categories.get("Subscriptions", 0) > 0
+        subscription_tx = categories.get("Subscriptions", 0)
+        total_tx = merchant.merchant_transaction_count
+        is_subscription = (
+            subscription_tx >= 2
+            and subscription_tx * 2 >= total_tx
+            and is_reliable_merchant_display_name(merchant.merchant_name)
+        )
         is_unknown = not categories or set(categories).issubset({"Other"})
+        reliable_merchant = is_reliable_merchant_display_name(merchant.merchant_name)
         if is_subscription:
             leak_type: LeakType = "subscription_leak"
-            title = f"Potential ongoing subscription payment at {merchant.merchant_name}"
-            description = "A stable recurring subscription payment may represent an ongoing financial commitment."
+            title = recurring_leak_title(subscription=True, merchant_name=merchant.merchant_name)
+            description = (
+                "Subscription-category payments followed a stable billing-like interval and amount pattern."
+            )
             ceiling = Decimal("0.90") if recurrence.recurrence_strength == "high" else Decimal("0.78")
-        elif is_unknown:
-            leak_type = "unknown_recurring_payment"
-            title = "Potential recurring payment from an unidentified merchant"
-            description = "A stable recurring payment was observed, but its category could not be identified confidently."
+        elif is_unknown or not reliable_merchant:
+            leak_type = "unknown_recurring_payment" if is_unknown else "recurring_payment_leak"
+            title = recurring_leak_title(subscription=False, merchant_name=None)
+            description = (
+                "A stable billing-like payment interval was observed, but the merchant could not be shown safely."
+                if not reliable_merchant
+                else "A stable recurring payment was observed, but its category could not be identified confidently."
+            )
             ceiling = Decimal("0.70")
         else:
             leak_type = "recurring_payment_leak"
-            title = f"Potential ongoing recurring payment at {merchant.merchant_name}"
-            description = "A stable recurring payment may represent an ongoing financial commitment."
+            title = recurring_leak_title(subscription=False, merchant_name=merchant.merchant_name)
+            description = "Payments at this merchant followed a stable billing-like interval and amount pattern."
             ceiling = Decimal("0.85") if recurrence.recurrence_strength == "high" else Decimal("0.72")
         confidence = leak_confidence(
             support=merchant.confidence_support,
@@ -175,12 +193,17 @@ def _recurring_leaks(
                 confidence=confidence,
                 severity=severity_for_impact(impact, persistent=True, confidence=confidence),
                 evidence={
-                    "merchant_key": merchant.merchant_name if not is_unknown else None,
+                    "merchant_key": merchant.merchant_name
+                    if reliable_merchant and not is_unknown
+                    else None,
                     "observation_count": recurrence.observation_count,
                     "average_interval_days": recurrence.average_interval_days,
                     "average_amount": recurrence.average_amount,
                     "recurrence_strength": recurrence.recurrence_strength,
+                    "first_observed_date": merchant.merchant_first_transaction_date,
+                    "last_observed_date": merchant.merchant_last_transaction_date,
                     "classification_support_ratio": support_ratio(merchant.confidence_support),
+                    "finding_kind": "potential_leak",
                 },
                 behaviour_ids=_matching_observation_ids(
                     recurring_observations, merchant.merchant_name
@@ -219,7 +242,10 @@ def _spending_escalation_leaks(
                 impact_kind="estimated",
                 confidence=confidence,
                 severity=severity_for_impact(change, persistent=True, confidence=confidence),
-                evidence=_escalation_evidence(observation),
+                evidence={
+                    **_escalation_evidence(observation),
+                    "finding_kind": "potential_leak",
+                },
                 behaviour_ids=[observation.observation_id],
                 feature_refs=observation.supporting_features,
             )
@@ -276,6 +302,7 @@ def _category_leaks(
                     "category_name": category,
                     "category_transaction_count": feature.category_transaction_count,
                     "classification_support_ratio": support_ratio(feature.confidence_support),
+                    "finding_kind": "potential_leak",
                 },
                 behaviour_ids=[observation.observation_id],
                 feature_refs=observation.supporting_features,
@@ -392,18 +419,24 @@ def _duplicate_leaks(
                 leak_type="duplicate_payment_leak",
                 subject=candidate.merchant_name,
                 title="Potential duplicate payment requires verification",
-                description="Same-day transactions with the same merchant and amount were grouped as a potential duplicate.",
+                description=(
+                    "Same-day transactions with the same merchant and amount were grouped as a "
+                    "duplicate candidate that requires manual verification."
+                ),
                 monthly_impact=impact,
                 annual_impact=None,
                 impact_kind="one_time",
                 confidence=confidence,
                 severity=severity_for_impact(impact, persistent=False, confidence=confidence),
                 evidence={
-                    "merchant_key": candidate.merchant_name,
+                    "merchant_key": candidate.merchant_name
+                    if is_reliable_merchant_display_name(candidate.merchant_name)
+                    else None,
                     "candidate_amount": candidate.amount,
                     "transaction_count_in_group": len(dates),
                     "date_span_days": 0,
                     "verification_required": True,
+                    "finding_kind": "verification_required",
                 },
                 behaviour_ids=observation_ids,
                 feature_refs=["duplicate_candidates"],
