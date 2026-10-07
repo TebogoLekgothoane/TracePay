@@ -15,6 +15,11 @@ from app.financial_reasoning import build_user_financial_reasoning
 from app.financial_recommendations import build_user_financial_recommendations
 from app.leak_detection import build_user_leak_detections
 from app.rate_limit import enforce_rate_limit
+from app.synthetic_intelligence import (
+    analyze_scenario,
+    require_synthetic_debug_user,
+    scenario_catalog,
+)
 from categorisation.reprocess import (
     as_categorisable,
     classification_update_payload,
@@ -193,6 +198,25 @@ async def categorisation_reprocess(
         result["metrics"]["categorised_transactions"],  # type: ignore[index]
     )
     return result
+
+
+@app.get("/debug/intelligence-scenarios")
+async def debug_intelligence_scenarios(
+    user_id: str = Depends(require_synthetic_debug_user),
+) -> dict[str, object]:
+    """List server-side synthetic scenarios. Unavailable outside development."""
+    enforce_rate_limit(f"synthetic-intelligence:{user_id}", 40, 15 * 60)
+    return scenario_catalog()
+
+
+@app.get("/debug/intelligence-scenarios/{scenario_id}/analysis")
+async def debug_intelligence_scenario_analysis(
+    scenario_id: str,
+    user_id: str = Depends(require_synthetic_debug_user),
+) -> dict[str, object]:
+    """Analyse one named synthetic scenario. The client cannot supply transactions."""
+    enforce_rate_limit(f"synthetic-intelligence:{user_id}", 40, 15 * 60)
+    return analyze_scenario(scenario_id)
 
 
 @app.get("/financial-features")

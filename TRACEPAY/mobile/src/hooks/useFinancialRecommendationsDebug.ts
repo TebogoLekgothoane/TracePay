@@ -7,14 +7,17 @@ import {
 } from "../api/financial-recommendations.api";
 import type { FinancialRecommendationResult } from "../features/financial-recommendations/financial-recommendations.types";
 
-export function useFinancialRecommendationsDebug() {
+export function useFinancialRecommendationsDebug(enabled = true) {
   const [result, setResult] = useState<FinancialRecommendationResult | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
 
   const load = useCallback(() => {
+    if (!enabled) {
+      return;
+    }
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
@@ -45,15 +48,19 @@ export function useFinancialRecommendationsDebug() {
           setLoading(false);
         }
       });
-  }, []);
+  }, [enabled]);
 
   useFocusEffect(
     useCallback(() => {
+      if (!enabled) {
+        setLoading(false);
+        return;
+      }
       load();
       return () => {
         controllerRef.current?.abort();
       };
-    }, [load]),
+    }, [enabled, load]),
   );
 
   useEffect(

@@ -42,6 +42,7 @@ const SECURITY_HREF = "/settings/security";
 const PRIVACY_HREF = "/settings/privacy";
 const LANGUAGE_HREF = "/settings/language";
 const HELP_HREF = "/settings/help";
+const SYNTHETIC_INTELLIGENCE_DEBUG_HREF = "/debug/synthetic-intelligence";
 const LEAK_INTELLIGENCE_DEBUG_HREF = "/debug/leak-intelligence";
 const FINANCIAL_REASONING_DEBUG_HREF = "/debug/financial-reasoning";
 const FINANCIAL_RECOMMENDATIONS_DEBUG_HREF = "/debug/financial-recommendations";
@@ -249,6 +250,13 @@ export default function ProfileScreen() {
 
   const developerRows: SettingsRow[] = __DEV__
     ? [
+        {
+          id: "synthetic-intelligence-debug",
+          label: "Synthetic Intelligence Testing",
+          value: "Dev only",
+          Icon: FlaskConical,
+          href: SYNTHETIC_INTELLIGENCE_DEBUG_HREF,
+        },
         {
           id: "leak-intelligence-debug",
           label: "Leak Intelligence (debug)",

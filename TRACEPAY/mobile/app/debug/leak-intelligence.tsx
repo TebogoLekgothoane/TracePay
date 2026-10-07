@@ -11,6 +11,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { IconButton } from "../../src/components/ui/IconButton";
 import { Button } from "../../src/components/ui/Button";
+import { SyntheticSourceNote } from "../../src/features/synthetic-intelligence/SyntheticSourceNote";
+import { scenarioLabel } from "../../src/features/synthetic-intelligence/synthetic-intelligence.parse";
 import {
   formatConfidence,
   formatCurrency,
@@ -20,6 +22,7 @@ import {
 } from "../../src/features/leak-intelligence/leak-intelligence.format";
 import type { LeakDetection } from "../../src/features/leak-intelligence/leak-intelligence.types";
 import { useLeakIntelligenceDebug } from "../../src/hooks/useLeakIntelligenceDebug";
+import { useStoredSyntheticAnalysis } from "../../src/hooks/useStoredSyntheticAnalysis";
 import { COLORS } from "../../src/theme/colors";
 
 export default function LeakIntelligenceDebugRoute() {
@@ -32,7 +35,16 @@ export default function LeakIntelligenceDebugRoute() {
 function LeakIntelligenceDebugScreen() {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
-  const { result, loading, error, refresh } = useLeakIntelligenceDebug();
+  const synthetic = useStoredSyntheticAnalysis();
+  const live = useLeakIntelligenceDebug(!synthetic.active);
+  const result = synthetic.active ? synthetic.analysis?.leaks ?? null : live.result;
+  const loading = synthetic.active ? false : live.loading;
+  const error = synthetic.active
+    ? synthetic.analysis
+      ? null
+      : "Run a synthetic scenario before opening this view."
+    : live.error;
+  const refresh = live.refresh;
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -60,33 +72,41 @@ function LeakIntelligenceDebugScreen() {
             </View>
           </View>
 
-          <View className="mt-5 rounded-3xl bg-card px-4 py-4">
-            <View className="flex-row items-center gap-3">
-              <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary/10">
-                <ShieldAlert color={palette.primary} size={20} strokeWidth={2.2} />
-              </View>
-              <View className="min-w-0 flex-1">
-                <Text className="text-[15px] font-semibold text-foreground">
-                  Authenticated backend response
-                </Text>
-                <Text className="mt-0.5 text-[13px] leading-5 text-muted-foreground">
-                  Results are calculated from your imported transactions. Sensitive
-                  transaction details are not displayed here.
-                </Text>
+          {synthetic.active && synthetic.analysis ? (
+            <SyntheticSourceNote
+              scenarioName={scenarioLabel(synthetic.analysis.scenario)}
+            />
+          ) : (
+            <View className="mt-5 rounded-3xl bg-card px-4 py-4">
+              <View className="flex-row items-center gap-3">
+                <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary/10">
+                  <ShieldAlert color={palette.primary} size={20} strokeWidth={2.2} />
+                </View>
+                <View className="min-w-0 flex-1">
+                  <Text className="text-[15px] font-semibold text-foreground">
+                    Authenticated backend response
+                  </Text>
+                  <Text className="mt-0.5 text-[13px] leading-5 text-muted-foreground">
+                    Results are calculated from your imported transactions. Sensitive
+                    transaction details are not displayed here.
+                  </Text>
+                </View>
               </View>
             </View>
-          </View>
+          )}
 
-          <View className="mt-4">
-            <Button
-              accessibilityLabel="Refresh Analysis"
-              loading={loading}
-              size="md"
-              onPress={refresh}
-            >
-              Refresh Analysis
-            </Button>
-          </View>
+          {synthetic.active ? null : (
+            <View className="mt-4">
+              <Button
+                accessibilityLabel="Refresh Analysis"
+                loading={loading}
+                size="md"
+                onPress={refresh}
+              >
+                Refresh Analysis
+              </Button>
+            </View>
+          )}
 
           {loading && !result ? <LoadingState /> : null}
           {error ? <ErrorState message={error} onRetry={refresh} /> : null}

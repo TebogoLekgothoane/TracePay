@@ -1,0 +1,92 @@
+[
+  {
+    "id": "base-grocery-07",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-02",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "800.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "base-grocery-08",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-02",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "800.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "base-kfc-09a",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-10",
+    "description": "POS PURCHASE KFC SANDTON CITY",
+    "amount": "180.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "KFC",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Fast Food"
+    }
+  },
+  {
+    "id": "base-kfc-09b",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-20",
+    "description": "POS PURCHASE KFC ROSEBANK",
+    "amount": "210.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "KFC",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Fast Food"
+    }
+  },
+  {
+    "id": "base-grocery-09",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-30",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "800.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  }
+]

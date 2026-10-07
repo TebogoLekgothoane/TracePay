@@ -1,0 +1,74 @@
+[
+  {
+    "id": "irregular-07-01",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-01",
+    "description": "DEBIT ORDER PLANET FITNESS SANDTON",
+    "amount": "299.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "PLANET FITNESS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Entertainment"
+    }
+  },
+  {
+    "id": "irregular-07-28",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-28",
+    "description": "DEBIT ORDER PLANET FITNESS SANDTON",
+    "amount": "299.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "PLANET FITNESS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Entertainment"
+    }
+  },
+  {
+    "id": "irregular-08-10",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-10",
+    "description": "DEBIT ORDER PLANET FITNESS SANDTON",
+    "amount": "299.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "PLANET FITNESS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Entertainment"
+    }
+  },
+  {
+    "id": "irregular-09-30",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-30",
+    "description": "DEBIT ORDER PLANET FITNESS SANDTON",
+    "amount": "299.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "PLANET FITNESS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Entertainment"
+    }
+  }
+]

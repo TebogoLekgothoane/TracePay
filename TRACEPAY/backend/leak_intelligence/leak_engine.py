@@ -280,7 +280,7 @@ def _category_leaks(
             or feature.category_total_amount < Decimal("150")
         ):
             continue
-        if leak_type in {"food_spending_leak", "transport_spending_leak"} and (
+        if leak_type == "transport_spending_leak" and (
             snapshot.spending_profile.total_spending or Decimal("0")
         ) < Decimal("2000"):
             continue

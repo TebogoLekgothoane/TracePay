@@ -7,14 +7,17 @@ import {
 } from "../api/leak-intelligence.api";
 import type { LeakDetectionResult } from "../features/leak-intelligence/leak-intelligence.types";
 
-export function useLeakIntelligenceDebug() {
+export function useLeakIntelligenceDebug(enabled = true) {
   const [result, setResult] = useState<LeakDetectionResult | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
 
   const load = useCallback(() => {
+    if (!enabled) {
+      return;
+    }
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
@@ -45,15 +48,19 @@ export function useLeakIntelligenceDebug() {
           setLoading(false);
         }
       });
-  }, []);
+  }, [enabled]);
 
   useFocusEffect(
     useCallback(() => {
+      if (!enabled) {
+        setLoading(false);
+        return;
+      }
       load();
       return () => {
         controllerRef.current?.abort();
       };
-    }, [load]),
+    }, [enabled, load]),
   );
 
   useEffect(

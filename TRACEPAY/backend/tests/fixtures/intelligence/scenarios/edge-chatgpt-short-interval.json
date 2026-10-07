@@ -1,0 +1,128 @@
+[
+  {
+    "id": "gpt-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-01",
+    "description": "POS PURCHASE CHATGPT",
+    "amount": "10.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHATGPT",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Other"
+    }
+  },
+  {
+    "id": "gpt-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-03",
+    "description": "POS PURCHASE CHATGPT",
+    "amount": "10.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHATGPT",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Other"
+    }
+  },
+  {
+    "id": "gpt-3",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-05",
+    "description": "POS PURCHASE CHATGPT",
+    "amount": "10.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHATGPT",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Other"
+    }
+  },
+  {
+    "id": "gpt-4",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-07",
+    "description": "POS PURCHASE CHATGPT",
+    "amount": "10.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHATGPT",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Other"
+    }
+  },
+  {
+    "id": "gpt-shop-07",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-10",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "500.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "gpt-shop-08",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-10",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "500.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "gpt-shop-09",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-30",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "500.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  }
+]

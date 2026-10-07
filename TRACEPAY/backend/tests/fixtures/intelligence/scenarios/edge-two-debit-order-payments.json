@@ -1,0 +1,56 @@
+[
+  {
+    "id": "two-dstv-07",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-01",
+    "description": "DEBIT ORDER MULTICHOICE DSTV",
+    "amount": "469.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "DSTV",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Subscriptions"
+    }
+  },
+  {
+    "id": "two-dstv-08",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-01",
+    "description": "DEBIT ORDER MULTICHOICE DSTV",
+    "amount": "469.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "DSTV",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Subscriptions"
+    }
+  },
+  {
+    "id": "two-grocery",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-30",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "250.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  }
+]

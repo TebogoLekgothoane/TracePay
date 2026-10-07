@@ -1,0 +1,56 @@
+[
+  {
+    "id": "boil-07",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-01",
+    "description": "POS PURCHASE ACCOUNT ID US FOR AMOUNT R149.00",
+    "amount": "149.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "ACCOUNT ID US FOR",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Entertainment"
+    }
+  },
+  {
+    "id": "boil-08",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-01",
+    "description": "POS PURCHASE ACCOUNT ID US FOR AMOUNT R149.00",
+    "amount": "149.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "ACCOUNT ID US FOR",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Entertainment"
+    }
+  },
+  {
+    "id": "boil-09",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-01",
+    "description": "POS PURCHASE ACCOUNT ID US FOR AMOUNT R149.00",
+    "amount": "149.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "ACCOUNT ID US FOR",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Entertainment"
+    }
+  }
+]

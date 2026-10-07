@@ -7,14 +7,17 @@ import {
 } from "../api/financial-reasoning.api";
 import type { FinancialReasoningResult } from "../features/financial-reasoning/financial-reasoning.types";
 
-export function useFinancialReasoningDebug() {
+export function useFinancialReasoningDebug(enabled = true) {
   const [result, setResult] = useState<FinancialReasoningResult | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
 
   const load = useCallback(() => {
+    if (!enabled) {
+      return;
+    }
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
@@ -45,15 +48,19 @@ export function useFinancialReasoningDebug() {
           setLoading(false);
         }
       });
-  }, []);
+  }, [enabled]);
 
   useFocusEffect(
     useCallback(() => {
+      if (!enabled) {
+        setLoading(false);
+        return;
+      }
       load();
       return () => {
         controllerRef.current?.abort();
       };
-    }, [load]),
+    }, [enabled, load]),
   );
 
   useEffect(

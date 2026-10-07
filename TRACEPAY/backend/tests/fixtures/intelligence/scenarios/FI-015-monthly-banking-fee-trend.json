@@ -1,0 +1,56 @@
+[
+  {
+    "id": "fi015-2026-07",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-02",
+    "description": "MONTHLY ACCOUNT FEE",
+    "amount": "69.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "fi015-2026-08",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-02",
+    "description": "MONTHLY ACCOUNT FEE",
+    "amount": "89.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "fi015-2026-09",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-30",
+    "description": "MONTHLY ACCOUNT FEE",
+    "amount": "149.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  }
+]

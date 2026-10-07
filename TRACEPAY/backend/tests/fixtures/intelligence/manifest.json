@@ -1,0 +1,231 @@
+{
+  "dataset": "tracepay-intelligence-v1",
+  "currency": "ZAR",
+  "user_id": "synthetic-intelligence-user",
+  "scenarios": [
+    {
+      "scenario_id": "FI-015-monthly-banking-fee-trend",
+      "fi_id": "FI-015",
+      "name": "Monthly banking fee trend",
+      "case_kind": "positive",
+      "family": "banking_fees",
+      "summary": "Three completed months of rising FNB-style monthly account fees.",
+      "transactions_file": "scenarios/FI-015-monthly-banking-fee-trend.json",
+      "expected": {
+        "detected": true,
+        "leak_type": "bank_fee_leak"
+      }
+    },
+    {
+      "scenario_id": "FI-029-fast-food-escalation",
+      "fi_id": "FI-029",
+      "name": "Fast food escalation",
+      "case_kind": "positive",
+      "family": "behaviour",
+      "summary": "KFC spend rises across three completed months above a flat grocery baseline.",
+      "transactions_file": "scenarios/FI-029-fast-food-escalation.json",
+      "expected": {
+        "detected": true,
+        "leak_type": "food_spending_leak"
+      }
+    },
+    {
+      "scenario_id": "FI-032-weekend-spending-spike",
+      "fi_id": "FI-032",
+      "name": "Weekend spending spike",
+      "case_kind": "positive",
+      "family": "behaviour",
+      "summary": "Dated spending is concentrated on Saturdays and Sundays for three months.",
+      "transactions_file": "scenarios/FI-032-weekend-spending-spike.json",
+      "expected": {
+        "detected": true,
+        "behavior_type": "weekend_spending_pattern"
+      }
+    },
+    {
+      "scenario_id": "FI-040-duplicate-merchant-payment",
+      "fi_id": "FI-040",
+      "name": "Duplicate merchant payment",
+      "case_kind": "positive",
+      "family": "duplicate",
+      "summary": "Two same-day Woolworths purchases for the same amount, plus later unrelated spend.",
+      "transactions_file": "scenarios/FI-040-duplicate-merchant-payment.json",
+      "expected": {
+        "detected": true,
+        "leak_type": "duplicate_payment_leak"
+      }
+    },
+    {
+      "scenario_id": "debit-order-dstv-subscription",
+      "fi_id": null,
+      "name": "DSTV monthly debit order",
+      "case_kind": "positive",
+      "family": "subscriptions",
+      "summary": "A stable monthly MultiChoice DSTV debit order categorised as a subscription.",
+      "transactions_file": "scenarios/debit-order-dstv-subscription.json",
+      "expected": {
+        "detected": true,
+        "leak_type": "subscription_leak"
+      }
+    },
+    {
+      "scenario_id": "single-restaurant-meal",
+      "fi_id": "FI-029",
+      "name": "Single restaurant meal",
+      "case_kind": "negative",
+      "family": "behaviour",
+      "summary": "One Spur dinner among flat grocery spend is not a food or recurring leak.",
+      "transactions_file": "scenarios/single-restaurant-meal.json",
+      "expected": {
+        "detected": false,
+        "leak_types": [
+          "food_spending_leak",
+          "recurring_payment_leak",
+          "subscription_leak",
+          "unknown_recurring_payment"
+        ]
+      }
+    },
+    {
+      "scenario_id": "next-day-lookalike-payment",
+      "fi_id": "FI-040",
+      "name": "Next-day lookalike payment",
+      "case_kind": "negative",
+      "family": "duplicate",
+      "summary": "The same Woolworths amount on consecutive days is not a same-day duplicate leak.",
+      "transactions_file": "scenarios/next-day-lookalike-payment.json",
+      "expected": {
+        "detected": false,
+        "leak_type": "duplicate_payment_leak"
+      }
+    },
+    {
+      "scenario_id": "edge-two-debit-order-payments",
+      "fi_id": null,
+      "name": "Only two debit-order payments",
+      "case_kind": "edge",
+      "family": "debit_orders",
+      "summary": "Two DSTV debit orders plus unrelated spend stay below the recurrence observation minimum.",
+      "transactions_file": "scenarios/edge-two-debit-order-payments.json",
+      "expected": {
+        "detected": false,
+        "leak_type": "subscription_leak"
+      }
+    },
+    {
+      "scenario_id": "edge-chatgpt-short-interval",
+      "fi_id": null,
+      "name": "Short-interval ChatGPT charges",
+      "case_kind": "edge",
+      "family": "subscriptions",
+      "summary": "Four R10 ChatGPT charges two days apart are frequent spend, not a recurring bill.",
+      "transactions_file": "scenarios/edge-chatgpt-short-interval.json",
+      "expected": {
+        "detected": false,
+        "leak_types": [
+          "subscription_leak",
+          "recurring_payment_leak",
+          "unknown_recurring_payment"
+        ]
+      }
+    },
+    {
+      "scenario_id": "edge-fast-food-low-confidence",
+      "fi_id": "FI-029",
+      "name": "Low-confidence fast food rise",
+      "case_kind": "edge",
+      "family": "behaviour",
+      "summary": "The same fast-food rise as FI-029, but every category confidence is below the support threshold.",
+      "transactions_file": "scenarios/edge-fast-food-low-confidence.json",
+      "expected": {
+        "detected": false,
+        "leak_type": "food_spending_leak"
+      }
+    },
+    {
+      "scenario_id": "edge-boilerplate-merchant-recurring",
+      "fi_id": null,
+      "name": "Boilerplate merchant description",
+      "case_kind": "edge",
+      "family": "merchant",
+      "summary": "A monthly entertainment debit whose merchant text is statement boilerplate.",
+      "transactions_file": "scenarios/edge-boilerplate-merchant-recurring.json",
+      "expected": {
+        "detected": true,
+        "leak_type": "recurring_payment_leak",
+        "evidence": {
+          "merchant_key": null
+        }
+      }
+    },
+    {
+      "scenario_id": "edge-small-banking-fee-change",
+      "fi_id": "FI-015",
+      "name": "Small banking fee change",
+      "case_kind": "edge",
+      "family": "banking_fees",
+      "summary": "Monthly account fees move by only R2, below the material fee-change threshold.",
+      "transactions_file": "scenarios/edge-small-banking-fee-change.json",
+      "expected": {
+        "detected": false,
+        "leak_type": "bank_fee_leak"
+      }
+    },
+    {
+      "scenario_id": "edge-irregular-debit-order-interval",
+      "fi_id": null,
+      "name": "Irregular debit-order interval",
+      "case_kind": "edge",
+      "family": "debit_orders",
+      "summary": "A gym debit order with uneven gaps should not be treated as a stable recurring bill.",
+      "transactions_file": "scenarios/edge-irregular-debit-order-interval.json",
+      "expected": {
+        "detected": false,
+        "leak_types": [
+          "subscription_leak",
+          "recurring_payment_leak",
+          "unknown_recurring_payment"
+        ]
+      }
+    },
+    {
+      "scenario_id": "edge-incomplete-final-fee-month",
+      "fi_id": "FI-015",
+      "name": "Incomplete final fee month",
+      "case_kind": "edge",
+      "family": "banking_fees",
+      "summary": "Account fees are flat across completed months. The only jump sits in an unfinished October.",
+      "transactions_file": "scenarios/edge-incomplete-final-fee-month.json",
+      "expected": {
+        "detected": false,
+        "leak_type": "bank_fee_leak"
+      }
+    },
+    {
+      "scenario_id": "edge-zero-baseline-fast-food",
+      "fi_id": "FI-029",
+      "name": "Fast food with no baseline",
+      "case_kind": "edge",
+      "family": "behaviour",
+      "summary": "Fast food appears only in the latest month, so there is no earlier baseline to escalate from.",
+      "transactions_file": "scenarios/edge-zero-baseline-fast-food.json",
+      "expected": {
+        "detected": false,
+        "leak_type": "food_spending_leak"
+      }
+    },
+    {
+      "scenario_id": "edge-fast-food-under-total-floor",
+      "fi_id": "FI-029",
+      "name": "Fast food rise below the spend floor",
+      "case_kind": "edge",
+      "family": "behaviour",
+      "summary": "Fast food rises across three completed months, but the whole history stays under R2000.",
+      "transactions_file": "scenarios/edge-fast-food-under-total-floor.json",
+      "expected": {
+        "detected": true,
+        "leak_type": "food_spending_leak"
+      }
+    }
+  ]
+}

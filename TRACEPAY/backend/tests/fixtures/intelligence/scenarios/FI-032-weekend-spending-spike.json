@@ -1,0 +1,218 @@
+[
+  {
+    "id": "fi032-07-sat",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-04",
+    "description": "POS PURCHASE MUG AND BEAN SANDTON",
+    "amount": "350.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "MUG AND BEAN",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi032-07-sun",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-05",
+    "description": "POS PURCHASE MUG AND BEAN ROSEBANK",
+    "amount": "350.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "MUG AND BEAN",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi032-07-wed",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-08",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "100.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi032-07-thu",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-09",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "100.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi032-08-sat",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-01",
+    "description": "POS PURCHASE MUG AND BEAN SANDTON",
+    "amount": "350.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "MUG AND BEAN",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi032-08-sun",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-02",
+    "description": "POS PURCHASE MUG AND BEAN ROSEBANK",
+    "amount": "350.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "MUG AND BEAN",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi032-08-wed",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-05",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "100.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi032-08-thu",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-06",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "100.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi032-09-sat",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-26",
+    "description": "POS PURCHASE MUG AND BEAN SANDTON",
+    "amount": "350.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "MUG AND BEAN",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi032-09-sun",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-27",
+    "description": "POS PURCHASE MUG AND BEAN ROSEBANK",
+    "amount": "350.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "MUG AND BEAN",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi032-09-mon",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-28",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "100.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi032-09-wed",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-30",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "100.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  }
+]

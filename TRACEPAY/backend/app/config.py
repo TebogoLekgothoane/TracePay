@@ -19,7 +19,9 @@ def _explicit_pdf_extraction_opt_in(value: object) -> bool:
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
     app_name: str = "TRACEPAY API"
     supabase_url: str = ""
@@ -41,11 +43,25 @@ class Settings(BaseSettings):
     ai_extraction_timeout_seconds: int = 180
     ai_extraction_max_pages: int = 20
     gemini_fallback_models: str = "gemini-3.8-flash,gemini-2.5-flash"
+    tracepay_env: str = "production"
+    synthetic_intelligence_debug: bool = False
 
     @field_validator("ai_pdf_extraction_enabled", mode="before")
     @classmethod
     def _parse_ai_pdf_extraction_enabled(cls, value: object) -> bool:
         return _explicit_pdf_extraction_opt_in(value)
+
+    @field_validator("synthetic_intelligence_debug", mode="before")
+    @classmethod
+    def _parse_synthetic_intelligence_debug(cls, value: object) -> bool:
+        return _explicit_pdf_extraction_opt_in(value)
+
+    @field_validator("tracepay_env", mode="before")
+    @classmethod
+    def _parse_tracepay_env(cls, value: object) -> str:
+        if not isinstance(value, str) or not value.strip():
+            return "production"
+        return value.strip().lower()
 
     def supabase_publishable_key(self) -> str:
         """Return the anon/publishable key only. A service-role value is treated as missing."""

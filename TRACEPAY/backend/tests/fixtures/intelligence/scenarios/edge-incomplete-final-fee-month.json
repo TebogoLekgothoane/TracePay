@@ -1,0 +1,74 @@
+[
+  {
+    "id": "partial-fee-07",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-02",
+    "description": "MONTHLY ACCOUNT FEE",
+    "amount": "69.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "partial-fee-08",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-02",
+    "description": "MONTHLY ACCOUNT FEE",
+    "amount": "69.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "partial-fee-09",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-30",
+    "description": "MONTHLY ACCOUNT FEE",
+    "amount": "69.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "partial-fee-10",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-10-10",
+    "description": "MONTHLY ACCOUNT FEE",
+    "amount": "220.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  }
+]

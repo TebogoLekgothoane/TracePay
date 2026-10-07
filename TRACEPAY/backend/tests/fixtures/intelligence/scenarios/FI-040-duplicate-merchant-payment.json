@@ -1,0 +1,56 @@
+[
+  {
+    "id": "fi040-wool-a",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-18",
+    "description": "POS PURCHASE WOOLWORTHS SANDTON",
+    "amount": "186.40",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "WOOLWORTHS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi040-wool-b",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-18",
+    "description": "POS PURCHASE WOOLWORTHS SANDTON",
+    "amount": "186.40",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "WOOLWORTHS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi040-later",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-30",
+    "description": "POS PURCHASE CHECKERS FOURWAYS",
+    "amount": "420.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  }
+]
