@@ -69,6 +69,8 @@ def _safe_title(behavior_type: str, fallback: str) -> str:
         "merchant_concentration": "Merchant spending concentration observed",
         "recurring_payment_pattern": "Recurring payment pattern observed",
         "price_increase_pattern": "Merchant payment amount increased",
+        "frequency_change_pattern": "Observed billing interval changed",
+        "spending_habit_pattern": "Repeated spending pattern observed",
         "duplicate_payment_pattern": "Similar payment timing pattern observed",
         "category_growth": "Category spending increased",
         "category_decline": "Category spending decreased",

@@ -1,0 +1,182 @@
+[
+  {
+    "id": "pad-grocery-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-03",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "900.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "pad-grocery-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-03",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "900.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "pad-grocery-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-03",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "900.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi038-ubereats-0-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-08",
+    "description": "UBER EATS ORDER SANDTON",
+    "amount": "120.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "UBER EATS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi038-ubereats-0-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-09",
+    "description": "UBER EATS ORDER SANDTON",
+    "amount": "120.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "UBER EATS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi038-ubereats-1-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-08",
+    "description": "UBER EATS ORDER SANDTON",
+    "amount": "180.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "UBER EATS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi038-ubereats-1-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-09",
+    "description": "UBER EATS ORDER SANDTON",
+    "amount": "180.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "UBER EATS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi038-ubereats-2-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-08",
+    "description": "UBER EATS ORDER SANDTON",
+    "amount": "320.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "UBER EATS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi038-ubereats-2-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-09",
+    "description": "UBER EATS ORDER SANDTON",
+    "amount": "320.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "UBER EATS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi038-ubereats-2-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-30",
+    "description": "UBER EATS ORDER SANDTON",
+    "amount": "320.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "UBER EATS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  }
+]

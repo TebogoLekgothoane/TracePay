@@ -87,6 +87,11 @@ class RecurrenceFeature(BaseModel):
     average_amount: Decimal | None = None
     amount_variance: Decimal | None = None
     recurrence_strength: Literal["none", "low", "medium", "high"] = "none"
+    baseline_interval_days: Decimal | None = None
+    current_interval_days: Decimal | None = None
+    interval_change_days: Decimal | None = None
+    baseline_interval_count: int = 0
+    current_interval_count: int = 0
 
 
 class MerchantFeature(BaseModel):
@@ -104,6 +109,18 @@ class MerchantFeature(BaseModel):
     merchant_monthly_totals: dict[str, Decimal] = Field(default_factory=dict)
     merchant_monthly_transaction_count: dict[str, int] = Field(default_factory=dict)
     merchant_category_transaction_count: dict[str, int] = Field(default_factory=dict)
+    debit_order_transaction_count: int = 0
+    insurance_transaction_count: int = 0
+    coffee_transaction_count: int = 0
+    convenience_store_transaction_count: int = 0
+    airtime_transaction_count: int = 0
+    airtime_only: bool = False
+    data_transaction_count: int = 0
+    data_only: bool = False
+    ride_hailing_transaction_count: int = 0
+    ride_hailing_only: bool = False
+    food_delivery_transaction_count: int = 0
+    food_delivery_only: bool = False
     merchant_amount_trend: AmountTrend | None = None
     merchant_frequency_trend: Decimal | None = None
     recurrence: RecurrenceFeature
@@ -119,6 +136,18 @@ class CategoryFeature(BaseModel):
     category_monthly_transaction_count: dict[str, int] = Field(default_factory=dict)
     category_trend: Decimal | None = None
     confidence_support: ConfidenceSupport
+    airtime_transaction_count: int = 0
+    airtime_total_amount: Decimal = Decimal("0")
+    airtime_only: bool = False
+    data_transaction_count: int = 0
+    data_total_amount: Decimal = Decimal("0")
+    data_only: bool = False
+    ride_hailing_transaction_count: int = 0
+    ride_hailing_total_amount: Decimal = Decimal("0")
+    ride_hailing_only: bool = False
+    food_delivery_transaction_count: int = 0
+    food_delivery_total_amount: Decimal = Decimal("0")
+    food_delivery_only: bool = False
 
 
 class MonthlyFeature(BaseModel):
@@ -144,6 +173,22 @@ class FeeFeatures(BaseModel):
     account_fee_total: Decimal | None = None
     sms_fee_total: Decimal | None = None
     immediate_payment_fee_total: Decimal | None = None
+    balance_enquiry_fee_total: Decimal | None = None
+    card_fee_total: Decimal | None = None
+    card_fee_transaction_count: int = 0
+    card_fee_high_confidence_count: int = 0
+    foreign_transaction_fee_total: Decimal | None = None
+    foreign_transaction_fee_count: int = 0
+    foreign_transaction_fee_high_confidence_count: int = 0
+    interest_charge_total: Decimal | None = None
+    interest_charge_count: int = 0
+    interest_charge_high_confidence_count: int = 0
+    overdraft_fee_total: Decimal | None = None
+    overdraft_fee_count: int = 0
+    overdraft_fee_high_confidence_count: int = 0
+    insufficient_funds_fee_total: Decimal | None = None
+    insufficient_funds_fee_count: int = 0
+    insufficient_funds_fee_high_confidence_count: int = 0
 
 
 class CashFeatures(BaseModel):
@@ -161,6 +206,7 @@ class WeekendSpendingFeatures(BaseModel):
     weekend_spending_transaction_count: int = 0
     dated_spending_total: Decimal = Decimal("0")
     weekend_spending_total: Decimal = Decimal("0")
+    weekday_spending_total: Decimal = Decimal("0")
     weekend_spending_share: Decimal | None = None
 
 
@@ -174,6 +220,7 @@ class PaydaySpendingFeatures(BaseModel):
     eligible_spending_total: Decimal = Decimal("0")
     post_income_spending_total: Decimal = Decimal("0")
     post_income_spending_share: Decimal | None = None
+    income_event_dates: list[date] = Field(default_factory=list)
 
 
 class IncomeFeatures(BaseModel):
@@ -192,6 +239,7 @@ class DuplicateCandidate(BaseModel):
     amount: Decimal
     transaction_ids: list[str]
     transaction_dates: list[date]
+    high_confidence_transaction_count: int = 0
 
 
 class FinancialFeatureSnapshot(BaseModel):

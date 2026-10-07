@@ -10,7 +10,8 @@ from .leak_keys import leak_fingerprint, subject_key
 from .leak_models import LeakDetection, LeakDetectionResult, LeakType
 from .leak_scoring import leak_confidence, severity_for_impact, support_ratio
 from .merchant_display import is_reliable_merchant_display_name, recurring_leak_title
-from .models import FinancialFeatureSnapshot, MerchantFeature
+from .engine import RECURRENCE_MIN_OBSERVATIONS
+from .models import CashFeatures, FeeFeatures, FinancialFeatureSnapshot, MerchantFeature
 from .periods import completed_months
 from .recurrence_rules import matches_plausible_recurring_interval
 from .service import CONVENIENCE_FOOD_CATEGORIES, TRANSPORT_CATEGORIES
@@ -75,15 +76,78 @@ def _bank_fee_leaks(
     )
     fee_observations = observations.get("fee_accumulation", [])
     ratio = snapshot.spending_profile.bank_fee_ratio or Decimal("0")
+    immediate = fees.immediate_payment_fee_total or Decimal("0")
+    immediate_burden = (
+        immediate >= MIN_IMPACT
+        and immediate == fees.bank_fee_total
+        and fee_observations
+    )
+    enquiry = fees.balance_enquiry_fee_total or Decimal("0")
+    balance_enquiry_burden = (
+        enquiry >= MIN_IMPACT
+        and enquiry == fees.bank_fee_total
+        and fee_observations
+    )
+    sms = fees.sms_fee_total or Decimal("0")
+    sms_banking_burden = (
+        sms >= MIN_IMPACT
+        and sms == fees.bank_fee_total
+        and fee_observations
+    )
+    foreign_burden = _foreign_transaction_fee_burden(fees, fee_observations)
+    interest_burden = _interest_charge_burden(fees, fee_observations)
+    overdraft_burden = _overdraft_fee_burden(fees, fee_observations)
+    insufficient_funds_burden = _insufficient_funds_fee_burden(fees, fee_observations)
+    typed_burden = (
+        immediate_burden
+        or balance_enquiry_burden
+        or sms_banking_burden
+        or foreign_burden
+        or interest_burden
+        or overdraft_burden
+        or insufficient_funds_burden
+    )
+    change = _decimal_evidence(fee_observations, "change_amount") or Decimal("0")
+    monthly_fee_trend = (
+        not typed_burden
+        and fee_observations
+        and change >= MIN_IMPACT
+        and _bool_evidence(fee_observations, "overall_monthly_fee_trend")
+    )
     if (
         fees.bank_fee_transaction_count < 2
         or monthly_average is None
-        or monthly_average < MIN_IMPACT
-        or not (fee_observations or (monthly_average >= Decimal("100") and ratio >= Decimal("0.02")))
+        or (monthly_average < MIN_IMPACT and not typed_burden)
+        or not (
+            fee_observations
+            or (monthly_average >= Decimal("100") and ratio >= Decimal("0.02"))
+            or typed_burden
+        )
     ):
         return []
-    change = _decimal_evidence(fee_observations, "change_amount") or Decimal("0")
-    impact = change if change >= MIN_IMPACT else monthly_average
+    typed_total = Decimal("0")
+    if sms_banking_burden:
+        typed_total = sms
+    elif balance_enquiry_burden:
+        typed_total = enquiry
+    elif immediate_burden:
+        typed_total = immediate
+    elif foreign_burden:
+        typed_total = fees.foreign_transaction_fee_total or Decimal("0")
+    elif interest_burden:
+        typed_total = fees.interest_charge_total or Decimal("0")
+    elif overdraft_burden:
+        typed_total = fees.overdraft_fee_total or Decimal("0")
+    elif insufficient_funds_burden:
+        typed_total = fees.insufficient_funds_fee_total or Decimal("0")
+    if change >= MIN_IMPACT:
+        impact = change
+    elif monthly_average >= MIN_IMPACT:
+        impact = monthly_average
+    elif typed_burden and typed_total >= MIN_IMPACT:
+        impact = typed_total / Decimal(max(1, len(completed_months(snapshot))))
+    else:
+        impact = monthly_average
     confidence = leak_confidence(
         support=None,
         observation_count=fees.bank_fee_transaction_count,
@@ -92,27 +156,115 @@ def _bank_fee_leaks(
     )
     if confidence is None:
         return []
+    title = "Potential recurring banking fee burden"
+    description = "Repeated banking fees may represent a material ongoing cost pattern."
+    if sms_banking_burden:
+        title = "Potential SMS banking charge burden"
+        description = (
+            "Repeated SMS banking or notification fees were observed. These may "
+            "represent an avoidable banking cost, but available data does not prove "
+            "that SMS alerts were unnecessary or that a free alternative was available."
+        )
+    elif balance_enquiry_burden:
+        title = "Potential ATM balance enquiry fee burden"
+        description = (
+            "Repeated ATM balance enquiry fees were observed. These may be reducible "
+            "through digital banking, but available data does not prove that digital "
+            "access was available or that each charge was avoidable."
+        )
+    elif immediate_burden:
+        title = "Potential immediate payment fee burden"
+        description = (
+            "Repeated immediate or real-time payment fees may indicate higher-cost "
+            "payment usage. This does not prove that a lower-cost method was available."
+        )
+    elif foreign_burden:
+        title = "Potential foreign transaction fee burden"
+        description = (
+            "Repeated foreign transaction fees were observed and may warrant review."
+        )
+    elif interest_burden:
+        title = "Potential interest charge burden"
+        description = "Interest charges were observed and may warrant review."
+    elif overdraft_burden:
+        title = "Potential overdraft fee burden"
+        description = "Repeated overdraft fees were observed and may warrant review."
+    elif insufficient_funds_burden:
+        title = "Potential insufficient-funds charge burden"
+        description = "Repeated insufficient-funds charges were observed and may warrant review."
+    elif monthly_fee_trend and _recurring_card_fee_change(fees):
+        title = "Potential recurring card fee increase"
+        description = (
+            "Repeated card fees increased over the observed period compared with "
+            "the prior baseline. This reflects observed fee amounts only."
+        )
+    elif monthly_fee_trend and not _card_fee_series(fees):
+        title = "Potential monthly banking fee increase"
+        description = (
+            "Overall banking fees increased over the observed period compared with "
+            "the prior baseline. This reflects combined monthly fee movement and does "
+            "not prove that fees could be eliminated or that a cheaper product was "
+            "available."
+        )
+    evidence: dict[str, object] = {
+        "monthly_average_fee": monthly_average,
+        "bank_fee_transaction_count": fees.bank_fee_transaction_count,
+        "bank_fee_ratio": ratio,
+        "fee_change_amount": change if change > 0 else None,
+        "finding_kind": "potential_leak",
+    }
+    if sms_banking_burden:
+        evidence["finding_focus"] = "sms_banking"
+        evidence["sms_fee_total"] = sms
+    elif balance_enquiry_burden:
+        evidence["finding_focus"] = "atm_balance_enquiry"
+        evidence["balance_enquiry_fee_total"] = enquiry
+    elif immediate_burden:
+        evidence["immediate_payment_fee_total"] = immediate
+        evidence["finding_focus"] = "immediate_payment_fee"
+    elif foreign_burden:
+        evidence["finding_focus"] = "foreign_transaction_fee"
+        evidence["foreign_transaction_fee_total"] = fees.foreign_transaction_fee_total
+        evidence["foreign_transaction_fee_count"] = fees.foreign_transaction_fee_count
+        evidence["completed_month_count"] = len(completed_months(snapshot))
+    elif interest_burden:
+        evidence["finding_focus"] = "interest_charges"
+        evidence["interest_charge_total"] = fees.interest_charge_total
+        evidence["interest_charge_count"] = fees.interest_charge_count
+        evidence["completed_month_count"] = len(completed_months(snapshot))
+    elif overdraft_burden:
+        evidence["finding_focus"] = "overdraft_fee_pattern"
+        evidence["overdraft_fee_total"] = fees.overdraft_fee_total
+        evidence["overdraft_fee_count"] = fees.overdraft_fee_count
+        evidence["completed_month_count"] = len(completed_months(snapshot))
+    elif insufficient_funds_burden:
+        evidence["finding_focus"] = "insufficient_funds_charges"
+        evidence["insufficient_funds_fee_total"] = fees.insufficient_funds_fee_total
+        evidence["insufficient_funds_fee_count"] = fees.insufficient_funds_fee_count
+        evidence["completed_month_count"] = len(completed_months(snapshot))
+    elif monthly_fee_trend and _recurring_card_fee_change(fees):
+        evidence["finding_focus"] = "recurring_merchant_fee_change"
+        evidence["card_fee_transaction_count"] = fees.card_fee_transaction_count
+        evidence["card_fee_total"] = fees.card_fee_total
+        evidence.update(_monthly_banking_fee_trend_evidence(snapshot, fee_observations))
+    elif monthly_fee_trend and not _card_fee_series(fees):
+        evidence["finding_focus"] = "monthly_banking_fee_trend"
+        evidence.update(_monthly_banking_fee_trend_evidence(snapshot, fee_observations))
     return [
         _leak(
             snapshot=snapshot,
             leak_type="bank_fee_leak",
             subject="bank-fees",
-            title="Potential recurring banking fee burden",
-            description="Repeated banking fees may represent a material ongoing cost pattern.",
+            title=title,
+            description=description,
             monthly_impact=impact,
             annual_impact=impact * Decimal("12"),
             impact_kind="recurring",
             confidence=confidence,
             severity=severity_for_impact(impact, persistent=True, confidence=confidence),
-            evidence={
-                "monthly_average_fee": monthly_average,
-                "bank_fee_transaction_count": fees.bank_fee_transaction_count,
-                "bank_fee_ratio": ratio,
-                "fee_change_amount": change if change > 0 else None,
-                "finding_kind": "potential_leak",
-            },
+            evidence=evidence,
             behaviour_ids=_observation_ids(fee_observations),
-            feature_refs=["fees", "months[].bank_fee_total", "spending_profile.bank_fee_ratio"],
+            feature_refs=_bank_fee_feature_refs(evidence),
         )
     ]
 
@@ -144,20 +296,41 @@ def _recurring_leaks(
         categories = merchant.merchant_category_transaction_count
         subscription_tx = categories.get("Subscriptions", 0)
         total_tx = merchant.merchant_transaction_count
+        if total_tx > 0 and categories.get("Bank Fees", 0) == total_tx:
+            continue
         is_subscription = (
             subscription_tx >= 2
             and subscription_tx * 2 >= total_tx
             and is_reliable_merchant_display_name(merchant.merchant_name)
         )
+        debit_order_review = (
+            not is_subscription
+            and merchant.debit_order_transaction_count >= 2
+            and merchant.debit_order_transaction_count * 2 >= total_tx
+            and is_reliable_merchant_display_name(merchant.merchant_name)
+        )
+        if (_coffee_habit_merchant(merchant) or _convenience_store_habit_merchant(merchant) or _airtime_repeat_merchant(merchant) or _data_repeat_merchant(merchant)) and not is_subscription and not debit_order_review:
+            continue
         is_unknown = not categories or set(categories).issubset({"Other"})
         reliable_merchant = is_reliable_merchant_display_name(merchant.merchant_name)
         if is_subscription:
             leak_type: LeakType = "subscription_leak"
             title = recurring_leak_title(subscription=True, merchant_name=merchant.merchant_name)
             description = (
-                "Subscription-category payments followed a stable billing-like interval and amount pattern."
+                "Recurring subscription-category payments followed a stable billing-like "
+                "interval. This may warrant review; available data does not show whether "
+                "the service is still used."
             )
             ceiling = Decimal("0.90") if recurrence.recurrence_strength == "high" else Decimal("0.78")
+        elif debit_order_review:
+            leak_type = "unknown_recurring_payment" if is_unknown else "recurring_payment_leak"
+            title = "Potential debit order that may warrant review"
+            description = (
+                "Recurring payments described as debit orders followed a stable billing-like "
+                "interval. This may warrant review; available data does not show whether "
+                "the underlying service is still used."
+            )
+            ceiling = Decimal("0.78") if is_unknown else Decimal("0.85")
         elif is_unknown or not reliable_merchant:
             leak_type = "unknown_recurring_payment" if is_unknown else "recurring_payment_leak"
             title = recurring_leak_title(subscription=False, merchant_name=None)
@@ -194,7 +367,7 @@ def _recurring_leaks(
                 severity=severity_for_impact(impact, persistent=True, confidence=confidence),
                 evidence={
                     "merchant_key": merchant.merchant_name
-                    if reliable_merchant and not is_unknown
+                    if reliable_merchant and (not is_unknown or debit_order_review)
                     else None,
                     "observation_count": recurrence.observation_count,
                     "average_interval_days": recurrence.average_interval_days,
@@ -204,6 +377,13 @@ def _recurring_leaks(
                     "last_observed_date": merchant.merchant_last_transaction_date,
                     "classification_support_ratio": support_ratio(merchant.confidence_support),
                     "finding_kind": "potential_leak",
+                    **(
+                        {"finding_focus": "subscription_review"}
+                        if is_subscription
+                        else {"finding_focus": "debit_order_review"}
+                        if debit_order_review
+                        else {}
+                    ),
                 },
                 behaviour_ids=_matching_observation_ids(
                     recurring_observations, merchant.merchant_name
@@ -275,7 +455,13 @@ def _category_leaks(
         leak_type, title, description, minimum_transactions = _category_leak_definition(category)
         if leak_type is None or feature.category_transaction_count < minimum_transactions:
             continue
-        if leak_type == "airtime_data_leak" and (
+        if leak_type == "airtime_data_leak" and feature.airtime_only:
+            if feature.airtime_transaction_count < 5 or feature.airtime_total_amount < Decimal("150"):
+                continue
+        elif leak_type == "airtime_data_leak" and feature.data_only:
+            if feature.data_transaction_count < 5 or feature.data_total_amount < Decimal("150"):
+                continue
+        elif leak_type == "airtime_data_leak" and (
             feature.category_transaction_count < 5
             or feature.category_total_amount < Decimal("150")
         ):
@@ -284,7 +470,127 @@ def _category_leaks(
             snapshot.spending_profile.total_spending or Decimal("0")
         ) < Decimal("2000"):
             continue
+        if (
+            leak_type == "transport_spending_leak"
+            and feature.ride_hailing_only
+            and feature.ride_hailing_transaction_count < minimum_transactions
+        ):
+            continue
+        if (
+            leak_type == "food_spending_leak"
+            and feature.food_delivery_only
+            and feature.food_delivery_transaction_count < minimum_transactions
+        ):
+            continue
         confidence = min(observation.confidence, 0.78)
+        evidence = {
+            **_escalation_evidence(observation),
+            "category_name": category,
+            "category_transaction_count": feature.category_transaction_count,
+            "classification_support_ratio": support_ratio(feature.confidence_support),
+            "finding_kind": "potential_leak",
+        }
+        if feature.airtime_only:
+            airtime_merchants = [
+                item.merchant_name
+                for item in snapshot.merchants
+                if item.airtime_only and item.airtime_transaction_count > 0
+            ]
+            evidence.update(
+                {
+                    "finding_focus": "airtime_inefficiency",
+                    "airtime_transaction_count": feature.airtime_transaction_count,
+                    "airtime_total": feature.airtime_total_amount,
+                    "average_transaction_amount": (
+                        feature.airtime_total_amount / Decimal(feature.airtime_transaction_count)
+                        if feature.airtime_transaction_count
+                        else None
+                    ),
+                    "spending_share": (
+                        feature.airtime_total_amount / snapshot.spending_profile.total_spending
+                        if snapshot.spending_profile.total_spending not in (None, Decimal("0"))
+                        else None
+                    ),
+                }
+            )
+            if len(airtime_merchants) == 1 and is_reliable_merchant_display_name(airtime_merchants[0]):
+                evidence["merchant_key"] = airtime_merchants[0]
+            title = "Airtime spending increased"
+            description = (
+                "Airtime spending increased over the analysed period and may warrant review."
+            )
+        elif feature.data_only:
+            data_merchants = [
+                item.merchant_name
+                for item in snapshot.merchants
+                if item.data_only and item.data_transaction_count > 0
+            ]
+            evidence.update(
+                {
+                    "finding_focus": "data_inefficiency",
+                    "data_transaction_count": feature.data_transaction_count,
+                    "data_total": feature.data_total_amount,
+                    "spending_share": (
+                        feature.data_total_amount / snapshot.spending_profile.total_spending
+                        if snapshot.spending_profile.total_spending not in (None, Decimal("0"))
+                        else None
+                    ),
+                }
+            )
+            if len(data_merchants) == 1 and is_reliable_merchant_display_name(data_merchants[0]):
+                evidence["merchant_key"] = data_merchants[0]
+            title = "Mobile data spending increased"
+            description = (
+                "Mobile data spending increased over the analysed period and may warrant review."
+            )
+        elif feature.ride_hailing_only:
+            ride_merchants = [
+                item.merchant_name
+                for item in snapshot.merchants
+                if item.ride_hailing_only and item.ride_hailing_transaction_count > 0
+            ]
+            evidence.update(
+                {
+                    "finding_focus": "ride_hailing_dependency",
+                    "ride_hailing_transaction_count": feature.ride_hailing_transaction_count,
+                    "ride_hailing_total": feature.ride_hailing_total_amount,
+                    "spending_share": (
+                        feature.ride_hailing_total_amount / snapshot.spending_profile.total_spending
+                        if snapshot.spending_profile.total_spending not in (None, Decimal("0"))
+                        else None
+                    ),
+                }
+            )
+            if len(ride_merchants) == 1 and is_reliable_merchant_display_name(ride_merchants[0]):
+                evidence["merchant_key"] = ride_merchants[0]
+            title = "Ride-hailing spending increased"
+            description = (
+                "Ride-hailing spending increased over the analysed period and may warrant review."
+            )
+        elif leak_type == "food_spending_leak" and feature.food_delivery_only:
+            delivery_merchants = [
+                item.merchant_name
+                for item in snapshot.merchants
+                if item.food_delivery_only and item.food_delivery_transaction_count > 0
+            ]
+            evidence.update(
+                {
+                    "finding_focus": "food_delivery_dependency",
+                    "food_delivery_transaction_count": feature.food_delivery_transaction_count,
+                    "food_delivery_total": feature.food_delivery_total_amount,
+                    "spending_share": (
+                        feature.food_delivery_total_amount / snapshot.spending_profile.total_spending
+                        if snapshot.spending_profile.total_spending not in (None, Decimal("0"))
+                        else None
+                    ),
+                }
+            )
+            if len(delivery_merchants) == 1 and is_reliable_merchant_display_name(delivery_merchants[0]):
+                evidence["merchant_key"] = delivery_merchants[0]
+            title = "Food delivery spending increased"
+            description = (
+                "Food delivery spending increased over the analysed period and may warrant review."
+            )
         findings.append(
             _leak(
                 snapshot=snapshot,
@@ -297,13 +603,7 @@ def _category_leaks(
                 impact_kind="estimated",
                 confidence=confidence,
                 severity=severity_for_impact(change, persistent=True, confidence=confidence),
-                evidence={
-                    **_escalation_evidence(observation),
-                    "category_name": category,
-                    "category_transaction_count": feature.category_transaction_count,
-                    "classification_support_ratio": support_ratio(feature.confidence_support),
-                    "finding_kind": "potential_leak",
-                },
+                evidence=evidence,
                 behaviour_ids=[observation.observation_id],
                 feature_refs=observation.supporting_features,
             )
@@ -350,18 +650,124 @@ def _snapshot_support_ratio(snapshot: FinancialFeatureSnapshot) -> Decimal:
     return Decimal(high) / Decimal(total) if total else Decimal("0")
 
 
+def _convenience_store_habit_merchant(merchant: MerchantFeature) -> bool:
+    count = merchant.convenience_store_transaction_count
+    total = merchant.merchant_transaction_count
+    return (
+        count >= RECURRENCE_MIN_OBSERVATIONS
+        and total > 0
+        and count * 2 >= total
+        and is_reliable_merchant_display_name(merchant.merchant_name)
+        and support_ratio(merchant.confidence_support) >= Decimal("0.60")
+    )
+
+
+def _coffee_habit_merchant(merchant: MerchantFeature) -> bool:
+    count = merchant.coffee_transaction_count
+    total = merchant.merchant_transaction_count
+    return (
+        count >= RECURRENCE_MIN_OBSERVATIONS
+        and total > 0
+        and count * 2 >= total
+        and is_reliable_merchant_display_name(merchant.merchant_name)
+        and support_ratio(merchant.confidence_support) >= Decimal("0.60")
+    )
+
+
+def _data_repeat_merchant(merchant: MerchantFeature) -> bool:
+    return (
+        merchant.data_only
+        and merchant.data_transaction_count >= RECURRENCE_MIN_OBSERVATIONS
+        and support_ratio(merchant.confidence_support) >= Decimal("0.60")
+    )
+
+
+def _airtime_repeat_merchant(merchant: MerchantFeature) -> bool:
+    return (
+        merchant.airtime_only
+        and merchant.airtime_transaction_count >= RECURRENCE_MIN_OBSERVATIONS
+        and support_ratio(merchant.confidence_support) >= Decimal("0.60")
+    )
+
+
+def _atm_withdrawal_fee_stacking_eligible(cash: CashFeatures) -> bool:
+    atm_total = cash.atm_fee_total or Decimal("0")
+    return (
+        atm_total >= MIN_IMPACT
+        and cash.atm_fee_count >= 2
+        and cash.cash_withdrawal_count >= 3
+    )
+
+
 def _cash_leaks(
     snapshot: FinancialFeatureSnapshot,
     observations: dict[str, list[BehaviourObservation]],
 ) -> list[LeakDetection]:
     cash = snapshot.cash
-    if cash.cash_withdrawal_count < 3 or cash.atm_fee_total < MIN_IMPACT:
+    if cash.cash_withdrawal_count < 3:
         return []
     cash_observations = observations.get("cash_dependency", [])
     if not cash_observations:
         return []
+    observation = cash_observations[0]
+    share = _decimal(observation.evidence.get("cash_withdrawal_share"))
+    atm_total = cash.atm_fee_total or Decimal("0")
+    fee_backed = atm_total >= MIN_IMPACT
+    reliance_backed = share is not None and share >= Decimal("0.15")
+    if not fee_backed and not reliance_backed:
+        return []
+
     months = max(1, len(completed_months(snapshot)))
-    impact = cash.atm_fee_total / Decimal(months)
+    stacking = _atm_withdrawal_fee_stacking_eligible(cash)
+    if stacking:
+        impact = atm_total / Decimal(months)
+        impact_kind = "recurring"
+        title = "Potential ATM withdrawal fee stacking"
+        description = (
+            "Multiple ATM cash withdrawals were accompanied by repeated ATM transaction "
+            "fees. This may indicate a stacking fee burden; available data does not "
+            "prove the fees were avoidable."
+        )
+        if reliance_backed and share is not None and share >= Decimal("0.30"):
+            description = (
+                f"{description} Cash withdrawals also represented a meaningful share "
+                "of observed spending."
+            )
+    elif fee_backed:
+        impact = atm_total / Decimal(months)
+        impact_kind = "recurring"
+        title = "Potential ATM fee cost from repeated cash withdrawals"
+        description = (
+            "Repeated cash withdrawals were accompanied by identifiable ATM fee costs."
+        )
+    else:
+        cash_monthly = cash.cash_withdrawal_total / Decimal(months)
+        if cash_monthly < MIN_IMPACT:
+            return []
+        impact = cash_monthly * share if share is not None else cash_monthly
+        impact_kind = "estimated"
+        title = "Potential cash dependency pattern"
+        description = (
+            "Cash withdrawals represent a meaningful share of observed spending."
+        )
+
+    if (
+        not stacking
+        and reliance_backed
+        and share is not None
+        and share >= Decimal("0.30")
+    ):
+        title = "Potential cash dependency pattern"
+        if fee_backed:
+            description = (
+                "Cash withdrawals made up a substantial share of observed spending and were "
+                "accompanied by identifiable ATM fee costs."
+            )
+        else:
+            description = (
+                "Cash withdrawals represent a meaningful share of observed spending."
+            )
+
     confidence = leak_confidence(
         support=None,
         observation_count=cash.cash_withdrawal_count,
@@ -370,26 +776,36 @@ def _cash_leaks(
     )
     if confidence is None:
         return []
+    confidence = min(confidence, observation.confidence)
+    evidence: dict[str, object] = {
+        "cash_withdrawal_count": cash.cash_withdrawal_count,
+        "cash_withdrawal_total": cash.cash_withdrawal_total,
+        "atm_fee_total": atm_total if atm_total > 0 else None,
+        "completed_month_count": months,
+        "finding_kind": "potential_leak",
+    }
+    if share is not None:
+        evidence["cash_withdrawal_share"] = share
+    if stacking:
+        evidence["finding_focus"] = "atm_withdrawal_fee_stacking"
+        evidence["atm_fee_count"] = cash.atm_fee_count
+    elif reliance_backed and share is not None and share >= Decimal("0.30"):
+        evidence["finding_focus"] = "cash_dependency"
     return [
         _leak(
             snapshot=snapshot,
             leak_type="cash_usage_leak",
             subject="cash-withdrawals",
-            title="Potential ATM fee cost from repeated cash withdrawals",
-            description="Repeated cash withdrawals were accompanied by identifiable ATM fee costs.",
+            title=title,
+            description=description,
             monthly_impact=impact,
             annual_impact=impact * Decimal("12"),
-            impact_kind="recurring",
+            impact_kind=impact_kind,
             confidence=confidence,
             severity=severity_for_impact(impact, persistent=True, confidence=confidence),
-            evidence={
-                "cash_withdrawal_count": cash.cash_withdrawal_count,
-                "cash_withdrawal_total": cash.cash_withdrawal_total,
-                "atm_fee_total": cash.atm_fee_total,
-                "completed_month_count": months,
-            },
+            evidence=evidence,
             behaviour_ids=_observation_ids(cash_observations),
-            feature_refs=["cash", "fees.atm_fee_total"],
+            feature_refs=["cash", "months[].cash_withdrawal_total", "fees.atm_fee_total"],
         )
     ]
 
@@ -402,7 +818,17 @@ def _duplicate_leaks(
     observation_ids = _observation_ids(observations.get("duplicate_payment_pattern", []))
     for candidate in snapshot.duplicate_candidates:
         dates = candidate.transaction_dates
-        if len(dates) < 2 or (max(dates) - min(dates)).days != 0 or candidate.amount < Decimal("20"):
+        high_confidence_ratio = (
+            Decimal(candidate.high_confidence_transaction_count) / Decimal(len(dates))
+            if dates
+            else Decimal("0")
+        )
+        if (
+            len(dates) < 2
+            or (max(dates) - min(dates)).days != 0
+            or candidate.amount < Decimal("20")
+            or high_confidence_ratio < Decimal("0.60")
+        ):
             continue
         impact = candidate.amount * Decimal(len(dates) - 1)
         confidence = leak_confidence(
@@ -429,11 +855,14 @@ def _duplicate_leaks(
                 confidence=confidence,
                 severity=severity_for_impact(impact, persistent=False, confidence=confidence),
                 evidence={
+                    "finding_focus": "duplicate_merchant_payment",
                     "merchant_key": candidate.merchant_name
                     if is_reliable_merchant_display_name(candidate.merchant_name)
                     else None,
                     "candidate_amount": candidate.amount,
                     "transaction_count_in_group": len(dates),
+                    "group_total": candidate.amount * Decimal(len(dates)),
+                    "observed_date": dates[0].isoformat(),
                     "date_span_days": 0,
                     "verification_required": True,
                     "finding_kind": "verification_required",
@@ -493,6 +922,51 @@ def _leak(
     )
 
 
+_BANK_FEE_FOCUS_REFS: dict[str, tuple[str, ...]] = {
+    "sms_banking": ("fees.sms_fee_total",),
+    "atm_balance_enquiry": ("fees.balance_enquiry_fee_total",),
+    "immediate_payment_fee": ("fees.immediate_payment_fee_total",),
+    "foreign_transaction_fee": (
+        "fees.foreign_transaction_fee_total",
+        "fees.foreign_transaction_fee_count",
+    ),
+    "interest_charges": (
+        "fees.interest_charge_total",
+        "fees.interest_charge_count",
+    ),
+    "overdraft_fee_pattern": (
+        "fees.overdraft_fee_total",
+        "fees.overdraft_fee_count",
+    ),
+    "insufficient_funds_charges": (
+        "fees.insufficient_funds_fee_total",
+        "fees.insufficient_funds_fee_count",
+    ),
+    "recurring_merchant_fee_change": (
+        "fees.card_fee_total",
+        "fees.card_fee_transaction_count",
+    ),
+    "monthly_banking_fee_trend": (),
+}
+
+_BANK_FEE_SHARED_REFS = (
+    "fees",
+    "months[].bank_fee_total",
+    "spending_profile.bank_fee_ratio",
+)
+
+
+def _bank_fee_feature_refs(evidence: dict[str, object]) -> list[str]:
+    """Cite the fee fields this finding used, plus the shared fee totals."""
+    focus = evidence.get("finding_focus")
+    specific = _BANK_FEE_FOCUS_REFS.get(focus, ()) if isinstance(focus, str) else ()
+    refs: list[str] = []
+    for reference in (*specific, *_BANK_FEE_SHARED_REFS):
+        if reference not in refs:
+            refs.append(reference)
+    return refs
+
+
 def _completed_month_average(snapshot: FinancialFeatureSnapshot, selector):
     months = completed_months(snapshot)
     if not months:
@@ -508,6 +982,85 @@ def _recurring_monthly_impact(merchant: MerchantFeature) -> Decimal | None:
     return amount * Decimal("30") / interval
 
 
+def _foreign_transaction_fee_burden(
+    fees: FeeFeatures, fee_observations: list[BehaviourObservation]
+) -> bool:
+    return _specific_fee_burden(
+        fees.foreign_transaction_fee_total or Decimal("0"),
+        fees.foreign_transaction_fee_count,
+        fees.foreign_transaction_fee_high_confidence_count,
+        fees,
+        fee_observations,
+    )
+
+
+def _interest_charge_burden(
+    fees: FeeFeatures, fee_observations: list[BehaviourObservation]
+) -> bool:
+    return _specific_fee_burden(
+        fees.interest_charge_total or Decimal("0"),
+        fees.interest_charge_count,
+        fees.interest_charge_high_confidence_count,
+        fees,
+        fee_observations,
+    )
+
+
+def _overdraft_fee_burden(
+    fees: FeeFeatures, fee_observations: list[BehaviourObservation]
+) -> bool:
+    return _specific_fee_burden(
+        fees.overdraft_fee_total or Decimal("0"),
+        fees.overdraft_fee_count,
+        fees.overdraft_fee_high_confidence_count,
+        fees,
+        fee_observations,
+    )
+
+
+def _insufficient_funds_fee_burden(
+    fees: FeeFeatures, fee_observations: list[BehaviourObservation]
+) -> bool:
+    return _specific_fee_burden(
+        fees.insufficient_funds_fee_total or Decimal("0"),
+        fees.insufficient_funds_fee_count,
+        fees.insufficient_funds_fee_high_confidence_count,
+        fees,
+        fee_observations,
+    )
+
+
+def _specific_fee_burden(
+    total: Decimal,
+    count: int,
+    high_confidence_count: int,
+    fees: FeeFeatures,
+    fee_observations: list[BehaviourObservation],
+) -> bool:
+    if (
+        not fee_observations
+        or count < 2
+        or total < MIN_IMPACT
+        or total != fees.bank_fee_total
+    ):
+        return False
+    return Decimal(high_confidence_count) / Decimal(count) >= Decimal("0.60")
+
+
+def _card_fee_series(fees: FeeFeatures) -> bool:
+    card_total = fees.card_fee_total or Decimal("0")
+    return card_total > 0 and card_total == fees.bank_fee_total
+
+
+def _recurring_card_fee_change(fees: FeeFeatures) -> bool:
+    if not _card_fee_series(fees) or fees.card_fee_transaction_count < 3:
+        return False
+    return (
+        Decimal(fees.card_fee_high_confidence_count) / Decimal(fees.card_fee_transaction_count)
+        >= Decimal("0.60")
+    )
+
+
 def _observation_ids(observations: list[BehaviourObservation]) -> list[str]:
     return [observation.observation_id for observation in observations]
 
@@ -520,6 +1073,45 @@ def _matching_observation_ids(
         for observation in observations
         if observation.evidence.get("merchant_key") == merchant
     ]
+
+
+def _bool_evidence(observations: list[BehaviourObservation], key: str) -> bool:
+    return any(observation.evidence.get(key) is True for observation in observations)
+
+
+def _monthly_banking_fee_trend_evidence(
+    snapshot: FinancialFeatureSnapshot,
+    observations: list[BehaviourObservation],
+) -> dict[str, object]:
+    observation = next(
+        (
+            item
+            for item in observations
+            if item.evidence.get("overall_monthly_fee_trend") is True
+        ),
+        observations[0] if observations else None,
+    )
+    completed = completed_months(snapshot)
+    payload: dict[str, object] = {
+        "completed_month_count": len(completed),
+        "completed_month_fee_totals": {
+            month.month: month.bank_fee_total for month in completed
+        },
+    }
+    if observation is None:
+        return payload
+    for key in (
+        "previous_period",
+        "current_period",
+        "previous_amount",
+        "current_amount",
+        "change_percentage",
+        "months_compared",
+    ):
+        value = observation.evidence.get(key)
+        if value is not None:
+            payload[key] = value
+    return payload
 
 
 def _decimal_evidence(

@@ -1,0 +1,128 @@
+[
+  {
+    "id": "fi005-pos-0-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-02",
+    "description": "BALANCE ENQUIRY FEE",
+    "amount": "5.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "fi005-pos-0-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-03",
+    "description": "BALANCE ENQUIRY FEE",
+    "amount": "5.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "fi005-pos-1-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-02",
+    "description": "BALANCE ENQUIRY FEE",
+    "amount": "5.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "fi005-pos-1-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-03",
+    "description": "BALANCE ENQUIRY FEE",
+    "amount": "5.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "fi005-pos-2-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-02",
+    "description": "BALANCE ENQUIRY FEE",
+    "amount": "5.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "fi005-pos-2-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-03",
+    "description": "BALANCE ENQUIRY FEE",
+    "amount": "5.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "fi005-pos-2-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-04",
+    "description": "BALANCE ENQUIRY FEE",
+    "amount": "5.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  }
+]

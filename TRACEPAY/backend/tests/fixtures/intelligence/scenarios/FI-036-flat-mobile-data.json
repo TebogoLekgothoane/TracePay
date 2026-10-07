@@ -1,0 +1,56 @@
+[
+  {
+    "id": "fi036-flat-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-05",
+    "description": "VODACOM DATA BUNDLE",
+    "amount": "79.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "VODACOM",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Airtime & Data"
+    }
+  },
+  {
+    "id": "fi036-flat-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-05",
+    "description": "VODACOM DATA BUNDLE",
+    "amount": "79.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "VODACOM",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Airtime & Data"
+    }
+  },
+  {
+    "id": "fi036-flat-3",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-05",
+    "description": "VODACOM DATA BUNDLE",
+    "amount": "79.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "VODACOM",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Airtime & Data"
+    }
+  }
+]

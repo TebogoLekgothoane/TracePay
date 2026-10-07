@@ -1,0 +1,182 @@
+[
+  {
+    "id": "fi030-spar-0-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-04",
+    "description": "POS PURCHASE SPAR EXPRESS SANDTON",
+    "amount": "60.0",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SPAR EXPRESS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi030-spar-0-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-05",
+    "description": "POS PURCHASE SPAR EXPRESS SANDTON",
+    "amount": "60.0",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SPAR EXPRESS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi030-spar-1-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-04",
+    "description": "POS PURCHASE SPAR EXPRESS SANDTON",
+    "amount": "73.33",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SPAR EXPRESS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi030-spar-1-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-05",
+    "description": "POS PURCHASE SPAR EXPRESS SANDTON",
+    "amount": "73.33",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SPAR EXPRESS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi030-spar-1-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-06",
+    "description": "POS PURCHASE SPAR EXPRESS SANDTON",
+    "amount": "73.33",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SPAR EXPRESS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi030-spar-2-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-04",
+    "description": "POS PURCHASE SPAR EXPRESS SANDTON",
+    "amount": "84.0",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SPAR EXPRESS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi030-spar-2-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-05",
+    "description": "POS PURCHASE SPAR EXPRESS SANDTON",
+    "amount": "84.0",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SPAR EXPRESS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi030-spar-2-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-06",
+    "description": "POS PURCHASE SPAR EXPRESS SANDTON",
+    "amount": "84.0",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SPAR EXPRESS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi030-spar-2-3",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-07",
+    "description": "POS PURCHASE SPAR EXPRESS SANDTON",
+    "amount": "84.0",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SPAR EXPRESS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi030-spar-2-4",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-08",
+    "description": "POS PURCHASE SPAR EXPRESS SANDTON",
+    "amount": "84.0",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SPAR EXPRESS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  }
+]

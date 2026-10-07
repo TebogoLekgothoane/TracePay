@@ -1,0 +1,115 @@
+{
+  "catalogue_source": "The canonical FI-001 to FI-062 catalogue file is not in this repository. web/tracepayvisiondev.md is absent. Untitled ids are listed without reconstructed names or definitions.",
+  "untitled_ids": [
+    "FI-001",
+    "FI-002",
+    "FI-006",
+    "FI-007",
+    "FI-008",
+    "FI-009",
+    "FI-010",
+    "FI-011",
+    "FI-012",
+    "FI-014",
+    "FI-019",
+    "FI-020",
+    "FI-021",
+    "FI-022",
+    "FI-024",
+    "FI-028"
+  ],
+  "covered_by_another_item": [
+    {
+      "fi_id": "FI-054",
+      "name": "Duplicate Charges",
+      "covered_by": "FI-040",
+      "reason": "Same-day duplicate charges are detected as duplicate_payment_leak with finding_focus duplicate_merchant_payment. There is no separate duplicate-charge detector."
+    }
+  ],
+  "deferred": [
+    {
+      "fi_id": "FI-031",
+      "name": "Impulse Spending Pattern",
+      "status": "DEFERRED",
+      "reason": "A shopping/spending increase does not prove impulse intent, and the current data model contains no reliable impulse-intent signal."
+    },
+    {
+      "fi_id": "FI-041",
+      "name": "Merchant Billing Errors",
+      "status": "DEFERRED",
+      "reason": "The current data model lacks the evidence required to decide that a merchant billed incorrectly."
+    },
+    {
+      "fi_id": "FI-043",
+      "name": "Currency Conversion Markup",
+      "status": "DEFERRED",
+      "reason": "The current data model lacks a separate currency-conversion markup signal."
+    },
+    {
+      "fi_id": "FI-044",
+      "name": "Dynamic Currency Conversion",
+      "status": "DEFERRED",
+      "reason": "The current data model lacks a dynamic currency conversion signal."
+    },
+    {
+      "fi_id": "FI-049",
+      "name": "Credit Utilisation Warning",
+      "status": "DEFERRED",
+      "reason": "The current data model lacks a credit-limit or utilisation signal."
+    },
+    {
+      "fi_id": "FI-050",
+      "name": "Insurance Overlap",
+      "status": "DEFERRED",
+      "reason": "The current data model lacks evidence that two insurance products cover the same risk."
+    },
+    {
+      "fi_id": "FI-052",
+      "name": "Unused Insurance Products",
+      "status": "DEFERRED",
+      "reason": "The current data model lacks evidence that an insurance product is unused."
+    },
+    {
+      "fi_id": "FI-053",
+      "name": "Missing Refund Investigation",
+      "status": "DEFERRED",
+      "reason": "The current data model lacks a refund-expected signal."
+    },
+    {
+      "fi_id": "FI-055",
+      "name": "Cashback Not Received",
+      "status": "DEFERRED",
+      "reason": "The current data model lacks an expected-cashback signal."
+    },
+    {
+      "fi_id": "FI-058",
+      "name": "Incorrect Merchant Charge",
+      "status": "DEFERRED",
+      "reason": "The current data model lacks a reference charge that would show a merchant amount was incorrect."
+    },
+    {
+      "fi_id": "FI-059",
+      "name": "Better Account Recommendation",
+      "status": "DEFERRED",
+      "reason": "The current data model lacks account-product and fee-schedule evidence for a better-account comparison."
+    },
+    {
+      "fi_id": "FI-060",
+      "name": "Digital Banking Migration Opportunity",
+      "status": "DEFERRED",
+      "reason": "The current data model lacks evidence that a digital alternative exists for this account."
+    },
+    {
+      "fi_id": "FI-061",
+      "name": "Payment Method Optimisation",
+      "status": "DEFERRED",
+      "reason": "The current data model lacks evidence that a cheaper payment method was available."
+    },
+    {
+      "fi_id": "FI-062",
+      "name": "Banking Cost Benchmark",
+      "status": "DEFERRED",
+      "reason": "The current data model lacks an external banking-cost benchmark."
+    }
+  ]
+}

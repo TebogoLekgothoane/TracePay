@@ -1,0 +1,110 @@
+[
+  {
+    "id": "fi004-cash-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-05",
+    "description": "ATM CASH WITHDRAWAL FNB",
+    "amount": "200",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Cash Withdrawal"
+    }
+  },
+  {
+    "id": "fi004-atm-fee-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-05",
+    "description": "ATM WITHDRAWAL FEE",
+    "amount": "20.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "fi004-cash-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-05",
+    "description": "ATM CASH WITHDRAWAL FNB",
+    "amount": "300",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Cash Withdrawal"
+    }
+  },
+  {
+    "id": "fi004-atm-fee-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-05",
+    "description": "ATM WITHDRAWAL FEE",
+    "amount": "20.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "fi004-cash-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-05",
+    "description": "ATM CASH WITHDRAWAL FNB",
+    "amount": "400",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Cash Withdrawal"
+    }
+  },
+  {
+    "id": "fi004-atm-fee-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-05",
+    "description": "ATM WITHDRAWAL FEE",
+    "amount": "20.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  }
+]

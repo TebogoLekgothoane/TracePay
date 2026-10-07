@@ -1,0 +1,74 @@
+[
+  {
+    "id": "fi023-gym-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-01",
+    "description": "DEBIT ORDER VIRGIN ACTIVE",
+    "amount": "450.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "VIRGIN ACTIVE",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Other"
+    }
+  },
+  {
+    "id": "fi023-gym-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-01",
+    "description": "DEBIT ORDER VIRGIN ACTIVE",
+    "amount": "450.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "VIRGIN ACTIVE",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Other"
+    }
+  },
+  {
+    "id": "pad-grocery-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-03",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "900.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "pad-grocery-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-10-03",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "900.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  }
+]

@@ -3,7 +3,7 @@
 The backend currently has two focused processes:
 
 1. **Auth (Node.js + TypeScript)** in `src/auth` — signup, login, Twilio SMS OTP.
-2. **Statement extraction API (Python)** in `pdf_processor/` — PDF inspection, table extraction, OCR fallback, normalization, and validation.
+2. **Financial API (Python)** in `app/` and `leak_intelligence/` — statement extraction, categorisation, and deterministic financial intelligence.
 
 Do **not** put Twilio secrets or auth backend logic in the React Native app.
 
@@ -34,12 +34,29 @@ Twilio env vars: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and either `TWILIO_V
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-The Python API intentionally starts with extraction only. It does not write to Supabase or run ML yet.
+The Python API reads the signed-in user's stored transactions and returns analysis. It does not persist leak, reasoning, or recommendation rows. Intelligence decisions are deterministic. AI does not decide leaks.
+
+Stored transactions move through this pipeline:
+
+```text
+Transactions → Categorisation → Financial Feature Engine → Behaviour Analysis
+→ Leak Detection → Financial Reasoning → Financial Recommendations
+```
+
+AI PDF extraction and AI categorisation are separate flags. Both default to off. When PDF AI is enabled it can receive the statement PDF. Categorisation AI receives sanitized descriptions only. Neither flag chooses a leak.
 
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/health` | Health check |
 | POST | `/extraction/preview` | Extract and validate a PDF without importing it |
+| POST | `/categorisation/reprocess` | Reclassify stored transactions |
+| GET | `/financial-features` | Completed-period financial features |
+| GET | `/behaviour-analysis` | Behaviour observations |
+| GET | `/leak-detections` | Deterministic leak findings |
+| GET | `/financial-reasoning` | Evidence-backed explanations of those findings |
+| GET | `/financial-recommendations` | Review actions derived from reasoning |
+
+Deferred catalogue items stay deferred because the current data model lacks the evidence they need. FI-031 Impulse Spending Pattern is deferred: a shopping increase does not prove impulse intent. FI-054 Duplicate Charges is covered by FI-040 duplicate merchant payments. The canonical FI catalogue file is not in this repository, so untitled ids are not reconstructed. See `tests/fixtures/intelligence/coverage_gaps.json`.
 
 The extraction response uses one canonical transaction shape for both file types:
 

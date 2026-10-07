@@ -360,14 +360,31 @@ def _recurring_reasoning(
         if merchant
         else Decimal("0.70")
     )
-    return _Draft(
-        root_cause_type="recurring_commitment",
-        title="Stable recurring payment pattern",
-        explanation=(
+    if leak.evidence.get("finding_focus") == "subscription_review":
+        title = "Potential subscription that may warrant review"
+        explanation = (
+            "Subscription-category payments followed a billing-like interval with a "
+            "stable amount pattern. This may warrant review, but the data does not "
+            "show whether the service is still used or forgotten."
+        )
+    elif leak.evidence.get("finding_focus") == "debit_order_review":
+        title = "Potential debit order that may warrant review"
+        explanation = (
+            "Payments described as debit orders followed a billing-like interval. "
+            "This may warrant review, but the data does not show whether the "
+            "underlying service is unused or no longer necessary."
+        )
+    else:
+        title = "Stable recurring payment pattern"
+        explanation = (
             "Payments followed a billing-like interval with a sufficiently stable "
             "amount pattern. This supports a recurring financial commitment, but "
             "does not indicate whether the payment is wanted or avoidable."
-        ),
+        )
+    return _Draft(
+        root_cause_type="recurring_commitment",
+        title=title,
+        explanation=explanation,
         evidence=evidence,
         persistence=persistence,
         evidence_strength=(
@@ -390,10 +407,156 @@ def _fee_reasoning(
         "account_fee_total": fees.account_fee_total,
         "sms_fee_total": fees.sms_fee_total,
         "immediate_payment_fee_total": fees.immediate_payment_fee_total,
+        "balance_enquiry_fee_total": fees.balance_enquiry_fee_total,
     }
     identified = {
         key: value for key, value in subtypes.items() if value not in (None, ZERO)
     }
+    focus = leak.evidence.get("finding_focus")
+    if focus == "atm_balance_enquiry":
+        return _Draft(
+            root_cause_type="fee_accumulation",
+            title="Repeated ATM balance enquiry fees",
+            explanation=(
+                "Multiple balance enquiry charges were classified from transaction "
+                "descriptions. The pattern may indicate avoidable ATM usage, but the "
+                "data does not establish digital banking availability or that each "
+                "fee was unnecessary."
+            ),
+            evidence={
+                "fee_transaction_count": fees.bank_fee_transaction_count,
+                "balance_enquiry_fee_total": fees.balance_enquiry_fee_total,
+                "monthly_average_fee": leak.evidence.get("monthly_average_fee"),
+            },
+            persistence=classify_persistence(series),
+            evidence_strength=Decimal("0.82"),
+        )
+    if focus == "sms_banking":
+        return _Draft(
+            root_cause_type="fee_accumulation",
+            title="Repeated SMS banking charges",
+            explanation=(
+                "Multiple SMS banking or notification fees were classified from "
+                "transaction descriptions. The pattern may represent an avoidable "
+                "banking cost, but the data does not establish that SMS alerts were "
+                "unnecessary or that a free channel was available."
+            ),
+            evidence={
+                "fee_transaction_count": fees.bank_fee_transaction_count,
+                "sms_fee_total": fees.sms_fee_total,
+                "monthly_average_fee": leak.evidence.get("monthly_average_fee"),
+            },
+            persistence=classify_persistence(series),
+            evidence_strength=Decimal("0.82"),
+        )
+    if focus == "interest_charges":
+        return _Draft(
+            root_cause_type="fee_accumulation",
+            title="Interest charges were observed",
+            explanation=(
+                "Transactions described as interest charges were observed and may "
+                "warrant review."
+            ),
+            evidence={
+                "interest_charge_count": fees.interest_charge_count,
+                "interest_charge_total": fees.interest_charge_total,
+                "completed_month_count": len(months),
+                "monthly_average_fee": leak.evidence.get("monthly_average_fee"),
+            },
+            persistence=classify_persistence(series),
+            evidence_strength=Decimal("0.82"),
+        )
+    if focus == "overdraft_fee_pattern":
+        return _Draft(
+            root_cause_type="fee_accumulation",
+            title="Repeated overdraft fees were observed",
+            explanation=(
+                "Fees described as overdraft fees were observed and may warrant review."
+            ),
+            evidence={
+                "overdraft_fee_count": fees.overdraft_fee_count,
+                "overdraft_fee_total": fees.overdraft_fee_total,
+                "completed_month_count": len(months),
+                "monthly_average_fee": leak.evidence.get("monthly_average_fee"),
+            },
+            persistence=classify_persistence(series),
+            evidence_strength=Decimal("0.82"),
+        )
+    if focus == "insufficient_funds_charges":
+        return _Draft(
+            root_cause_type="fee_accumulation",
+            title="Repeated insufficient-funds charges were observed",
+            explanation=(
+                "Fees described as insufficient-funds charges were observed and may "
+                "warrant review."
+            ),
+            evidence={
+                "insufficient_funds_fee_count": fees.insufficient_funds_fee_count,
+                "insufficient_funds_fee_total": fees.insufficient_funds_fee_total,
+                "completed_month_count": len(months),
+                "monthly_average_fee": leak.evidence.get("monthly_average_fee"),
+            },
+            persistence=classify_persistence(series),
+            evidence_strength=Decimal("0.82"),
+        )
+    if focus == "foreign_transaction_fee":
+        return _Draft(
+            root_cause_type="fee_accumulation",
+            title="Repeated foreign transaction fees were observed",
+            explanation=(
+                "Fees described as foreign transaction fees were observed and may "
+                "warrant review."
+            ),
+            evidence={
+                "foreign_transaction_fee_count": fees.foreign_transaction_fee_count,
+                "foreign_transaction_fee_total": fees.foreign_transaction_fee_total,
+                "completed_month_count": len(months),
+                "monthly_average_fee": leak.evidence.get("monthly_average_fee"),
+            },
+            persistence=classify_persistence(series),
+            evidence_strength=Decimal("0.82"),
+        )
+    if focus == "recurring_merchant_fee_change":
+        return _Draft(
+            root_cause_type="fee_accumulation",
+            title="Repeated card fees increased",
+            explanation=(
+                "Repeated card fees increased over the observed period compared with "
+                "the prior baseline. This reflects observed fee amounts only."
+            ),
+            evidence={
+                "card_fee_transaction_count": fees.card_fee_transaction_count,
+                "card_fee_total": fees.card_fee_total,
+                "previous_amount": leak.evidence.get("previous_amount"),
+                "current_amount": leak.evidence.get("current_amount"),
+                "fee_change_amount": leak.evidence.get("fee_change_amount"),
+                "completed_month_count": len(months),
+                "monthly_average_fee": leak.evidence.get("monthly_average_fee"),
+            },
+            persistence=classify_persistence(series),
+            evidence_strength=Decimal("0.84"),
+        )
+    if focus == "monthly_banking_fee_trend":
+        return _Draft(
+            root_cause_type="fee_accumulation",
+            title="Monthly banking fees increased over time",
+            explanation=(
+                "Completed monthly banking-fee totals rose materially compared with "
+                "the prior baseline period. This is an overall fee trend rather than "
+                "one specific charge type, and it does not establish that lower fees "
+                "were available."
+            ),
+            evidence={
+                "fee_transaction_count": fees.bank_fee_transaction_count,
+                "monthly_average_fee": leak.evidence.get("monthly_average_fee"),
+                "fee_change_amount": leak.evidence.get("fee_change_amount"),
+                "completed_month_fee_totals": leak.evidence.get(
+                    "completed_month_fee_totals"
+                ),
+            },
+            persistence=classify_persistence(series),
+            evidence_strength=Decimal("0.84"),
+        )
     evidence = {
         "fee_transaction_count": fees.bank_fee_transaction_count,
         "fee_total": fees.bank_fee_total,
@@ -433,14 +596,32 @@ def _cash_reasoning(
     leak: LeakDetection,
 ) -> _Draft:
     cash = snapshot.cash
-    return _Draft(
-        root_cause_type="transaction_pattern",
-        title="Repeated cash withdrawals carried ATM fee costs",
-        explanation=(
+    focus = leak.evidence.get("finding_focus")
+    if focus == "atm_withdrawal_fee_stacking":
+        title = "Repeated ATM withdrawals carried stacked transaction fees"
+        explanation = (
+            "Multiple cash withdrawals coincided with repeated ATM fee charges. "
+            "The evidence links fees to withdrawal activity without proving that "
+            "lower-cost payment methods were available or that the fees were avoidable."
+        )
+    elif focus == "cash_dependency":
+        title = "Cash withdrawals were a meaningful share of spending"
+        explanation = (
+            "Cash withdrawals represent a meaningful share of observed spending. "
+            "The evidence describes that share without establishing that the "
+            "withdrawals were unnecessary."
+        )
+    else:
+        title = "Repeated cash withdrawals carried ATM fee costs"
+        explanation = (
             "Repeated cash-withdrawal activity coincided with identifiable ATM fee "
             "costs. The evidence links the detected amount to that transaction "
             "pattern without determining whether the withdrawals were avoidable."
-        ),
+        )
+    return _Draft(
+        root_cause_type="transaction_pattern",
+        title=title,
+        explanation=explanation,
         evidence={
             "cash_withdrawal_count": cash.cash_withdrawal_count,
             "cash_withdrawal_total": cash.cash_withdrawal_total,

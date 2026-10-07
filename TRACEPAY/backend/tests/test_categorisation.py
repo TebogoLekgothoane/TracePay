@@ -556,8 +556,16 @@ def test_pipeline_metrics_cover_mixed_batch(monkeypatch: pytest.MonkeyPatch) -> 
 
 @pytest.mark.parametrize(("description", "category", "transaction_class"), [
     ("SMS Notification Fee: 1 notification(s)", "Bank Fees", "bank_fee"),
+    ("Interest Charged", "Bank Fees", "bank_fee"),
+    ("Debit Interest", "Bank Fees", "bank_fee"),
+    ("Overdraft Interest", "Bank Fees", "bank_fee"),
+    ("Overdraft Fee", "Bank Fees", "bank_fee"),
+    ("Overdraft Charge", "Bank Fees", "bank_fee"),
     ("Monthly Account Admin Fee", "Bank Fees", "bank_fee"),
     ("Card Purchase Insufficient Funds Fee: Uber Johannesburg Za", "Bank Fees", "bank_fee"),
+    ("Insufficient Funds Charge", "Bank Fees", "bank_fee"),
+    ("NSF Fee", "Bank Fees", "bank_fee"),
+    ("NSF Charge", "Bank Fees", "bank_fee"),
     ("Banking App External PayShap Payment: Tebogo", "Transfers", "person_to_person"),
     ("Banking App Immediate Payment: Neo Capitec", "Transfers", "person_to_person"),
     ("Live Better Round-up Transfer", "Transfers", "internal_transfer"),
@@ -573,6 +581,13 @@ def test_capitec_live_failure_patterns(
     result = classify_transaction(description, "debit")
     assert result.category_name == category
     assert result.transaction_class == transaction_class
+
+
+def test_interest_received_stays_income() -> None:
+    result = classify_transaction("Interest Received", "credit")
+    assert result.category_name == "Other Income"
+    assert result.transaction_class == "income"
+    assert result.rule == "description:interest-received"
 
 
 def test_weak_statement_category_does_not_override_deterministic_fee() -> None:

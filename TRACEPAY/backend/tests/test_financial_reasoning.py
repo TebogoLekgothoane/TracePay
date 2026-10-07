@@ -18,6 +18,7 @@ from leak_intelligence.reasoning_engine import (
     classify_persistence,
 )
 from leak_intelligence.reasoning_report import render_financial_reasoning_report
+from leak_intelligence.recommendation_engine import recommend_actions
 
 
 def _transaction(
@@ -185,6 +186,112 @@ def test_recurring_payment_reasoning_is_neutral_and_persistent() -> None:
     assert "cancel" not in analysis.explanation.lower()
 
 
+_UNKNOWN_FEE_SUBTYPE = (
+    "The available classification evidence does not reliably identify one fee subtype."
+)
+_UNRELATED_FEE_REFS = (
+    "fees.balance_enquiry_fee_total",
+    "fees.sms_fee_total",
+    "fees.immediate_payment_fee_total",
+)
+
+
+def _completed_fee_rows(
+    prefix: str,
+    description: str,
+    amounts: tuple[tuple[int, str], ...],
+) -> list[FeatureTransaction]:
+    return [
+        _transaction(
+            f"{prefix}-{month}",
+            amount,
+            date(2026, month, 30 if month == 9 else 2),
+            merchant="BANK",
+            category="Bank Fees",
+            transaction_class="bank_fee",
+            description=description,
+        )
+        for month, amount in amounts
+    ]
+
+
+def _assert_typed_fee_reasoning_stays_unknown(
+    pipeline,
+    *,
+    focus: str,
+    explanation: str,
+    required_refs: tuple[str, ...],
+) -> None:
+    leak = next(item for item in pipeline[2].leaks if item.leak_type == "bank_fee_leak")
+    analysis = _analysis_for_type(pipeline, "bank_fee_leak")
+    assert leak.evidence["finding_focus"] == focus
+    assert analysis.explanation == explanation
+    assert _UNKNOWN_FEE_SUBTYPE not in analysis.explanation
+    assert analysis.avoidability == "unknown"
+    assert analysis.impact_assessment.recoverable_amount is None
+    assert analysis.impact_assessment.potentially_avoidable_amount is None
+    lowered = analysis.explanation.lower()
+    assert "saving" not in lowered
+    assert "recover" not in lowered
+    assert "cheaper" not in lowered
+    for reference in required_refs:
+        assert reference in analysis.supporting_feature_references
+    for reference in _UNRELATED_FEE_REFS:
+        assert reference not in analysis.supporting_feature_references
+    recommendation = next(
+        item
+        for item in recommend_actions(pipeline[3]).recommendations
+        if item.source_reasoning_id == analysis.reasoning_id
+    )
+    assert recommendation.recommendation_type == "review_bank_fees"
+    assert recommendation.expected_savings_amount is None
+    assert recommendation.potential_recovery_amount is None
+
+
+def test_foreign_transaction_fee_reasoning_keeps_its_subtype() -> None:
+    pipeline = _pipeline(
+        _completed_fee_rows(
+            "fx",
+            "FOREIGN TRANSACTION FEE",
+            ((7, "15"), (8, "15"), (9, "15")),
+        )
+    )
+    _assert_typed_fee_reasoning_stays_unknown(
+        pipeline,
+        focus="foreign_transaction_fee",
+        explanation=(
+            "Fees described as foreign transaction fees were observed and may "
+            "warrant review."
+        ),
+        required_refs=(
+            "fees.foreign_transaction_fee_total",
+            "fees.foreign_transaction_fee_count",
+        ),
+    )
+
+
+def test_recurring_card_fee_reasoning_keeps_its_subtype() -> None:
+    pipeline = _pipeline(
+        _completed_fee_rows(
+            "card",
+            "MONTHLY CARD FEE",
+            ((7, "25"), (8, "35"), (9, "45")),
+        )
+    )
+    _assert_typed_fee_reasoning_stays_unknown(
+        pipeline,
+        focus="recurring_merchant_fee_change",
+        explanation=(
+            "Repeated card fees increased over the observed period compared with "
+            "the prior baseline. This reflects observed fee amounts only."
+        ),
+        required_refs=(
+            "fees.card_fee_total",
+            "fees.card_fee_transaction_count",
+        ),
+    )
+
+
 def test_bank_fee_reasoning_uses_only_identified_subtypes() -> None:
     fees = [
         _transaction(
@@ -216,9 +323,11 @@ def test_bank_fee_reasoning_uses_only_identified_subtypes() -> None:
         ),
     ]
     pipeline = _pipeline(fees)
+    leak = next(item for item in pipeline[2].leaks if item.leak_type == "bank_fee_leak")
     analysis = _analysis_for_type(pipeline, "bank_fee_leak")
     assert analysis.root_cause_type == "fee_accumulation"
-    assert "atm_fee_total" in analysis.evidence["identified_fee_subtypes"]
+    assert leak.evidence.get("finding_focus") == "monthly_banking_fee_trend"
+    assert analysis.evidence.get("fee_change_amount") is not None
     assert analysis.avoidability == "medium"
     assert analysis.impact_assessment.potentially_avoidable_amount is None
 

@@ -13,8 +13,12 @@
       "transactions_file": "scenarios/FI-015-monthly-banking-fee-trend.json",
       "expected": {
         "detected": true,
-        "leak_type": "bank_fee_leak"
-      }
+        "leak_type": "bank_fee_leak",
+        "evidence": {
+          "finding_focus": "monthly_banking_fee_trend"
+        }
+      },
+      "enforce_expectation": true
     },
     {
       "scenario_id": "FI-029-fast-food-escalation",
@@ -27,7 +31,8 @@
       "expected": {
         "detected": true,
         "leak_type": "food_spending_leak"
-      }
+      },
+      "enforce_expectation": true
     },
     {
       "scenario_id": "FI-032-weekend-spending-spike",
@@ -39,8 +44,12 @@
       "transactions_file": "scenarios/FI-032-weekend-spending-spike.json",
       "expected": {
         "detected": true,
-        "behavior_type": "weekend_spending_pattern"
-      }
+        "behavior_type": "weekend_spending_pattern",
+        "evidence": {
+          "finding_focus": "weekend_spending_spike"
+        }
+      },
+      "enforce_expectation": true
     },
     {
       "scenario_id": "FI-040-duplicate-merchant-payment",
@@ -52,12 +61,16 @@
       "transactions_file": "scenarios/FI-040-duplicate-merchant-payment.json",
       "expected": {
         "detected": true,
-        "leak_type": "duplicate_payment_leak"
-      }
+        "leak_type": "duplicate_payment_leak",
+        "evidence": {
+          "finding_focus": "duplicate_merchant_payment"
+        }
+      },
+      "enforce_expectation": true
     },
     {
       "scenario_id": "debit-order-dstv-subscription",
-      "fi_id": null,
+      "fi_id": "FI-016",
       "name": "DSTV monthly debit order",
       "case_kind": "positive",
       "family": "subscriptions",
@@ -66,7 +79,8 @@
       "expected": {
         "detected": true,
         "leak_type": "subscription_leak"
-      }
+      },
+      "enforce_expectation": true
     },
     {
       "scenario_id": "single-restaurant-meal",
@@ -84,7 +98,8 @@
           "subscription_leak",
           "unknown_recurring_payment"
         ]
-      }
+      },
+      "enforce_expectation": true
     },
     {
       "scenario_id": "next-day-lookalike-payment",
@@ -97,7 +112,8 @@
       "expected": {
         "detected": false,
         "leak_type": "duplicate_payment_leak"
-      }
+      },
+      "enforce_expectation": true
     },
     {
       "scenario_id": "edge-two-debit-order-payments",
@@ -110,7 +126,8 @@
       "expected": {
         "detected": false,
         "leak_type": "subscription_leak"
-      }
+      },
+      "enforce_expectation": true
     },
     {
       "scenario_id": "edge-chatgpt-short-interval",
@@ -127,7 +144,8 @@
           "recurring_payment_leak",
           "unknown_recurring_payment"
         ]
-      }
+      },
+      "enforce_expectation": true
     },
     {
       "scenario_id": "edge-fast-food-low-confidence",
@@ -140,7 +158,8 @@
       "expected": {
         "detected": false,
         "leak_type": "food_spending_leak"
-      }
+      },
+      "enforce_expectation": true
     },
     {
       "scenario_id": "edge-boilerplate-merchant-recurring",
@@ -156,7 +175,8 @@
         "evidence": {
           "merchant_key": null
         }
-      }
+      },
+      "enforce_expectation": true
     },
     {
       "scenario_id": "edge-small-banking-fee-change",
@@ -169,11 +189,12 @@
       "expected": {
         "detected": false,
         "leak_type": "bank_fee_leak"
-      }
+      },
+      "enforce_expectation": true
     },
     {
       "scenario_id": "edge-irregular-debit-order-interval",
-      "fi_id": null,
+      "fi_id": "FI-026",
       "name": "Irregular debit-order interval",
       "case_kind": "edge",
       "family": "debit_orders",
@@ -186,7 +207,8 @@
           "recurring_payment_leak",
           "unknown_recurring_payment"
         ]
-      }
+      },
+      "enforce_expectation": true
     },
     {
       "scenario_id": "edge-incomplete-final-fee-month",
@@ -199,7 +221,8 @@
       "expected": {
         "detected": false,
         "leak_type": "bank_fee_leak"
-      }
+      },
+      "enforce_expectation": true
     },
     {
       "scenario_id": "edge-zero-baseline-fast-food",
@@ -212,7 +235,8 @@
       "expected": {
         "detected": false,
         "leak_type": "food_spending_leak"
-      }
+      },
+      "enforce_expectation": true
     },
     {
       "scenario_id": "edge-fast-food-under-total-floor",
@@ -225,7 +249,622 @@
       "expected": {
         "detected": true,
         "leak_type": "food_spending_leak"
-      }
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-003-immediate-payment-fee-overuse",
+      "fi_id": "FI-003",
+      "name": "Immediate payment fee overuse",
+      "case_kind": "positive",
+      "family": "banking_fees",
+      "summary": "Repeated immediate payment fees rise across three completed months.",
+      "transactions_file": "scenarios/FI-003-immediate-payment-fee-overuse.json",
+      "expected": {
+        "detected": true,
+        "leak_type": "bank_fee_leak"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-003-immediate-payment-fee-rare",
+      "fi_id": "FI-003",
+      "name": "Rare immediate payment fees",
+      "case_kind": "negative",
+      "family": "banking_fees",
+      "summary": "A single immediate payment fee should not trigger a banking fee leak.",
+      "transactions_file": "scenarios/FI-003-immediate-payment-fee-rare.json",
+      "expected": {
+        "detected": false,
+        "leak_type": "bank_fee_leak"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "edge-immediate-payment-fees-below-materiality",
+      "fi_id": "FI-003",
+      "name": "Immediate payment fees below materiality",
+      "case_kind": "edge",
+      "family": "banking_fees",
+      "summary": "Several small immediate payment fees stay below the fee-change materiality threshold.",
+      "transactions_file": "scenarios/edge-immediate-payment-fees-below-materiality.json",
+      "expected": {
+        "detected": false,
+        "leak_type": "bank_fee_leak"
+      },
+      "enforce_expectation": false
+    },
+    {
+      "scenario_id": "FI-004-atm-withdrawal-fee-stacking",
+      "fi_id": "FI-004",
+      "name": "ATM withdrawal fee stacking",
+      "case_kind": "positive",
+      "family": "banking_fees",
+      "summary": "Repeated cash withdrawals with ATM fees and cash dependency behaviour.",
+      "transactions_file": "scenarios/FI-004-atm-withdrawal-fee-stacking.json",
+      "expected": {
+        "detected": true,
+        "leak_type": "cash_usage_leak",
+        "evidence": {
+          "finding_focus": "atm_withdrawal_fee_stacking",
+          "atm_fee_count": 3
+        }
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-004-atm-withdrawal-fee-minimal",
+      "fi_id": "FI-004",
+      "name": "Minimal ATM activity",
+      "case_kind": "negative",
+      "family": "banking_fees",
+      "summary": "One cash withdrawal without ATM fees should not create a cash usage leak.",
+      "transactions_file": "scenarios/FI-004-atm-withdrawal-fee-minimal.json",
+      "expected": {
+        "detected": false,
+        "leak_type": "cash_usage_leak"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-005-balance-enquiry-charges",
+      "fi_id": "FI-005",
+      "name": "Balance enquiry charges",
+      "case_kind": "positive",
+      "family": "banking_fees",
+      "summary": "Repeated balance enquiry fees accumulate across three months.",
+      "transactions_file": "scenarios/FI-005-balance-enquiry-charges.json",
+      "expected": {
+        "detected": true,
+        "leak_type": "bank_fee_leak",
+        "evidence": {
+          "finding_focus": "atm_balance_enquiry"
+        }
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-005-balance-enquiry-single",
+      "fi_id": "FI-005",
+      "name": "Single balance enquiry",
+      "case_kind": "negative",
+      "family": "banking_fees",
+      "summary": "One balance enquiry fee should not trigger a banking fee leak.",
+      "transactions_file": "scenarios/FI-005-balance-enquiry-single.json",
+      "expected": {
+        "detected": false,
+        "leak_type": "bank_fee_leak"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-013-sms-banking-charges",
+      "fi_id": "FI-013",
+      "name": "SMS banking charges",
+      "case_kind": "positive",
+      "family": "banking_fees",
+      "summary": "SMS notification fees repeat and accumulate across three months.",
+      "transactions_file": "scenarios/FI-013-sms-banking-charges.json",
+      "expected": {
+        "detected": true,
+        "leak_type": "bank_fee_leak",
+        "evidence": {
+          "finding_focus": "sms_banking"
+        }
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-013-no-sms-fees",
+      "fi_id": "FI-013",
+      "name": "No SMS banking fees",
+      "case_kind": "negative",
+      "family": "banking_fees",
+      "summary": "Groceries-only spend should not produce a banking fee leak.",
+      "transactions_file": "scenarios/FI-013-no-sms-fees.json",
+      "expected": {
+        "detected": false,
+        "leak_type": "bank_fee_leak"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-016-forgotten-showmax-subscription",
+      "fi_id": "FI-016",
+      "name": "Forgotten Showmax subscription",
+      "case_kind": "positive",
+      "family": "subscriptions",
+      "summary": "A stable Showmax debit order repeats for four months.",
+      "transactions_file": "scenarios/FI-016-forgotten-showmax-subscription.json",
+      "expected": {
+        "detected": true,
+        "leak_type": "subscription_leak",
+        "evidence": {
+          "finding_focus": "subscription_review"
+        }
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-016-single-subscription-payment",
+      "fi_id": "FI-016",
+      "name": "Single subscription debit",
+      "case_kind": "negative",
+      "family": "subscriptions",
+      "summary": "One Showmax debit among normal spend should not be treated as a subscription leak.",
+      "transactions_file": "scenarios/FI-016-single-subscription-payment.json",
+      "expected": {
+        "detected": false,
+        "leak_type": "subscription_leak"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-018-subscription-price-creep",
+      "fi_id": "FI-018",
+      "name": "Subscription price creep",
+      "case_kind": "positive",
+      "family": "subscriptions",
+      "summary": "Netflix debits rise across four monthly payments.",
+      "transactions_file": "scenarios/FI-018-subscription-price-creep.json",
+      "expected": {
+        "detected": true,
+        "behavior_type": "price_increase_pattern",
+        "evidence": {
+          "finding_focus": "subscription_price_creep"
+        }
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-018-flat-subscription",
+      "fi_id": "FI-018",
+      "name": "Flat subscription amount",
+      "case_kind": "negative",
+      "family": "subscriptions",
+      "summary": "Two flat Netflix debits should not show subscription price creep.",
+      "transactions_file": "scenarios/FI-018-flat-subscription.json",
+      "expected": {
+        "detected": false,
+        "behavior_type": "price_increase_pattern"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "edge-subscription-creep-under-materiality",
+      "fi_id": "FI-018",
+      "name": "Subscription creep below materiality",
+      "case_kind": "edge",
+      "family": "subscriptions",
+      "summary": "Netflix increases by only R2 per month across four payments.",
+      "transactions_file": "scenarios/edge-subscription-creep-under-materiality.json",
+      "expected": {
+        "detected": false,
+        "behavior_type": "price_increase_pattern"
+      },
+      "enforce_expectation": false
+    },
+    {
+      "scenario_id": "FI-023-debit-order-zombie-gym",
+      "fi_id": "FI-023",
+      "name": "Debit order zombie gym",
+      "case_kind": "positive",
+      "family": "debit_orders",
+      "summary": "A Virgin Active debit order repeats monthly for four months.",
+      "transactions_file": "scenarios/FI-023-debit-order-zombie-gym.json",
+      "expected": {
+        "detected": true,
+        "leak_type": "unknown_recurring_payment",
+        "evidence": {
+          "finding_focus": "debit_order_review"
+        }
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-023-debit-order-ended",
+      "fi_id": "FI-023",
+      "name": "Ended debit order",
+      "case_kind": "negative",
+      "family": "debit_orders",
+      "summary": "Two gym debits should not be treated as an established recurring bill.",
+      "transactions_file": "scenarios/FI-023-debit-order-ended.json",
+      "expected": {
+        "detected": false,
+        "leak_types": [
+          "subscription_leak",
+          "recurring_payment_leak",
+          "unknown_recurring_payment"
+        ]
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-025-increased-debit-order-amounts",
+      "fi_id": "FI-025",
+      "name": "Increased debit order amounts",
+      "case_kind": "positive",
+      "family": "debit_orders",
+      "summary": "City of Johannesburg debit order amounts rise across four months.",
+      "transactions_file": "scenarios/FI-025-increased-debit-order-amounts.json",
+      "expected": {
+        "detected": true,
+        "behavior_type": "price_increase_pattern",
+        "evidence": {
+          "finding_focus": "debit_order_amount_increase"
+        }
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-025-flat-debit-order",
+      "fi_id": "FI-025",
+      "name": "Flat debit order",
+      "case_kind": "negative",
+      "family": "debit_orders",
+      "summary": "Flat municipal debits should not show a price increase pattern.",
+      "transactions_file": "scenarios/FI-025-flat-debit-order.json",
+      "expected": {
+        "detected": false,
+        "behavior_type": "price_increase_pattern"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-030-convenience-store-leakage",
+      "fi_id": "FI-030",
+      "name": "Convenience store leakage",
+      "case_kind": "positive",
+      "family": "behaviour",
+      "summary": "Spar Express grocery-category spend rises in frequency and total.",
+      "transactions_file": "scenarios/FI-030-convenience-store-leakage.json",
+      "expected": {
+        "detected": true,
+        "behavior_type": "spending_habit_pattern",
+        "evidence": {
+          "finding_focus": "convenience_store_spending"
+        }
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-030-flat-convenience-spend",
+      "fi_id": "FI-030",
+      "name": "Flat convenience spend",
+      "case_kind": "negative",
+      "family": "behaviour",
+      "summary": "Flat Spar Express spend should not show convenience leakage growth.",
+      "transactions_file": "scenarios/FI-030-flat-convenience-spend.json",
+      "expected": {
+        "detected": false,
+        "behavior_type": "category_growth"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-031-impulse-spending-pattern",
+      "fi_id": "FI-031",
+      "name": "FI-031 deferred shopping spike",
+      "case_kind": "negative",
+      "family": "behaviour",
+      "summary": "DEFERRED. A shopping/spending increase does not prove impulse intent, and the current data model contains no reliable impulse-intent signal. This spike must not become an impulse finding.",
+      "transactions_file": "scenarios/FI-031-impulse-spending-pattern.json",
+      "expected": {
+        "detected": false,
+        "behavior_type": "spending_increase"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-031-stable-shopping",
+      "fi_id": "FI-031",
+      "name": "Stable shopping spend",
+      "case_kind": "negative",
+      "family": "behaviour",
+      "summary": "Flat monthly shopping totals should not show an impulse spending spike.",
+      "transactions_file": "scenarios/FI-031-stable-shopping.json",
+      "expected": {
+        "detected": false,
+        "behavior_type": "spending_increase"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-033-payday-spending-pattern",
+      "fi_id": "FI-033",
+      "name": "Payday spending pattern",
+      "case_kind": "positive",
+      "family": "behaviour",
+      "summary": "Salary credits on the 25th are followed by concentrated grocery spend.",
+      "transactions_file": "scenarios/FI-033-payday-spending-pattern.json",
+      "expected": {
+        "detected": true,
+        "behavior_type": "payday_spending_pattern",
+        "evidence": {
+          "finding_focus": "payday_spending_pattern"
+        }
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-033-even-spending-across-month",
+      "fi_id": "FI-033",
+      "name": "Even spending across the month",
+      "case_kind": "negative",
+      "family": "behaviour",
+      "summary": "Salary and spending spread evenly should not show payday concentration.",
+      "transactions_file": "scenarios/FI-033-even-spending-across-month.json",
+      "expected": {
+        "detected": false,
+        "behavior_type": "payday_spending_pattern"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-034-cash-dependency",
+      "fi_id": "FI-034",
+      "name": "Cash dependency",
+      "case_kind": "positive",
+      "family": "behaviour",
+      "summary": "Repeated cash withdrawals with ATM fees form a cash dependency pattern.",
+      "transactions_file": "scenarios/FI-034-cash-dependency.json",
+      "expected": {
+        "detected": true,
+        "leak_type": "cash_usage_leak",
+        "behavior_type": "cash_dependency"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-034-no-cash-withdrawals",
+      "fi_id": "FI-034",
+      "name": "No cash withdrawals",
+      "case_kind": "negative",
+      "family": "behaviour",
+      "summary": "Groceries-only spend should not produce a cash usage leak.",
+      "transactions_file": "scenarios/FI-034-no-cash-withdrawals.json",
+      "expected": {
+        "detected": false,
+        "leak_type": "cash_usage_leak"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-035-airtime-inefficiency",
+      "fi_id": "FI-035",
+      "name": "Airtime inefficiency",
+      "case_kind": "positive",
+      "family": "behaviour",
+      "summary": "MTN airtime purchases rise in the latest month with repeated activity.",
+      "transactions_file": "scenarios/FI-035-airtime-inefficiency.json",
+      "expected": {
+        "detected": true,
+        "leak_type": "airtime_data_leak",
+        "evidence": {
+          "finding_focus": "airtime_inefficiency"
+        }
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-035-minimal-airtime",
+      "fi_id": "FI-035",
+      "name": "Minimal airtime purchases",
+      "case_kind": "negative",
+      "family": "behaviour",
+      "summary": "Two small airtime purchases should not trigger an airtime leak.",
+      "transactions_file": "scenarios/FI-035-minimal-airtime.json",
+      "expected": {
+        "detected": false,
+        "leak_type": "airtime_data_leak"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-036-mobile-data-inefficiency",
+      "fi_id": "FI-036",
+      "name": "Mobile data inefficiency",
+      "case_kind": "positive",
+      "family": "behaviour",
+      "summary": "Vodacom data bundles rise across three completed months.",
+      "transactions_file": "scenarios/FI-036-mobile-data-inefficiency.json",
+      "expected": {
+        "detected": true,
+        "leak_type": "airtime_data_leak",
+        "evidence": {
+          "finding_focus": "data_inefficiency"
+        }
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-036-flat-mobile-data",
+      "fi_id": "FI-036",
+      "name": "Flat mobile data spend",
+      "case_kind": "negative",
+      "family": "behaviour",
+      "summary": "Three flat data bundles should not show mobile data inefficiency.",
+      "transactions_file": "scenarios/FI-036-flat-mobile-data.json",
+      "expected": {
+        "detected": false,
+        "leak_type": "airtime_data_leak"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-037-ride-hailing-dependency",
+      "fi_id": "FI-037",
+      "name": "Ride-hailing dependency",
+      "case_kind": "positive",
+      "family": "behaviour",
+      "summary": "Uber ride-hailing spend rises above a grocery baseline across three months.",
+      "transactions_file": "scenarios/FI-037-ride-hailing-dependency.json",
+      "expected": {
+        "detected": true,
+        "leak_type": "transport_spending_leak",
+        "evidence": {
+          "finding_focus": "ride_hailing_dependency"
+        }
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-037-single-ride-hail",
+      "fi_id": "FI-037",
+      "name": "Single ride-hail trip",
+      "case_kind": "negative",
+      "family": "behaviour",
+      "summary": "One Uber trip should not trigger transport dependency.",
+      "transactions_file": "scenarios/FI-037-single-ride-hail.json",
+      "expected": {
+        "detected": false,
+        "leak_type": "transport_spending_leak"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-038-food-delivery-dependency",
+      "fi_id": "FI-038",
+      "name": "Food delivery dependency",
+      "case_kind": "positive",
+      "family": "behaviour",
+      "summary": "Uber Eats restaurant spend rises across three completed months.",
+      "transactions_file": "scenarios/FI-038-food-delivery-dependency.json",
+      "expected": {
+        "detected": true,
+        "leak_type": "food_spending_leak",
+        "evidence": {
+          "finding_focus": "food_delivery_dependency"
+        }
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-038-single-food-delivery",
+      "fi_id": "FI-038",
+      "name": "Single food delivery",
+      "case_kind": "negative",
+      "family": "behaviour",
+      "summary": "One Uber Eats order should not trigger a food spending leak.",
+      "transactions_file": "scenarios/FI-038-single-food-delivery.json",
+      "expected": {
+        "detected": false,
+        "leak_type": "food_spending_leak"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-039-merchant-price-increase",
+      "fi_id": "FI-039",
+      "name": "Merchant price increase",
+      "case_kind": "positive",
+      "family": "merchant",
+      "summary": "Steers meal amounts rise across three months at the same merchant.",
+      "transactions_file": "scenarios/FI-039-merchant-price-increase.json",
+      "expected": {
+        "detected": true,
+        "behavior_type": "price_increase_pattern",
+        "evidence": {
+          "finding_focus": "merchant_price_increase"
+        }
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-039-flat-merchant-prices",
+      "fi_id": "FI-039",
+      "name": "Flat merchant prices",
+      "case_kind": "negative",
+      "family": "merchant",
+      "summary": "Flat Steers amounts should not show a merchant price increase pattern.",
+      "transactions_file": "scenarios/FI-039-flat-merchant-prices.json",
+      "expected": {
+        "detected": false,
+        "behavior_type": "price_increase_pattern"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-042-recurring-card-fee-change",
+      "fi_id": "FI-042",
+      "name": "Recurring card fee change",
+      "case_kind": "positive",
+      "family": "banking_fees",
+      "summary": "Monthly card fees rise across three completed months.",
+      "transactions_file": "scenarios/FI-042-recurring-card-fee-change.json",
+      "expected": {
+        "detected": true,
+        "leak_type": "bank_fee_leak",
+        "evidence": {
+          "finding_focus": "recurring_merchant_fee_change"
+        }
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-042-flat-card-fee",
+      "fi_id": "FI-042",
+      "name": "Flat card fee",
+      "case_kind": "negative",
+      "family": "banking_fees",
+      "summary": "Flat monthly card fees should not trigger a banking fee leak.",
+      "transactions_file": "scenarios/FI-042-flat-card-fee.json",
+      "expected": {
+        "detected": false,
+        "leak_type": "bank_fee_leak"
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-054-duplicate-charges-same-day",
+      "fi_id": "FI-054",
+      "name": "Duplicate charges same day",
+      "case_kind": "positive",
+      "family": "duplicate",
+      "summary": "Two identical CNA purchases occur on the same day.",
+      "transactions_file": "scenarios/FI-054-duplicate-charges-same-day.json",
+      "expected": {
+        "detected": true,
+        "leak_type": "duplicate_payment_leak",
+        "evidence": {
+          "finding_focus": "duplicate_merchant_payment"
+        }
+      },
+      "enforce_expectation": true
+    },
+    {
+      "scenario_id": "FI-054-no-duplicate-charge",
+      "fi_id": "FI-054",
+      "name": "No duplicate charge",
+      "case_kind": "negative",
+      "family": "duplicate",
+      "summary": "The same CNA amount on consecutive days is not a duplicate charge.",
+      "transactions_file": "scenarios/FI-054-no-duplicate-charge.json",
+      "expected": {
+        "detected": false,
+        "leak_type": "duplicate_payment_leak"
+      },
+      "enforce_expectation": true
     }
   ]
 }

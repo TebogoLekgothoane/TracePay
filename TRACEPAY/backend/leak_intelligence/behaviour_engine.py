@@ -8,9 +8,11 @@ from datetime import date
 from decimal import Decimal
 
 from .behaviour_models import BehaviourAnalysisResult, BehaviourObservation, BehaviorType
+from .engine import RECURRENCE_MIN_OBSERVATIONS
 from .merchant_display import is_reliable_merchant_display_name
-from .models import ConfidenceSupport, FinancialFeatureSnapshot
-from .periods import exclude_incomplete_final_month
+from .common import ZERO
+from .models import ConfidenceSupport, FinancialFeatureSnapshot, MerchantFeature
+from .periods import completed_months, exclude_incomplete_final_month
 from .recurrence_rules import matches_plausible_recurring_interval
 
 MIN_TREND_MONTHS = 3
@@ -20,6 +22,7 @@ MIN_HIGH_CONFIDENCE_RATIO = Decimal("0.60")
 MIN_OBSERVATION_CONFIDENCE = 0.55
 MIN_WEEKEND_SPENDING_TRANSACTIONS = 10
 MIN_PAYDAY_SPENDING_TRANSACTIONS = 10
+MIN_FEE_BURDEN_TOTAL = Decimal("10")
 
 
 def analyze_behaviour(snapshot: FinancialFeatureSnapshot) -> BehaviourAnalysisResult:
@@ -228,28 +231,290 @@ def _merchant_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviour
         trend = feature.merchant_amount_trend
         if trend and trend.amount_change and trend.amount_change > 0 and trend.percentage_change:
             if _material_change(trend.amount_change, trend.percentage_change) and _support_ratio(feature.confidence_support) >= MIN_HIGH_CONFIDENCE_RATIO:
+                subscription_creep = _subscription_recurring_merchant(feature)
+                insurance_increase = (
+                    not subscription_creep and _insurance_recurring_merchant(feature)
+                )
+                debit_order_increase = (
+                    not subscription_creep
+                    and not insurance_increase
+                    and _debit_order_recurring_merchant(feature)
+                )
+                evidence: dict[str, object] = {
+                    "merchant_key": feature.merchant_name,
+                    "first_amount": trend.first_amount,
+                    "latest_amount": trend.latest_amount,
+                    "average_previous_amount": trend.average_previous_amount,
+                    "change_amount": trend.amount_change,
+                    "change_percentage": trend.percentage_change,
+                    "observation_count": feature.merchant_transaction_count,
+                    "first_observed_date": feature.merchant_first_transaction_date,
+                    "last_observed_date": feature.merchant_last_transaction_date,
+                }
+                if subscription_creep:
+                    evidence["finding_focus"] = "subscription_price_creep"
+                    evidence["subscription_category"] = True
+                    evidence["average_interval_days"] = feature.recurrence.average_interval_days
+                    title = f"Observed subscription payment amount increased at {feature.merchant_name}"
+                    description = (
+                        "Recurring subscription-category payments at this merchant show a "
+                        "higher latest amount than the prior observed average. This reflects "
+                        "observed transaction amounts only and does not establish an official "
+                        "price change or overcharging."
+                    )
+                elif insurance_increase:
+                    evidence["finding_focus"] = "insurance_premium_increase"
+                    evidence["insurance_transaction_count"] = feature.insurance_transaction_count
+                    evidence["average_interval_days"] = feature.recurrence.average_interval_days
+                    title = f"Insurance premium payments increased at {feature.merchant_name}"
+                    description = (
+                        "Insurance premium payments increased over the analysed period "
+                        "and may warrant review."
+                    )
+                elif debit_order_increase:
+                    evidence["finding_focus"] = "debit_order_amount_increase"
+                    evidence["debit_order_transaction_count"] = feature.debit_order_transaction_count
+                    evidence["average_interval_days"] = feature.recurrence.average_interval_days
+                    title = f"Observed debit-order amount increased at {feature.merchant_name}"
+                    description = (
+                        "Recurring payments described as debit orders show a higher latest "
+                        "amount than the prior observed average. This reflects observed "
+                        "transaction amounts only and does not establish an official price "
+                        "change, an incorrect debit, or overcharging."
+                    )
+                else:
+                    evidence["finding_focus"] = "merchant_price_increase"
+                    title = f"Payment amount increased at {feature.merchant_name}"
+                    description = (
+                        "The latest observed amount is higher than the prior average for "
+                        "this merchant and may warrant review."
+                    )
                 observations.append(
                     _observation(
                         "price_increase_pattern",
-                        f"Payment amount increased at {feature.merchant_name}",
-                        "The latest observed amount is higher than the prior average for this merchant.",
+                        title,
+                        description,
                         _severity(trend.percentage_change, trend.amount_change),
                         _confidence(feature.confidence_support, feature.merchant_transaction_count, Decimal("0.85")),
-                        {
-                            "merchant_key": feature.merchant_name,
-                            "first_amount": trend.first_amount,
-                            "latest_amount": trend.latest_amount,
-                            "average_previous_amount": trend.average_previous_amount,
-                            "change_amount": trend.amount_change,
-                            "change_percentage": trend.percentage_change,
-                            "observation_count": feature.merchant_transaction_count,
-                        },
+                        evidence,
                         [f"merchants[{feature.merchant_name}].merchant_amount_trend"],
                         feature.merchant_first_transaction_date,
                         feature.merchant_last_transaction_date,
                     )
                 )
+        frequency_shift = _debit_order_frequency_shift(feature)
+        if frequency_shift is not None:
+            observations.append(frequency_shift)
+        coffee_habit = _coffee_habit_observation(feature, total_spending)
+        if coffee_habit is not None:
+            observations.append(coffee_habit)
+        convenience_habit = _convenience_store_habit_observation(feature, total_spending)
+        if convenience_habit is not None:
+            observations.append(convenience_habit)
     return observations
+
+
+def _coffee_habit_observation(
+    feature: MerchantFeature,
+    total_spending: Decimal | None,
+) -> BehaviourObservation | None:
+    coffee_count = feature.coffee_transaction_count
+    total_tx = feature.merchant_transaction_count
+    if (
+        coffee_count < RECURRENCE_MIN_OBSERVATIONS
+        or coffee_count * 2 < total_tx
+        or not is_reliable_merchant_display_name(feature.merchant_name)
+        or _support_ratio(feature.confidence_support) < MIN_HIGH_CONFIDENCE_RATIO
+    ):
+        return None
+    share = (
+        feature.merchant_total_amount / total_spending
+        if total_spending not in (None, ZERO) and coffee_count == total_tx
+        else None
+    )
+    return _observation(
+        "spending_habit_pattern",
+        f"Repeated coffee spending at {feature.merchant_name}",
+        (
+            "Repeated coffee-related spending was observed over the analysed period. "
+            "This describes the observed pattern and does not establish that the "
+            "purchases were unnecessary."
+        ),
+        "low",
+        _confidence(feature.confidence_support, coffee_count, Decimal("0.70")),
+        {
+            "merchant_key": feature.merchant_name,
+            "finding_focus": "coffee_spending_habit",
+            "coffee_transaction_count": coffee_count,
+            "merchant_total_amount": feature.merchant_total_amount if coffee_count == total_tx else None,
+            "average_transaction_amount": feature.merchant_average_amount if coffee_count == total_tx else None,
+            "transaction_frequency": feature.merchant_transaction_frequency,
+            "spending_share": share,
+            "first_observed_date": feature.merchant_first_transaction_date,
+            "last_observed_date": feature.merchant_last_transaction_date,
+        },
+        [f"merchants[{feature.merchant_name}].coffee_transaction_count"],
+        feature.merchant_first_transaction_date,
+        feature.merchant_last_transaction_date,
+    )
+
+
+def _convenience_store_habit_observation(
+    feature: MerchantFeature,
+    total_spending: Decimal | None,
+) -> BehaviourObservation | None:
+    purchase_count = feature.convenience_store_transaction_count
+    total_tx = feature.merchant_transaction_count
+    if (
+        purchase_count < RECURRENCE_MIN_OBSERVATIONS
+        or purchase_count * 2 < total_tx
+        or not is_reliable_merchant_display_name(feature.merchant_name)
+        or _support_ratio(feature.confidence_support) < MIN_HIGH_CONFIDENCE_RATIO
+    ):
+        return None
+    share = (
+        feature.merchant_total_amount / total_spending
+        if total_spending not in (None, ZERO) and purchase_count == total_tx
+        else None
+    )
+    return _observation(
+        "spending_habit_pattern",
+        f"Repeated convenience-store spending at {feature.merchant_name}",
+        (
+            "Repeated convenience-store spending was observed over the analysed period. "
+            "This describes the observed pattern and does not establish that the "
+            "purchases were unnecessary."
+        ),
+        "low",
+        _confidence(feature.confidence_support, purchase_count, Decimal("0.70")),
+        {
+            "merchant_key": feature.merchant_name,
+            "finding_focus": "convenience_store_spending",
+            "convenience_store_transaction_count": purchase_count,
+            "merchant_total_amount": feature.merchant_total_amount if purchase_count == total_tx else None,
+            "average_transaction_amount": feature.merchant_average_amount if purchase_count == total_tx else None,
+            "transaction_frequency": feature.merchant_transaction_frequency,
+            "spending_share": share,
+            "first_observed_date": feature.merchant_first_transaction_date,
+            "last_observed_date": feature.merchant_last_transaction_date,
+        },
+        [f"merchants[{feature.merchant_name}].convenience_store_transaction_count"],
+        feature.merchant_first_transaction_date,
+        feature.merchant_last_transaction_date,
+    )
+
+
+def _debit_order_frequency_shift(
+    feature: MerchantFeature,
+) -> BehaviourObservation | None:
+    recurrence = feature.recurrence
+    if (
+        recurrence.baseline_interval_days is None
+        or recurrence.current_interval_days is None
+        or _subscription_category_majority(feature)
+        or not _debit_order_majority(feature)
+    ):
+        return None
+    return _observation(
+        "frequency_change_pattern",
+        f"Observed debit-order interval changed at {feature.merchant_name}",
+        (
+            "Observed debit-order payments shifted from an established billing "
+            "interval to a different interval. This does not establish that the "
+            "merchant billed incorrectly or that an extra charge occurred."
+        ),
+        "medium",
+        _confidence(feature.confidence_support, feature.merchant_transaction_count, Decimal("0.75")),
+        {
+            "merchant_key": feature.merchant_name,
+            "finding_focus": "debit_order_frequency_change",
+            "debit_order_transaction_count": feature.debit_order_transaction_count,
+            "baseline_interval_days": recurrence.baseline_interval_days,
+            "current_interval_days": recurrence.current_interval_days,
+            "interval_change_days": recurrence.interval_change_days,
+            "baseline_interval_count": recurrence.baseline_interval_count,
+            "current_interval_count": recurrence.current_interval_count,
+            "observation_count": feature.merchant_transaction_count,
+            "first_observed_date": feature.merchant_first_transaction_date,
+            "last_observed_date": feature.merchant_last_transaction_date,
+        },
+        [f"merchants[{feature.merchant_name}].recurrence"],
+        feature.merchant_first_transaction_date,
+        feature.merchant_last_transaction_date,
+    )
+
+
+def _subscription_category_majority(feature: MerchantFeature) -> bool:
+    categories = feature.merchant_category_transaction_count
+    subscription_tx = categories.get("Subscriptions", 0)
+    total_tx = feature.merchant_transaction_count
+    return (
+        subscription_tx >= 2
+        and subscription_tx * 2 >= total_tx
+        and is_reliable_merchant_display_name(feature.merchant_name)
+    )
+
+
+def _debit_order_majority(feature: MerchantFeature) -> bool:
+    total_tx = feature.merchant_transaction_count
+    debit_orders = feature.debit_order_transaction_count
+    return (
+        debit_orders >= 2
+        and debit_orders * 2 >= total_tx
+        and is_reliable_merchant_display_name(feature.merchant_name)
+    )
+
+
+def _subscription_recurring_merchant(feature: MerchantFeature) -> bool:
+    categories = feature.merchant_category_transaction_count
+    subscription_tx = categories.get("Subscriptions", 0)
+    total_tx = feature.merchant_transaction_count
+    if not (
+        subscription_tx >= 2
+        and subscription_tx * 2 >= total_tx
+        and is_reliable_merchant_display_name(feature.merchant_name)
+    ):
+        return False
+    recurrence = feature.recurrence
+    return (
+        recurrence.recurrence_strength in {"medium", "high"}
+        and recurrence.observation_count >= 3
+        and matches_plausible_recurring_interval(recurrence.average_interval_days)
+    )
+
+
+def _insurance_recurring_merchant(feature: MerchantFeature) -> bool:
+    total_tx = feature.merchant_transaction_count
+    insurance = feature.insurance_transaction_count
+    if not (
+        insurance >= 2
+        and insurance * 2 >= total_tx
+        and is_reliable_merchant_display_name(feature.merchant_name)
+    ):
+        return False
+    recurrence = feature.recurrence
+    return (
+        recurrence.recurrence_strength in {"medium", "high"}
+        and recurrence.observation_count >= 3
+        and matches_plausible_recurring_interval(recurrence.average_interval_days)
+    )
+
+
+def _debit_order_recurring_merchant(feature: MerchantFeature) -> bool:
+    total_tx = feature.merchant_transaction_count
+    debit_orders = feature.debit_order_transaction_count
+    if not (
+        debit_orders >= 2
+        and debit_orders * 2 >= total_tx
+        and is_reliable_merchant_display_name(feature.merchant_name)
+    ):
+        return False
+    recurrence = feature.recurrence
+    return (
+        recurrence.recurrence_strength in {"medium", "high"}
+        and recurrence.observation_count >= 3
+        and matches_plausible_recurring_interval(recurrence.average_interval_days)
+    )
 
 
 def _recurring_observations(snapshot: FinancialFeatureSnapshot) -> list[BehaviourObservation]:
@@ -262,6 +527,12 @@ def _recurring_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviou
         if not matches_plausible_recurring_interval(recurrence.average_interval_days):
             continue
         if _support_ratio(feature.confidence_support) < MIN_HIGH_CONFIDENCE_RATIO:
+            continue
+        categories = feature.merchant_category_transaction_count
+        if (
+            feature.merchant_transaction_count > 0
+            and categories.get("Bank Fees", 0) == feature.merchant_transaction_count
+        ):
             continue
         merchant_label = (
             feature.merchant_name
@@ -342,12 +613,14 @@ def _calendar_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviour
             _observation(
                 "weekend_spending_pattern",
                 "Weekend spending concentration observed",
-                "A substantial share of dated spending occurred on Saturdays and Sundays.",
+                "Spending was concentrated on weekends during the analysed period.",
                 "medium" if weekend.weekend_spending_share < Decimal("0.60") else "high",
                 _confidence(None, weekend.dated_spending_transaction_count, Decimal("0.8")),
                 {
+                    "finding_focus": "weekend_spending_spike",
                     "weekend_spending_share": weekend.weekend_spending_share,
                     "weekend_spending_total": weekend.weekend_spending_total,
+                    "weekday_spending_total": weekend.weekday_spending_total,
                     "dated_spending_total": weekend.dated_spending_total,
                     "weekend_transaction_count": weekend.weekend_spending_transaction_count,
                     "dated_spending_transaction_count": weekend.dated_spending_transaction_count,
@@ -369,15 +642,19 @@ def _calendar_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviour
             _observation(
                 "payday_spending_pattern",
                 "Spending is concentrated after income events",
-                f"A substantial share of eligible spending occurred within {payday.window_days} days after income events.",
+                "Spending was concentrated shortly after income was received during the analysed period.",
                 "medium" if payday.post_income_spending_share < Decimal("0.60") else "high",
                 _confidence(None, payday.eligible_spending_transaction_count, Decimal("0.85")),
                 {
+                    "finding_focus": "payday_spending_pattern",
                     "window_days": payday.window_days,
                     "post_income_spending_share": payday.post_income_spending_share,
                     "post_income_spending_total": payday.post_income_spending_total,
                     "eligible_spending_total": payday.eligible_spending_total,
+                    "eligible_spending_transaction_count": payday.eligible_spending_transaction_count,
+                    "post_income_spending_transaction_count": payday.post_income_spending_transaction_count,
                     "income_event_count": payday.eligible_income_event_count,
+                    "income_event_dates": payday.income_event_dates,
                 },
                 ["payday", "income.estimated_payday_interval"],
                 snapshot.date_start,
@@ -406,17 +683,27 @@ def _cash_and_fee_observations(snapshot: FinancialFeatureSnapshot) -> list[Behav
         and cash_compare["change_amount"] > 0
         and _material_change(cash_compare["change_amount"], cash_compare["change_percentage"])
     ):
+        reliance_backed = cash_share is not None and cash_share >= Decimal("0.15")
         observations.append(
             _observation(
                 "cash_dependency",
                 "Cash withdrawal activity is significant",
-                "Cash withdrawals form a notable part of the observed spending activity.",
+                (
+                    "Cash withdrawals represent a meaningful share of observed spending."
+                    if reliance_backed
+                    else "Cash withdrawal totals increased across the observed months."
+                ),
                 "medium" if cash_share is None or cash_share < Decimal("0.30") else "high",
                 _confidence(None, cash.cash_withdrawal_count, Decimal("0.75")),
                 {
+                    "finding_focus": "cash_dependency",
                     "cash_withdrawal_count": cash.cash_withdrawal_count,
                     "cash_withdrawal_total": cash.cash_withdrawal_total,
+                    "spending_total": spending,
                     "cash_withdrawal_share": cash_share,
+                    "atm_fee_count": cash.atm_fee_count,
+                    "atm_fee_total": cash.atm_fee_total,
+                    "reliance_backed": reliance_backed,
                     "trend_change_percentage": cash_compare["change_percentage"] if cash_compare else None,
                 },
                 ["cash", "months[].cash_withdrawal_total"],
@@ -438,22 +725,157 @@ def _cash_and_fee_observations(snapshot: FinancialFeatureSnapshot) -> list[Behav
         )
     ):
         observations.append(
-            _observation(
-                "fee_accumulation",
-                "Banking fees increased",
-                "Banking fee totals increased in the latest observed month.",
-                _severity(fee_compare["change_percentage"], fee_compare["change_amount"]),
-                _confidence(None, snapshot.fees.bank_fee_transaction_count, Decimal("0.75")),
-                {
-                    **fee_compare,
-                    "bank_fee_transaction_count": snapshot.fees.bank_fee_transaction_count,
-                },
-                ["months[].bank_fee_total", "fees.bank_fee_transaction_count"],
-                snapshot.date_start,
-                snapshot.date_end,
+            _fee_accumulation_observation(
+                snapshot,
+                {**fee_compare, "overall_monthly_fee_trend": True},
             )
         )
+    else:
+        fee_only_compare = _fee_only_account_fee_compare(snapshot)
+        if (
+            fee_only_compare
+            and fee_only_compare["change_amount"] > 0
+            and _material_change(
+                fee_only_compare["change_amount"],
+                fee_only_compare["change_percentage"],
+                minimum_amount=Decimal("10"),
+            )
+        ):
+            observations.append(
+                _fee_accumulation_observation(
+                    snapshot,
+                    {**fee_only_compare, "overall_monthly_fee_trend": True},
+                )
+            )
+    if not any(item.behavior_type == "fee_accumulation" for item in observations):
+        enquiry = snapshot.fees.balance_enquiry_fee_total or ZERO
+        sms = snapshot.fees.sms_fee_total or ZERO
+        if _typed_bank_fee_repetition_eligible(snapshot, enquiry):
+            observations.append(_typed_fee_repetition_observation(snapshot))
+        elif _typed_bank_fee_repetition_eligible(snapshot, sms):
+            observations.append(_typed_fee_repetition_observation(snapshot))
+        elif _typed_bank_fee_repetition_eligible(
+            snapshot, snapshot.fees.foreign_transaction_fee_total or ZERO
+        ):
+            observations.append(_typed_fee_repetition_observation(snapshot))
+        elif _typed_bank_fee_repetition_eligible(
+            snapshot, snapshot.fees.interest_charge_total or ZERO
+        ):
+            observations.append(_typed_fee_repetition_observation(snapshot))
+        elif _typed_bank_fee_repetition_eligible(
+            snapshot, snapshot.fees.overdraft_fee_total or ZERO
+        ):
+            observations.append(_typed_fee_repetition_observation(snapshot))
+        elif _typed_bank_fee_repetition_eligible(
+            snapshot, snapshot.fees.insufficient_funds_fee_total or ZERO
+        ):
+            observations.append(_typed_fee_repetition_observation(snapshot))
     return observations
+
+
+def _typed_bank_fee_repetition_eligible(
+    snapshot: FinancialFeatureSnapshot, typed_total: Decimal
+) -> bool:
+    fees = snapshot.fees
+    if (
+        typed_total < MIN_FEE_BURDEN_TOTAL
+        or typed_total != fees.bank_fee_total
+        or fees.bank_fee_transaction_count < 2
+    ):
+        return False
+    completed = completed_months(snapshot)
+    if len(completed) < 2:
+        return False
+    return sum(1 for month in completed if month.bank_fee_total > ZERO) >= 2
+
+
+def _typed_fee_repetition_observation(
+    snapshot: FinancialFeatureSnapshot,
+) -> BehaviourObservation:
+    completed = completed_months(snapshot)
+    previous_month, current_month = completed[-2], completed[-1]
+    previous_amount = previous_month.bank_fee_total
+    current_amount = current_month.bank_fee_total
+    change_amount = current_amount - previous_amount
+    change_percentage = (
+        (change_amount / previous_amount) * Decimal("100")
+        if previous_amount > ZERO
+        else ZERO
+    )
+    return _fee_accumulation_observation(
+        snapshot,
+        {
+            "previous_period": previous_month.month,
+            "current_period": current_month.month,
+            "previous_amount": previous_amount,
+            "current_amount": current_amount,
+            "change_amount": change_amount,
+            "change_percentage": change_percentage,
+            "transaction_count_previous": 0,
+            "transaction_count_current": 0,
+            "months_compared": len(completed),
+        },
+    )
+
+
+def _fee_accumulation_observation(
+    snapshot: FinancialFeatureSnapshot, compare: dict[str, Decimal | int | str]
+) -> BehaviourObservation:
+    immediate = snapshot.fees.immediate_payment_fee_total or ZERO
+    enquiry = snapshot.fees.balance_enquiry_fee_total or ZERO
+    sms = snapshot.fees.sms_fee_total or ZERO
+    payload = {
+        **compare,
+        "bank_fee_transaction_count": snapshot.fees.bank_fee_transaction_count,
+    }
+    if immediate >= MIN_FEE_BURDEN_TOTAL and immediate == snapshot.fees.bank_fee_total:
+        payload["immediate_payment_fee_total"] = immediate
+    if enquiry >= MIN_FEE_BURDEN_TOTAL and enquiry == snapshot.fees.bank_fee_total:
+        payload["balance_enquiry_fee_total"] = enquiry
+    if sms >= MIN_FEE_BURDEN_TOTAL and sms == snapshot.fees.bank_fee_total:
+        payload["sms_fee_total"] = sms
+    return _observation(
+        "fee_accumulation",
+        "Banking fees increased",
+        "Banking fee totals increased in the latest observed month.",
+        _severity(compare["change_percentage"], compare["change_amount"]),
+        _confidence(None, snapshot.fees.bank_fee_transaction_count, Decimal("0.75")),
+        payload,
+        ["months[].bank_fee_total", "fees.bank_fee_transaction_count"],
+        snapshot.date_start,
+        snapshot.date_end,
+    )
+
+
+def _fee_only_account_fee_compare(
+    snapshot: FinancialFeatureSnapshot,
+) -> dict[str, Decimal | int | str] | None:
+    """Compare the last two completed fee months when spending history is absent."""
+    spending = snapshot.spending_profile.total_spending
+    if spending not in (None, ZERO):
+        return None
+    completed = completed_months(snapshot)
+    if len(completed) < 2:
+        return None
+    previous_month, current_month = completed[-2], completed[-1]
+    previous_amount = previous_month.bank_fee_total
+    current_amount = current_month.bank_fee_total
+    if previous_amount <= ZERO:
+        return None
+    change_amount = current_amount - previous_amount
+    if change_amount <= ZERO:
+        return None
+    return {
+        "previous_period": previous_month.month,
+        "current_period": current_month.month,
+        "previous_amount": previous_amount,
+        "current_amount": current_amount,
+        "change_amount": change_amount,
+        "change_percentage": (change_amount / previous_amount) * Decimal("100"),
+        "transaction_count_previous": 0,
+        "transaction_count_current": 0,
+        "months_compared": len(completed),
+    }
 
 
 def _income_observations(snapshot: FinancialFeatureSnapshot) -> list[BehaviourObservation]:

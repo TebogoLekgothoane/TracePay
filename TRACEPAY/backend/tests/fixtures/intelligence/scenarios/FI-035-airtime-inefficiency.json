@@ -1,0 +1,128 @@
+[
+  {
+    "id": "fi035-air-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-01",
+    "description": "PREPAID AIRTIME MTN",
+    "amount": "40.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "MTN",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Airtime & Data"
+    }
+  },
+  {
+    "id": "fi035-air-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-02",
+    "description": "PREPAID AIRTIME MTN",
+    "amount": "40.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "MTN",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Airtime & Data"
+    }
+  },
+  {
+    "id": "fi035-air-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-01",
+    "description": "PREPAID AIRTIME MTN",
+    "amount": "40.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "MTN",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Airtime & Data"
+    }
+  },
+  {
+    "id": "fi035-air-3",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-02",
+    "description": "PREPAID AIRTIME MTN",
+    "amount": "40.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "MTN",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Airtime & Data"
+    }
+  },
+  {
+    "id": "fi035-air-4",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-28",
+    "description": "PREPAID AIRTIME MTN",
+    "amount": "100.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "MTN",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Airtime & Data"
+    }
+  },
+  {
+    "id": "fi035-air-5",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-29",
+    "description": "PREPAID AIRTIME MTN",
+    "amount": "100.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "MTN",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Airtime & Data"
+    }
+  },
+  {
+    "id": "fi035-air-6",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-30",
+    "description": "PREPAID AIRTIME MTN",
+    "amount": "100.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "MTN",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Airtime & Data"
+    }
+  }
+]

@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from leak_intelligence.adapters import feature_transaction_from_row
 from leak_intelligence.behaviour_engine import analyze_behaviour
-from leak_intelligence.behaviour_models import BehaviorType
+from leak_intelligence.behaviour_models import BehaviorType, BehaviourAnalysisResult
 from leak_intelligence.engine import build_financial_features
 from leak_intelligence.leak_engine import detect_leaks
 from leak_intelligence.leak_models import LeakDetectionResult, LeakType
@@ -80,6 +80,7 @@ class ScenarioSpec(BaseModel):
     summary: str = Field(min_length=1)
     transactions_file: str = Field(min_length=1)
     expected: ScenarioExpectation
+    enforce_expectation: bool = True
 
 
 class DatasetManifest(BaseModel):
@@ -108,6 +109,7 @@ class ScenarioEvaluation:
     leak_types: tuple[str, ...]
     behavior_types: tuple[str, ...]
     leaks: LeakDetectionResult
+    behaviours: BehaviourAnalysisResult
 
 
 def load_intelligence_scenario(scenario_id: str) -> IntelligenceScenario:
@@ -134,7 +136,34 @@ def evaluate_intelligence_scenario(
         leak_types=tuple(item.leak_type for item in leaks.leaks),
         behavior_types=tuple(item.behavior_type for item in behaviours.observations),
         leaks=leaks,
+        behaviours=behaviours,
     )
+
+
+@dataclass(frozen=True)
+class CatalogueCoverageRow:
+    scenario_id: str
+    fi_id: str | None
+    case_kind: CaseKind
+    expected_detected: bool
+    mismatch: str | None
+
+
+def catalogue_coverage_rows() -> tuple[CatalogueCoverageRow, ...]:
+    """Evaluate every manifest scenario against the current pipeline."""
+    rows: list[CatalogueCoverageRow] = []
+    for scenario in load_all_intelligence_scenarios():
+        evaluation = evaluate_intelligence_scenario(scenario)
+        rows.append(
+            CatalogueCoverageRow(
+                scenario_id=scenario.scenario_id,
+                fi_id=scenario.spec.fi_id,
+                case_kind=scenario.spec.case_kind,
+                expected_detected=scenario.spec.expected.detected,
+                mismatch=expectation_mismatch(scenario, evaluation),
+            )
+        )
+    return tuple(rows)
 
 
 def expectation_mismatch(
@@ -157,24 +186,47 @@ def expectation_mismatch(
                 f"expected detected={expected.detected}, actual={present}"
             )
     if expected.detected and expected.evidence:
-        leak_type = expected.leak_type or (
-            expected.leak_types[0] if expected.leak_types else None
-        )
-        match = next(
-            (item for item in evaluation.leaks.leaks if item.leak_type == leak_type),
-            None,
-        )
-        if match is None:
-            problems.append(f"evidence requested but {leak_type} was not detected")
+        if expected.behavior_type and not expected.target_leak_types():
+            behaviour_match = next(
+                (
+                    item
+                    for item in evaluation.behaviours.observations
+                    if item.behavior_type == expected.behavior_type
+                ),
+                None,
+            )
+            if behaviour_match is None:
+                problems.append(
+                    f"evidence requested but {expected.behavior_type} was not detected"
+                )
+            else:
+                for key, value in expected.evidence.items():
+                    actual = behaviour_match.evidence.get(key)
+                    if isinstance(actual, Decimal):
+                        actual = str(actual)
+                    if actual != value:
+                        problems.append(
+                            f"evidence.{key}: expected {value!r}, actual {actual!r}"
+                        )
         else:
-            for key, value in expected.evidence.items():
-                actual = match.evidence.get(key)
-                if isinstance(actual, Decimal):
-                    actual = str(actual)
-                if actual != value:
-                    problems.append(
-                        f"evidence.{key}: expected {value!r}, actual {actual!r}"
-                    )
+            leak_type = expected.leak_type or (
+                expected.leak_types[0] if expected.leak_types else None
+            )
+            match = next(
+                (item for item in evaluation.leaks.leaks if item.leak_type == leak_type),
+                None,
+            )
+            if match is None:
+                problems.append(f"evidence requested but {leak_type} was not detected")
+            else:
+                for key, value in expected.evidence.items():
+                    actual = match.evidence.get(key)
+                    if isinstance(actual, Decimal):
+                        actual = str(actual)
+                    if actual != value:
+                        problems.append(
+                            f"evidence.{key}: expected {value!r}, actual {actual!r}"
+                        )
     if not problems:
         return None
     actual = (

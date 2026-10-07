@@ -101,6 +101,8 @@ def test_duplicate_leak_is_verification_candidate_with_one_time_impact_label() -
     assert "Duplicate payment detected" not in leak.title
     assert leak.evidence.get("verification_required") is True
     assert leak.evidence.get("finding_kind") == "verification_required"
+    assert leak.evidence.get("finding_focus") == "duplicate_merchant_payment"
+    assert "transaction_ids" not in leak.evidence
     report = render_leak_report(_detect(duplicate))
     assert "Potential amount:" in report
     assert "Monthly impact:" not in report.split("Potential amount:")[0] or "Potential amount:" in report

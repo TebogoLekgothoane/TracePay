@@ -7,6 +7,7 @@ duplicate-confirmation, recommendation, or affordability decisions.
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import date
 from decimal import Decimal
 from statistics import pvariance
 
@@ -27,11 +28,15 @@ from .models import (
     RecurrenceFeature,
     WeekendSpendingFeatures,
 )
-from .recurrence_rules import recurrence_strength_cap_for_interval
+from .recurrence_rules import (
+    matches_plausible_recurring_interval,
+    recurrence_strength_cap_for_interval,
+)
 from .service import build_spending_profile
 
 HIGH_CONFIDENCE = 0.85
 RECURRENCE_MIN_OBSERVATIONS = 3
+INTERVAL_STABILITY_CV = Decimal("0.15")
 TREND_MIN_OBSERVATIONS = 3
 PAYDAY_MIN_OBSERVATIONS = 3
 DUPLICATE_DATE_WINDOW_DAYS = 1
@@ -124,7 +129,12 @@ def _monthly_amounts(
 
 
 def _amount_trend(transactions: list[FeatureTransaction]) -> AmountTrend | None:
-    dated = sorted((item for item in transactions if item.transaction_date is not None), key=lambda item: item.transaction_date)
+    dated = sorted(
+        _without_same_day_amount_duplicates(
+            [item for item in transactions if item.transaction_date is not None]
+        ),
+        key=lambda item: item.transaction_date,
+    )
     if len(dated) < TREND_MIN_OBSERVATIONS:
         return None
     previous = [amount_of(item) for item in dated[:-1]]
@@ -174,13 +184,20 @@ def _recurrence(transactions: list[FeatureTransaction]) -> RecurrenceFeature:
     )
     if len(transactions) < RECURRENCE_MIN_OBSERVATIONS or len(intervals) < 2:
         return feature
+    shift = _billing_interval_shift(intervals)
+    if shift is not None:
+        feature.baseline_interval_days = shift["baseline_interval_days"]
+        feature.current_interval_days = shift["current_interval_days"]
+        feature.interval_change_days = shift["interval_change_days"]
+        feature.baseline_interval_count = shift["baseline_interval_count"]
+        feature.current_interval_count = shift["current_interval_count"]
     average_interval = feature.average_interval_days
     average_amount = feature.average_amount
     if average_interval in (None, ZERO) or average_amount in (None, ZERO):
         return feature
     interval_cv = (feature.interval_variance or ZERO).sqrt() / average_interval
     amount_cv = (feature.amount_variance or ZERO).sqrt() / average_amount
-    if average_interval <= Decimal("400") and interval_cv <= Decimal("0.15") and amount_cv <= Decimal("0.10"):
+    if average_interval <= Decimal("400") and interval_cv <= INTERVAL_STABILITY_CV and amount_cv <= Decimal("0.10"):
         feature.recurrence_strength = recurrence_strength_cap_for_interval(
             average_interval, "high"
         )
@@ -193,6 +210,217 @@ def _recurrence(transactions: list[FeatureTransaction]) -> RecurrenceFeature:
     return feature
 
 
+def _billing_interval_shift(intervals: list[Decimal]) -> dict[str, Decimal | int] | None:
+    """Return a stable earlier cadence and a stable later cadence when they differ.
+
+    Each window must contain at least two intervals and stay within the same
+    coefficient of variation used for high recurrence. A single unusual gap does
+    not qualify, and neither window may be a 1–3 day spending interval.
+    """
+    if len(intervals) < 4:
+        return None
+    midpoint = len(intervals) // 2
+    baseline = intervals[:midpoint]
+    current = intervals[midpoint:]
+    if len(baseline) < 2 or len(current) < 2:
+        return None
+    baseline_average = _average(baseline, minimum=2)
+    current_average = _average(current, minimum=2)
+    baseline_cv = _coefficient_of_variation(baseline)
+    current_cv = _coefficient_of_variation(current)
+    if (
+        baseline_average in (None, ZERO)
+        or current_average in (None, ZERO)
+        or baseline_cv is None
+        or current_cv is None
+        or baseline_cv > INTERVAL_STABILITY_CV
+        or current_cv > INTERVAL_STABILITY_CV
+        or not matches_plausible_recurring_interval(baseline_average)
+        or not matches_plausible_recurring_interval(current_average)
+    ):
+        return None
+    change = current_average - baseline_average
+    if abs(change) / baseline_average <= INTERVAL_STABILITY_CV:
+        return None
+    return {
+        "baseline_interval_days": baseline_average,
+        "current_interval_days": current_average,
+        "interval_change_days": change,
+        "baseline_interval_count": len(baseline),
+        "current_interval_count": len(current),
+    }
+
+
+def _coefficient_of_variation(values: list[Decimal]) -> Decimal | None:
+    average = _average(values, minimum=2)
+    variance = _variance(values)
+    if average in (None, ZERO) or variance is None:
+        return None
+    return variance.sqrt() / average
+
+
+def _coffee_transaction_count(transactions: list[FeatureTransaction]) -> int:
+    """Count coffee purchases once per same-day, same-amount duplicate group."""
+    coffee = [item for item in transactions if _is_coffee_transaction(item)]
+    coffee.sort(key=lambda item: (item.transaction_date or date.min, item.transaction_id))
+    counted = 0
+    previous: FeatureTransaction | None = None
+    for item in coffee:
+        if previous is not None and item.transaction_date and previous.transaction_date:
+            same_amount = abs(amount_of(item) - amount_of(previous)) <= AMOUNT_TOLERANCE
+            nearby = (item.transaction_date - previous.transaction_date).days <= DUPLICATE_DATE_WINDOW_DAYS
+            if same_amount and nearby:
+                previous = item
+                continue
+        counted += 1
+        previous = item
+    return counted
+
+
+def _is_airtime_transaction(transaction: FeatureTransaction) -> bool:
+    text = f"{transaction.merchant_name or ''} {transaction.description}".upper().replace("-", " ")
+    return "AIRTIME" in text.split()
+
+
+def _airtime_transaction_count(transactions: list[FeatureTransaction]) -> int:
+    """Count airtime purchases once per same-day, same-amount duplicate group."""
+    return len(
+        _without_same_day_amount_duplicates(
+            [item for item in transactions if _is_airtime_transaction(item)]
+        )
+    )
+
+
+def _airtime_total(transactions: list[FeatureTransaction]) -> Decimal:
+    return sum(
+        (
+            amount_of(item)
+            for item in _without_same_day_amount_duplicates(
+                [item for item in transactions if _is_airtime_transaction(item)]
+            )
+        ),
+        ZERO,
+    )
+
+
+def _is_data_transaction(transaction: FeatureTransaction) -> bool:
+    text = f"{transaction.merchant_name or ''} {transaction.description}".upper().replace("-", " ")
+    tokens = text.split()
+    return "DATA" in tokens and "AIRTIME" not in tokens
+
+
+def _data_transaction_count(transactions: list[FeatureTransaction]) -> int:
+    return len(
+        _without_same_day_amount_duplicates(
+            [item for item in transactions if _is_data_transaction(item)]
+        )
+    )
+
+
+def _data_total(transactions: list[FeatureTransaction]) -> Decimal:
+    return sum(
+        (
+            amount_of(item)
+            for item in _without_same_day_amount_duplicates(
+                [item for item in transactions if _is_data_transaction(item)]
+            )
+        ),
+        ZERO,
+    )
+
+
+def _is_ride_hailing_transaction(transaction: FeatureTransaction) -> bool:
+    raw = f"{transaction.merchant_name or ''} {transaction.description}".upper()
+    compact = raw.replace(" ", "").replace("-", "").replace("*", "")
+    if "UBEREATS" in compact:
+        return False
+    tokens = raw.replace("-", " ").replace("*", " ").split()
+    return "UBER" in tokens or "BOLT" in tokens
+
+
+def _ride_hailing_transaction_count(transactions: list[FeatureTransaction]) -> int:
+    return len(
+        _without_same_day_amount_duplicates(
+            [item for item in transactions if _is_ride_hailing_transaction(item)]
+        )
+    )
+
+
+def _ride_hailing_total(transactions: list[FeatureTransaction]) -> Decimal:
+    return sum(
+        (
+            amount_of(item)
+            for item in _without_same_day_amount_duplicates(
+                [item for item in transactions if _is_ride_hailing_transaction(item)]
+            )
+        ),
+        ZERO,
+    )
+
+
+def _is_food_delivery_transaction(transaction: FeatureTransaction) -> bool:
+    """Match the catalogue food-delivery merchants, not generic food or delivery words."""
+    raw = f"{transaction.merchant_name or ''} {transaction.description}".upper()
+    compact = raw.replace(" ", "").replace("-", "").replace("*", "")
+    if "UBEREATS" in compact or "MRDFOOD" in compact:
+        return True
+    tokens = raw.replace("-", " ").replace("*", " ").split()
+    return any(
+        token == "MR" and tokens[index + 1] == "D" for index, token in enumerate(tokens[:-1])
+    )
+
+
+def _food_delivery_transaction_count(transactions: list[FeatureTransaction]) -> int:
+    return len(
+        _without_same_day_amount_duplicates(
+            [item for item in transactions if _is_food_delivery_transaction(item)]
+        )
+    )
+
+
+def _food_delivery_total(transactions: list[FeatureTransaction]) -> Decimal:
+    return sum(
+        (
+            amount_of(item)
+            for item in _without_same_day_amount_duplicates(
+                [item for item in transactions if _is_food_delivery_transaction(item)]
+            )
+        ),
+        ZERO,
+    )
+
+
+def _is_coffee_transaction(transaction: FeatureTransaction) -> bool:
+    text = f"{transaction.merchant_name or ''} {transaction.description}".upper().replace("-", " ")
+    return "COFFEE" in text.split()
+
+
+def _convenience_store_transaction_count(transactions: list[FeatureTransaction]) -> int:
+    """Count convenience-store purchases once per same-day, same-amount duplicate group."""
+    purchases = [item for item in transactions if _is_convenience_store_transaction(item)]
+    purchases.sort(key=lambda item: (item.transaction_date or date.min, item.transaction_id))
+    counted = 0
+    previous: FeatureTransaction | None = None
+    for item in purchases:
+        if (
+            previous is not None
+            and item.transaction_date
+            and previous.transaction_date
+            and item.transaction_date == previous.transaction_date
+            and abs(amount_of(item) - amount_of(previous)) <= AMOUNT_TOLERANCE
+        ):
+            previous = item
+            continue
+        counted += 1
+        previous = item
+    return counted
+
+
+def _is_convenience_store_transaction(transaction: FeatureTransaction) -> bool:
+    text = f"{transaction.merchant_name or ''} {transaction.description}".upper()
+    return "SPAR EXPRESS" in text
+
+
 def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantFeature]:
     groups: defaultdict[str, list[FeatureTransaction]] = defaultdict(list)
     for item in transactions:
@@ -203,9 +431,21 @@ def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantF
         amounts = [amount_of(item) for item in items]
         monthly_totals, monthly_counts = _monthly_amounts(items)
         category_counts: defaultdict[str, int] = defaultdict(int)
+        debit_order_count = 0
+        insurance_count = 0
         for item in items:
             if category := item.categorisation.category_name:
                 category_counts[category] += 1
+            if "DEBIT ORDER" in item.description.upper():
+                debit_order_count += 1
+            if _is_insurance_transaction(item):
+                insurance_count += 1
+        coffee_count = _coffee_transaction_count(items)
+        convenience_count = _convenience_store_transaction_count(items)
+        airtime_count = _airtime_transaction_count(items)
+        data_purchases = [item for item in items if _is_data_transaction(item)]
+        ride_purchases = [item for item in items if _is_ride_hailing_transaction(item)]
+        delivery_purchases = [item for item in items if _is_food_delivery_transaction(item)]
         dated = [item.transaction_date for item in items if item.transaction_date is not None]
         features.append(
             MerchantFeature(
@@ -223,6 +463,18 @@ def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantF
                 merchant_monthly_totals=monthly_totals,
                 merchant_monthly_transaction_count=monthly_counts,
                 merchant_category_transaction_count=dict(category_counts),
+                debit_order_transaction_count=debit_order_count,
+                insurance_transaction_count=insurance_count,
+                coffee_transaction_count=coffee_count,
+                convenience_store_transaction_count=convenience_count,
+                airtime_transaction_count=airtime_count,
+                airtime_only=airtime_count > 0 and len([item for item in items if _is_airtime_transaction(item)]) == len(items),
+                data_transaction_count=_data_transaction_count(items),
+                data_only=len(data_purchases) == len(items) and len(items) > 0,
+                ride_hailing_transaction_count=_ride_hailing_transaction_count(items),
+                ride_hailing_only=len(ride_purchases) == len(items) and len(items) > 0,
+                food_delivery_transaction_count=_food_delivery_transaction_count(items),
+                food_delivery_only=len(delivery_purchases) == len(items) and len(items) > 0,
                 merchant_amount_trend=_amount_trend(items),
                 merchant_frequency_trend=_monthly_frequency_trend(monthly_counts),
                 recurrence=_recurrence(items),
@@ -241,6 +493,10 @@ def _category_features(transactions: list[FeatureTransaction]) -> list[CategoryF
     for category, items in groups.items():
         amounts = [amount_of(item) for item in items]
         monthly_totals, monthly_counts = _monthly_amounts(items)
+        airtime_purchases = [item for item in items if _is_airtime_transaction(item)]
+        data_purchases = [item for item in items if _is_data_transaction(item)]
+        ride_purchases = [item for item in items if _is_ride_hailing_transaction(item)]
+        delivery_purchases = [item for item in items if _is_food_delivery_transaction(item)]
         features.append(
             CategoryFeature(
                 category_name=category,
@@ -251,6 +507,18 @@ def _category_features(transactions: list[FeatureTransaction]) -> list[CategoryF
                 category_monthly_transaction_count=monthly_counts,
                 category_trend=_monthly_trend(monthly_totals),
                 confidence_support=_confidence_support(items),
+                airtime_transaction_count=_airtime_transaction_count(items),
+                airtime_total_amount=_airtime_total(items),
+                airtime_only=len(airtime_purchases) == len(items) and len(items) > 0,
+                data_transaction_count=_data_transaction_count(items),
+                data_total_amount=_data_total(items),
+                data_only=len(data_purchases) == len(items) and len(items) > 0,
+                ride_hailing_transaction_count=_ride_hailing_transaction_count(items),
+                ride_hailing_total_amount=_ride_hailing_total(items),
+                ride_hailing_only=len(ride_purchases) == len(items) and len(items) > 0,
+                food_delivery_transaction_count=_food_delivery_transaction_count(items),
+                food_delivery_total_amount=_food_delivery_total(items),
+                food_delivery_only=len(delivery_purchases) == len(items) and len(items) > 0,
             )
         )
     return sorted(features, key=lambda feature: (-feature.category_total_amount, feature.category_name))
@@ -296,7 +564,15 @@ def _monthly_features(transactions: list[FeatureTransaction]) -> list[MonthlyFea
                 category_totals=dict(category_totals),
                 merchant_totals=dict(merchant_totals),
                 bank_fee_total=sum((amount_of(item) for item in items if item.categorisation.transaction_class == "bank_fee"), ZERO),
-                cash_withdrawal_total=sum((amount_of(item) for item in items if _is_cash_withdrawal(item)), ZERO),
+                cash_withdrawal_total=sum(
+                    (
+                        amount_of(item)
+                        for item in _without_same_day_amount_duplicates(
+                            [item for item in items if _is_cash_withdrawal(item)]
+                        )
+                    ),
+                    ZERO,
+                ),
                 subscription_total=sum((amount_of(item) for item in items if item.categorisation.category_name == "Subscriptions"), ZERO),
                 transfer_total=sum(
                     (amount_of(item) for item in items if item.categorisation.transaction_class in {"internal_transfer", "person_to_person"}),
@@ -311,14 +587,39 @@ def _fee_subtype(transaction: FeatureTransaction) -> str | None:
     if transaction.categorisation.transaction_class != "bank_fee":
         return None
     description = transaction.description.upper()
-    if "ATM FEE" in description:
+    if "BALANCE ENQUIRY" in description or "BALANCE INQUIRY" in description:
+        return "balance_enquiry"
+    if "ATM FEE" in description or (
+        "ATM" in description and "WITHDRAWAL" in description and "FEE" in description
+    ):
         return "atm"
     if "IMMEDIATE PAYMENT" in description:
         return "immediate_payment"
-    if "SMS" in description or "NOTIFICATION" in description:
+    if "SMS" in description and (
+        "FEE" in description or "NOTIFICATION" in description or "BANKING" in description
+    ):
         return "sms"
+    if "CARD FEE" in description:
+        return "card"
+    if (
+        "INTEREST CHARGED" in description
+        or "DEBIT INTEREST" in description
+        or "OVERDRAFT INTEREST" in description
+    ):
+        return "interest"
+    if "OVERDRAFT FEE" in description or "OVERDRAFT CHARGE" in description:
+        return "overdraft"
+    if (
+        "INSUFFICIENT FUNDS FEE" in description
+        or "INSUFFICIENT FUNDS CHARGE" in description
+        or "NSF FEE" in description
+        or "NSF CHARGE" in description
+    ):
+        return "insufficient_funds"
     if "ACCOUNT" in description or "MONTHLY FEE" in description:
         return "account"
+    if "FOREIGN TRANSACTION FEE" in description:
+        return "foreign"
     if "TRANSACTION FEE" in description:
         return "transaction"
     return None
@@ -331,6 +632,26 @@ def _fee_features(transactions: list[FeatureTransaction]) -> FeeFeatures:
     for item in fees:
         if subtype := _fee_subtype(item):
             totals[subtype] += amount_of(item)
+    card_fees = _without_same_day_amount_duplicates(
+        [item for item in fees if _fee_subtype(item) == "card"]
+    )
+    foreign_fees = _without_same_day_amount_duplicates(
+        [item for item in fees if _fee_subtype(item) == "foreign"]
+    )
+    interest_charges = _without_same_day_amount_duplicates(
+        [item for item in fees if _fee_subtype(item) == "interest"]
+    )
+    overdraft_fees = _without_same_day_amount_duplicates(
+        [item for item in fees if _fee_subtype(item) == "overdraft"]
+    )
+    insufficient_funds_fees = _without_same_day_amount_duplicates(
+        [item for item in fees if _fee_subtype(item) == "insufficient_funds"]
+    )
+    card_total = sum((amount_of(item) for item in card_fees), ZERO)
+    foreign_total = sum((amount_of(item) for item in foreign_fees), ZERO)
+    interest_total = sum((amount_of(item) for item in interest_charges), ZERO)
+    overdraft_total = sum((amount_of(item) for item in overdraft_fees), ZERO)
+    insufficient_funds_total = sum((amount_of(item) for item in insufficient_funds_fees), ZERO)
     return FeeFeatures(
         bank_fee_transaction_count=len(fees),
         bank_fee_total=sum(amounts, ZERO),
@@ -340,7 +661,44 @@ def _fee_features(transactions: list[FeatureTransaction]) -> FeeFeatures:
         account_fee_total=totals["account"] or None,
         sms_fee_total=totals["sms"] or None,
         immediate_payment_fee_total=totals["immediate_payment"] or None,
+        balance_enquiry_fee_total=totals["balance_enquiry"] or None,
+        card_fee_total=card_total or None,
+        card_fee_transaction_count=len(card_fees),
+        card_fee_high_confidence_count=sum(
+            item.categorisation.classification_confidence >= HIGH_CONFIDENCE
+            for item in card_fees
+        ),
+        foreign_transaction_fee_total=foreign_total or None,
+        foreign_transaction_fee_count=len(foreign_fees),
+        foreign_transaction_fee_high_confidence_count=sum(
+            item.categorisation.classification_confidence >= HIGH_CONFIDENCE
+            for item in foreign_fees
+        ),
+        interest_charge_total=interest_total or None,
+        interest_charge_count=len(interest_charges),
+        interest_charge_high_confidence_count=sum(
+            item.categorisation.classification_confidence >= HIGH_CONFIDENCE
+            for item in interest_charges
+        ),
+        overdraft_fee_total=overdraft_total or None,
+        overdraft_fee_count=len(overdraft_fees),
+        overdraft_fee_high_confidence_count=sum(
+            item.categorisation.classification_confidence >= HIGH_CONFIDENCE
+            for item in overdraft_fees
+        ),
+        insufficient_funds_fee_total=insufficient_funds_total or None,
+        insufficient_funds_fee_count=len(insufficient_funds_fees),
+        insufficient_funds_fee_high_confidence_count=sum(
+            item.categorisation.classification_confidence >= HIGH_CONFIDENCE
+            for item in insufficient_funds_fees
+        ),
     )
+
+
+def _is_insurance_transaction(transaction: FeatureTransaction) -> bool:
+    if transaction.categorisation.category_name == "Insurance":
+        return True
+    return "INSURANCE" in transaction.description.upper()
 
 
 def _is_cash_withdrawal(transaction: FeatureTransaction) -> bool:
@@ -351,7 +709,9 @@ def _is_cash_withdrawal(transaction: FeatureTransaction) -> bool:
 
 
 def _cash_features(transactions: list[FeatureTransaction]) -> CashFeatures:
-    withdrawals = [item for item in transactions if _is_cash_withdrawal(item)]
+    withdrawals = _without_same_day_amount_duplicates(
+        [item for item in transactions if _is_cash_withdrawal(item)]
+    )
     atm_fees = [item for item in transactions if _fee_subtype(item) == "atm"]
     withdrawal_amounts = [amount_of(item) for item in withdrawals]
     return CashFeatures(
@@ -364,12 +724,14 @@ def _cash_features(transactions: list[FeatureTransaction]) -> CashFeatures:
 
 
 def _weekend_features(transactions: list[FeatureTransaction]) -> WeekendSpendingFeatures:
-    spending = [
-        item
-        for item in transactions
-        if item.categorisation.transaction_class == "spending"
-        and item.transaction_date is not None
-    ]
+    spending = _without_same_day_amount_duplicates(
+        [
+            item
+            for item in transactions
+            if item.categorisation.transaction_class == "spending"
+            and item.transaction_date is not None
+        ]
+    )
     weekend = [item for item in spending if item.transaction_date.weekday() >= 5]
     spending_total = sum((amount_of(item) for item in spending), ZERO)
     weekend_total = sum((amount_of(item) for item in weekend), ZERO)
@@ -378,10 +740,34 @@ def _weekend_features(transactions: list[FeatureTransaction]) -> WeekendSpending
         weekend_spending_transaction_count=len(weekend),
         dated_spending_total=spending_total,
         weekend_spending_total=weekend_total,
+        weekday_spending_total=spending_total - weekend_total,
         weekend_spending_share=(
             weekend_total / spending_total if spending_total != ZERO else None
         ),
     )
+
+
+def _without_same_day_amount_duplicates(
+    transactions: list[FeatureTransaction],
+) -> list[FeatureTransaction]:
+    """Keep one transaction for each same-merchant, same-day, same-amount group."""
+    buckets: defaultdict[tuple[str, date], list[FeatureTransaction]] = defaultdict(list)
+    kept: list[FeatureTransaction] = []
+    for item in transactions:
+        key = merchant_group_key(item)
+        if key is None or item.transaction_date is None:
+            kept.append(item)
+            continue
+        buckets[(key, item.transaction_date)].append(item)
+    for items in buckets.values():
+        accepted: list[Decimal] = []
+        for item in sorted(items, key=lambda current: current.transaction_id):
+            amount = amount_of(item)
+            if any(abs(amount - existing) <= AMOUNT_TOLERANCE for existing in accepted):
+                continue
+            accepted.append(amount)
+            kept.append(item)
+    return kept
 
 
 def _payday_spending_features(
@@ -396,12 +782,14 @@ def _payday_spending_features(
             and item.transaction_date is not None
         }
     )
-    spending = [
-        item
-        for item in transactions
-        if item.categorisation.transaction_class == "spending"
-        and item.transaction_date is not None
-    ]
+    spending = _without_same_day_amount_duplicates(
+        [
+            item
+            for item in transactions
+            if item.categorisation.transaction_class == "spending"
+            and item.transaction_date is not None
+        ]
+    )
     eligible = [
         item
         for item in spending
@@ -430,6 +818,7 @@ def _payday_spending_features(
         post_income_spending_share=(
             post_income_total / eligible_total if eligible_total != ZERO else None
         ),
+        income_event_dates=list(income_dates),
     )
 
 
@@ -471,6 +860,8 @@ def _duplicate_candidates(
 ) -> list[DuplicateCandidate]:
     groups: defaultdict[str, list[FeatureTransaction]] = defaultdict(list)
     for item in transactions:
+        if item.categorisation.transaction_class == "bank_fee":
+            continue
         if item.transaction_date is not None and (merchant := merchant_group_key(item)) is not None:
             groups[merchant].append(item)
     candidates = []
@@ -505,4 +896,8 @@ def _candidate(
         amount=amount_of(transactions[0]),
         transaction_ids=[item.transaction_id for item in transactions],
         transaction_dates=dates,
+        high_confidence_transaction_count=sum(
+            item.categorisation.classification_confidence >= HIGH_CONFIDENCE
+            for item in transactions
+        ),
     )

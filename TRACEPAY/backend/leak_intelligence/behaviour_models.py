@@ -28,6 +28,8 @@ BehaviorType = Literal[
     "irregular_income",
     "income_gap",
     "price_increase_pattern",
+    "frequency_change_pattern",
+    "spending_habit_pattern",
 ]
 BehaviourSeverity = Literal["low", "medium", "high"]
 BehaviourStatus = Literal["active"]
