@@ -430,108 +430,108 @@ export function AccountStatementSetupFlow({
 
         <ScrollView
           className="flex-1"
-          contentContainerStyle={{ paddingBottom: 32 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {message && !passwordRequired ? (
-            <View className="mt-4 rounded-2xl bg-destructive/10 px-4 py-3">
-              <Text className="text-center text-[13px] text-destructive">{message}</Text>
-              {reconciliationImportId ? (
-                <Button className="mt-3" onPress={() => void retryReconciliation()}>
-                  Try again
+          <View className="pb-8">
+            {message && !passwordRequired ? (
+              <View className="mt-4 rounded-2xl bg-destructive/10 px-4 py-3">
+                <Text className="text-center text-[13px] text-destructive">{message}</Text>
+                {reconciliationImportId ? (
+                  <Button className="mt-3" onPress={() => void retryReconciliation()}>
+                    Try again
+                  </Button>
+                ) : null}
+              </View>
+            ) : null}
+
+            {formError ? (
+              <Text className="mt-3 text-[13px] text-destructive">{formError}</Text>
+            ) : null}
+
+            {!importOnly && existingAccounts.length > 0 ? (
+              <View className="mt-6">
+                <Text className="mb-2 text-[13px] font-semibold text-foreground">
+                  Existing accounts
+                </Text>
+                <View className="gap-2">
+                  {existingAccounts.map((account) => {
+                    const selected = loadedAccount?.id === account.id && !creatingNew;
+                    return (
+                      <Pressable
+                        key={account.id}
+                        accessibilityRole="button"
+                        className={`rounded-2xl border px-4 py-3 ${
+                          selected ? "border-primary bg-primary/5" : "border-border bg-card"
+                        }`}
+                        disabled={busy}
+                        onPress={() => {
+                          selectExistingAccount(account);
+                          void pickPdf(institutionFromAccount(account));
+                        }}
+                      >
+                        <Text className="text-[15px] font-semibold text-foreground">
+                          {formatAccountHeading(account)}
+                        </Text>
+                        <Text className="mt-0.5 text-[12px] text-muted-foreground">
+                          {formatAccountSubtitle(account)}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <Button
+                  className="mt-3"
+                  disabled={busy}
+                  size="sm"
+                  variant="secondary"
+                  onPress={() => {
+                    setCreatingNew(true);
+                    setLoadedAccount(null);
+                    setAccountId(null);
+                    setAccountBank(null);
+                    if (!initialInstitution) {
+                      setBank(null);
+                      bankRef.current = null;
+                    }
+                    clearImport();
+                  }}
+                >
+                  Import for a new bank
                 </Button>
-              ) : null}
-            </View>
-          ) : null}
-
-          {formError ? (
-            <Text className="mt-3 text-[13px] text-destructive">{formError}</Text>
-          ) : null}
-
-          {!importOnly && existingAccounts.length > 0 ? (
-            <View className="mt-6">
-              <Text className="mb-2 text-[13px] font-semibold text-foreground">
-                Existing accounts
-              </Text>
-              <View className="gap-2">
-                {existingAccounts.map((account) => {
-                  const selected = loadedAccount?.id === account.id && !creatingNew;
-                  return (
-                    <Pressable
-                      key={account.id}
-                      accessibilityRole="button"
-                      className={`rounded-2xl border px-4 py-3 ${
-                        selected ? "border-primary bg-primary/5" : "border-border bg-card"
-                      }`}
-                      disabled={busy}
-                      onPress={() => {
-                        selectExistingAccount(account);
-                        void pickPdf(institutionFromAccount(account));
-                      }}
-                    >
-                      <Text className="text-[15px] font-semibold text-foreground">
-                        {formatAccountHeading(account)}
-                      </Text>
-                      <Text className="mt-0.5 text-[12px] text-muted-foreground">
-                        {formatAccountSubtitle(account)}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
               </View>
-              <Button
-                className="mt-3"
+            ) : null}
+
+            {showBankList ? (
+              <View className={existingAccounts.length > 0 ? "mt-6" : "mt-4"}>
+                <BankImportList
+                  disabled={busy}
+                  selected={bank}
+                  onSelect={(name) => void chooseBankAndPick(name)}
+                />
+              </View>
+            ) : null}
+
+            {showExistingUpload && !file ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ disabled: busy }}
+                className={`mt-4 items-center rounded-3xl border border-dashed border-border bg-card px-6 py-14 ${
+                  busy ? "opacity-50" : "active:opacity-90"
+                }`}
                 disabled={busy}
-                size="sm"
-                variant="secondary"
-                onPress={() => {
-                  setCreatingNew(true);
-                  setLoadedAccount(null);
-                  setAccountId(null);
-                  setAccountBank(null);
-                  if (!initialInstitution) {
-                    setBank(null);
-                    bankRef.current = null;
-                  }
-                  clearImport();
-                }}
+                onPress={() => void pickPdf(bankRef.current)}
               >
-                Import for a new bank
-              </Button>
-            </View>
-          ) : null}
-
-          {showBankList ? (
-            <View className={existingAccounts.length > 0 ? "mt-6" : "mt-4"}>
-              <BankImportList
-                disabled={busy}
-                selected={bank}
-                onSelect={(name) => void chooseBankAndPick(name)}
-              />
-            </View>
-          ) : null}
-
-          {showExistingUpload && !file ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ disabled: busy }}
-              className={`mt-4 items-center rounded-3xl border border-dashed border-border bg-card px-6 py-14 ${
-                busy ? "opacity-50" : "active:opacity-90"
-              }`}
-              disabled={busy}
-              onPress={() => void pickPdf(bankRef.current)}
-            >
-              <View className="h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-                <FileText color={palette.primary} size={28} strokeWidth={1.8} />
-              </View>
-              <Text className="mt-4 text-[17px] font-bold text-foreground">Choose PDF file</Text>
-              <Text className="mt-1 text-center text-[14px] text-muted-foreground">
-                or browse your files
-              </Text>
-            </Pressable>
-          ) : null}
-
+                <View className="h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                  <FileText color={palette.primary} size={28} strokeWidth={1.8} />
+                </View>
+                <Text className="mt-4 text-[17px] font-bold text-foreground">Choose PDF file</Text>
+                <Text className="mt-1 text-center text-[14px] text-muted-foreground">
+                  or browse your files
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         </ScrollView>
 
         {mode === "onboarding" ? (

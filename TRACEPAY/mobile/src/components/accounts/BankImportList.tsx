@@ -130,12 +130,9 @@ export function BankImportList({ selected = null, disabled = false, onSelect }: 
                     {bank.hint}
                   </Text>
                 </View>
-                <ChevronRight
-                  color={palette.mutedForeground}
-                  size={18}
-                  strokeWidth={2}
-                  style={{ marginLeft: 4, opacity: 0.55 }}
-                />
+                <View className="ml-1 opacity-50">
+                  <ChevronRight color={palette.mutedForeground} size={18} strokeWidth={2} />
+                </View>
               </Pressable>
             );
           })}

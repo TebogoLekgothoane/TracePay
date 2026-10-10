@@ -16,15 +16,8 @@ import {
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useEffect, useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   estimateExtractionMs,
@@ -37,8 +30,8 @@ import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
 
 const TICK_MS = 400;
-const BAR_HEIGHT = 5;
-const NODE_SIZE = 28;
+
+const LINE_WIDTHS = [78, 92, 64, 86, 70, 54] as const;
 
 const STEPS: ReadonlyArray<{
   title: string;
@@ -151,8 +144,8 @@ function Header({
 }) {
   const palette = usePalette();
   return (
-    <View style={styles.header}>
-      <View style={styles.headerSide}>
+    <View className="relative min-h-11 flex-row items-center justify-center px-4">
+      <View className="absolute left-3 z-10 w-11">
         {onBack ? (
           <IconButton accessibilityLabel="Go back" variant="ghost" onPress={onBack}>
             <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
@@ -162,32 +155,22 @@ function Header({
       <Text className="text-[17px] font-semibold text-foreground" numberOfLines={1}>
         {title}
       </Text>
-      <View style={styles.headerSide} />
     </View>
   );
 }
 
 function ProgressBar({
   percent,
-  tone = "foreground",
+  fillClassName = "bg-foreground",
 }: {
   percent: number;
-  tone?: "foreground" | "primary";
+  fillClassName?: string;
 }) {
-  const palette = usePalette();
   const width = Math.max(0, Math.min(100, percent));
-  const fill = tone === "primary" ? palette.primary : palette.foreground;
 
   return (
-    <View style={[styles.progressTrack, { backgroundColor: palette.muted, height: BAR_HEIGHT }]}>
-      <View
-        style={{
-          height: BAR_HEIGHT,
-          width: `${width}%`,
-          borderRadius: BAR_HEIGHT,
-          backgroundColor: fill,
-        }}
-      />
+    <View className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+      <View className={`h-1.5 rounded-full ${fillClassName}`} style={{ width: `${width}%` }} />
     </View>
   );
 }
@@ -203,17 +186,8 @@ function DocumentCard({
   const label = bankName ? `${bankName.toUpperCase()} STATEMENT` : "BANK STATEMENT";
 
   return (
-    <View
-      style={[
-        styles.docCard,
-        {
-          backgroundColor: palette.card,
-          borderColor: palette.border,
-          shadowColor: palette.foreground,
-        },
-      ]}
-    >
-      <View style={styles.docHeader}>
+    <View className="w-[220px] rounded-[22px] border border-border bg-card px-4 pb-3.5 pt-4 shadow-md">
+      <View className="mb-3.5 flex-row items-center">
         <FileText color={palette.foreground} size={16} strokeWidth={2.2} />
         <Text
           className="ml-2 text-[11px] font-bold uppercase tracking-[0.7px] text-foreground"
@@ -222,17 +196,12 @@ function DocumentCard({
           {label}
         </Text>
       </View>
-      <View style={styles.docBody}>
-        {[78, 92, 64, 86, 70, 54].map((width) => (
-          <View
-            key={width}
-            style={[styles.docLine, { width: `${width}%`, backgroundColor: palette.muted }]}
-          />
+      <View className="mb-4 gap-2.5">
+        {LINE_WIDTHS.map((width) => (
+          <View key={width} className="h-2 rounded-full bg-muted" style={{ width: `${width}%` }} />
         ))}
       </View>
-      <View style={styles.docProgress}>
-        <ProgressBar percent={percent} />
-      </View>
+      <ProgressBar percent={percent} />
     </View>
   );
 }
@@ -241,76 +210,71 @@ function ConnectedStepper({ current }: { current: number }) {
   const palette = usePalette();
 
   return (
-    <View>
-      <View style={styles.stepRow}>
-        {STEPS.map((step, index) => {
-          const done = index < current;
-          const active = index === current;
-          const Icon = step.Icon;
-          const reached = done || active;
+    <View className="flex-row items-start">
+      {STEPS.map((step, index) => {
+        const done = index < current;
+        const active = index === current;
+        const Icon = step.Icon;
+        const reached = done || active;
+        const lineReached = index <= current;
+        const nextReached = index < current;
 
-          return (
-            <View key={step.title} style={styles.stepCol}>
-              <View style={styles.stepNodeRow}>
-                {index > 0 ? (
-                  <View
-                    style={[
-                      styles.stepLine,
-                      {
-                        borderColor: index <= current ? palette.foreground : palette.border,
-                        borderStyle: index <= current ? "solid" : "dashed",
-                      },
-                    ]}
-                  />
-                ) : (
-                  <View style={styles.stepLineSpacer} />
-                )}
+        return (
+          <View key={step.title} className="flex-1 items-center">
+            <View className="w-full flex-row items-center">
+              {index > 0 ? (
                 <View
-                  style={[
-                    styles.stepNode,
-                    {
-                      backgroundColor: done ? palette.foreground : palette.card,
-                      borderColor: reached ? palette.foreground : palette.border,
-                      borderStyle: active && !done ? "dashed" : "solid",
-                    },
-                  ]}
-                >
-                  {done ? (
-                    <Check color={palette.background} size={14} strokeWidth={3} />
-                  ) : (
-                    <Icon
-                      color={active ? palette.foreground : palette.mutedForeground}
-                      size={14}
-                      strokeWidth={2.2}
-                    />
-                  )}
-                </View>
-                {index < STEPS.length - 1 ? (
-                  <View
-                    style={[
-                      styles.stepLine,
-                      {
-                        borderColor: index < current ? palette.foreground : palette.border,
-                        borderStyle: index < current ? "solid" : "dashed",
-                      },
-                    ]}
-                  />
+                  className={`h-0 flex-1 border-t-[1.5px] ${
+                    lineReached
+                      ? "border-solid border-foreground"
+                      : "border-dashed border-border"
+                  }`}
+                />
+              ) : (
+                <View className="flex-1" />
+              )}
+              <View
+                className={`h-7 w-7 items-center justify-center rounded-full border-[1.5px] ${
+                  done
+                    ? "border-foreground bg-foreground"
+                    : active
+                      ? "border-dashed border-foreground bg-card"
+                      : "border-solid border-border bg-card"
+                }`}
+              >
+                {done ? (
+                  <Check color={palette.background} size={14} strokeWidth={3} />
                 ) : (
-                  <View style={styles.stepLineSpacer} />
+                  <Icon
+                    color={active ? palette.foreground : palette.mutedForeground}
+                    size={14}
+                    strokeWidth={2.2}
+                  />
                 )}
               </View>
-              <Text
-                className={`mt-2 text-center text-[11px] font-semibold ${
-                  reached ? "text-foreground" : "text-muted-foreground"
-                }`}
-                numberOfLines={1}
-              >
-                {step.title}
-              </Text>
+              {index < STEPS.length - 1 ? (
+                <View
+                  className={`h-0 flex-1 border-t-[1.5px] ${
+                    nextReached
+                      ? "border-solid border-foreground"
+                      : "border-dashed border-border"
+                  }`}
+                />
+              ) : (
+                <View className="flex-1" />
+              )}
             </View>
-          );
-        })}
-      </View>
+            <Text
+              className={`mt-2 text-center text-[11px] font-semibold ${
+                reached ? "text-foreground" : "text-muted-foreground"
+              }`}
+              numberOfLines={1}
+            >
+              {step.title}
+            </Text>
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -334,67 +298,56 @@ export function StatementProcessingScreen({
   const percent = progressPercent(stage, extractElapsedMs);
   const remainingMs = Math.max(estimateExtractionMs(fileSizeBytes) - extractElapsedMs, 0);
   const step = STEPS[current];
-  const detail = step.detail(bankName ?? null);
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
       <Header title="Tracing statement" onBack={onClose} />
 
-      <ScrollView
-        contentContainerStyle={styles.processingScroll}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.hero}>
-          <DocumentCard bankName={bankName} percent={percent} />
+      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+        <View className="px-5 pb-7 pt-2">
+          <View className="items-center pt-2">
+            <DocumentCard bankName={bankName} percent={percent} />
 
-          <Text className="mt-6 text-[44px] font-bold tracking-[-1.2px] text-foreground">
-            {percent}%
-          </Text>
-          <Text className="mt-1 text-[17px] font-semibold text-foreground">{step.headline}</Text>
-          <Text className="mt-2 max-w-[300px] text-center text-[14px] leading-5 text-muted-foreground">
-            {detail}
-          </Text>
-
-          <View className="mt-4 flex-row items-center justify-center gap-2">
-            <View className="flex-row items-center gap-1.5 rounded-full bg-muted px-3 py-1.5">
-              <Clock3 color={palette.mutedForeground} size={13} strokeWidth={2.2} />
-              <Text className="text-[12px] font-semibold text-muted-foreground">
-                {formatElapsed(elapsedMs)}
-              </Text>
-            </View>
-            <View className="flex-row items-center gap-1.5 rounded-full bg-muted px-3 py-1.5">
-              <Hourglass color={palette.mutedForeground} size={13} strokeWidth={2.2} />
-              <Text className="text-[12px] font-semibold text-muted-foreground">
-                {formatRemainingCompact(remainingMs)}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        <View
-          style={[
-            styles.footerCard,
-            {
-              backgroundColor: palette.card,
-              borderColor: palette.border,
-              shadowColor: palette.foreground,
-            },
-          ]}
-        >
-          <ConnectedStepper current={current} />
-
-          <View className="mt-5 flex-row items-center gap-3">
-            <View className="flex-1">
-              <ProgressBar percent={percent} />
-            </View>
-            <Text className="text-[12px] font-bold text-foreground">{percent}%</Text>
-          </View>
-
-          <View className="mt-4 flex-row items-center justify-center gap-1.5">
-            <ShieldCheck color={palette.mutedForeground} size={13} strokeWidth={2.2} />
-            <Text className="text-[12px] text-muted-foreground">
-              Your financial data stays private.
+            <Text className="mt-6 text-[44px] font-bold tracking-[-1.2px] text-foreground">
+              {percent}%
             </Text>
+            <Text className="mt-1 text-[17px] font-semibold text-foreground">{step.headline}</Text>
+            <Text className="mt-2 max-w-[300px] text-center text-[14px] leading-5 text-muted-foreground">
+              {step.detail(bankName ?? null)}
+            </Text>
+
+            <View className="mt-4 flex-row items-center justify-center gap-2">
+              <View className="flex-row items-center gap-1.5 rounded-full bg-muted px-3 py-1.5">
+                <Clock3 color={palette.mutedForeground} size={13} strokeWidth={2.2} />
+                <Text className="text-[12px] font-semibold text-muted-foreground">
+                  {formatElapsed(elapsedMs)}
+                </Text>
+              </View>
+              <View className="flex-row items-center gap-1.5 rounded-full bg-muted px-3 py-1.5">
+                <Hourglass color={palette.mutedForeground} size={13} strokeWidth={2.2} />
+                <Text className="text-[12px] font-semibold text-muted-foreground">
+                  {formatRemainingCompact(remainingMs)}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View className="mt-7 rounded-3xl border border-border bg-card px-3.5 pb-4 pt-[18px] shadow-sm">
+            <ConnectedStepper current={current} />
+
+            <View className="mt-5 flex-row items-center gap-3">
+              <View className="flex-1">
+                <ProgressBar percent={percent} />
+              </View>
+              <Text className="text-[12px] font-bold text-foreground">{percent}%</Text>
+            </View>
+
+            <View className="mt-4 flex-row items-center justify-center gap-1.5">
+              <ShieldCheck color={palette.mutedForeground} size={13} strokeWidth={2.2} />
+              <Text className="text-[12px] text-muted-foreground">
+                Your financial data stays private.
+              </Text>
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -437,67 +390,68 @@ export function StatementPasswordScreen({
         <Header title="Unlock statement" onBack={onClose} />
         <ScrollView
           className="flex-1 px-5"
-          contentContainerStyle={styles.passwordScroll}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View className="items-center">
-            <View className="h-20 w-20 items-center justify-center rounded-[24px] border border-border bg-card">
-              <View className="h-12 w-12 items-center justify-center rounded-2xl bg-primary/15">
-                <Lock color={palette.primary} size={24} strokeWidth={2.2} />
+          <View className="flex-1 justify-center pb-4">
+            <View className="items-center">
+              <View className="h-20 w-20 items-center justify-center rounded-[24px] border border-border bg-card">
+                <View className="h-12 w-12 items-center justify-center rounded-2xl bg-primary/15">
+                  <Lock color={palette.primary} size={24} strokeWidth={2.2} />
+                </View>
               </View>
-            </View>
-            <Text className="mt-5 text-center text-[24px] font-bold tracking-[-0.4px] text-foreground">
-              Password required
-            </Text>
-            <Text className="mt-2 max-w-[320px] text-center text-[14px] leading-5 text-muted-foreground">
-              {bankName
-                ? `Enter the password for your ${bankName} statement PDF.`
-                : "Enter the password for this statement PDF."}
-            </Text>
+              <Text className="mt-5 text-center text-[24px] font-bold tracking-[-0.4px] text-foreground">
+                Password required
+              </Text>
+              <Text className="mt-2 max-w-[320px] text-center text-[14px] leading-5 text-muted-foreground">
+                {bankName
+                  ? `Enter the password for your ${bankName} statement PDF.`
+                  : "Enter the password for this statement PDF."}
+              </Text>
 
-            <View className="mt-5 w-full flex-row items-center gap-3 rounded-2xl border border-border bg-card px-3.5 py-3">
-              <View className="h-10 w-10 items-center justify-center rounded-xl bg-muted">
-                <FileText color={palette.primary} size={18} strokeWidth={2} />
-              </View>
-              <View className="min-w-0 flex-1">
-                <Text className="text-[14px] font-semibold text-foreground" numberOfLines={1}>
-                  {fileName}
-                </Text>
-                {bankName ? (
-                  <Text className="mt-0.5 text-[12px] text-muted-foreground">{bankName}</Text>
-                ) : null}
+              <View className="mt-5 w-full flex-row items-center gap-3 rounded-2xl border border-border bg-card px-3.5 py-3">
+                <View className="h-10 w-10 items-center justify-center rounded-xl bg-muted">
+                  <FileText color={palette.primary} size={18} strokeWidth={2} />
+                </View>
+                <View className="min-w-0 flex-1">
+                  <Text className="text-[14px] font-semibold text-foreground" numberOfLines={1}>
+                    {fileName}
+                  </Text>
+                  {bankName ? (
+                    <Text className="mt-0.5 text-[12px] text-muted-foreground">{bankName}</Text>
+                  ) : null}
+                </View>
               </View>
             </View>
-          </View>
 
-          <View className="mt-6">
-            <Text className="mb-2 text-[13px] font-semibold text-foreground">PDF password</Text>
-            <View className="overflow-hidden rounded-2xl border border-input-border bg-input">
-              <BridgedTextField
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!busy}
-                hostStyle={{ height: 52 }}
-                inputStyle={{
-                  height: 52,
-                  paddingHorizontal: 16,
-                  backgroundColor: "transparent",
-                  borderWidth: 0,
-                }}
-                placeholder="Enter the PDF password"
-                returnKeyType="go"
-                secureTextEntry
-                value={password}
-                onChangeText={onPasswordChange}
-                onSubmitEditing={() => {
-                  if (canUnlock) onUnlock();
-                }}
-              />
+            <View className="mt-6">
+              <Text className="mb-2 text-[13px] font-semibold text-foreground">PDF password</Text>
+              <View className="overflow-hidden rounded-2xl border border-input-border bg-input">
+                <BridgedTextField
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!busy}
+                  hostStyle={{ height: 52 }}
+                  inputStyle={{
+                    height: 52,
+                    paddingHorizontal: 16,
+                    backgroundColor: "transparent",
+                    borderWidth: 0,
+                  }}
+                  placeholder="Enter the PDF password"
+                  returnKeyType="go"
+                  secureTextEntry
+                  value={password}
+                  onChangeText={onPasswordChange}
+                  onSubmitEditing={() => {
+                    if (canUnlock) onUnlock();
+                  }}
+                />
+              </View>
+              {passwordHint ? (
+                <Text className="mt-2 text-[13px] text-muted-foreground">{passwordHint}</Text>
+              ) : null}
             </View>
-            {passwordHint ? (
-              <Text className="mt-2 text-[13px] text-muted-foreground">{passwordHint}</Text>
-            ) : null}
           </View>
         </ScrollView>
 
@@ -532,7 +486,6 @@ export function StatementImportComplete({
   onImportAnother,
 }: CompleteProps) {
   const palette = usePalette();
-  const insets = useSafeAreaInsets();
   const countLabel = transactionCount.toLocaleString("en-ZA");
 
   const rows = [
@@ -550,10 +503,7 @@ export function StatementImportComplete({
   ] as const;
 
   return (
-    <View
-      className="flex-1 bg-background px-5"
-      style={{ paddingBottom: Math.max(insets.bottom, 16) }}
-    >
+    <SafeAreaView className="flex-1 bg-background px-5" edges={["top", "bottom"]}>
       <View className="flex-row justify-end pt-1">
         <IconButton accessibilityLabel="Close" variant="ghost" onPress={onClose}>
           <X color={palette.foreground} size={22} strokeWidth={2} />
@@ -581,115 +531,12 @@ export function StatementImportComplete({
           ))}
         </View>
       </View>
-      <View className="gap-3">
+      <View className="gap-3 pb-2">
         <Button onPress={onViewInsights}>View your insights</Button>
         <Button variant="outline" onPress={onImportAnother}>
           Import another statement
         </Button>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  header: {
-    minHeight: 44,
-    paddingHorizontal: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerSide: {
-    width: 44,
-    position: "absolute",
-    left: 12,
-    zIndex: 1,
-  },
-  processingScroll: {
-    paddingHorizontal: 20,
-    paddingBottom: 28,
-    paddingTop: 8,
-  },
-  hero: {
-    alignItems: "center",
-    paddingTop: 8,
-  },
-  docCard: {
-    width: 220,
-    borderRadius: 22,
-    borderWidth: 1,
-    paddingTop: 16,
-    paddingBottom: 14,
-    paddingHorizontal: 16,
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
-  },
-  docHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 14,
-  },
-  docBody: {
-    gap: 9,
-    marginBottom: 16,
-  },
-  docLine: {
-    height: 8,
-    borderRadius: 999,
-  },
-  docProgress: {
-    marginTop: 2,
-  },
-  footerCard: {
-    marginTop: 28,
-    borderRadius: 24,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingTop: 18,
-    paddingBottom: 16,
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 2,
-  },
-  stepRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-  },
-  stepCol: {
-    flex: 1,
-    alignItems: "center",
-  },
-  stepNodeRow: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  stepNode: {
-    width: NODE_SIZE,
-    height: NODE_SIZE,
-    borderRadius: NODE_SIZE / 2,
-    borderWidth: 1.5,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stepLine: {
-    flex: 1,
-    borderTopWidth: 1.5,
-  },
-  stepLineSpacer: {
-    flex: 1,
-  },
-  progressTrack: {
-    width: "100%",
-    borderRadius: 999,
-    overflow: "hidden",
-  },
-  passwordScroll: {
-    flexGrow: 1,
-    justifyContent: "center",
-    paddingBottom: 16,
-  },
-});

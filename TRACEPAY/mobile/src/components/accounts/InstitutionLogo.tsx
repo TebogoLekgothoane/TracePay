@@ -12,6 +12,12 @@ type Props = {
   size?: number;
 };
 
+function sizeClassName(size: number): string {
+  if (size <= 34) return "h-[34px] w-[34px]";
+  if (size <= 40) return "h-10 w-10";
+  return "h-11 w-11";
+}
+
 export function InstitutionLogo({
   name,
   logoDomain,
@@ -29,19 +35,15 @@ export function InstitutionLogo({
 
   return (
     <View
-      className="items-center justify-center overflow-hidden rounded-full"
-      style={{
-        width: size,
-        height: size,
-        backgroundColor: showLogo ? "transparent" : withAlpha(color, 0.16),
-      }}
       accessibilityLabel={`${name} logo`}
+      className={`items-center justify-center overflow-hidden rounded-full ${sizeClassName(size)}`}
+      style={showLogo ? undefined : { backgroundColor: withAlpha(color, 0.16) }}
     >
       {showLogo && uri ? (
         <Image
-          source={{ uri }}
-          style={{ width: size, height: size, borderRadius: size / 2 }}
+          className="h-full w-full rounded-full"
           resizeMode="contain"
+          source={{ uri }}
           onError={() => setFailed(true)}
         />
       ) : (
