@@ -29,6 +29,9 @@
     --pin-empty: 91 96 112;
     --pin-filled: 121 85 231;
     --key-pressed: 116 84 219;
+    --hero-foreground: 255 255 255;
+    --hero-muted: 255 255 255;
+    --hero-subtle: 255 255 255;
 
     --trace-background: 250 249 254;
     --trace-foreground: 23 24 45;
@@ -60,10 +63,13 @@
       --input-border: 58 58 68;
       --ring: 167 139 250;
       --placeholder: 107 113 133;
-      --surface-soft: 167 139 250;
+      --surface-soft: 32 28 48;
       --pin-empty: 91 96 112;
       --pin-filled: 155 123 255;
       --key-pressed: 167 139 250;
+      --hero-foreground: 255 255 255;
+      --hero-muted: 255 255 255;
+      --hero-subtle: 255 255 255;
 
       --trace-background: 11 11 15;
       --trace-foreground: 255 255 255;
@@ -96,10 +102,13 @@
     --input-border: 58 58 68;
     --ring: 167 139 250;
     --placeholder: 107 113 133;
-    --surface-soft: 167 139 250;
+    --surface-soft: 32 28 48;
     --pin-empty: 91 96 112;
     --pin-filled: 155 123 255;
     --key-pressed: 167 139 250;
+    --hero-foreground: 255 255 255;
+    --hero-muted: 255 255 255;
+    --hero-subtle: 255 255 255;
 
     --trace-background: 11 11 15;
     --trace-foreground: 255 255 255;

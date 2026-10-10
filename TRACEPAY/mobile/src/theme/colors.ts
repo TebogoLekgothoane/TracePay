@@ -70,7 +70,7 @@ const TRACEPAY = {
     input: "rgb(22, 22, 28)",
     inputBorder: "rgb(58, 58, 68)",
     placeholder: "rgb(107, 113, 133)",
-    surfaceSoft: "rgba(167, 139, 250, 0.12)",
+    surfaceSoft: "rgb(32, 28, 48)",
     pinEmpty: "rgb(91, 96, 112)",
     pinFilled: "rgb(155, 123, 255)",
     keyPressed: "rgba(167, 139, 250, 0.13)",

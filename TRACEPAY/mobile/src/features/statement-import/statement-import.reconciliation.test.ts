@@ -45,12 +45,14 @@ async function testSuccessfulReconciliation(): Promise<void> {
     calls.push({ url, init });
     return jsonResponse(200, resultBody(IMPORT_ID));
   };
-  await postFindingReconciliation({
+  const counts = await postFindingReconciliation({
     statementImportId: IMPORT_ID,
     accessToken: TOKEN,
     baseUrl: `${BASE}/`,
     fetchImpl,
   });
+  assert(counts.newFindings === 1, "new findings");
+  assert(counts.updatedFindings === 0, "updated findings");
   assert(calls.length === 1, "one reconciliation request");
   assert(
     calls[0].url === `${BASE}/finding-registry/imports/${IMPORT_ID}`,

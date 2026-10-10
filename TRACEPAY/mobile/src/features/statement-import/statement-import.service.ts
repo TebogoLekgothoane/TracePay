@@ -58,6 +58,11 @@ export type PdfStatementPreview = {
   balanceReconciliation: "verified" | "not_available" | "mismatch";
   rowsDetected: number;
   rowsRejected: number;
+  findingSummary?: {
+    inserted: number;
+    newFindings: number;
+    updatedFindings: number;
+  };
   statement: {
     bank: string | null;
     accountNumberLast4: string | null;
@@ -438,8 +443,10 @@ async function currentAccessToken(): Promise<string> {
   return data.session.access_token;
 }
 
-export async function retryFindingReconciliation(statementImportId: string): Promise<void> {
-  await postFindingReconciliation({
+export async function retryFindingReconciliation(
+  statementImportId: string,
+): Promise<{ newFindings: number; updatedFindings: number }> {
+  return postFindingReconciliation({
     statementImportId,
     accessToken: await currentAccessToken(),
     baseUrl: getPdfProcessorBaseUrl(),
@@ -450,7 +457,7 @@ export async function retryFindingReconciliation(statementImportId: string): Pro
 async function persistPreview(
   preview: PdfStatementPreview,
   account: FinancialAccount,
-): Promise<{ inserted: number; duplicates: number }> {
+): Promise<{ inserted: number; duplicates: number; newFindings: number; updatedFindings: number }> {
   console.info("[TracePay][statement] persist_started", {
     statementId: preview.statementId,
     transactionCount: preview.transactions.length,
@@ -658,9 +665,13 @@ async function persistPreview(
     transactionCount: inserted,
     duplicateCount,
   });
+  let newFindings = 0;
+  let updatedFindings = 0;
   if (shouldReconcileSavedImport("processed", inserted)) {
     try {
-      await retryFindingReconciliation(preview.statementId);
+      const counts = await retryFindingReconciliation(preview.statementId);
+      newFindings = counts.newFindings;
+      updatedFindings = counts.updatedFindings;
     } catch (error) {
       const message =
         error instanceof FindingReconciliationError
@@ -672,6 +683,8 @@ async function persistPreview(
   return {
     inserted,
     duplicates: duplicateCount,
+    newFindings,
+    updatedFindings,
   };
 }
 
@@ -910,6 +923,11 @@ export async function preparePdfStatement(
     }
     reportProgress(onProgress, "saving");
     const persistResult = await persistPreview(preview, account);
+    preview.findingSummary = {
+      inserted: persistResult.inserted,
+      newFindings: persistResult.newFindings,
+      updatedFindings: persistResult.updatedFindings,
+    };
     if (persistResult.duplicates > 0) {
       preview.warnings = [
         ...preview.warnings,

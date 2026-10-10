@@ -76,11 +76,9 @@ function RootNavigator({
     const isUnlockRoute = isAuthRoute && screen === "unlock";
     const isFinancialSetupRoute =
       isAuthRoute &&
-      [
-        "financial-data-consent",
-        "financial-accounts-setup",
-        "import-success",
-      ].includes(screen ?? "");
+      ["financial-data-consent", "financial-accounts-setup"].includes(
+        screen ?? "",
+      );
     const isPinSetupRoute =
       isAuthRoute &&
       ["device-security", "confirm-pin", "biometric-setup"].includes(

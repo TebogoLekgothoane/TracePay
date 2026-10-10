@@ -77,14 +77,6 @@ export default function AuthLayout() {
       />
 
       <Stack.Screen
-        name="import-success"
-        options={{
-          headerShown: false,
-          gestureEnabled: false,
-        }}
-      />
-
-      <Stack.Screen
         name="unlock"
         options={{
           headerShown: false,

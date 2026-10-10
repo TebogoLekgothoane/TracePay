@@ -50,13 +50,18 @@ export type ReconciliationFetch = (
   },
 ) => Promise<ReconciliationResponse>;
 
+export type FindingReconciliationCounts = {
+  newFindings: number;
+  updatedFindings: number;
+};
+
 export async function postFindingReconciliation(input: {
   statementImportId: string;
   accessToken: string;
   baseUrl: string;
   fetchImpl?: ReconciliationFetch;
   timeoutMs?: number;
-}): Promise<void> {
+}): Promise<FindingReconciliationCounts> {
   const statementImportId = input.statementImportId.trim();
   if (!STATEMENT_IMPORT_ID.test(statementImportId)) {
     throw new FindingReconciliationError(
@@ -104,6 +109,10 @@ export async function postFindingReconciliation(input: {
         failureMessage(response.ok ? 502 : response.status, payload),
       );
     }
+    return {
+      newFindings: payload.new_findings,
+      updatedFindings: payload.unchanged_findings + payload.materially_changed_findings,
+    };
   } catch (error) {
     if (isFindingReconciliationError(error)) {
       throw error;
@@ -143,7 +152,16 @@ export async function retrySavedImportReconciliation(input: {
   await input.reconcile(input.statementImportId);
 }
 
-function isReconciliationResult(value: unknown, statementImportId: string): boolean {
+type ReconciliationPayload = {
+  new_findings: number;
+  unchanged_findings: number;
+  materially_changed_findings: number;
+};
+
+function isReconciliationResult(
+  value: unknown,
+  statementImportId: string,
+): value is ReconciliationPayload {
   if (!isRecord(value) || value.statement_import_id !== statementImportId) {
     return false;
   }

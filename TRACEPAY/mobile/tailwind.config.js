@@ -45,6 +45,11 @@ module.exports = {
         "pin-empty": "rgb(var(--pin-empty) / <alpha-value>)",
         "pin-filled": "rgb(var(--pin-filled) / <alpha-value>)",
         "key-pressed": "rgb(var(--key-pressed) / <alpha-value>)",
+        hero: {
+          foreground: "rgb(var(--hero-foreground) / <alpha-value>)",
+          muted: "rgb(var(--hero-muted) / <alpha-value>)",
+          subtle: "rgb(var(--hero-subtle) / <alpha-value>)",
+        },
         "trace-background": "rgb(var(--trace-background) / <alpha-value>)",
         "trace-foreground": "rgb(var(--trace-foreground) / <alpha-value>)",
         "trace-muted": "rgb(var(--trace-muted) / <alpha-value>)",

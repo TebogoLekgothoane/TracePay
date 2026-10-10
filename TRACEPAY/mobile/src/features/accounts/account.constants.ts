@@ -29,6 +29,22 @@ export function isSaInstitution(value: string): value is SaInstitution {
   return (SA_INSTITUTIONS as readonly string[]).includes(value);
 }
 
+/** Banks shown on the statement import screen, in display order. */
+export const STATEMENT_IMPORT_BANKS = [
+  { name: "Capitec", hint: "Transaction history or account statement" },
+  { name: "FNB", hint: "Online or app statement export" },
+  { name: "Discovery Bank", hint: "Monthly Discovery Bank statement" },
+  { name: "Absa", hint: "E-stamped transaction history" },
+  { name: "African Bank", hint: "Supported account statement" },
+  { name: "Investec", hint: "Bank account statement" },
+  { name: "Nedbank", hint: "Current-account statement" },
+  { name: "Standard Bank", hint: "Online banking statement export" },
+  { name: "TymeBank", hint: "Monthly personal statement" },
+] as const satisfies ReadonlyArray<{
+  name: SaInstitution;
+  hint: string;
+}>;
+
 export const INSTITUTION_COLORS: Record<string, string> = {
   absa: "#AF1685",
   "african bank": "#002F6C",

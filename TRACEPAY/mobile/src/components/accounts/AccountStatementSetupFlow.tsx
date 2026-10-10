@@ -1,34 +1,31 @@
 import * as DocumentPicker from "expo-document-picker";
 import { router, type Href } from "expo-router";
-import { ChevronLeft } from "lucide-react-native";
+import { ChevronLeft, FileText } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { SetupBrandHeader } from "../auth/SetupBrandHeader";
-import { AccountTypePicker } from "./AccountTypePicker";
-import { BankPicker } from "./BankPicker";
-import { InstitutionLogo } from "./InstitutionLogo";
-import { StatementImportPanel } from "./StatementImportPanel";
+import { BankImportList } from "./BankImportList";
+import {
+  StatementImportComplete,
+  StatementPasswordScreen,
+  StatementProcessingScreen,
+} from "./StatementImportScreens";
 import { IconButton } from "../ui/IconButton";
 import { Button } from "../ui/Button";
-import { Input } from "../ui/Input";
 import {
-  INSTITUTION_COLORS,
   isSaInstitution,
-  resolveInstitutionLogoDomain,
   type SaInstitution,
 } from "../../features/accounts/account.constants";
-import { parseReturnTo, IMPORT_SUCCESS_HREF, LINKED_ACCOUNTS_HREF } from "../../features/accounts/account.navigation";
+import { parseReturnTo } from "../../features/accounts/account.navigation";
 import { dismissFinancialAccountsSetup } from "../../features/accounts/account-setup.service";
 import { createAccount, getAccountById, listAccounts } from "../../features/accounts/account.service";
-import type { AccountType, FinancialAccount } from "../../features/accounts/account.types";
+import type { FinancialAccount } from "../../features/accounts/account.types";
 import {
-  colorForAccount,
   formatAccountHeading,
   formatAccountSubtitle,
-  formatAccountTypeLabel,
   isValidAccountName,
 } from "../../features/accounts/account.validation";
 import {
@@ -48,10 +45,11 @@ type Props = {
   existingAccountId?: string | null;
 };
 
-function institutionColor(institution: SaInstitution): string {
-  const key = institution.toLowerCase();
-  return INSTITUTION_COLORS[key] ?? "#6366F1";
-}
+type ImportOutcome = {
+  count: number;
+  newFindings: number;
+  updatedFindings: number;
+};
 
 function institutionFromAccount(account: FinancialAccount): SaInstitution | null {
   const institution = account.institution?.trim();
@@ -72,17 +70,15 @@ export function AccountStatementSetupFlow({
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const mountedRef = useRef(true);
+  const processLock = useRef(false);
+  const bankRef = useRef<SaInstitution | null>(initialInstitution);
 
   const [bank, setBank] = useState<SaInstitution | null>(initialInstitution);
   const [accountId, setAccountId] = useState<string | null>(existingAccountId);
-  const [accountBank, setAccountBank] = useState<SaInstitution | null>(
-    initialInstitution,
-  );
+  const [accountBank, setAccountBank] = useState<SaInstitution | null>(initialInstitution);
   const [loadedAccount, setLoadedAccount] = useState<FinancialAccount | null>(null);
   const [existingAccounts, setExistingAccounts] = useState<FinancialAccount[]>([]);
   const [creatingNew, setCreatingNew] = useState(!existingAccountId);
-  const [accountType, setAccountType] = useState<AccountType>("cheque");
-  const [nickname, setNickname] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
   const [file, setFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
@@ -95,6 +91,7 @@ export function AccountStatementSetupFlow({
   const [resume, setResume] = useState<PdfImportResume | null>(null);
   const [reconciliationImportId, setReconciliationImportId] = useState<string | null>(null);
   const [extractedCount, setExtractedCount] = useState(0);
+  const [outcome, setOutcome] = useState<ImportOutcome | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -102,6 +99,10 @@ export function AccountStatementSetupFlow({
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    bankRef.current = bank;
+  }, [bank]);
 
   useEffect(() => {
     if (existingAccountId) return;
@@ -133,6 +134,7 @@ export function AccountStatementSetupFlow({
         if (institution) {
           setBank(institution);
           setAccountBank(institution);
+          bankRef.current = institution;
         }
       })
       .catch(() => setFormError("Account not found."));
@@ -151,20 +153,8 @@ export function AccountStatementSetupFlow({
     setExtractedCount(0);
   }, [busy]);
 
-  const handleBankChange = useCallback(
-    (next: SaInstitution) => {
-      setBank(next);
-      setAccountId(null);
-      setAccountBank(null);
-      setFormError(null);
-      setCreatingNew(true);
-      clearImport();
-    },
-    [clearImport],
-  );
-
-  const leave = () => {
-    if (busy) return;
+  const leave = (force = false) => {
+    if (busy && !force) return;
     if (mode === "onboarding") {
       void dismissFinancialAccountsSetup();
       return router.replace("/(tabs)");
@@ -173,53 +163,25 @@ export function AccountStatementSetupFlow({
     router.back();
   };
 
-  const resolveNickname = () => {
-    const custom = nickname.trim();
-    if (custom.length > 0) return custom;
-    return formatAccountTypeLabel(accountType);
-  };
-
-  const ensureAccountId = async (): Promise<string> => {
-    if (accountId && (importOnly || loadedAccount || accountBank === bank)) {
+  const ensureAccountId = async (selectedBank: SaInstitution | null): Promise<string> => {
+    if (accountId && (importOnly || loadedAccount || accountBank === selectedBank)) {
       return accountId;
     }
-    if (!bank) throw new Error("Select your bank.");
-    const name = resolveNickname();
+    if (!selectedBank) throw new Error("Select your bank.");
+    const name = selectedBank;
     if (!isValidAccountName(name)) {
-      throw new Error("Enter a nickname between 2 and 80 characters.");
+      throw new Error("That bank could not be saved. Try again.");
     }
     const account = await createAccount({
       name,
-      institution: bank,
-      accountType,
+      institution: selectedBank,
+      accountType: "cheque",
       connectionSource: "statement_import",
     });
     setAccountId(account.id);
-    setAccountBank(bank);
+    setAccountBank(selectedBank);
     setLoadedAccount(account);
     return account.id;
-  };
-
-  const saveAccountOnly = async () => {
-    if (busy || importOnly) return;
-    setBusy(true);
-    setFormError(null);
-    try {
-      await ensureAccountId();
-      if (!mountedRef.current) return;
-      if (mode === "onboarding") {
-        void dismissFinancialAccountsSetup();
-        router.replace("/(tabs)");
-        return;
-      }
-      router.replace((returnTo ?? LINKED_ACCOUNTS_HREF) as Href);
-    } catch (caught) {
-      setFormError(
-        caught instanceof Error ? caught.message : "Could not save your account.",
-      );
-    } finally {
-      if (mountedRef.current) setBusy(false);
-    }
   };
 
   const selectExistingAccount = (account: FinancialAccount) => {
@@ -232,37 +194,34 @@ export function AccountStatementSetupFlow({
     if (institution) {
       setBank(institution);
       setAccountBank(institution);
+      bankRef.current = institution;
     }
     clearImport();
   };
 
-  const canImport = Boolean(importOnly || loadedAccount || bank);
-
-  const pickPdf = async () => {
-    if (busy || !canImport) return;
-    setFormError(null);
-    const result = await DocumentPicker.getDocumentAsync({
-      type: "application/pdf",
-      copyToCacheDirectory: true,
-      multiple: false,
-    });
-    if (!result.canceled && result.assets?.[0]) {
-      clearImport();
-      setFile(result.assets[0]);
+  const process = async (
+    asset: DocumentPicker.DocumentPickerAsset,
+    selectedBank: SaInstitution | null,
+    overrides?: { password: string; resume: PdfImportResume | null },
+  ) => {
+    const nextPassword = overrides?.password ?? password;
+    const nextResume = overrides ? overrides.resume : resume;
+    if (busy || processLock.current) return;
+    if (!importOnly && !loadedAccount && !selectedBank) {
+      setFormError("Select your bank before uploading a statement.");
+      return;
     }
-  };
-
-  const process = async () => {
-    if (!file || busy || !canImport) return;
+    processLock.current = true;
     setBusy(true);
     setMessage(null);
     setFormError(null);
+    setPasswordRequired(false);
     setPasswordHint(null);
     setStage("preparing");
     try {
       let targetAccountId: string;
       try {
-        targetAccountId = await ensureAccountId();
+        targetAccountId = await ensureAccountId(selectedBank);
       } catch (accountError) {
         setFormError(
           accountError instanceof Error
@@ -272,17 +231,20 @@ export function AccountStatementSetupFlow({
         setStage(null);
         return;
       }
-      const preview = await preparePdfStatement(file, {
+      const preview = await preparePdfStatement(asset, {
         accountId: targetAccountId,
-        password,
-        resume,
+        password: nextPassword,
+        resume: nextResume,
         onProgress: (progress) => {
           if (mountedRef.current) setStage(progress.stage);
         },
       });
       if (mountedRef.current) {
         setReconciliationImportId(null);
-        finishSavedImport(preview.transactions.length);
+        finishSavedImport(
+          preview.findingSummary?.inserted ?? preview.transactions.length,
+          preview.findingSummary,
+        );
       }
     } catch (error) {
       if (isPdfPasswordChallenge(error)) {
@@ -307,25 +269,61 @@ export function AccountStatementSetupFlow({
       if (!mountedRef.current) return;
       setResume(null);
       setReconciliationImportId(null);
-      const nextMessage =
-        error instanceof Error ? error.message : "The PDF could not be processed.";
-      setMessage(nextMessage);
+      setMessage(error instanceof Error ? error.message : "The PDF could not be processed.");
       setStage(null);
     } finally {
+      processLock.current = false;
       if (mountedRef.current) setBusy(false);
     }
   };
 
-  const finishSavedImport = (count: number) => {
-    if (mode === "onboarding") {
-      router.replace({
-        pathname: IMPORT_SUCCESS_HREF,
-        params: {
-          count: String(count),
-          accountName: bank ?? loadedAccount?.name ?? "your account",
-        },
-      } as Href);
+  const pickPdf = async (selectedBank: SaInstitution | null) => {
+    if (busy) return;
+    if (!importOnly && !loadedAccount && !selectedBank) {
+      setFormError("Select your bank before uploading a statement.");
       return;
+    }
+    setFormError(null);
+    const result = await DocumentPicker.getDocumentAsync({
+      type: "application/pdf",
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+    const asset = result.canceled ? null : result.assets?.[0];
+    if (!asset) return;
+    clearImport();
+    setFile(asset);
+    void process(asset, selectedBank, { password: "", resume: null });
+  };
+
+  const chooseBankAndPick = async (name: SaInstitution) => {
+    if (busy) return;
+    setBank(name);
+    bankRef.current = name;
+    setAccountId(null);
+    setAccountBank(null);
+    setLoadedAccount(null);
+    setCreatingNew(true);
+    setFormError(null);
+    clearImport();
+    await pickPdf(name);
+  };
+
+  const finishSavedImport = (
+    count: number,
+    findings?: { newFindings: number; updatedFindings: number },
+  ) => {
+    setOutcome({
+      count,
+      newFindings: findings?.newFindings ?? 0,
+      updatedFindings: findings?.updatedFindings ?? 0,
+    });
+    setStage(null);
+  };
+
+  const closeFinishedImport = () => {
+    if (mode === "onboarding") {
+      void dismissFinancialAccountsSetup();
     }
     if (returnTo) router.replace(returnTo as Href);
     else router.replace("/(tabs)");
@@ -336,10 +334,10 @@ export function AccountStatementSetupFlow({
     setBusy(true);
     setMessage(null);
     try {
-      await retryFindingReconciliation(reconciliationImportId);
+      const counts = await retryFindingReconciliation(reconciliationImportId);
       if (!mountedRef.current) return;
       setReconciliationImportId(null);
-      finishSavedImport(extractedCount);
+      finishSavedImport(extractedCount, counts);
     } catch (error) {
       if (!mountedRef.current) return;
       if (isFindingReconciliationError(error)) {
@@ -355,50 +353,101 @@ export function AccountStatementSetupFlow({
     }
   };
 
-  const heroBank = bank;
-  const heroAccount = loadedAccount;
+  if (outcome) {
+    return (
+      <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
+        <StatementImportComplete
+          newFindings={outcome.newFindings}
+          transactionCount={outcome.count}
+          updatedFindings={outcome.updatedFindings}
+          onClose={closeFinishedImport}
+          onImportAnother={() => {
+            setOutcome(null);
+            clearImport();
+          }}
+          onViewInsights={() => {
+            if (mode === "onboarding") void dismissFinancialAccountsSetup();
+            router.replace("/(tabs)/leaks");
+          }}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  const bankName = bank ?? loadedAccount?.institution ?? null;
+
+  if (passwordRequired && file) {
+    return (
+      <StatementPasswordScreen
+        bankName={bankName}
+        busy={busy}
+        fileName={file.name}
+        password={password}
+        passwordHint={passwordHint}
+        onChooseAnother={clearImport}
+        onClose={() => leave()}
+        onPasswordChange={setPassword}
+        onUnlock={() => {
+          if (!password.trim()) return;
+          void process(file, bankRef.current, { password, resume });
+        }}
+      />
+    );
+  }
+
+  if (busy && stage) {
+    return (
+      <StatementProcessingScreen
+        bankName={bankName}
+        fileSizeBytes={file?.size}
+        stage={stage}
+        onClose={() => leave(true)}
+      />
+    );
+  }
+
+  const showBankList = !importOnly && (creatingNew || existingAccounts.length === 0);
+  const showExistingUpload = importOnly || (loadedAccount && !creatingNew);
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={mode === "onboarding" ? undefined : ["top"]}>
+    <SafeAreaView
+      className="flex-1 bg-background"
+      edges={mode === "onboarding" ? undefined : ["top"]}
+    >
       <View className="flex-1 px-5">
         {mode === "onboarding" ? (
           <SetupBrandHeader />
         ) : (
-          <View className="flex-row items-center gap-3 pt-1">
-            <IconButton accessibilityLabel="Go back" variant="ghost" onPress={leave}>
-              <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
-            </IconButton>
-            <Text className="text-[24px] font-bold text-foreground">
-              {importOnly || loadedAccount ? "Import statement" : "Add account"}
-            </Text>
+          <View className="relative mt-1 min-h-11 flex-row items-center justify-center">
+            <View className="absolute left-0 z-10">
+              <IconButton accessibilityLabel="Go back" variant="outline" onPress={() => leave()}>
+                <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
+              </IconButton>
+            </View>
+            <Text className="text-[17px] font-semibold text-foreground">Import statement</Text>
           </View>
         )}
 
         <ScrollView
-          contentContainerStyle={{ paddingBottom: 32 }}
-          showsVerticalScrollIndicator={false}
           className="flex-1"
+          contentContainerStyle={{ paddingBottom: 32 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          {mode === "onboarding" ? (
-            <>
-              <Text className="mt-8 text-center text-[30px] font-bold text-foreground">
-                Connect your bank
-              </Text>
-              <Text className="mt-3 text-center text-[15px] leading-[22px] text-muted-foreground">
-                Start with one bank now. You can add FNB, Capitec, credit cards, and more
-                anytime from Home or Settings after setup.
-              </Text>
-            </>
-          ) : importOnly || loadedAccount ? (
-            <Text className="mt-4 text-[14px] leading-6 text-muted-foreground">
-              Upload another PDF statement for this account. Previous statements are kept.
-            </Text>
-          ) : (
-            <Text className="mt-4 text-[14px] leading-6 text-muted-foreground">
-              Choose an existing account or create a new one. You can save the account now and
-              import a statement later.
-            </Text>
-          )}
+          {message && !passwordRequired ? (
+            <View className="mt-4 rounded-2xl bg-destructive/10 px-4 py-3">
+              <Text className="text-center text-[13px] text-destructive">{message}</Text>
+              {reconciliationImportId ? (
+                <Button className="mt-3" onPress={() => void retryReconciliation()}>
+                  Try again
+                </Button>
+              ) : null}
+            </View>
+          ) : null}
+
+          {formError ? (
+            <Text className="mt-3 text-[13px] text-destructive">{formError}</Text>
+          ) : null}
 
           {!importOnly && existingAccounts.length > 0 ? (
             <View className="mt-6">
@@ -416,7 +465,10 @@ export function AccountStatementSetupFlow({
                         selected ? "border-primary bg-primary/5" : "border-border bg-card"
                       }`}
                       disabled={busy}
-                      onPress={() => selectExistingAccount(account)}
+                      onPress={() => {
+                        selectExistingAccount(account);
+                        void pickPdf(institutionFromAccount(account));
+                      }}
                     >
                       <Text className="text-[15px] font-semibold text-foreground">
                         {formatAccountHeading(account)}
@@ -438,79 +490,52 @@ export function AccountStatementSetupFlow({
                   setLoadedAccount(null);
                   setAccountId(null);
                   setAccountBank(null);
-                  if (!initialInstitution) setBank(null);
+                  if (!initialInstitution) {
+                    setBank(null);
+                    bankRef.current = null;
+                  }
                   clearImport();
                 }}
               >
-                New account
+                Import for a new bank
               </Button>
             </View>
           ) : null}
 
-          {!importOnly && (creatingNew || existingAccounts.length === 0) ? (
-            <View className="mt-6 gap-4">
-              <BankPicker
-                value={bank}
-                onChange={handleBankChange}
-                error={formError && !bank ? formError : null}
+          {showBankList ? (
+            <View className={existingAccounts.length > 0 ? "mt-6" : "mt-4"}>
+              <BankImportList
                 disabled={busy}
+                selected={bank}
+                onSelect={(name) => void chooseBankAndPick(name)}
               />
-              {bank ? (
-                <>
-                  <AccountTypePicker
-                    disabled={busy}
-                    value={accountType}
-                    onChange={setAccountType}
-                  />
-                  <Input
-                    editable={!busy}
-                    label="Nickname (optional)"
-                    placeholder={formatAccountTypeLabel(accountType)}
-                    value={nickname}
-                    onChangeText={setNickname}
-                  />
-                </>
-              ) : null}
             </View>
           ) : null}
 
-          {(importOnly && heroAccount) || loadedAccount || (!importOnly && creatingNew && heroBank) ? (
-            <View className="mt-6">
-              <StatementImportPanel
-                busy={busy}
-                file={file}
-                message={message}
-                password={password}
-                passwordHint={passwordHint}
-                passwordRequired={passwordRequired}
-                stage={stage}
-                onClear={clearImport}
-                onPasswordChange={setPassword}
-                onPick={() => void pickPdf()}
-                onProcess={() => void process()}
-                onRetry={
-                  reconciliationImportId ? () => void retryReconciliation() : undefined
-                }
-              />
-              {!importOnly && creatingNew && heroBank ? (
-                <Button
-                  className="mt-3"
-                  disabled={busy}
-                  variant="outline"
-                  onPress={() => void saveAccountOnly()}
-                >
-                  Save account without a statement
-                </Button>
-              ) : null}
-              {formError ? (
-                <Text className="mt-3 text-[13px] text-destructive">{formError}</Text>
-              ) : null}
-            </View>
+          {showExistingUpload && !file ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: busy }}
+              className={`mt-4 items-center rounded-3xl border border-dashed border-border bg-card px-6 py-14 ${
+                busy ? "opacity-50" : "active:opacity-90"
+              }`}
+              disabled={busy}
+              onPress={() => void pickPdf(bankRef.current)}
+            >
+              <View className="h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                <FileText color={palette.primary} size={28} strokeWidth={1.8} />
+              </View>
+              <Text className="mt-4 text-[17px] font-bold text-foreground">Choose PDF file</Text>
+              <Text className="mt-1 text-center text-[14px] text-muted-foreground">
+                or browse your files
+              </Text>
+            </Pressable>
           ) : null}
+
         </ScrollView>
 
         {mode === "onboarding" ? (
-          <Button className="mb-2" disabled={busy} onPress={leave} variant="outline">
+          <Button className="mb-2" disabled={busy} variant="outline" onPress={() => leave()}>
             Skip for now
           </Button>
         ) : null}
