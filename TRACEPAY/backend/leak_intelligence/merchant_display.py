@@ -15,6 +15,19 @@ _ACCOUNT_ID_PHRASE = re.compile(r"\bACCOUNT\s+ID\b", re.IGNORECASE)
 _ZAR_AMOUNT_FRAGMENT = re.compile(r"\bZAR\s*\d", re.IGNORECASE)
 _LONG_DIGIT_RUN = re.compile(r"\d{6,}")
 _REDACTED = re.compile(r"\[(?:ACCOUNT_ID|PHONE|REDACTED)\]", re.IGNORECASE)
+# normalize_for_matching already strips a leading "PURCHASE".
+_CARD_PURCHASE_BOILERPLATE = re.compile(
+    r"WITH\s+CARD\s+AT(?:\s+EPOS(?:\s+AT)?)?\Z",
+    re.IGNORECASE,
+)
+
+
+def is_card_purchase_boilerplate(value: str | None) -> bool:
+    """True when the label is only a card-purchase prefix, not a merchant."""
+    normalized = normalize_for_matching(value)
+    if not normalized:
+        return False
+    return _CARD_PURCHASE_BOILERPLATE.fullmatch(normalized) is not None
 
 
 def is_reliable_merchant_display_name(value: str | None) -> bool:
@@ -56,6 +69,26 @@ def display_merchant_label(value: str) -> str:
         else:
             parts.append(token)
     return " ".join(parts).strip()
+
+
+def merchant_display_name_for(merchant_key: str | None) -> str | None:
+    """Safe label for an already reliable merchant key.
+
+    Card-purchase boilerplate never becomes a display name. Detection keys,
+    confidence, and amounts are unchanged.
+    """
+    if not merchant_key or not merchant_key.strip():
+        return None
+    if is_card_purchase_boilerplate(merchant_key):
+        return None
+    if not is_reliable_merchant_display_name(merchant_key):
+        return None
+    label = display_merchant_label(merchant_key)
+    if not label or is_card_purchase_boilerplate(label):
+        return None
+    if not is_reliable_merchant_display_name(label):
+        return None
+    return label
 
 
 def recurring_leak_title(*, subscription: bool, merchant_name: str | None) -> str:

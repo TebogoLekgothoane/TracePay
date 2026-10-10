@@ -12,6 +12,11 @@ import {
   type StatementImportProgress,
   type StatementImportStage,
 } from "./statement-import.progress";
+import {
+  FindingReconciliationError,
+  postFindingReconciliation,
+  shouldReconcileSavedImport,
+} from "./statement-import.reconciliation";
 import { requireValidExtractedTransactions } from "./statement-import.validation";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -111,6 +116,8 @@ export function isPdfPasswordChallenge(
 ): value is PdfPasswordChallengeError {
   return value instanceof PdfPasswordChallengeError;
 }
+
+export { FindingReconciliationError, isFindingReconciliationError } from "./statement-import.reconciliation";
 
 type ProcessorPreviewPayload = {
   detail?: string;
@@ -420,6 +427,26 @@ async function loadCanonicalDedupeMap(
   return map;
 }
 
+const FINDING_REGISTRY_TIMEOUT_MS = 60_000;
+
+async function currentAccessToken(): Promise<string> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.auth.getSession();
+  if (error || !data.session?.access_token) {
+    return "";
+  }
+  return data.session.access_token;
+}
+
+export async function retryFindingReconciliation(statementImportId: string): Promise<void> {
+  await postFindingReconciliation({
+    statementImportId,
+    accessToken: await currentAccessToken(),
+    baseUrl: getPdfProcessorBaseUrl(),
+    timeoutMs: FINDING_REGISTRY_TIMEOUT_MS,
+  });
+}
+
 async function persistPreview(
   preview: PdfStatementPreview,
   account: FinancialAccount,
@@ -625,13 +652,25 @@ async function persistPreview(
     }
   });
 
+  const inserted = rows.length - duplicateCount;
   console.info("[TracePay][statement] persist_completed", {
     statementId: preview.statementId,
-    transactionCount: rows.length - duplicateCount,
+    transactionCount: inserted,
     duplicateCount,
   });
+  if (shouldReconcileSavedImport("processed", inserted)) {
+    try {
+      await retryFindingReconciliation(preview.statementId);
+    } catch (error) {
+      const message =
+        error instanceof FindingReconciliationError
+          ? error.message
+          : "Finding reconciliation could not finish. Your statement is saved. Try again.";
+      throw new FindingReconciliationError(preview.statementId, message, rows.length);
+    }
+  }
   return {
-    inserted: rows.length - duplicateCount,
+    inserted,
     duplicates: duplicateCount,
   };
 }
@@ -885,7 +924,7 @@ export async function preparePdfStatement(
     });
     return preview;
   } catch (error) {
-    if (isPdfPasswordChallenge(error)) {
+    if (isPdfPasswordChallenge(error) || error instanceof FindingReconciliationError) {
       throw error;
     }
     console.error("[TracePay][statement] import_failed", {

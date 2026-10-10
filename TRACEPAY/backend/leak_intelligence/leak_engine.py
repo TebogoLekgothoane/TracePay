@@ -5,11 +5,16 @@ from __future__ import annotations
 from datetime import datetime, time, timezone
 from decimal import Decimal
 
+from .behaviour_engine import MIN_FEE_BURDEN_TOTAL, MIN_RELATIVE_CHANGE_PERCENT, MIN_TREND_MONTHS
 from .behaviour_models import BehaviourAnalysisResult, BehaviourObservation
 from .leak_keys import leak_fingerprint, subject_key
 from .leak_models import LeakDetection, LeakDetectionResult, LeakType
 from .leak_scoring import leak_confidence, severity_for_impact, support_ratio
-from .merchant_display import is_reliable_merchant_display_name, recurring_leak_title
+from .merchant_display import (
+    is_reliable_merchant_display_name,
+    merchant_display_name_for,
+    recurring_leak_title,
+)
 from .engine import RECURRENCE_MIN_OBSERVATIONS
 from .models import CashFeatures, FeeFeatures, FinancialFeatureSnapshot, MerchantFeature
 from .periods import completed_months
@@ -94,7 +99,7 @@ def _bank_fee_leaks(
         and sms == fees.bank_fee_total
         and fee_observations
     )
-    foreign_burden = _foreign_transaction_fee_burden(fees, fee_observations)
+    foreign_burden = _foreign_transaction_fee_burden(snapshot, fees, fee_observations)
     interest_burden = _interest_charge_burden(fees, fee_observations)
     overdraft_burden = _overdraft_fee_burden(fees, fee_observations)
     insufficient_funds_burden = _insufficient_funds_fee_burden(fees, fee_observations)
@@ -890,6 +895,10 @@ def _leak(
     behaviour_ids: list[str],
     feature_refs: list[str],
 ) -> LeakDetection:
+    merchant_key = evidence.get("merchant_key")
+    display_name = merchant_display_name_for(merchant_key if isinstance(merchant_key, str) else None)
+    if display_name:
+        evidence = {**evidence, "merchant_display_name": display_name}
     fingerprint = leak_fingerprint(
         user_id=snapshot.user_id,
         leak_type=leak_type,
@@ -983,15 +992,53 @@ def _recurring_monthly_impact(merchant: MerchantFeature) -> Decimal | None:
 
 
 def _foreign_transaction_fee_burden(
-    fees: FeeFeatures, fee_observations: list[BehaviourObservation]
+    snapshot: FinancialFeatureSnapshot,
+    fees: FeeFeatures,
+    fee_observations: list[BehaviourObservation],
 ) -> bool:
-    return _specific_fee_burden(
-        fees.foreign_transaction_fee_total or Decimal("0"),
+    total = fees.foreign_transaction_fee_total or Decimal("0")
+    if _specific_fee_burden(
+        total,
         fees.foreign_transaction_fee_count,
         fees.foreign_transaction_fee_high_confidence_count,
         fees,
         fee_observations,
+    ):
+        return True
+    # One bank-fee leak cannot carry two independent movements. A foreign-fee
+    # increase is specific only when it accounts for the whole fee change.
+    foreign_change = _material_subtype_increase(
+        snapshot, lambda month: month.foreign_transaction_fee_total
     )
+    overall_change = _decimal_evidence(fee_observations, "change_amount")
+    if (
+        foreign_change is None
+        or overall_change is None
+        or fees.foreign_transaction_fee_count < 2
+        or total < MIN_IMPACT
+        or Decimal(fees.foreign_transaction_fee_high_confidence_count)
+        / Decimal(fees.foreign_transaction_fee_count)
+        < Decimal("0.60")
+    ):
+        return False
+    return foreign_change == overall_change
+
+
+def _material_subtype_increase(snapshot: FinancialFeatureSnapshot, selector) -> Decimal | None:
+    months = completed_months(snapshot)
+    if len(months) < MIN_TREND_MONTHS:
+        return None
+    current = selector(months[-1])
+    previous_amount = sum((selector(month) for month in months[:-1]), Decimal("0")) / Decimal(
+        len(months) - 1
+    )
+    if previous_amount <= 0:
+        return None
+    change = current - previous_amount
+    percentage = (change / previous_amount) * Decimal("100")
+    if change < MIN_FEE_BURDEN_TOTAL or percentage < MIN_RELATIVE_CHANGE_PERCENT:
+        return None
+    return change
 
 
 def _interest_charge_burden(

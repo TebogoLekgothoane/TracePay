@@ -1,7 +1,14 @@
+import { hunterLogoUrl } from "../accounts/account.constants";
+
 export type MerchantCatalogEntry = {
   id: string;
   domain: string;
   patterns: RegExp[];
+};
+
+export type CatalogLogo = {
+  brandId: string;
+  domain: string;
 };
 
 /** Curated merchant → Hunter domain map for transaction descriptions. */
@@ -48,4 +55,47 @@ export function resolveMerchantLogoDomain(
   }
 
   return null;
+}
+
+const CARD_PURCHASE_BOILERPLATE = /^(?:purchase\s+)?with\s+card\s+at(?:\s+epos(?:\s+at)?)?$/i;
+const CATALOG_HOSTNAME = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
+
+const CATALOG_BY_KEY = new Map(
+  MERCHANT_CATALOG.map((entry) => [entry.id, entry] as const),
+);
+
+export function isCatalogDomain(domain: string): boolean {
+  const normalized = domain.trim().toLowerCase();
+  return (
+    MERCHANT_CATALOG.some((entry) => entry.domain === normalized) &&
+    CATALOG_HOSTNAME.test(normalized)
+  );
+}
+
+/** Hunter URL for a catalogue domain. Display names and descriptions are rejected. */
+export function catalogLogoUrl(domain: string): string | null {
+  const normalized = domain.trim().toLowerCase();
+  if (!isCatalogDomain(normalized)) {
+    return null;
+  }
+  return hunterLogoUrl(normalized);
+}
+
+/** Exact catalogue match for a reliable display name. Does not scan descriptions. */
+export function resolveCatalogLogo(
+  displayName: string | null | undefined,
+): CatalogLogo | null {
+  const text = displayName?.trim();
+  if (!text || CARD_PURCHASE_BOILERPLATE.test(text)) {
+    return null;
+  }
+  if (/[/:]|https?:/i.test(text)) {
+    return null;
+  }
+  const key = text.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const entry = CATALOG_BY_KEY.get(key);
+  if (!entry || !isCatalogDomain(entry.domain)) {
+    return null;
+  }
+  return { brandId: entry.id, domain: entry.domain };
 }

@@ -54,6 +54,35 @@ def test_known_rules(description: str, category: str) -> None:
     assert result.classification_reason
 
 
+def test_card_purchase_prefix_uses_the_recognised_merchant() -> None:
+    mr_d = "PURCHASE: WITH CARD AT EPOS AT MR D FOOD"
+    checkers = "PURCHASE: WITH CARD AT EPOS AT CHECKERS SANDTON"
+    woolworths = "PURCHASE WITH CARD AT EPOS AT WOOLWORTHS SANDTON"
+    north = "PURCHASE: WITH CARD AT EPOS AT NORTH CAFE"
+    south = "PURCHASE: WITH CARD AT EPOS AT SOUTH MARKET"
+    online_mr = "Online Purchase Mr Food"
+    online_uber = "Online Purchase: Uber Eats Johannesburg (Card 7571)"
+
+    mr_d_result = classify_transaction(mr_d, "debit")
+    checkers_result = classify_transaction(checkers, "debit")
+    woolworths_result = classify_transaction(woolworths, "debit")
+
+    assert mr_d_result.category_name == "Fast Food"
+    assert mr_d_result.rule == "merchant:food-delivery"
+    assert mr_d_result.merchant_name == "Mr D"
+    assert extract_merchant_name(mr_d) == "Mr D"
+    assert checkers_result.category_name == "Groceries"
+    assert checkers_result.merchant_name == "Checkers"
+    assert woolworths_result.merchant_name == "Woolworths"
+    assert checkers_result.merchant_name != woolworths_result.merchant_name
+    assert extract_merchant_name(north) != extract_merchant_name(south)
+    assert "With Card At" not in (extract_merchant_name(north) or "")
+    assert "With Card At" not in (extract_merchant_name(south) or "")
+    assert extract_merchant_name(online_mr) == "Online Purchase Mr Food"
+    assert extract_merchant_name(online_uber) == "Online Purchase Uber Eats"
+    assert mr_d == "PURCHASE: WITH CARD AT EPOS AT MR D FOOD"
+
+
 def test_case_and_merchant_variations() -> None:
     assert classify_transaction("woolworths").category_name == "Groceries"
     assert classify_transaction("Woolworths Store 123").category_name == "Groceries"
@@ -651,6 +680,57 @@ def test_generic_statement_other_does_not_win(monkeypatch: pytest.MonkeyPatch) -
     assert result.category_name == "Other"
     assert result.rule == "fallback:other"
     assert result.classification_confidence <= 0.40
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "WOOLWORTHS REFUND",
+        "REVERSAL WOOLWORTHS",
+        "WOOLWORTHS REVERSED",
+        "CANCELLED NETFLIX",
+        "CANCELED NETFLIX",
+        "CORRECTION WOOLWORTHS",
+    ],
+)
+def test_purchase_reversal_batch_does_not_receive_other(
+    monkeypatch: pytest.MonkeyPatch,
+    description: str,
+) -> None:
+    monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", False)
+    result = categorise_batch(
+        [CategorisableTransaction("reversal", description, Decimal("186.40"), "credit")],
+        LIVE_CATEGORIES,
+    )["reversal"]
+    assert result.transaction_class == "unknown"
+    assert result.category_name is None
+    assert result.rule == "description:purchase-reversal"
+    assert result.classification_confidence == 0.95
+
+
+def test_batch_keeps_purchases_income_and_genuine_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", False)
+    results = categorise_batch(
+        [
+            CategorisableTransaction("purchase", "WOOLWORTHS", Decimal("186.40"), "debit"),
+            CategorisableTransaction("salary", "SALARY ACME", Decimal("22000"), "credit"),
+            CategorisableTransaction("unknown", "Obscure merchant 999", Decimal("9"), "debit"),
+            CategorisableTransaction("refund", "WOOLWORTHS REFUND", Decimal("186.40"), "credit"),
+            CategorisableTransaction("credit", "WOOLWORTHS", Decimal("186.40"), "credit"),
+        ],
+        LIVE_CATEGORIES,
+    )
+    assert results["purchase"].category_name == "Groceries"
+    assert results["purchase"].transaction_class == "spending"
+    assert results["credit"].category_name == "Groceries"
+    assert results["credit"].transaction_class == "spending"
+    assert results["salary"].category_name == "Salary"
+    assert results["salary"].transaction_class == "income"
+    assert results["unknown"].category_name == "Other"
+    assert results["unknown"].rule == "fallback:other"
+    assert results["refund"].category_name is None
+    assert results["refund"].transaction_class == "unknown"
+    assert results["refund"].rule == "description:purchase-reversal"
 
 
 def test_fallback_other_has_low_confidence(monkeypatch: pytest.MonkeyPatch) -> None:

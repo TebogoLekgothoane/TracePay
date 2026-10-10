@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.auth import require_supabase_user
 from app.main import app
+from categorisation.classifier import classify_transaction
 from categorisation.models import CategorisationResult
 from leak_intelligence.behaviour_engine import analyze_behaviour
 from leak_intelligence.engine import build_financial_features
@@ -343,12 +344,63 @@ def test_duplicate_reasoning_is_one_time_and_requires_verification() -> None:
     impact = analysis.impact_assessment
     assert analysis.root_cause_type == "potential_duplicate"
     assert analysis.analysis_status == "verification_required"
-    assert analysis.avoidability == "high"
+    assert analysis.avoidability == "unknown"
     assert impact.impact_kind == "one_time"
     assert impact.detected_annual_amount is None
-    assert impact.recoverable_amount == Decimal("50")
+    assert impact.detected_amount == Decimal("50")
+    assert impact.recoverable_amount is None
+    assert impact.potentially_avoidable_amount is None
     assert "fraud" in analysis.explanation.lower()
     assert "does not establish" in analysis.explanation.lower()
+    assert set(analysis.evidence) == {
+        "potential_duplicate_amount",
+        "matching_transaction_count",
+        "date_span_days",
+        "verification_required",
+    }
+
+
+def test_same_day_kfc_repeat_stays_a_verification_candidate() -> None:
+    transactions = []
+    for transaction_id, when, description in (
+        ("kfc-a", date(2026, 7, 4), "KFC"),
+        ("kfc-b", date(2026, 7, 4), "KFC"),
+        ("later", date(2026, 9, 4), "CHECKERS"),
+    ):
+        categorisation = classify_transaction(description, "debit")
+        transactions.append(
+            FeatureTransaction(
+                transaction_id=transaction_id,
+                user_id="user-a",
+                amount=Decimal("89.90") if description == "KFC" else Decimal("50"),
+                transaction_date=when,
+                merchant_name="KFC" if description == "KFC" else "CHECKERS",
+                description=description,
+                transaction_type="debit",
+                categorisation=categorisation,
+            )
+        )
+    snapshot, _behaviours, leaks, reasoning = _pipeline(transactions)
+    recommendations = recommend_actions(reasoning)
+    leak = next(item for item in leaks.leaks if item.leak_type == "duplicate_payment_leak")
+    analysis = next(item for item in reasoning.analyses if item.leak_id == leak.leak_id)
+    recommendation = next(
+        item
+        for item in recommendations.recommendations
+        if item.source_reasoning_id == analysis.reasoning_id
+    )
+
+    assert snapshot.duplicate_candidates
+    assert analysis.analysis_status == "verification_required"
+    assert analysis.avoidability == "unknown"
+    assert analysis.impact_assessment.detected_amount == Decimal("89.90")
+    assert analysis.impact_assessment.recoverable_amount is None
+    assert recommendation.recommendation_type == "verify_potential_duplicate"
+    assert recommendation.priority == "medium"
+    assert recommendation.potential_recovery_amount is None
+    assert "has not confirmed" in recommendation.explanation
+    assert "not recovered money" in recommendation.explanation
+    assert "dispute" in recommendation.recommended_action
 
 
 @pytest.mark.parametrize(
@@ -432,9 +484,10 @@ def test_reasoning_report_separates_detected_and_recoverable_impact() -> None:
         ]
     )
     report = render_financial_reasoning_report(pipeline[3])
-    assert "Detected impact:" in report
+    assert "Detected impact:\nR50.00 one time" in report
     assert "Potentially avoidable:\nUnknown" in report
-    assert "Potentially recoverable:\nR50.00 one time" in report
+    assert "Potentially recoverable:\nUnknown" in report
+    assert "Avoidability: Unknown" in report
     assert "recommend" not in report.lower()
     assert "guaranteed" not in report.lower()
 

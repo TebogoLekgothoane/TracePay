@@ -1,6 +1,6 @@
 import { listAccounts, requireAuthenticatedUserId } from "../accounts/account.service";
 import { getSupabase } from "../../lib/supabase";
-import { mergeRecentTransactions } from "./transaction.merge";
+import { TRANSACTION_LIST_ORDER } from "./transaction.merge";
 import { readTransactionRow } from "./transaction.row";
 import type { TransactionRow } from "./transaction.types";
 
@@ -15,25 +15,33 @@ const TRANSACTION_SELECT =
   "id,date,description,amount,type,balance,currency,account_id,statement_id,source,category_id,category_source,transaction_class,is_duplicate,categories(name),accounts(id,name,institution,account_type)";
 
 const DEFAULT_LIMIT = 100;
-const MIN_PER_ACCOUNT = 25;
 
 async function queryRecentTransactions(
   limit: number,
-  accountId?: string | null,
+  accountIds: readonly string[],
 ): Promise<TransactionRow[]> {
+  if (accountIds.length === 0) {
+    return [];
+  }
+
   let query = getSupabase()
     .from("transactions")
     .select(TRANSACTION_SELECT)
-    .eq("is_duplicate", false)
-    .order("date", { ascending: false })
-    .order("created_at", { ascending: false })
+    .eq("is_duplicate", false);
+
+  const [onlyAccountId] = accountIds;
+  query =
+    accountIds.length === 1 && onlyAccountId
+      ? query.eq("account_id", onlyAccountId)
+      : query.in("account_id", [...accountIds]);
+
+  // created_at is the import batch time and would cluster same-day rows by bank.
+  const [byDate, byId] = TRANSACTION_LIST_ORDER;
+  const { data, error } = await query
+    .order(byDate.column, { ascending: byDate.ascending })
+    .order(byId.column, { ascending: byId.ascending })
     .limit(limit);
 
-  if (accountId) {
-    query = query.eq("account_id", accountId);
-  }
-
-  const { data, error } = await query;
   if (error) {
     throw new Error("Could not load your imported transactions.");
   }
@@ -50,28 +58,14 @@ export async function listRecentTransactions(
   await requireAuthenticatedUserId();
 
   if (accountId) {
-    return queryRecentTransactions(limit, accountId);
+    return queryRecentTransactions(limit, [accountId]);
   }
 
   const accounts = await listAccounts();
-  const accountIds = accounts.map((account) => account.id);
-  if (accountIds.length === 0) {
-    return [];
-  }
-  if (accountIds.length === 1) {
-    return queryRecentTransactions(limit, accountIds[0]);
-  }
-
-  // Pull a fair recent slice from every account, then merge by date so one
-  // busy account cannot hide activity on the others.
-  const perAccount = Math.max(
-    MIN_PER_ACCOUNT,
-    Math.ceil(limit / accountIds.length) + MIN_PER_ACCOUNT,
+  return queryRecentTransactions(
+    limit,
+    accounts.map((account) => account.id),
   );
-  const batches = await Promise.all(
-    accountIds.map((id) => queryRecentTransactions(perAccount, id)),
-  );
-  return mergeRecentTransactions(batches.flat(), limit);
 }
 
 export async function getTransactionById(transactionId: string): Promise<TransactionRow | null> {

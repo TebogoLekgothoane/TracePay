@@ -223,8 +223,8 @@ def _copy_for(
             (
                 f"{observed} They shared a merchant grouping, amount and calendar day. "
                 "This recommendation is a verification step. TracePay has not confirmed "
-                "that this was a duplicate or an error. Any potential recovery amount "
-                "comes directly from that matching amount and is not recovered money."
+                "that this was a duplicate or an error. Matching those fields does not "
+                "establish that the amount is recoverable, and it is not recovered money."
             ),
             (
                 "Compare the transactions in this group before taking action. TracePay "

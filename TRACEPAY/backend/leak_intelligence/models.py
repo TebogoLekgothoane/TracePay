@@ -159,6 +159,7 @@ class MonthlyFeature(BaseModel):
     category_totals: dict[str, Decimal] = Field(default_factory=dict)
     merchant_totals: dict[str, Decimal] = Field(default_factory=dict)
     bank_fee_total: Decimal = Decimal("0")
+    foreign_transaction_fee_total: Decimal = Decimal("0")
     cash_withdrawal_total: Decimal = Decimal("0")
     subscription_total: Decimal = Decimal("0")
     transfer_total: Decimal = Decimal("0")

@@ -3,6 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect } from "expo-router";
 import type { LucideIcon } from "lucide-react-native";
 import {
+  Bell,
   ChevronRight,
   FlaskConical,
   Globe,
@@ -42,6 +43,7 @@ const SECURITY_HREF = "/settings/security";
 const PRIVACY_HREF = "/settings/privacy";
 const LANGUAGE_HREF = "/settings/language";
 const HELP_HREF = "/settings/help";
+const NOTIFICATIONS_HREF = "/settings/notifications";
 const SYNTHETIC_INTELLIGENCE_DEBUG_HREF = "/debug/synthetic-intelligence";
 const LEAK_INTELLIGENCE_DEBUG_HREF = "/debug/leak-intelligence";
 const FINANCIAL_REASONING_DEBUG_HREF = "/debug/financial-reasoning";
@@ -79,6 +81,12 @@ const ACCOUNT_ROWS: SettingsRow[] = [
 ];
 
 const PREFERENCE_ROWS: SettingsRow[] = [
+  {
+    id: "notifications",
+    label: "Notifications",
+    Icon: Bell,
+    href: NOTIFICATIONS_HREF,
+  },
   {
     id: "privacy",
     label: "Privacy & consent",

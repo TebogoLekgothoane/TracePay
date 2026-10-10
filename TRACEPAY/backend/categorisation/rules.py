@@ -6,6 +6,8 @@ from dataclasses import dataclass
 import re
 from typing import Callable
 
+from categorisation.normalize import normalize_description, normalize_for_matching
+
 
 @dataclass(frozen=True)
 class Rule:
@@ -17,12 +19,73 @@ class Rule:
 
 
 def contains(*phrases: str) -> Callable[[str, str], bool]:
-    patterns = tuple(
-        re.compile(rf"(?<![A-Z0-9]){re.escape(phrase)}(?![A-Z0-9])") for phrase in phrases
-    )
+    patterns = tuple(_bounded_phrase(phrase) for phrase in phrases)
     return lambda description, _transaction_type: any(
         pattern.search(description) for pattern in patterns
     )
+
+
+def _bounded_phrase(phrase: str) -> re.Pattern[str]:
+    return re.compile(rf"(?<![A-Z0-9]){re.escape(phrase)}(?![A-Z0-9])")
+
+
+# Longer phrases are listed first so "MR D FOOD" wins over "MR D" and
+# "UBER EATS" wins over "UBER". Labels are the canonical merchant keys'
+# display form. Card-purchase recovery uses this list; it is not a new
+# category catalogue.
+_RECOGNISED_MERCHANT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Mr D", ("MR D FOOD", "MRD FOOD", "MR D")),
+    ("Uber Eats", ("UBER EATS", "UBEREATS")),
+    ("Pick n Pay", ("PICK N PAY", "PICKNPAY")),
+    ("Woolworths", ("WOOLWORTHS",)),
+    ("Checkers", ("CHECKERS",)),
+    ("Shoprite", ("SHOPRITE",)),
+    ("Spar", ("SPAR",)),
+    ("Food Lovers", ("FOOD LOVERS", "FOODLOVERS")),
+    ("Nando's", ("NANDO'S", "NANDOS")),
+    ("Mugg & Bean", ("MUGG & BEAN", "MUGG AND BEAN")),
+    ("Debonairs", ("DEBONAIRS",)),
+    ("Pizza Hut", ("PIZZA HUT",)),
+    ("Ocean Basket", ("OCEAN BASKET",)),
+    ("Kfc", ("KFC",)),
+    ("Mcdonald's", ("MCDONALD'S", "MCDONALDS")),
+    ("Steers", ("STEERS",)),
+    ("Wimpy", ("WIMPY",)),
+    ("Roman's Pizza", ("ROMAN'S PIZZA", "ROMANS")),
+    ("Uber", ("UBER",)),
+    ("Bolt", ("BOLT",)),
+    ("Shell", ("SHELL",)),
+    ("Engen", ("ENGEN",)),
+    ("Bp", ("BP",)),
+    ("Totalenergies", ("TOTALENERGIES",)),
+    ("Sasol", ("SASOL",)),
+    ("Netflix", ("NETFLIX",)),
+    ("Spotify", ("SPOTIFY",)),
+    ("Dstv", ("DSTV",)),
+    ("Showmax", ("SHOWMAX",)),
+)
+
+_RECOGNISED_MERCHANT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
+    sorted(
+        (
+            (_bounded_phrase(phrase), label)
+            for label, phrases in _RECOGNISED_MERCHANT_GROUPS
+            for phrase in phrases
+        ),
+        key=lambda item: len(item[0].pattern),
+        reverse=True,
+    )
+)
+
+
+def recognised_merchant_label(normalized_text: str) -> str | None:
+    """Return the canonical merchant label when an existing merchant phrase matches."""
+    if not normalized_text:
+        return None
+    for pattern, label in _RECOGNISED_MERCHANT_PATTERNS:
+        if pattern.search(normalized_text):
+            return label
+    return None
 
 
 def incoming_contains(*phrases: str) -> Callable[[str, str], bool]:
@@ -39,7 +102,35 @@ def contains_fragment(*fragments: str) -> Callable[[str, str], bool]:
     )
 
 
+_PURCHASE_REVERSAL = contains(
+    "REFUND",
+    "REVERSAL",
+    "REVERSED",
+    "CANCELLED",
+    "CANCELED",
+    "CORRECTION",
+)
+PURCHASE_REVERSAL_RULE = "description:purchase-reversal"
+
+
+def is_purchase_reversal_description(description: str | None) -> bool:
+    """True when the description says the entry undoes a payment.
+
+    A credit alone is not enough: salary, interest, and other incoming payments
+    stay on their own rules.
+    """
+    text = normalize_for_matching(description) or normalize_description(description)
+    return _PURCHASE_REVERSAL(text, "")
+
+
 RULES: tuple[Rule, ...] = (
+    Rule(
+        PURCHASE_REVERSAL_RULE,
+        "",
+        0.95,
+        _PURCHASE_REVERSAL,
+        transaction_class="unknown",
+    ),
     Rule(
         "merchant:salary-advance",
         "Other Income",
@@ -67,6 +158,8 @@ RULES: tuple[Rule, ...] = (
             "MONTHLY FEE",
             "ACCOUNT FEE",
             "TRANSACTION FEE",
+            "IMMEDIATE PAYMENT FEE",
+            "BALANCE ENQUIRY FEE",
             "ATM FEE",
             "OVERDRAFT FEE",
             "OVERDRAFT CHARGE",
@@ -74,7 +167,9 @@ RULES: tuple[Rule, ...] = (
             "INTEREST CHARGED",
             "DEBIT INTEREST",
             "BANK CHARGES",
+            "BANK CHARGE",
             "SERVICE CHARGES",
+            "SERVICE CHARGE",
         ),
         transaction_class="bank_fee",
     ),

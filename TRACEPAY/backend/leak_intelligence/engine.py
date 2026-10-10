@@ -11,7 +11,7 @@ from datetime import date
 from decimal import Decimal
 from statistics import pvariance
 
-from .common import ZERO, amount_of, merchant_group_key, month_key
+from .common import ZERO, amount_of, is_purchase_reversal, merchant_group_key, month_key
 from .models import (
     AmountTrend,
     CashFeatures,
@@ -42,6 +42,11 @@ PAYDAY_MIN_OBSERVATIONS = 3
 DUPLICATE_DATE_WINDOW_DAYS = 1
 AMOUNT_TOLERANCE = Decimal("0.01")
 CASH_WITHDRAWAL_CATEGORIES = {"Cash Withdrawal", "Cash Withdrawals", "ATM Cash Withdrawal"}
+# These stay in their own income, transfer, savings, and fee totals.
+# They are not purchase spending and do not enter merchant-payment features.
+_NON_PURCHASE_CLASSES = frozenset(
+    {"income", "internal_transfer", "savings", "investment", "bank_fee"}
+)
 
 
 def build_financial_features(
@@ -424,6 +429,8 @@ def _is_convenience_store_transaction(transaction: FeatureTransaction) -> bool:
 def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantFeature]:
     groups: defaultdict[str, list[FeatureTransaction]] = defaultdict(list)
     for item in transactions:
+        if _excluded_from_purchase_spending(item):
+            continue
         if (key := merchant_group_key(item)) is not None:
             groups[key].append(item)
     features = []
@@ -487,6 +494,8 @@ def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantF
 def _category_features(transactions: list[FeatureTransaction]) -> list[CategoryFeature]:
     groups: defaultdict[str, list[FeatureTransaction]] = defaultdict(list)
     for item in transactions:
+        if _excluded_from_purchase_spending(item):
+            continue
         if category := item.categorisation.category_name:
             groups[category].append(item)
     features = []
@@ -534,6 +543,8 @@ def _monthly_features(transactions: list[FeatureTransaction]) -> list[MonthlyFea
         category_totals: defaultdict[str, Decimal] = defaultdict(lambda: ZERO)
         merchant_totals: defaultdict[str, Decimal] = defaultdict(lambda: ZERO)
         for item in items:
+            if _excluded_from_purchase_spending(item):
+                continue
             value = amount_of(item)
             if category := item.categorisation.category_name:
                 category_totals[category] += value
@@ -544,36 +555,52 @@ def _monthly_features(transactions: list[FeatureTransaction]) -> list[MonthlyFea
                 month=month,
                 total_income=sum((amount_of(item) for item in items if item.categorisation.transaction_class == "income"), ZERO),
                 total_outflow=sum(
-                    (
-                        amount_of(item)
-                        for item in items
-                        if item.transaction_type == "debit"
-                        or (item.transaction_type is None and item.categorisation.transaction_class != "income")
-                    ),
+                    (amount_of(item) for item in items if _purchase_outflow(item)),
                     ZERO,
                 ),
                 transaction_count=len(items),
-                outflow_transaction_count=sum(
-                    item.transaction_type == "debit"
-                    or (
-                        item.transaction_type is None
-                        and item.categorisation.transaction_class != "income"
-                    )
-                    for item in items
-                ),
+                outflow_transaction_count=sum(_purchase_outflow(item) for item in items),
                 category_totals=dict(category_totals),
                 merchant_totals=dict(merchant_totals),
-                bank_fee_total=sum((amount_of(item) for item in items if item.categorisation.transaction_class == "bank_fee"), ZERO),
+                bank_fee_total=sum(
+                    (
+                        amount_of(item)
+                        for item in items
+                        if item.categorisation.transaction_class == "bank_fee"
+                        and not is_purchase_reversal(item)
+                    ),
+                    ZERO,
+                ),
+                foreign_transaction_fee_total=sum(
+                    (
+                        amount_of(item)
+                        for item in items
+                        if _fee_subtype(item) == "foreign" and not is_purchase_reversal(item)
+                    ),
+                    ZERO,
+                ),
                 cash_withdrawal_total=sum(
                     (
                         amount_of(item)
                         for item in _without_same_day_amount_duplicates(
-                            [item for item in items if _is_cash_withdrawal(item)]
+                            [
+                                item
+                                for item in items
+                                if _is_cash_withdrawal(item) and not is_purchase_reversal(item)
+                            ]
                         )
                     ),
                     ZERO,
                 ),
-                subscription_total=sum((amount_of(item) for item in items if item.categorisation.category_name == "Subscriptions"), ZERO),
+                subscription_total=sum(
+                    (
+                        amount_of(item)
+                        for item in items
+                        if item.categorisation.category_name == "Subscriptions"
+                        and not is_purchase_reversal(item)
+                    ),
+                    ZERO,
+                ),
                 transfer_total=sum(
                     (amount_of(item) for item in items if item.categorisation.transaction_class in {"internal_transfer", "person_to_person"}),
                     ZERO,
@@ -581,6 +608,20 @@ def _monthly_features(transactions: list[FeatureTransaction]) -> list[MonthlyFea
             )
         )
     return features
+
+
+def _excluded_from_purchase_spending(transaction: FeatureTransaction) -> bool:
+    """Return whether a row must stay out of purchase-spending features."""
+    if is_purchase_reversal(transaction):
+        return True
+    return transaction.categorisation.transaction_class in _NON_PURCHASE_CLASSES
+
+
+def _purchase_outflow(transaction: FeatureTransaction) -> bool:
+    """Return whether a row belongs in the purchase-spending outflow series."""
+    if _excluded_from_purchase_spending(transaction):
+        return False
+    return transaction.transaction_type in {"debit", None}
 
 
 def _fee_subtype(transaction: FeatureTransaction) -> str | None:
@@ -626,7 +667,11 @@ def _fee_subtype(transaction: FeatureTransaction) -> str | None:
 
 
 def _fee_features(transactions: list[FeatureTransaction]) -> FeeFeatures:
-    fees = [item for item in transactions if item.categorisation.transaction_class == "bank_fee"]
+    fees = [
+        item
+        for item in transactions
+        if item.categorisation.transaction_class == "bank_fee" and not is_purchase_reversal(item)
+    ]
     amounts = [amount_of(item) for item in fees]
     totals: defaultdict[str, Decimal] = defaultdict(lambda: ZERO)
     for item in fees:
@@ -710,7 +755,11 @@ def _is_cash_withdrawal(transaction: FeatureTransaction) -> bool:
 
 def _cash_features(transactions: list[FeatureTransaction]) -> CashFeatures:
     withdrawals = _without_same_day_amount_duplicates(
-        [item for item in transactions if _is_cash_withdrawal(item)]
+        [
+            item
+            for item in transactions
+            if _is_cash_withdrawal(item) and not is_purchase_reversal(item)
+        ]
     )
     atm_fees = [item for item in transactions if _fee_subtype(item) == "atm"]
     withdrawal_amounts = [amount_of(item) for item in withdrawals]
@@ -730,6 +779,7 @@ def _weekend_features(transactions: list[FeatureTransaction]) -> WeekendSpending
             for item in transactions
             if item.categorisation.transaction_class == "spending"
             and item.transaction_date is not None
+            and not is_purchase_reversal(item)
         ]
     )
     weekend = [item for item in spending if item.transaction_date.weekday() >= 5]
@@ -788,6 +838,7 @@ def _payday_spending_features(
             for item in transactions
             if item.categorisation.transaction_class == "spending"
             and item.transaction_date is not None
+            and not is_purchase_reversal(item)
         ]
     )
     eligible = [
@@ -860,7 +911,7 @@ def _duplicate_candidates(
 ) -> list[DuplicateCandidate]:
     groups: defaultdict[str, list[FeatureTransaction]] = defaultdict(list)
     for item in transactions:
-        if item.categorisation.transaction_class == "bank_fee":
+        if item.categorisation.transaction_class == "bank_fee" or is_purchase_reversal(item):
             continue
         if item.transaction_date is not None and (merchant := merchant_group_key(item)) is not None:
             groups[merchant].append(item)

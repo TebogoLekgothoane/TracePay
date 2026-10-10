@@ -16,6 +16,15 @@ from pdf_processor.validate import validate_transactions
 def test_amount_and_date_normalisation() -> None:
     assert parse_amount("R 1,250.50") == Decimal("1250.50")
     assert parse_amount("(450.00)") == Decimal("-450.00")
+    assert parse_amount("22,000") == Decimal("22000")
+    assert parse_amount("-1,500") == Decimal("-1500")
+    assert parse_amount("22,000.00") == Decimal("22000.00")
+    assert parse_amount("-1,500.00") == Decimal("-1500.00")
+    assert parse_amount("1 500") == Decimal("1500")
+    assert parse_amount("(1,500)") == Decimal("-1500")
+    assert parse_amount("186,40") == Decimal("186.40")
+    assert parse_amount("1.500,00") == Decimal("1500.00")
+    assert parse_amount("12,3456") is None
     assert parse_date("18/09/26") == date(2026, 9, 18)
 
 

@@ -32,8 +32,10 @@ import {
   isValidAccountName,
 } from "../../features/accounts/account.validation";
 import {
+  isFindingReconciliationError,
   isPdfPasswordChallenge,
   preparePdfStatement,
+  retryFindingReconciliation,
   type PdfImportResume,
   type StatementImportStage,
 } from "../../features/statement-import/statement-import.service";
@@ -91,6 +93,8 @@ export function AccountStatementSetupFlow({
   const [passwordRequired, setPasswordRequired] = useState(false);
   const [passwordHint, setPasswordHint] = useState<string | null>(null);
   const [resume, setResume] = useState<PdfImportResume | null>(null);
+  const [reconciliationImportId, setReconciliationImportId] = useState<string | null>(null);
+  const [extractedCount, setExtractedCount] = useState(0);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -143,6 +147,8 @@ export function AccountStatementSetupFlow({
     setPassword("");
     setResume(null);
     setStage(null);
+    setReconciliationImportId(null);
+    setExtractedCount(0);
   }, [busy]);
 
   const handleBankChange = useCallback(
@@ -275,18 +281,8 @@ export function AccountStatementSetupFlow({
         },
       });
       if (mountedRef.current) {
-        if (mode === "onboarding") {
-          router.replace({
-            pathname: IMPORT_SUCCESS_HREF,
-            params: {
-              count: String(preview.transactions.length),
-              accountName: bank ?? loadedAccount?.name ?? "your account",
-            },
-          } as Href);
-          return;
-        }
-        if (returnTo) router.replace(returnTo as Href);
-        else router.replace("/(tabs)");
+        setReconciliationImportId(null);
+        finishSavedImport(preview.transactions.length);
       }
     } catch (error) {
       if (isPdfPasswordChallenge(error)) {
@@ -300,12 +296,60 @@ export function AccountStatementSetupFlow({
         setStage(null);
         return;
       }
+      if (isFindingReconciliationError(error)) {
+        if (!mountedRef.current) return;
+        setReconciliationImportId(error.statementImportId);
+        setExtractedCount(error.extractedCount);
+        setMessage(error.message);
+        setStage(null);
+        return;
+      }
       if (!mountedRef.current) return;
       setResume(null);
+      setReconciliationImportId(null);
       const nextMessage =
         error instanceof Error ? error.message : "The PDF could not be processed.";
       setMessage(nextMessage);
       setStage(null);
+    } finally {
+      if (mountedRef.current) setBusy(false);
+    }
+  };
+
+  const finishSavedImport = (count: number) => {
+    if (mode === "onboarding") {
+      router.replace({
+        pathname: IMPORT_SUCCESS_HREF,
+        params: {
+          count: String(count),
+          accountName: bank ?? loadedAccount?.name ?? "your account",
+        },
+      } as Href);
+      return;
+    }
+    if (returnTo) router.replace(returnTo as Href);
+    else router.replace("/(tabs)");
+  };
+
+  const retryReconciliation = async () => {
+    if (!reconciliationImportId || busy) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await retryFindingReconciliation(reconciliationImportId);
+      if (!mountedRef.current) return;
+      setReconciliationImportId(null);
+      finishSavedImport(extractedCount);
+    } catch (error) {
+      if (!mountedRef.current) return;
+      if (isFindingReconciliationError(error)) {
+        setReconciliationImportId(error.statementImportId);
+        setMessage(error.message);
+        return;
+      }
+      setMessage(
+        "Finding reconciliation could not finish. Your statement is saved. Try again.",
+      );
     } finally {
       if (mountedRef.current) setBusy(false);
     }
@@ -444,6 +488,9 @@ export function AccountStatementSetupFlow({
                 onPasswordChange={setPassword}
                 onPick={() => void pickPdf()}
                 onProcess={() => void process()}
+                onRetry={
+                  reconciliationImportId ? () => void retryReconciliation() : undefined
+                }
               />
               {!importOnly && creatingNew && heroBank ? (
                 <Button

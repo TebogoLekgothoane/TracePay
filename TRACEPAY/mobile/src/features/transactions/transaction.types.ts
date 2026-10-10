@@ -26,4 +26,6 @@ export type TransactionRow = {
   category_source: CategorySource;
   categories: { name: string } | { name: string }[] | null;
   account: TransactionAccount | null;
+  /** Transaction time when the source provides one. Import time is not a transaction time. */
+  occurredAt: string | null;
 };

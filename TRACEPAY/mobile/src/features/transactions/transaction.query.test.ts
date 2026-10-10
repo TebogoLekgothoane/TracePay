@@ -1,5 +1,6 @@
-import { mergeRecentTransactions } from "./transaction.merge";
-import { readTransactionRow, transactionAccountLabel } from "./transaction.row";
+import { mergeRecentTransactions, TRANSACTION_LIST_ORDER } from "./transaction.merge";
+import { categoryName, readTransactionRow, transactionAccountLabel } from "./transaction.row";
+import type { TransactionRow } from "./transaction.types";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -94,6 +95,158 @@ test("mergeRecentTransactions sorts by date across accounts", () => {
     new Set(merged.map((row) => row.account_id)).size === 2,
     "both accounts represented when dates interleave",
   );
+});
+
+function linkedRow(input: {
+  id: string;
+  date: string;
+  institution: "KPB" | "Tyne Bank";
+  description: string;
+  amount: number;
+  type: "debit" | "credit";
+  category: string;
+  occurredAt?: string;
+}): TransactionRow {
+  const accountId = input.institution === "KPB" ? "acc-kpb" : "acc-tyne";
+  const row = readTransactionRow({
+    ...fnbRow,
+    id: input.id,
+    date: input.date,
+    description: input.description,
+    amount: input.amount,
+    type: input.type,
+    account_id: accountId,
+    occurred_at: input.occurredAt,
+    categories: { name: input.category },
+    accounts: {
+      id: accountId,
+      name: input.institution,
+      institution: input.institution,
+      account_type: "cheque",
+    },
+  });
+  assert(row, `parsed ${input.id}`);
+  return row;
+}
+
+test("KPB and Tyne Bank transactions interleave by date, newest first", () => {
+  const kpbNewest = linkedRow({
+    id: "kpb-new",
+    date: "2026-03-04",
+    institution: "KPB",
+    description: "KPB salary",
+    amount: 12000,
+    type: "credit",
+    category: "Income",
+  });
+  const tyneNext = linkedRow({
+    id: "tyne-new",
+    date: "2026-03-01",
+    institution: "Tyne Bank",
+    description: "Tyne groceries",
+    amount: -450.5,
+    type: "debit",
+    category: "Groceries",
+  });
+  const kpbSameDay = linkedRow({
+    id: "kpb-same",
+    date: "2026-02-15",
+    institution: "KPB",
+    description: "KPB fee",
+    amount: -15,
+    type: "debit",
+    category: "Bank fees",
+    occurredAt: "2026-02-15T08:00:00.000Z",
+  });
+  const tyneSameDay = linkedRow({
+    id: "tyne-same",
+    date: "2026-02-15",
+    institution: "Tyne Bank",
+    description: "Tyne transfer",
+    amount: -200,
+    type: "debit",
+    category: "Transfers",
+    occurredAt: "2026-02-15T18:30:00.000Z",
+  });
+  const tyneOlder = linkedRow({
+    id: "tyne-old",
+    date: "2026-02-01",
+    institution: "Tyne Bank",
+    description: "Tyne airtime",
+    amount: -30,
+    type: "debit",
+    category: "Airtime",
+  });
+  const kpbOldest = linkedRow({
+    id: "kpb-old",
+    date: "2026-01-20",
+    institution: "KPB",
+    description: "KPB debit order",
+    amount: -899,
+    type: "debit",
+    category: "Bills",
+  });
+
+  const groupedByBank = [kpbNewest, kpbSameDay, kpbOldest, tyneNext, tyneSameDay, tyneOlder];
+  const merged = mergeRecentTransactions(groupedByBank, 10);
+  const again = mergeRecentTransactions([...groupedByBank].reverse(), 10);
+
+  assertEqual(
+    merged.map((row) => row.id).join(","),
+    "kpb-new,tyne-new,tyne-same,kpb-same,tyne-old,kpb-old",
+    "newest first across both banks",
+  );
+  assertEqual(
+    again.map((row) => row.id).join(","),
+    merged.map((row) => row.id).join(","),
+    "same order when the bank groups are reversed",
+  );
+  assertEqual(
+    merged.map((row) => row.account?.institution).join(","),
+    "KPB,Tyne Bank,Tyne Bank,KPB,Tyne Bank,KPB",
+    "banks interleave instead of staying in two blocks",
+  );
+  assertEqual(merged[0]?.description, "KPB salary", "description");
+  assertEqual(merged[0]?.amount, 12000, "amount");
+  assertEqual(merged[0]?.type, "credit", "type");
+  assertEqual(categoryName(merged[0]!), "Income", "category");
+  assertEqual(merged[0]?.account_id, "acc-kpb", "account");
+  assertEqual(merged[2]?.description, "Tyne transfer", "same-day description");
+  assertEqual(merged[2]?.account?.institution, "Tyne Bank", "later timestamp first");
+  assertEqual(categoryName(merged[2]!), "Transfers", "same-day category");
+});
+
+test("the combined query uses the same order as the in-memory sort", () => {
+  assertEqual(TRANSACTION_LIST_ORDER.length, 2, "date then id");
+  assertEqual(TRANSACTION_LIST_ORDER[0]?.column, "date", "date column");
+  assertEqual(TRANSACTION_LIST_ORDER[0]?.ascending, false, "newest date first");
+  assertEqual(TRANSACTION_LIST_ORDER[1]?.column, "id", "stable tie-break");
+  assertEqual(TRANSACTION_LIST_ORDER[1]?.ascending, true, "id ascending");
+});
+
+test("identical dates without a transaction timestamp use a stable id order", () => {
+  const kpb = linkedRow({
+    id: "tx-2",
+    date: "2026-04-01",
+    institution: "KPB",
+    description: "KPB card",
+    amount: -10,
+    type: "debit",
+    category: "Shopping",
+  });
+  const tyne = linkedRow({
+    id: "tx-1",
+    date: "2026-04-01",
+    institution: "Tyne Bank",
+    description: "Tyne card",
+    amount: -12,
+    type: "debit",
+    category: "Shopping",
+  });
+  const forward = mergeRecentTransactions([kpb, tyne], 10).map((row) => row.id).join(",");
+  const backward = mergeRecentTransactions([tyne, kpb], 10).map((row) => row.id).join(",");
+  assertEqual(forward, "tx-1,tx-2", "id ascending when the date matches");
+  assertEqual(backward, forward, "order does not follow input or bank");
 });
 
 test("duplicate rows are excluded from the unified totals view", () => {

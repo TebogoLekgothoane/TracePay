@@ -2,6 +2,7 @@ import asyncio
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -11,6 +12,18 @@ from app.auth import require_supabase_user
 from app.behaviour_analysis import build_user_behaviour_analysis
 from app.category_catalog import fetch_category_names
 from app.financial_features import build_user_feature_snapshot, public_feature_payload
+from app.financial_intelligence_report import (
+    ReportCompositionError,
+    build_user_financial_intelligence_report,
+)
+from app.finding_actions import (
+    FindingActionRequest,
+    FindingNotFound,
+    guidance_payload,
+    load_finding_guidance,
+    save_finding_action,
+)
+from app.finding_registry import reconcile_findings_after_import
 from app.financial_reasoning import build_user_financial_reasoning
 from app.financial_recommendations import build_user_financial_recommendations
 from app.leak_detection import build_user_leak_detections
@@ -307,3 +320,94 @@ async def financial_recommendations(
         result.recommendation_count,
     )
     return result.model_dump(mode="json")
+
+
+@app.get("/financial-intelligence-report")
+async def financial_intelligence_report(
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Return one read-only report assembled from a single intelligence run."""
+    enforce_rate_limit(f"report-user:{_user_id}", 20, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    try:
+        report = await build_user_financial_intelligence_report(_user_id, access_token)
+    except ReportCompositionError:
+        logger.error(
+            "financial_intelligence_report_composition_failed user_id_prefix=%s",
+            _user_id[:8],
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Financial intelligence report could not be assembled.",
+        ) from None
+    logger.info(
+        "financial_intelligence_report_completed user_id_prefix=%s findings=%s",
+        _user_id[:8],
+        len(report.findings),
+    )
+    return report.model_dump(mode="json")
+
+
+@app.post("/finding-registry/imports/{statement_import_id}")
+async def reconcile_finding_registry(
+    statement_import_id: str,
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Store finding identity after one processed import. This does not read as a report."""
+    enforce_rate_limit(f"finding-registry:{_user_id}", 20, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    result = await reconcile_findings_after_import(
+        _user_id,
+        access_token,
+        statement_import_id,
+    )
+    return result.model_dump(mode="json")
+
+
+@app.get("/finding-registry/{finding_id}/guidance")
+async def finding_guidance(
+    finding_id: str,
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Return stored guidance. This does not write notifications or the registry."""
+    enforce_rate_limit(f"finding-guidance:{_user_id}", 30, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    try:
+        guidance = load_finding_guidance(_user_id, access_token, _finding_id(finding_id))
+    except FindingNotFound:
+        raise HTTPException(status_code=404, detail="That finding was not found.") from None
+    return guidance_payload(guidance)
+
+
+@app.post("/finding-registry/{finding_id}/actions")
+async def record_finding_action(
+    finding_id: str,
+    body: FindingActionRequest,
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Append one user response. Detection status is left unchanged."""
+    enforce_rate_limit(f"finding-action:{_user_id}", 20, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    try:
+        guidance = save_finding_action(
+            _user_id,
+            access_token,
+            _finding_id(finding_id),
+            body,
+            created_at=datetime.now(timezone.utc),
+        )
+    except FindingNotFound:
+        raise HTTPException(status_code=404, detail="That finding was not found.") from None
+    return guidance_payload(guidance)
+
+
+def _finding_id(value: str) -> str:
+    try:
+        parsed = uuid.UUID(value)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="The finding id is invalid.") from None
+    return str(parsed)

@@ -4,7 +4,15 @@ from decimal import Decimal, InvalidOperation
 
 from .models import Transaction
 
-_TEXT_ROW_AMOUNT = re.compile(r"(?:R|ZAR)?\s*\(?[-+]?\d[\d\s]*(?:[,.]\d{2})?\)?")
+# Thousands groups must stay inside the amount token. Stopping at the first
+# comma turned "+22,000.00" into 22.00 before parse_amount could see it.
+_TEXT_ROW_AMOUNT = re.compile(
+    r"(?:R|ZAR)?\s*"
+    r"\(?[-+]?"
+    r"(?:\d{1,3}(?:[ ,]\d{3})+|\d+)"
+    r"(?:[.,]\d{2})?"
+    r"\)?"
+)
 _TEXT_ROW_DATE = re.compile(
     r"^(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}-\d{1,2}-\d{1,2})\s+(.+)$",
 )
@@ -38,25 +46,48 @@ def parse_date(value: str) -> date | None:
     return None
 
 
+# 22,000 is thousands. 186,40 stays a decimal comma. Other comma shapes are
+# not interpreted.
+_THOUSANDS_GROUPS = re.compile(r"\d{1,3}(?:,\d{3})+")
+_DECIMAL_COMMA = re.compile(r"\d+,\d{1,2}")
+_PLAIN_NUMBER = re.compile(r"\d+(?:\.\d+)?")
+
+
 def parse_amount(value: str) -> Decimal | None:
     raw = value.strip()
     if not raw:
         return None
     negative = raw.startswith("-") or (raw.startswith("(") and raw.endswith(")"))
     cleaned = re.sub(r"[^0-9,.-]", "", raw)
-    if "," in cleaned and "." in cleaned:
-        cleaned = (
-            cleaned.replace(",", "")
-            if cleaned.rfind(".") > cleaned.rfind(",")
-            else cleaned.replace(".", "").replace(",", ".")
-        )
-    elif "," in cleaned:
-        cleaned = cleaned.replace(",", ".")
+    if cleaned.startswith("-"):
+        negative = True
+        cleaned = cleaned[1:]
+    normalized = _normalize_amount_body(cleaned)
+    if normalized is None:
+        return None
     try:
-        amount = abs(Decimal(cleaned))
+        amount = abs(Decimal(normalized))
     except (InvalidOperation, ValueError):
         return None
     return -amount if negative else amount
+
+
+def _normalize_amount_body(cleaned: str) -> str | None:
+    if not cleaned:
+        return None
+    if "," in cleaned and "." in cleaned:
+        if cleaned.rfind(".") > cleaned.rfind(","):
+            body = cleaned.replace(",", "")
+        else:
+            body = cleaned.replace(".", "").replace(",", ".")
+        return body if _PLAIN_NUMBER.fullmatch(body) else None
+    if "," not in cleaned:
+        return cleaned if _PLAIN_NUMBER.fullmatch(cleaned) else None
+    if _THOUSANDS_GROUPS.fullmatch(cleaned):
+        return cleaned.replace(",", "")
+    if _DECIMAL_COMMA.fullmatch(cleaned):
+        return cleaned.replace(",", ".")
+    return None
 
 
 def normalize_row(row: list[str], headers: list[str], row_number: int) -> Transaction | None:

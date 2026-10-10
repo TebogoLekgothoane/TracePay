@@ -90,7 +90,8 @@ def test_monthly_category_and_fee_aggregation() -> None:
     september = next(item for item in snapshot.months if item.month == "2026-09")
     groceries = next(item for item in snapshot.categories if item.category_name == "Groceries")
     assert september.total_income == Decimal("3000")
-    assert september.total_outflow == Decimal("210")
+    assert september.total_outflow == Decimal("200")
+    assert september.bank_fee_total == Decimal("10")
     assert groceries.category_total_amount == Decimal("450")
     assert len(snapshot.months) == 3
     assert snapshot.fees.bank_fee_total == Decimal("10")

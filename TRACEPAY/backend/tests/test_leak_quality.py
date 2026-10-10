@@ -5,8 +5,17 @@ from decimal import Decimal
 
 from leak_intelligence.behaviour_engine import analyze_behaviour
 from leak_intelligence.engine import build_financial_features
+from leak_intelligence.leak_engine import DETECTOR_VERSION, detect_leaks
+from leak_intelligence.leak_keys import leak_fingerprint, subject_key
 from leak_intelligence.leak_report import render_leak_report
-from leak_intelligence.merchant_display import is_reliable_merchant_display_name, recurring_leak_title
+from leak_intelligence.leak_scoring import leak_confidence
+from leak_intelligence.merchant_display import (
+    is_reliable_merchant_display_name,
+    merchant_display_name_for,
+    recurring_leak_title,
+)
+from leak_intelligence.reasoning_engine import analyze_financial_reasoning
+from leak_intelligence.recommendation_engine import recommend_actions
 from leak_intelligence.recurrence_rules import (
     is_implausibly_frequent_interval,
     matches_plausible_recurring_interval,
@@ -140,3 +149,99 @@ def test_bank_fee_ratio_evidence_stays_fraction_for_formatters() -> None:
     ratio = leak.evidence.get("bank_fee_ratio")
     assert ratio is not None
     assert Decimal(str(ratio)) <= Decimal("1")
+
+
+def test_woolworths_duplicate_display_name_does_not_change_detection() -> None:
+    transactions = [
+        _transaction(
+            "wool-a",
+            "186.40",
+            date(2026, 7, 18),
+            merchant="WOOLWORTHS",
+            category="Groceries",
+            description="WOOLWORTHS REF 123456789",
+        ),
+        _transaction(
+            "wool-b",
+            "186.40",
+            date(2026, 7, 18),
+            merchant="WOOLWORTHS",
+            category="Groceries",
+            description="WOOLWORTHS REF 123456789",
+        ),
+        _transaction("later", "80", date(2026, 9, 30), merchant="CHECKERS", category="Groceries"),
+    ]
+    snapshot = build_financial_features("user-a", transactions)
+    behaviours = analyze_behaviour(snapshot)
+    leaks = detect_leaks(snapshot, behaviours)
+    leak = next(item for item in leaks.leaks if item.leak_type == "duplicate_payment_leak")
+    expected = leak_fingerprint(
+        user_id="user-a",
+        leak_type="duplicate_payment_leak",
+        subject_key=subject_key("WOOLWORTHS"),
+        detector_version=DETECTOR_VERSION,
+    )
+    assert leak.fingerprint == expected
+    assert leak.leak_id == expected
+    assert leak.evidence["merchant_key"] == "WOOLWORTHS"
+    assert leak.evidence["merchant_display_name"] == "Woolworths"
+    assert leak.evidence["observed_date"] == "2026-07-18"
+    assert leak.evidence["transaction_count_in_group"] == 2
+    assert leak.evidence["candidate_amount"] == Decimal("186.40")
+    assert leak.estimated_monthly_impact == Decimal("186.40")
+    assert leak.estimated_annual_impact is None
+    assert leak.confidence == leak_confidence(
+        support=None,
+        observation_count=2,
+        pattern_strength=Decimal("0.65"),
+        ceiling=Decimal("0.68"),
+    )
+    reasoning = analyze_financial_reasoning(snapshot, behaviours, leaks)
+    recommendations = recommend_actions(reasoning)
+    analysis = next(item for item in reasoning.analyses if item.leak_id == leak.leak_id)
+    recommendation = next(
+        item
+        for item in recommendations.recommendations
+        if item.source_reasoning_id == analysis.reasoning_id
+    )
+    assert recommendation.recommendation_type == "verify_potential_duplicate"
+    assert set(analysis.evidence) == {
+        "potential_duplicate_amount",
+        "matching_transaction_count",
+        "date_span_days",
+        "verification_required",
+    }
+
+
+def test_card_purchase_boilerplate_has_no_merchant_display_name() -> None:
+    assert merchant_display_name_for("With Card At") is None
+    assert merchant_display_name_for("WITH CARD AT") is None
+    assert merchant_display_name_for("PURCHASE WITH CARD AT") is None
+    assert merchant_display_name_for("WOOLWORTHS") == "Woolworths"
+    transactions = [
+        _transaction(
+            "card-a",
+            "40",
+            date(2026, 7, 2),
+            merchant="WITH CARD AT",
+            description="WITH CARD AT",
+        ),
+        _transaction(
+            "card-b",
+            "40",
+            date(2026, 7, 2),
+            merchant="PURCHASE WITH CARD AT",
+            description="PURCHASE WITH CARD AT",
+        ),
+        _transaction("later", "80", date(2026, 9, 30), merchant="CHECKERS"),
+    ]
+    leaks = [
+        item
+        for item in _detect(transactions).leaks
+        if item.leak_type == "duplicate_payment_leak"
+    ]
+    assert leaks
+    for leak in leaks:
+        assert leak.evidence.get("merchant_display_name") is None
+        assert "logo" not in leak.evidence
+        assert "merchant_logo" not in leak.evidence

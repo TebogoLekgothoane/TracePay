@@ -18,11 +18,12 @@ import {
   Wifi,
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 
+import { ForYouSection } from "../../src/components/dashboard/ForYouSection";
 import { FixActionsList } from "../../src/components/leaks/FixActionsList";
 import { resolveMarkColor } from "../../src/components/leaks/LeakFlowShell";
 import { PeriodTabs } from "../../src/components/insights/PeriodTabs";
@@ -31,6 +32,8 @@ import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
 import { InfoSheet, SelectionSheet } from "../../src/components/ui/Modal";
 import { SimpleBrandLogo } from "../../src/components/ui/SimpleBrandLogo";
+import { useForYouCards } from "../../src/features/for-you/for-you.preferences";
+import type { ForYouCard } from "../../src/features/for-you/for-you.types";
 import {
   getFixContent,
   getFixRoute,
@@ -209,6 +212,18 @@ const LEAK_DETAILS: Record<string, LeakDetail> = {
         logoDomain: "spotify.com",
         mark: "♪",
         markColor: "success",
+      },
+      {
+        id: "youtube",
+        name: "YouTube Premium",
+        category: "Music",
+        billing: "Billed monthly",
+        amount: "R72.00",
+        status: "Active",
+        brandId: "youtube",
+        logoDomain: "youtube.com",
+        mark: "▶",
+        markColor: "destructive",
       },
       {
         id: "adobe",
@@ -501,6 +516,16 @@ export default function LeakDetailScreen() {
   const fixContent = leakId ? getFixContent(leakId) : null;
   const tone = getImpactToneStyles(scheme, detail?.impact ?? "high");
   const factor = periodFactor(period, customRange);
+  const { cards: forYouCards, ignore: ignoreForYouCard } = useForYouCards();
+  const openForYouCard = useCallback((card: ForYouCard) => {
+    router.push(card.href as never);
+  }, []);
+  const dismissForYouCard = useCallback(
+    (cardId: string) => {
+      void ignoreForYouCard(cardId);
+    },
+    [ignoreForYouCard],
+  );
 
   const scaledDetail = useMemo(() => {
     if (!detail) return null;
@@ -839,6 +864,16 @@ export default function LeakDetailScreen() {
                 ))}
               </View>
             </>
+          ) : null}
+
+          {leakId === "subs" && forYouCards.length > 0 ? (
+            <View className="mt-7">
+              <ForYouSection
+                cards={forYouCards}
+                onAction={openForYouCard}
+                onIgnore={dismissForYouCard}
+              />
+            </View>
           ) : null}
 
           <Text className="mb-2 mt-8 text-[17px] font-bold text-foreground">

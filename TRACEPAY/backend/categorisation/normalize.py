@@ -62,16 +62,40 @@ def merchant_key(value: str | None) -> str:
     return text
 
 
+# "PURCHASE: WITH CARD AT" becomes this after punctuation is turned into spaces.
+# The older "^PURCHASE\\s+" prefix does not match the colon form, so the first
+# four words were the boilerplate itself.
+_CARD_PURCHASE_BOILERPLATE = re.compile(r"^(?:PURCHASE\s+)?WITH\s+CARD\s+AT\s+")
+
+
 def extract_merchant_name(description: str | None) -> str | None:
-    """Best-effort merchant label derived from a bank description."""
+    """Best-effort merchant label derived from a bank description.
+
+    The original description is not modified. A known merchant after
+    ``PURCHASE WITH CARD AT`` replaces that shared prefix. Without a known
+    merchant, the words after the prefix stay on the label so different
+    payees are not grouped together.
+    """
     cleaned = normalize_for_matching(description)
     if not cleaned or cleaned in {"-", "UNKNOWN"}:
         return None
-    # Prefer the leading merchant phrase; keep it short and readable.
+    boilerplate = _CARD_PURCHASE_BOILERPLATE.match(cleaned)
+    if boilerplate is None:
+        return _leading_merchant_label(cleaned)
+    remainder = cleaned[boilerplate.end() :].strip()
+    from categorisation.rules import recognised_merchant_label
+
+    recognised = recognised_merchant_label(cleaned)
+    if recognised:
+        return recognised
+    return _leading_merchant_label(remainder)
+
+
+def _leading_merchant_label(cleaned: str) -> str | None:
     tokens = cleaned.split(" ")
     kept: list[str] = []
     for token in tokens:
-        if token.isdigit():
+        if not token or token.isdigit():
             break
         if len(token) == 1 and token not in {"&"}:
             continue

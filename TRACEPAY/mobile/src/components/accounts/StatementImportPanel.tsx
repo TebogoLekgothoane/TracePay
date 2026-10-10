@@ -22,6 +22,7 @@ type Props = {
   onClear: () => void;
   onPasswordChange: (value: string) => void;
   onProcess: () => void;
+  onRetry?: () => void;
 };
 
 export function StatementImportPanel({
@@ -37,6 +38,7 @@ export function StatementImportPanel({
   onClear,
   onPasswordChange,
   onProcess,
+  onRetry,
 }: Props) {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
@@ -105,18 +107,24 @@ export function StatementImportPanel({
         <StatementProcessingProgress fileSizeBytes={file.size} stage={stage} />
       ) : null}
       <View className="mt-6">
-        <Button disabled={busy} loading={busy} onPress={onProcess}>
-          {passwordRequired ? "Unlock and process" : "Process statement"}
+        <Button disabled={busy} loading={busy} onPress={onRetry ?? onProcess}>
+          {onRetry
+            ? "Try again"
+            : passwordRequired
+              ? "Unlock and process"
+              : "Process statement"}
         </Button>
       </View>
       {message ? (
         <View className="mt-4 rounded-2xl bg-destructive/10 px-4 py-3">
           <Text className="text-center text-[13px] text-destructive">{message}</Text>
-          <Pressable className="mt-2" onPress={onClear}>
-            <Text className="text-center text-[13px] font-semibold text-primary">
-              Choose another PDF
-            </Text>
-          </Pressable>
+          {onRetry ? null : (
+            <Pressable className="mt-2" onPress={onClear}>
+              <Text className="text-center text-[13px] font-semibold text-primary">
+                Choose another PDF
+              </Text>
+            </Pressable>
+          )}
         </View>
       ) : null}
     </View>

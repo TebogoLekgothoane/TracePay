@@ -2,7 +2,7 @@ from collections import Counter, defaultdict
 from decimal import Decimal
 from statistics import median
 
-from .common import ZERO, amount_of, merchant_group_key
+from .common import ZERO, amount_of, is_purchase_reversal, merchant_group_key
 from .models import FeatureTransaction, SpendingProfile
 
 DEFAULT_SMALL_TRANSACTION_THRESHOLD = Decimal("100")
@@ -22,6 +22,8 @@ def _category_amounts(transactions: list[FeatureTransaction]) -> tuple[dict[str,
         result = transaction.categorisation
         if result.transaction_class != "spending" or not result.category_name:
             continue
+        if is_purchase_reversal(transaction):
+            continue
         category = result.category_name
         spending_by_category[category] += amount_of(transaction)
         count_by_category[category] += 1
@@ -29,7 +31,12 @@ def _category_amounts(transactions: list[FeatureTransaction]) -> tuple[dict[str,
 
 
 def _class_total(transactions: list[FeatureTransaction], transaction_class: str) -> Decimal | None:
-    values = [amount_of(item) for item in transactions if item.categorisation.transaction_class == transaction_class]
+    values = [
+        amount_of(item)
+        for item in transactions
+        if item.categorisation.transaction_class == transaction_class
+        and not (transaction_class == "spending" and is_purchase_reversal(item))
+    ]
     return sum(values, ZERO) if values else None
 
 
@@ -41,7 +48,11 @@ def _ratio(numerator: Decimal | None, denominator: Decimal | None) -> Decimal | 
 
 
 def _recurring_counts(transactions: list[FeatureTransaction]) -> tuple[int | None, int | None]:
-    keys = [key for transaction in transactions if (key := merchant_group_key(transaction))]
+    keys = [
+        key
+        for transaction in transactions
+        if not is_purchase_reversal(transaction) and (key := merchant_group_key(transaction))
+    ]
     if not keys:
         return None, None
     counts = Counter(keys)
@@ -79,6 +90,7 @@ def build_spending_profile(
         amount_of(item)
         for item in transactions
         if item.categorisation.transaction_class == "spending"
+        and not is_purchase_reversal(item)
         and amount_of(item) <= small_transaction_threshold
     ]
     recurring_merchants, recurring_payments = _recurring_counts(transactions)
@@ -91,6 +103,7 @@ def build_spending_profile(
     cash_values = [
         amount_of(item) for item in transactions
         if item.categorisation.category_name in CASH_WITHDRAWAL_CATEGORIES
+        and not is_purchase_reversal(item)
     ]
     cash_withdrawal_total = sum(cash_values, ZERO) if cash_values else None
 

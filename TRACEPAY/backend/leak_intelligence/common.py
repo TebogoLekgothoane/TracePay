@@ -5,6 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from categorisation.normalize import merchant_key
+from categorisation.rules import PURCHASE_REVERSAL_RULE, is_purchase_reversal_description
 
 from .models import FeatureTransaction
 
@@ -14,6 +15,17 @@ ZERO = Decimal("0")
 def amount_of(transaction: FeatureTransaction) -> Decimal:
     """Return a transaction magnitude without assuming source sign conventions."""
     return abs(Decimal(transaction.amount))
+
+
+def is_purchase_reversal(transaction: FeatureTransaction) -> bool:
+    """Return whether this row undoes a payment instead of creating one.
+
+    Identification uses reversal wording or the deterministic reversal rule.
+    Other credits, including salary and interest, are unchanged.
+    """
+    if transaction.categorisation.rule == PURCHASE_REVERSAL_RULE:
+        return True
+    return is_purchase_reversal_description(transaction.description)
 
 
 def merchant_group_key(transaction: FeatureTransaction) -> str | None:

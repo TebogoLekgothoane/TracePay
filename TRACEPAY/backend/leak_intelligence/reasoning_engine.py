@@ -852,7 +852,8 @@ def _avoidability(
     draft: _Draft,
 ) -> tuple[Avoidability, float | None, Decimal | None]:
     if draft.root_cause_type == "potential_duplicate":
-        return "high", 0.72, leak.estimated_monthly_impact
+        # Same merchant, amount, and day is a verification candidate only.
+        return "unknown", None, None
     if leak.leak_type == "bank_fee_leak":
         fees = snapshot.fees
         optional_total = sum(

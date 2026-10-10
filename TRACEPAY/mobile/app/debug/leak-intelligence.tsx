@@ -1,8 +1,20 @@
 import { Redirect, router } from "expo-router";
-import { ChevronLeft, RefreshCw, ShieldAlert } from "lucide-react-native";
+import {
+  ArrowLeftRight,
+  ChevronLeft,
+  Fuel,
+  ShieldAlert,
+  ShoppingCart,
+  Smartphone,
+  Utensils,
+  Wallet,
+} from "lucide-react-native";
+import type { LucideIcon } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   ScrollView,
   Text,
   View,
@@ -16,11 +28,20 @@ import { scenarioLabel } from "../../src/features/synthetic-intelligence/synthet
 import {
   formatConfidence,
   formatCurrency,
-  formatEvidence,
+  formatDuplicateFinding,
+  formatFindingEvidence,
   formatImpactKind,
   formatPrimaryImpactLabel,
+  merchantDisplayName,
+  recognisedCategoryKey,
 } from "../../src/features/leak-intelligence/leak-intelligence.format";
 import type { LeakDetection } from "../../src/features/leak-intelligence/leak-intelligence.types";
+import { resolveBrandIcon } from "../../src/features/brands/simple-brand-icons";
+import {
+  catalogLogoUrl,
+  resolveCatalogLogo,
+} from "../../src/features/transactions/merchant-logos";
+import { SimpleBrandLogo } from "../../src/components/ui/SimpleBrandLogo";
 import { useLeakIntelligenceDebug } from "../../src/hooks/useLeakIntelligenceDebug";
 import { useStoredSyntheticAnalysis } from "../../src/hooks/useStoredSyntheticAnalysis";
 import { COLORS } from "../../src/theme/colors";
@@ -214,21 +235,36 @@ function EmptyState() {
 }
 
 function LeakCard({ leak }: { leak: LeakDetection }) {
-  const evidence = formatEvidence(leak.evidence);
+  const duplicate =
+    leak.leak_type === "duplicate_payment_leak" ? formatDuplicateFinding(leak) : null;
+  const evidence = duplicate
+    ? duplicate.rows
+    : formatFindingEvidence(leak.leak_type, leak.evidence);
+  const merchant = merchantDisplayName(leak.evidence);
+  const category =
+    typeof leak.evidence.category_name === "string" ? leak.evidence.category_name : null;
   return (
     <View className="rounded-3xl bg-card px-5 py-5">
       <View className="flex-row items-start justify-between gap-3">
-        <View className="min-w-0 flex-1">
-          <Text className="text-[12px] font-semibold uppercase tracking-[0.7px] text-muted-foreground">
-            {humanize(leak.leak_type)}
-          </Text>
-          <Text className="mt-1 text-[18px] font-bold text-foreground">{leak.title}</Text>
+        <View className="min-w-0 flex-1 flex-row items-start gap-3">
+          <FindingMark category={category} displayName={merchant} />
+          <View className="min-w-0 flex-1">
+            <Text className="text-[12px] font-semibold uppercase tracking-[0.7px] text-muted-foreground">
+              {humanize(leak.leak_type)}
+            </Text>
+            <Text className="mt-1 text-[18px] font-bold text-foreground">{leak.title}</Text>
+          </View>
         </View>
         <SeverityBadge severity={leak.severity} />
       </View>
       <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">
         {leak.description}
       </Text>
+      {duplicate ? (
+        <Text className="mt-3 text-[13px] leading-5 text-muted-foreground">
+          {duplicate.disclaimer}
+        </Text>
+      ) : null}
 
       <View className="mt-5 flex-row gap-3">
         <Metric
@@ -303,4 +339,78 @@ function formatPeriod(start: string | null, end: string | null): string {
 
 function humanize(value: string): string {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  groceries: ShoppingCart,
+  shopping: ShoppingCart,
+  transport: Fuel,
+  fuel: Fuel,
+  "airtime & data": Smartphone,
+  airtime: Smartphone,
+  subscriptions: Wallet,
+  "internal transfer": ArrowLeftRight,
+  transfer: ArrowLeftRight,
+  dining: Utensils,
+  food: Utensils,
+  restaurants: Utensils,
+  "fast food": Utensils,
+  "ride hailing": Fuel,
+  "public transport": Fuel,
+};
+
+function FindingMark({
+  displayName,
+  category,
+}: {
+  displayName: string | null;
+  category: string | null;
+}) {
+  const logo = displayName ? resolveCatalogLogo(displayName) : null;
+  const [logoFailed, setLogoFailed] = useState(false);
+  const categoryKey = recognisedCategoryKey(category);
+  const CategoryIcon = categoryKey ? CATEGORY_ICONS[categoryKey] : null;
+
+  useEffect(() => {
+    setLogoFailed(false);
+  }, [logo?.domain]);
+
+  if (logo && !logoFailed) {
+    const bundled = resolveBrandIcon(logo.brandId) ?? resolveBrandIcon(logo.domain);
+    if (bundled) {
+      return (
+        <SimpleBrandLogo
+          brandId={logo.brandId}
+          name={displayName ?? logo.brandId}
+          shape="circle"
+          size={40}
+        />
+      );
+    }
+    const uri = catalogLogoUrl(logo.domain);
+    if (uri) {
+      return (
+        <Image
+          accessibilityLabel={`${displayName} logo`}
+          resizeMode="contain"
+          source={{ uri }}
+          style={{ width: 40, height: 40, borderRadius: 20 }}
+          onError={() => setLogoFailed(true)}
+        />
+      );
+    }
+  }
+
+  if (!CategoryIcon) {
+    return null;
+  }
+  return (
+    <View
+      accessibilityLabel={`${category} category`}
+      className="items-center justify-center rounded-full bg-muted"
+      style={{ width: 40, height: 40 }}
+    >
+      <CategoryIcon color="#6366F1" size={18} strokeWidth={2.2} />
+    </View>
+  );
 }

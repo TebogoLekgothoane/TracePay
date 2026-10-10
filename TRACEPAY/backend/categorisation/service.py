@@ -11,6 +11,7 @@ from app.config import settings
 from categorisation.ai_classifier import AiTransaction, classify_batch
 from categorisation.bank_category_map import map_bank_category
 from categorisation.classifier import classify_transaction
+from categorisation.rules import PURCHASE_REVERSAL_RULE
 from categorisation.constants import FALLBACK_CATEGORY, FALLBACK_CONFIDENCE
 from categorisation.merchant_memory import MerchantMemory, fetch_merchant_memory
 from categorisation.models import CategorisationResult
@@ -90,6 +91,12 @@ def categorise_batch_with_metrics(
 
     for item in transactions:
         deterministic = classify_transaction(item.description, item.transaction_type)
+        if deterministic.rule == PURCHASE_REVERSAL_RULE:
+            results[item.transaction_id] = deterministic
+            source_by_id[item.transaction_id] = "deterministic"
+            deterministic_matches += 1
+            _log_classification(item.transaction_id, deterministic, "deterministic")
+            continue
         if deterministic.transaction_class != "unknown" or deterministic.category_name:
             resolved = ensure_complete_classification(
                 deterministic,
@@ -221,6 +228,8 @@ def categorise_batch_with_metrics(
         _log_classification(item.transaction_id, fallback, "fallback")
 
     for transaction_id, result in list(results.items()):
+        if result.rule == PURCHASE_REVERSAL_RULE:
+            continue
         resolved_name = resolve_category_name(result.category_name, catalog) if catalog else result.category_name
         if resolved_name != result.category_name or result.category_name is None:
             results[transaction_id] = ensure_complete_classification(
