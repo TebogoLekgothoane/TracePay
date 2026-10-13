@@ -352,12 +352,13 @@ def test_duplicate_reasoning_is_one_time_and_requires_verification() -> None:
     assert impact.potentially_avoidable_amount is None
     assert "fraud" in analysis.explanation.lower()
     assert "does not establish" in analysis.explanation.lower()
-    assert set(analysis.evidence) == {
-        "potential_duplicate_amount",
-        "matching_transaction_count",
-        "date_span_days",
-        "verification_required",
-    }
+    assert analysis.evidence["potential_duplicate_amount"] == Decimal("50")
+    assert analysis.evidence["matching_transaction_count"] == 2
+    assert analysis.evidence["verification_required"] is True
+    assert analysis.evidence["merchant_key"] == "COFFEE"
+    assert analysis.evidence["merchant_display_name"] == "Coffee"
+    assert analysis.evidence["observed_date"] == "2026-07-01"
+    assert "Coffee" in analysis.title
 
 
 def test_same_day_kfc_repeat_stays_a_verification_candidate() -> None:

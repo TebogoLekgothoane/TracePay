@@ -1,25 +1,23 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { BarChart3, Eye, ScanSearch } from "lucide-react-native";
+import { BarChart3, Eye, EyeOff, Upload } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
-import Svg, { Path } from "react-native-svg";
 
+import { TRACEPAY } from "../../theme/colors";
 import { Button } from "../ui/Button";
 
 type Props = {
   balance: string;
-  sourceLabel: string;
-  changeLabel: string;
-  warningLabel?: string | null;
+  metaLabel: string;
   hidden?: boolean;
   onToggleVisibility?: () => void;
-  onScanLeaks?: () => void;
+  onImportStatement?: () => void;
   onViewInsights?: () => void;
 };
 
 function BalanceAmount({ balance, hidden }: { balance: string; hidden: boolean }) {
   if (hidden) {
     return (
-      <Text className="text-[34px] font-bold tracking-[-1px] text-white">
+      <Text className="text-[36px] font-bold tracking-[-1px] text-white">
         R ••••••
       </Text>
     );
@@ -28,7 +26,7 @@ function BalanceAmount({ balance, hidden }: { balance: string; hidden: boolean }
   const match = balance.match(/^(R\s?[\d,]+)([.,][\d]+)?$/);
   if (!match) {
     return (
-      <Text className="text-[34px] font-bold tracking-[-1px] text-white">
+      <Text className="text-[36px] font-bold tracking-[-1px] text-white">
         {balance}
       </Text>
     );
@@ -36,116 +34,76 @@ function BalanceAmount({ balance, hidden }: { balance: string; hidden: boolean }
 
   return (
     <Text className="font-bold tracking-[-1px] text-white">
-      <Text className="text-[34px]">{match[1]}</Text>
-      {match[2] ? (
-        <Text className="text-[22px]">{match[2]}</Text>
-      ) : null}
+      <Text className="text-[36px]">{match[1]}</Text>
+      {match[2] ? <Text className="text-[22px] text-white/80">{match[2]}</Text> : null}
     </Text>
-  );
-}
-
-function BalanceWaves() {
-  return (
-    <View className="absolute -right-2 top-6 opacity-50" pointerEvents="none">
-      <Svg width={160} height={120} viewBox="0 0 160 120">
-        <Path
-          d="M0 60 C30 20 60 80 90 40 C110 20 130 50 160 30"
-          stroke="#A78BFA"
-          strokeWidth={3}
-          fill="none"
-          opacity={0.6}
-        />
-        <Path
-          d="M0 80 C40 50 70 100 110 70 C130 55 145 75 160 60"
-          stroke="#7C3AED"
-          strokeWidth={2.5}
-          fill="none"
-          opacity={0.4}
-        />
-        <Path
-          d="M0 95 C35 70 75 110 120 85 C140 72 150 90 160 78"
-          stroke="#C084FC"
-          strokeWidth={2}
-          fill="none"
-          opacity={0.35}
-        />
-      </Svg>
-    </View>
   );
 }
 
 export function BalanceCard({
   balance,
-  sourceLabel,
-  changeLabel,
-  warningLabel = null,
+  metaLabel,
   hidden = false,
   onToggleVisibility,
-  onScanLeaks,
+  onImportStatement,
   onViewInsights,
 }: Props) {
   return (
     <LinearGradient
-      colors={["#1E1245", "#161028", "#0F0A1C"]}
+      colors={[...TRACEPAY.light.summaryGradient]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={{
-        borderRadius: 24,
-        padding: 20,
+        borderRadius: 28,
+        paddingHorizontal: 20,
+        paddingTop: 20,
+        paddingBottom: 18,
         overflow: "hidden",
       }}
     >
-      <BalanceWaves />
+      <View className="flex-row items-start justify-between gap-3">
+        <View className="min-w-0 flex-1">
+          <Text className="text-[13px] font-medium text-white/65">Total balance</Text>
+          <View className="mt-1.5">
+            <BalanceAmount balance={balance} hidden={hidden} />
+          </View>
+          <Text className="mt-1.5 text-[12px] leading-5 text-white/55" numberOfLines={2}>
+            {metaLabel}
+          </Text>
+        </View>
 
-      <Pressable
-        onPress={onToggleVisibility}
-        className="flex-row items-center gap-2 self-start active:opacity-70"
-      >
-        <Text className="text-[13px] text-white/70">Statement balance</Text>
-        <Eye color="rgba(255,255,255,0.7)" size={15} strokeWidth={2} />
-      </Pressable>
-
-      <Text className="mt-1 text-[12px] text-white/55">{sourceLabel}</Text>
-
-      <View className="mt-2.5">
-        <BalanceAmount balance={balance} hidden={hidden} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={hidden ? "Show balances" : "Hide balances"}
+          hitSlop={10}
+          className="h-10 w-10 items-center justify-center rounded-full bg-white/10 active:opacity-70"
+          onPress={onToggleVisibility}
+        >
+          {hidden ? (
+            <EyeOff color="rgba(255,255,255,0.85)" size={18} strokeWidth={2} />
+          ) : (
+            <Eye color="rgba(255,255,255,0.85)" size={18} strokeWidth={2} />
+          )}
+        </Pressable>
       </View>
 
-      {warningLabel ? (
-        <Text className="mt-2 text-[12px] leading-5 text-amber-200/90">
-          {warningLabel}
-        </Text>
-      ) : null}
-
-      <View className="mt-2.5 self-start rounded-full bg-emerald-500/15 px-3 py-1.5">
-        <Text className="text-[12px] font-semibold text-emerald-400">
-          {changeLabel}
-        </Text>
-      </View>
-
-      <View className="mt-5 flex-row gap-3">
-        <Button className="flex-1" size="md" onPress={onScanLeaks}>
+      <View className="mt-5 flex-row gap-2.5">
+        <Button className="flex-1" size="md" onPress={onImportStatement}>
           <>
-            <ScanSearch color="#FFFFFF" size={18} strokeWidth={2} />
-            <Text className="text-[14px] font-semibold text-white">
-              Scan new leaks
-            </Text>
+            <Upload color="#FFFFFF" size={17} strokeWidth={2.2} />
+            <Text className="text-[14px] font-semibold text-white">Import statement</Text>
           </>
         </Button>
 
-        <Button
-          className="flex-1 border-white/20 bg-white/5"
-          size="md"
-          variant="secondary"
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="View insights"
+          className="h-12 flex-1 flex-row items-center justify-center gap-2 rounded-full border border-white/20 bg-white/12 active:opacity-80"
           onPress={onViewInsights}
         >
-          <>
-            <BarChart3 color="#FFFFFF" size={18} strokeWidth={2} />
-            <Text className="text-[14px] font-semibold text-white/90">
-              View Insights
-            </Text>
-          </>
-        </Button>
+          <BarChart3 color="#FFFFFF" size={17} strokeWidth={2.2} />
+          <Text className="text-[14px] font-semibold text-white">Insights</Text>
+        </Pressable>
       </View>
     </LinearGradient>
   );

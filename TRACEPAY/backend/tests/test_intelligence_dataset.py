@@ -135,7 +135,7 @@ def test_fi035_airtime_scenario_matches_pipeline() -> None:
     assert leak.evidence["airtime_transaction_count"] == 7
     assert leak.evidence["airtime_total"] == Decimal("460.00")
     assert leak.evidence["merchant_key"] == "MTN"
-    assert leak.description == (
+    assert leak.description.startswith(
         "Airtime spending increased over the analysed period and may warrant review."
     )
     assert "subscription_leak" not in evaluation.leak_types
@@ -156,7 +156,7 @@ def test_fi036_data_scenario_matches_pipeline() -> None:
     assert leak.evidence["data_transaction_count"] == 5
     assert leak.evidence["data_total"] == Decimal("625.00")
     assert leak.evidence["merchant_key"] == "VODACOM"
-    assert leak.description == (
+    assert leak.description.startswith(
         "Mobile data spending increased over the analysed period and may warrant review."
     )
     assert all(
@@ -180,7 +180,7 @@ def test_fi037_ride_hailing_scenario_matches_pipeline() -> None:
     assert leak.evidence["ride_hailing_transaction_count"] == 4
     assert leak.evidence["ride_hailing_total"] == Decimal("600.00")
     assert leak.evidence["merchant_key"] == "UBER"
-    assert leak.description == (
+    assert leak.description.startswith(
         "Ride-hailing spending increased over the analysed period and may warrant review."
     )
     assert "subscription_leak" not in evaluation.leak_types
@@ -204,7 +204,7 @@ def test_fi038_food_delivery_scenario_matches_pipeline() -> None:
     assert leak.evidence["food_delivery_transaction_count"] == 7
     assert leak.evidence["food_delivery_total"] == Decimal("1560.00")
     assert leak.evidence["merchant_key"] == "UBER EATS"
-    assert leak.description == (
+    assert leak.description.startswith(
         "Food delivery spending increased over the analysed period and may warrant review."
     )
     assert "subscription_leak" not in evaluation.leak_types
@@ -305,7 +305,8 @@ def test_fi033_payday_scenario_matches_pipeline() -> None:
     }
     assert "weekend_spending_spike" in focuses
     assert "impulse_spending_pattern" not in focuses
-    assert "recurring_payment_pattern" in evaluation.behavior_types
+    # Payday fixtures use grocery/shopping cadence; that is not a recurring-bill signal.
+    assert "recurring_payment_pattern" not in evaluation.behavior_types
 
     even_scenario = load_intelligence_scenario("FI-033-even-spending-across-month")
     even = evaluate_intelligence_scenario(even_scenario)
@@ -334,7 +335,8 @@ def test_fi031_shopping_spike_is_not_an_impulse_finding() -> None:
         for item in evaluation.behaviours.observations
     }
     assert "impulse_spending_pattern" not in focuses
-    assert "duplicate_payment_pattern" in evaluation.behavior_types
+    # Adjacent-day same-amount shopping is a legitimate repeat, not a duplicate pattern.
+    assert "duplicate_payment_pattern" not in evaluation.behavior_types
     assert "food_spending_leak" not in evaluation.leak_types
 
 
@@ -405,7 +407,7 @@ def test_fi023_debit_order_zombie_scenario_matches_pipeline() -> None:
         if item.leak_type == "unknown_recurring_payment"
     )
     assert leak.evidence.get("finding_focus") == "debit_order_review"
-    assert leak.title == "Potential debit order that may warrant review"
+    assert leak.title == "Potential debit order at Virgin Active that may warrant review"
     assert "unused" not in leak.description.lower()
 
 

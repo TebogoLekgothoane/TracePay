@@ -151,7 +151,7 @@ export function TracePayAnimatedSplash({ onAnimationComplete }: Props) {
   const taglineStageHeight = 42;
   const accentWidth = 22;
   const accentHeight = 2;
-  const taglineGap = 18;
+  const taglineGap = 8;
   const taglineWidth = Math.min(width - 32, 440);
   const taglineTextWidth = taglineWidth - accentWidth * 2 - 16;
 

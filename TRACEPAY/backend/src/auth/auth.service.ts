@@ -243,11 +243,14 @@ export async function login(body: SignInBody): Promise<SignInResult> {
 
   if (error || !data.session) {
     const user = await findUserByPhone(phone);
-    if (user && !user.phone_confirmed_at) {
+    if (!user) {
+      throw new AuthHttpError(404, "This phone number is not registered.");
+    }
+    if (!user.phone_confirmed_at) {
       // Do not send OTP on a failed password attempt. Client must use rate-limited /auth/resend-otp.
       return { requiresOtp: true, session: null };
     }
-    throw new AuthHttpError(401, "Incorrect phone number or password.");
+    throw new AuthHttpError(401, "Incorrect password.");
   }
 
   return {

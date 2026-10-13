@@ -14,8 +14,10 @@ import type {
   FinancialAccount,
 } from "./account.types";
 import {
+  isValidAccountName,
   isValidAccountType,
   normalizeCreateAccountInput,
+  sanitizeAccountName,
 } from "./account.validation";
 
 let accountsRequest: Promise<FinancialAccount[]> | null = null;
@@ -264,6 +266,106 @@ export async function createAccount(
     const current = getAccountsSnapshot();
     setAccountsSnapshot({
       accounts: [...current.accounts, account],
+      loading: false,
+      error: null,
+      initialized: true,
+    });
+  }
+
+  return account;
+}
+
+/**
+ * Remove a statement-import account that never received saved transactions.
+ * Used when setup fails or the user abandons unlock — linked accounts must
+ * only remain after a successful extract + save.
+ */
+export async function discardEmptyImportAccount(
+  accountId: string | null | undefined,
+): Promise<void> {
+  if (!accountId) return;
+
+  const userId = await requireAuthenticatedUserId();
+  const supabase = getSupabase();
+
+  const [{ count: processedCount, error: processedError }, { count: txCount, error: txError }] =
+    await Promise.all([
+      supabase
+        .from("statement_imports")
+        .select("id", { count: "exact", head: true })
+        .eq("account_id", accountId)
+        .eq("user_id", userId)
+        .eq("status", "processed"),
+      supabase
+        .from("transactions")
+        .select("id", { count: "exact", head: true })
+        .eq("account_id", accountId)
+        .eq("user_id", userId),
+    ]);
+
+  if (processedError || txError) {
+    console.warn("[TracePay][accounts] discard_empty_check_failed", {
+      accountId,
+    });
+    return;
+  }
+  if ((processedCount ?? 0) > 0 || (txCount ?? 0) > 0) {
+    return;
+  }
+
+  try {
+    await deleteAccount(accountId);
+    console.info("[TracePay][accounts] discarded_empty_import_account", {
+      accountId,
+    });
+  } catch (error) {
+    console.warn("[TracePay][accounts] discard_empty_failed", {
+      accountId,
+      message: error instanceof Error ? error.message : "unknown",
+    });
+  }
+}
+
+export async function updateAccountName(
+  accountId: string,
+  name: string,
+): Promise<FinancialAccount> {
+  const userId = await requireAuthenticatedUserId();
+  const nextName = sanitizeAccountName(name);
+
+  if (!accountId) {
+    throw new AccountError("Account not found.");
+  }
+  if (!isValidAccountName(nextName)) {
+    throw new AccountError("Enter an account name between 2 and 80 characters.");
+  }
+
+  const mutationId = ++mutationCounter;
+  const { data, error } = await getSupabase()
+    .from("accounts")
+    .update({ name: nextName })
+    .eq("id", accountId)
+    .eq("user_id", userId)
+    .select(
+      "id, user_id, name, institution, account_type, currency, last_four_digits, connection_source, created_at, updated_at",
+    )
+    .single();
+
+  if (error || !data) {
+    throw new AccountError("Could not rename your account. Please try again.");
+  }
+
+  const account = readAccountRow(data);
+  if (!account) {
+    throw new AccountError("Could not read the updated account. Please try again.");
+  }
+
+  if (mutationId === mutationCounter) {
+    const current = getAccountsSnapshot();
+    setAccountsSnapshot({
+      accounts: current.accounts.map((item) =>
+        item.id === account.id ? account : item,
+      ),
       loading: false,
       error: null,
       initialized: true,

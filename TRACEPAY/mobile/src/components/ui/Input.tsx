@@ -48,9 +48,9 @@ export function Input({
     <View className="gap-1.5">
       <Text className="text-[13px] font-semibold text-foreground">{label}</Text>
       <View
-        className={`h-[52px] flex-row items-center rounded-2xl border bg-input ${
-          hasError ? "border-destructive" : "border-input-border"
-        } ${editable ? "" : "opacity-50"}`}
+        className={`h-[52px] flex-row items-center overflow-hidden rounded-2xl bg-input ${
+          editable ? "" : "opacity-50"
+        }`}
       >
         {icon ? (
           <Ionicons

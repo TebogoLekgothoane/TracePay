@@ -42,9 +42,9 @@ export function PasswordInput({
     <View className="gap-1.5">
       <Text className="text-[13px] font-semibold text-foreground">{label}</Text>
       <View
-        className={`h-[52px] flex-row items-center rounded-2xl border bg-input pr-2 ${
-          hasError ? "border-destructive" : "border-input-border"
-        } ${editable ? "" : "opacity-50"}`}
+        className={`h-[52px] flex-row items-center overflow-hidden rounded-2xl bg-input pr-2 ${
+          editable ? "" : "opacity-50"
+        }`}
       >
         {icon ? (
           <Ionicons

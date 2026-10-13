@@ -7,6 +7,11 @@ import re
 from dataclasses import dataclass
 from decimal import Decimal
 
+from .merchant_display import (
+    display_merchant_label,
+    is_reliable_merchant_display_name,
+    merchant_display_name_for,
+)
 from .recommendation_models import (
     FinancialRecommendationResult,
     FindingScope,
@@ -168,12 +173,19 @@ def _copy_for(
             ),
         )
     if recommendation_type == "review_recurring_payment":
+        merchant = _merchant_name(analysis)
+        subject = f" at {merchant}" if merchant else ""
+        title = (
+            f"Review {merchant} recurring payment"
+            if merchant
+            else "Review recurring payment"
+        )
         return (
-            "Review recurring payment",
+            title,
             (
-                "A recurring payment pattern was observed. This recommendation is shown "
-                "because the reasoning layer found a recurring financial commitment. "
-                f"{avoidability_clause}"
+                f"A recurring payment pattern was observed{subject}. This recommendation "
+                "is shown because the reasoning layer found a recurring financial "
+                f"commitment. {avoidability_clause}"
             ),
             (
                 "Verify whether the recurring payment is still wanted and whether the "
@@ -213,13 +225,20 @@ def _copy_for(
         )
     if recommendation_type == "verify_potential_duplicate":
         count = _integer(analysis.evidence.get("matching_transaction_count"))
+        merchant = _merchant_name(analysis)
+        who = f" at {merchant}" if merchant else ""
         observed = (
-            "Two transactions may represent a duplicate payment."
+            f"Two transactions{who} may represent a duplicate payment."
             if count == 2
-            else "A group of transactions may represent a duplicate payment."
+            else f"A group of transactions{who} may represent a duplicate payment."
+        )
+        title = (
+            f"Verify possible duplicate payment at {merchant}"
+            if merchant
+            else "Verify potential duplicate payment"
         )
         return (
-            "Verify potential duplicate payment",
+            title,
             (
                 f"{observed} They shared a merchant grouping, amount and calendar day. "
                 "This recommendation is a verification step. TracePay has not confirmed "
@@ -237,10 +256,16 @@ def _copy_for(
 
 
 def _monitor_copy(analysis: FinancialReasoning) -> tuple[str, str, str]:
+    merchant = _merchant_name(analysis)
     category = _category_name(analysis)
-    subject = category if category else "Spending"
+    subject = merchant or category or "Spending"
     driver = _driver_sentence(analysis, subject)
-    title = "Monitor spending increase" if category is None else "Monitor spending pattern"
+    if merchant:
+        title = f"Monitor {merchant} spending increase"
+    elif category is None:
+        title = "Monitor spending increase"
+    else:
+        title = f"Monitor {category} spending pattern"
     return (
         title,
         (
@@ -389,9 +414,21 @@ def _outranks(candidate: Recommendation, current: Recommendation) -> bool:
 
 
 def _category_name(analysis: FinancialReasoning) -> str | None:
-    category = analysis.evidence.get("category")
+    category = analysis.evidence.get("category") or analysis.evidence.get("category_name")
     if isinstance(category, str) and category.strip():
         return category.strip()
+    return None
+
+
+def _merchant_name(analysis: FinancialReasoning) -> str | None:
+    for key in ("merchant_display_name", "merchant_key", "merchant_name", "merchant"):
+        value = analysis.evidence.get(key)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        cleaned = value.strip()
+        if not is_reliable_merchant_display_name(cleaned):
+            continue
+        return merchant_display_name_for(cleaned) or display_merchant_label(cleaned)
     return None
 
 

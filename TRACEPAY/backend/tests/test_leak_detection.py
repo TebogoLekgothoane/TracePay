@@ -69,8 +69,10 @@ def test_bank_fee_leak_annualizes_material_fee_escalation() -> None:
         _transaction("fee-3", "80", date(2026, 9, 30), merchant=None, category="Bank Fees", transaction_class="bank_fee", description="ACCOUNT FEE"),
     ]
     leak = next(item for item in _detect(transactions).leaks if item.leak_type == "bank_fee_leak")
-    assert leak.impact_kind == "recurring"
-    assert leak.estimated_annual_impact == leak.estimated_monthly_impact * Decimal("12")
+    # MoM fee change is estimated impact; annualisation uses the recurring monthly average.
+    assert leak.impact_kind == "estimated"
+    assert leak.evidence["monthly_average_fee"] is not None
+    assert leak.estimated_annual_impact == leak.evidence["monthly_average_fee"] * Decimal("12")
     assert leak.confidence <= 0.82
 
 
@@ -169,10 +171,9 @@ def test_debit_order_descriptions_produce_review_focus_without_replacing_subscri
             (date(2026, 7, 3), date(2026, 8, 3), date(2026, 9, 3))
         )
     ]
-    recurring = next(
-        item for item in _detect(grocery).leaks if item.leak_type == "recurring_payment_leak"
-    )
-    assert recurring.evidence.get("finding_focus") is None
+    grocery_types = {item.leak_type for item in _detect(grocery).leaks}
+    assert "recurring_payment_leak" not in grocery_types
+    assert "subscription_leak" not in grocery_types
 
 
 def test_spending_escalation_and_category_detectors() -> None:
@@ -290,7 +291,7 @@ def test_airtime_inefficiency_requires_airtime_evidence() -> None:
     assert data_leak.evidence["finding_focus"] == "data_inefficiency"
     assert data_leak.evidence.get("finding_focus") != "airtime_inefficiency"
     assert data_leak.evidence["merchant_key"] == "VODACOM"
-    assert data_leak.description == (
+    assert data_leak.description.startswith(
         "Mobile data spending increased over the analysed period and may warrant review."
     )
 

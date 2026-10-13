@@ -191,16 +191,14 @@ export function WelcomeAuthSheet({
           styles.sheet,
           {
             height: sheetHeight,
-            backgroundColor: palette.card,
+            backgroundColor: palette.background,
             paddingBottom: Math.max(insets.bottom, 20),
           },
           sheetStyle,
         ]}
       >
         <GestureDetector gesture={pan}>
-          <View style={styles.handleHit}>
-            <View style={[styles.handle, { backgroundColor: palette.border }]} />
-          </View>
+          <View style={styles.dragStrip} accessibilityElementsHidden />
         </GestureDetector>
         <Animated.ScrollView
           contentContainerStyle={styles.content}
@@ -224,22 +222,9 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 36,
     borderTopRightRadius: 36,
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 24,
-    elevation: 16,
   },
-  handleHit: {
-    alignItems: "center",
-    paddingTop: 10,
-    paddingBottom: 10,
-    minHeight: 28,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
+  dragStrip: {
+    height: 20,
   },
   content: {
     paddingHorizontal: 28,

@@ -24,7 +24,14 @@ def leak_confidence(
     pattern_strength: Decimal,
     ceiling: Decimal,
 ) -> float | None:
-    """Return a rounded score or None when evidence cannot meet the minimum."""
+    """Score how well classified evidence supports the pattern — not risk or loss.
+
+    Combines (1) the share of supporting transactions with high classification
+    confidence, (2) how many observations underpin the pattern, and (3) how
+    stable the pattern itself appears. The result is capped by ``ceiling`` and
+    rounded to two decimals to avoid false precision. It does not measure
+    severity, recoverability, or whether money was lost.
+    """
     ratio = support_ratio(support)
     history = min(Decimal("1"), Decimal(observation_count) / Decimal("10"))
     score = min(
@@ -44,7 +51,13 @@ def severity_for_impact(
     persistent: bool,
     confidence: float,
 ) -> str:
-    """Materiality-based severity; confidence does not independently raise severity."""
+    """Materiality-based severity for lasting financial burden.
+
+    High severity requires a persistent (recurring / multi-period) impact of at
+    least R1,000 with confidence >= 0.70. A large one-period spending increase
+    alone must not become high severity: pass ``persistent=False`` for estimated
+    single-period deltas. Confidence never raises severity on its own.
+    """
     if persistent and monthly_impact >= Decimal("1000") and confidence >= 0.70:
         return "high"
     if monthly_impact >= Decimal("200"):

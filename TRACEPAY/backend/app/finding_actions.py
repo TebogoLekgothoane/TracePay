@@ -101,6 +101,8 @@ def guidance_payload(guidance: FindingGuidance) -> dict[str, object]:
         "detection_status": guidance.detection_status,
         "detection_status_label": guidance.detection_status_label,
         "user_response": guidance.user_response,
+        "source": guidance.source,
+        "what_happened": guidance.what_happened,
         "reason": guidance.reason,
         "evidence": [
             {"label": label, "value": value} for label, value in guidance.evidence

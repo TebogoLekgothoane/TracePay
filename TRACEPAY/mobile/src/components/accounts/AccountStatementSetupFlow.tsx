@@ -16,21 +16,31 @@ import {
 import { IconButton } from "../ui/IconButton";
 import { Button } from "../ui/Button";
 import {
+  incorrectPdfPasswordMessage,
   isSaInstitution,
+  statementPdfPasswordTip,
   type SaInstitution,
 } from "../../features/accounts/account.constants";
 import { parseReturnTo } from "../../features/accounts/account.navigation";
 import { dismissFinancialAccountsSetup } from "../../features/accounts/account-setup.service";
-import { createAccount, getAccountById, listAccounts } from "../../features/accounts/account.service";
+import {
+  createAccount,
+  discardEmptyImportAccount,
+  getAccountById,
+  listAccounts,
+} from "../../features/accounts/account.service";
 import type { FinancialAccount } from "../../features/accounts/account.types";
 import {
   formatAccountHeading,
   formatAccountSubtitle,
   isValidAccountName,
 } from "../../features/accounts/account.validation";
+import { BANK_ALREADY_UPLOADED_MESSAGE } from "../../features/statement-import/statement-bank";
 import {
   isFindingReconciliationError,
   isPdfPasswordChallenge,
+  isStatementBankOccupied,
+  listOccupiedStatementBankKeys,
   preparePdfStatement,
   retryFindingReconciliation,
   type PdfImportResume,
@@ -72,6 +82,8 @@ export function AccountStatementSetupFlow({
   const mountedRef = useRef(true);
   const processLock = useRef(false);
   const bankRef = useRef<SaInstitution | null>(initialInstitution);
+  /** Account created for this import attempt — remove if extract/save never succeeds. */
+  const provisionalAccountIdRef = useRef<string | null>(null);
 
   const [bank, setBank] = useState<SaInstitution | null>(initialInstitution);
   const [accountId, setAccountId] = useState<string | null>(existingAccountId);
@@ -87,11 +99,12 @@ export function AccountStatementSetupFlow({
   const [stage, setStage] = useState<StatementImportStage | null>(null);
   const [password, setPassword] = useState("");
   const [passwordRequired, setPasswordRequired] = useState(false);
-  const [passwordHint, setPasswordHint] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const [resume, setResume] = useState<PdfImportResume | null>(null);
   const [reconciliationImportId, setReconciliationImportId] = useState<string | null>(null);
   const [extractedCount, setExtractedCount] = useState(0);
   const [outcome, setOutcome] = useState<ImportOutcome | null>(null);
+  const [occupiedBankKeys, setOccupiedBankKeys] = useState<string[]>([]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -99,6 +112,20 @@ export function AccountStatementSetupFlow({
       mountedRef.current = false;
     };
   }, []);
+
+  const refreshOccupiedBanks = useCallback(() => {
+    void listOccupiedStatementBankKeys()
+      .then((keys) => {
+        if (mountedRef.current) setOccupiedBankKeys(keys);
+      })
+      .catch(() => {
+        if (mountedRef.current) setOccupiedBankKeys([]);
+      });
+  }, []);
+
+  useEffect(() => {
+    refreshOccupiedBanks();
+  }, [refreshOccupiedBanks]);
 
   useEffect(() => {
     bankRef.current = bank;
@@ -110,14 +137,20 @@ export function AccountStatementSetupFlow({
       .then((accounts) => {
         if (!mountedRef.current) return;
         setExistingAccounts(accounts);
-        if (accounts.length > 0 && !initialInstitution) {
+        // Onboarding can prefer picking an existing account; Add account must keep
+        // the bank list so it doesn't flash then jump to imported accounts.
+        if (
+          mode === "onboarding" &&
+          accounts.length > 0 &&
+          !initialInstitution
+        ) {
           setCreatingNew(false);
         }
       })
       .catch(() => {
         if (mountedRef.current) setExistingAccounts([]);
       });
-  }, [existingAccountId, initialInstitution]);
+  }, [existingAccountId, initialInstitution, mode]);
 
   useEffect(() => {
     if (!existingAccountId) return;
@@ -142,25 +175,54 @@ export function AccountStatementSetupFlow({
 
   const clearImport = useCallback(() => {
     if (busy) return;
+    const provisionalId = provisionalAccountIdRef.current;
+    provisionalAccountIdRef.current = null;
     setFile(null);
     setMessage(null);
     setPasswordRequired(false);
-    setPasswordHint(null);
+    setPasswordError(null);
     setPassword("");
     setResume(null);
     setStage(null);
     setReconciliationImportId(null);
     setExtractedCount(0);
+    if (!provisionalId) return;
+    void discardEmptyImportAccount(provisionalId).then(() => {
+      if (!mountedRef.current) return;
+      setAccountId((current) => {
+        if (current !== provisionalId) return current;
+        setLoadedAccount(null);
+        setAccountBank(null);
+        return null;
+      });
+    });
   }, [busy]);
 
   const leave = (force = false) => {
     if (busy && !force) return;
+    const provisionalId = provisionalAccountIdRef.current;
+    provisionalAccountIdRef.current = null;
+    if (provisionalId) {
+      void discardEmptyImportAccount(provisionalId);
+    }
     if (mode === "onboarding") {
       void dismissFinancialAccountsSetup();
       return router.replace("/(tabs)");
     }
     if (returnTo) return router.replace(returnTo as Href);
     router.back();
+  };
+
+  const discardProvisionalAccount = async () => {
+    const provisionalId = provisionalAccountIdRef.current;
+    provisionalAccountIdRef.current = null;
+    if (!provisionalId) return;
+    await discardEmptyImportAccount(provisionalId);
+    if (accountId === provisionalId) {
+      setAccountId(null);
+      setAccountBank(null);
+      setLoadedAccount(null);
+    }
   };
 
   const ensureAccountId = async (selectedBank: SaInstitution | null): Promise<string> => {
@@ -178,6 +240,7 @@ export function AccountStatementSetupFlow({
       accountType: "cheque",
       connectionSource: "statement_import",
     });
+    provisionalAccountIdRef.current = account.id;
     setAccountId(account.id);
     setAccountBank(selectedBank);
     setLoadedAccount(account);
@@ -216,7 +279,7 @@ export function AccountStatementSetupFlow({
     setMessage(null);
     setFormError(null);
     setPasswordRequired(false);
-    setPasswordHint(null);
+    setPasswordError(null);
     setStage("preparing");
     try {
       let targetAccountId: string;
@@ -233,12 +296,14 @@ export function AccountStatementSetupFlow({
       }
       const preview = await preparePdfStatement(asset, {
         accountId: targetAccountId,
-        password: nextPassword,
+        password: nextPassword.trim(),
         resume: nextResume,
         onProgress: (progress) => {
           if (mountedRef.current) setStage(progress.stage);
         },
       });
+      // Transactions saved — keep the linked account.
+      provisionalAccountIdRef.current = null;
       if (mountedRef.current) {
         setReconciliationImportId(null);
         finishSavedImport(
@@ -254,11 +319,17 @@ export function AccountStatementSetupFlow({
           filePath: error.filePath,
         });
         setPasswordRequired(true);
-        setPasswordHint(error.message);
+        setPasswordError(
+          error.code === "invalid_password"
+            ? incorrectPdfPasswordMessage(selectedBank ?? bankRef.current)
+            : null,
+        );
         setStage(null);
         return;
       }
       if (isFindingReconciliationError(error)) {
+        // Transactions already saved; findings retry is separate — keep account.
+        provisionalAccountIdRef.current = null;
         if (!mountedRef.current) return;
         setReconciliationImportId(error.statementImportId);
         setExtractedCount(error.extractedCount);
@@ -266,6 +337,7 @@ export function AccountStatementSetupFlow({
         setStage(null);
         return;
       }
+      await discardProvisionalAccount();
       if (!mountedRef.current) return;
       setResume(null);
       setReconciliationImportId(null);
@@ -283,6 +355,14 @@ export function AccountStatementSetupFlow({
       setFormError("Select your bank before uploading a statement.");
       return;
     }
+    const bankToCheck =
+      selectedBank ??
+      accountBank ??
+      (loadedAccount ? institutionFromAccount(loadedAccount) : null);
+    if (bankToCheck && isStatementBankOccupied(bankToCheck, occupiedBankKeys)) {
+      setFormError(BANK_ALREADY_UPLOADED_MESSAGE);
+      return;
+    }
     setFormError(null);
     const result = await DocumentPicker.getDocumentAsync({
       type: "application/pdf",
@@ -298,6 +378,10 @@ export function AccountStatementSetupFlow({
 
   const chooseBankAndPick = async (name: SaInstitution) => {
     if (busy) return;
+    if (isStatementBankOccupied(name, occupiedBankKeys)) {
+      setFormError(BANK_ALREADY_UPLOADED_MESSAGE);
+      return;
+    }
     setBank(name);
     bankRef.current = name;
     setAccountId(null);
@@ -319,6 +403,7 @@ export function AccountStatementSetupFlow({
       updatedFindings: findings?.updatedFindings ?? 0,
     });
     setStage(null);
+    refreshOccupiedBanks();
   };
 
   const closeFinishedImport = () => {
@@ -382,14 +467,19 @@ export function AccountStatementSetupFlow({
         bankName={bankName}
         busy={busy}
         fileName={file.name}
+        formatTip={statementPdfPasswordTip(bankName)}
         password={password}
-        passwordHint={passwordHint}
+        passwordError={passwordError}
         onChooseAnother={clearImport}
         onClose={() => leave()}
-        onPasswordChange={setPassword}
+        onPasswordChange={(value) => {
+          setPassword(value);
+          if (passwordError) setPasswordError(null);
+        }}
         onUnlock={() => {
-          if (!password.trim()) return;
-          void process(file, bankRef.current, { password, resume });
+          const next = password.trim();
+          if (!next) return;
+          void process(file, bankRef.current, { password: next, resume });
         }}
       />
     );
@@ -457,24 +547,36 @@ export function AccountStatementSetupFlow({
                 <View className="gap-2">
                   {existingAccounts.map((account) => {
                     const selected = loadedAccount?.id === account.id && !creatingNew;
+                    const institution = institutionFromAccount(account);
+                    const bankOccupied = isStatementBankOccupied(
+                      institution,
+                      occupiedBankKeys,
+                    );
                     return (
                       <Pressable
                         key={account.id}
                         accessibilityRole="button"
+                        accessibilityState={{ disabled: busy || bankOccupied }}
                         className={`rounded-2xl border px-4 py-3 ${
                           selected ? "border-primary bg-primary/5" : "border-border bg-card"
-                        }`}
-                        disabled={busy}
+                        } ${bankOccupied ? "opacity-50" : ""}`}
+                        disabled={busy || bankOccupied}
                         onPress={() => {
+                          if (bankOccupied) {
+                            setFormError(BANK_ALREADY_UPLOADED_MESSAGE);
+                            return;
+                          }
                           selectExistingAccount(account);
-                          void pickPdf(institutionFromAccount(account));
+                          void pickPdf(institution);
                         }}
                       >
                         <Text className="text-[15px] font-semibold text-foreground">
                           {formatAccountHeading(account)}
                         </Text>
                         <Text className="mt-0.5 text-[12px] text-muted-foreground">
-                          {formatAccountSubtitle(account)}
+                          {bankOccupied
+                            ? "Statement already uploaded for this bank."
+                            : formatAccountSubtitle(account)}
                         </Text>
                       </Pressable>
                     );
@@ -506,6 +608,7 @@ export function AccountStatementSetupFlow({
               <View className={existingAccounts.length > 0 ? "mt-6" : "mt-4"}>
                 <BankImportList
                   disabled={busy}
+                  occupiedBankKeys={occupiedBankKeys}
                   selected={bank}
                   onSelect={(name) => void chooseBankAndPick(name)}
                 />

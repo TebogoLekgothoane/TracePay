@@ -3,12 +3,14 @@ import type { LucideIcon } from "lucide-react-native";
 import {
   Banknote,
   Calendar,
+  ChevronLeft,
+  ChevronRight,
   CreditCard,
   FileText,
   HelpCircle,
   Landmark,
+  Layers,
   MessageSquare,
-  MoreHorizontal,
   RefreshCw,
   Smartphone,
   Store,
@@ -16,25 +18,28 @@ import {
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ForYouSection } from "../../src/components/dashboard/ForYouSection";
 import { FindingReview } from "../../src/components/leaks/FindingReview";
 import { FixActionsList } from "../../src/components/leaks/FixActionsList";
-import { categoryReview } from "../../src/features/leaks/category-review";
+import { resolveMarkColor } from "../../src/components/leaks/LeakFlowShell";
+import { PeriodTabs } from "../../src/components/insights/PeriodTabs";
+import { BrandLogo } from "../../src/components/ui/BrandLogo";
+import { Button } from "../../src/components/ui/Button";
+import { IconButton } from "../../src/components/ui/IconButton";
+import { InfoSheet, SelectionSheet } from "../../src/components/ui/Modal";
+import { SimpleBrandLogo } from "../../src/components/ui/SimpleBrandLogo";
+import type { ActionType } from "../../src/features/guidance/finding-guidance.model";
+import { useForYouCards } from "../../src/features/for-you/for-you.preferences";
+import type { ForYouCard } from "../../src/features/for-you/for-you.types";
 import {
   readLeakResponse,
   saveLeakResponse,
   type StoredLeakResponse,
 } from "../../src/features/leaks/leak-response.store";
 import { getPotentialLeak } from "../../src/features/leaks/potential-leaks";
-import type { ActionType } from "../../src/features/guidance/finding-guidance.model";
-import { PeriodTabs } from "../../src/components/insights/PeriodTabs";
-import { Button } from "../../src/components/ui/Button";
-import { InfoSheet, SelectionSheet } from "../../src/components/ui/Modal";
-import { useForYouCards } from "../../src/features/for-you/for-you.preferences";
-import type { ForYouCard } from "../../src/features/for-you/for-you.types";
 import {
   getFixContent,
   getFixRoute,
@@ -51,6 +56,8 @@ import {
 import {
   COLORS,
   type ImpactTone,
+  getImpactToneStyles,
+  withAlpha,
 } from "../../src/theme/colors";
 
 const LEAK_CALC_COPY: Record<string, string> = {
@@ -158,7 +165,7 @@ const LEAK_DETAILS: Record<string, LeakDetail> = {
         description: "Miscellaneous charges",
         amount: "R72.60",
         percent: "10%",
-        Icon: MoreHorizontal,
+        Icon: Layers,
       },
     ],
     didYouKnow:
@@ -333,7 +340,7 @@ const LEAK_DETAILS: Record<string, LeakDetail> = {
         description: "Extra data usage charges",
         amount: "R40.00",
         percent: "19%",
-        Icon: MoreHorizontal,
+        Icon: Layers,
       },
     ],
     didYouKnow:
@@ -407,7 +414,6 @@ const BREAKDOWN_FIX_ACTION: Record<string, Record<string, string>> = {
   },
 };
 
-
 export default function LeakDetailScreen() {
   const params = useLocalSearchParams<{ id: string; view?: string }>();
   const leakId = Array.isArray(params.id) ? params.id[0] : params.id;
@@ -415,6 +421,7 @@ export default function LeakDetailScreen() {
   const [customRange, setCustomRange] = useState<CustomRange>("Last 14 days");
   const [showCustomSheet, setShowCustomSheet] = useState(false);
   const [showCalc, setShowCalc] = useState(false);
+  const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
@@ -422,10 +429,11 @@ export default function LeakDetailScreen() {
   const detail = leakId ? LEAK_DETAILS[leakId] : undefined;
   const potential = leakId ? getPotentialLeak(leakId) : null;
   const fixContent = leakId ? getFixContent(leakId) : null;
+  const tone = getImpactToneStyles(scheme, detail?.impact ?? "high");
+  const factor = periodFactor(period, customRange);
   const [response, setResponse] = useState<StoredLeakResponse | null>(null);
   const [savingResponse, setSavingResponse] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const factor = periodFactor(period, customRange);
   const { cards: forYouCards, ignore: ignoreForYouCard } = useForYouCards();
   const openForYouCard = useCallback((card: ForYouCard) => {
     router.push(card.href as never);
@@ -467,7 +475,7 @@ export default function LeakDetailScreen() {
   }, [detail, factor, period]);
 
   useEffect(() => {
-    if (!leakId) return;
+    if (!leakId || !potential) return;
     let active = true;
     void readLeakResponse(leakId).then((value) => {
       if (active) setResponse(value);
@@ -475,7 +483,7 @@ export default function LeakDetailScreen() {
     return () => {
       active = false;
     };
-  }, [leakId]);
+  }, [leakId, potential]);
 
   const onSaveResponse = useCallback(
     async (action: ActionType, note: string) => {
@@ -502,22 +510,6 @@ export default function LeakDetailScreen() {
     setPeriod(next);
     if (next === "Custom") setShowCustomSheet(true);
   };
-
-  if (!leakId || (!potential && (!detail || !fixContent || !scaledDetail))) {
-    return (
-      <SafeAreaView
-        className="flex-1 items-center justify-center bg-background px-5"
-        edges={["top"]}
-      >
-        <Text className="text-center text-[16px] font-semibold text-foreground">
-          This leak could not be found.
-        </Text>
-        <Button className="mt-4" size="md" onPress={() => router.back()}>
-          Go back
-        </Button>
-      </SafeAreaView>
-    );
-  }
 
   const openGuide = (targetLeakId: string) => {
     const actionId = getPrimaryFixActionId(targetLeakId);
@@ -551,111 +543,269 @@ export default function LeakDetailScreen() {
         nextCharge={potential.nextCharge}
         why={potential.why}
         onOpenGuide={
-          potential.relatedLeakId ? () => openGuide(potential.relatedLeakId as string) : undefined
+          potential.relatedLeakId
+            ? () => openGuide(potential.relatedLeakId as string)
+            : undefined
         }
         onSave={onSaveResponse}
       />
     );
   }
 
-  if (!detail || !fixContent || !scaledDetail) {
-    return null;
+  if (!leakId || !detail || !fixContent || !scaledDetail) {
+    return (
+      <SafeAreaView
+        className="flex-1 items-center justify-center bg-background px-5"
+        edges={["top"]}
+      >
+        <Text className="text-center text-[16px] font-semibold text-foreground">
+          This leak could not be found.
+        </Text>
+        <Button className="mt-4" size="md" onPress={() => router.back()}>
+          Go back
+        </Button>
+      </SafeAreaView>
+    );
   }
 
-  const review = categoryReview({
-    leakId,
-    subtitle: detail.subtitle,
-    changeLabel: scaledDetail.changeLabel,
-    percentOfLeaks: detail.percentOfLeaks,
-    why:
-      scaledDetail.didYouKnow ??
-      LEAK_CALC_COPY[leakId] ??
-      "We total avoidable charges linked to this leak for the selected period.",
-    breakdown: scaledDetail.breakdown,
-    subscriptions: scaledDetail.subscriptions,
-  });
+  const listTitle =
+    detail.listSectionTitle ??
+    (leakId === "debit" ? "Your debit orders" : "Your subscriptions");
 
-  const openTransaction = (itemId: string) => {
-    if (detail.variant === "breakdown") {
-      const actionId = BREAKDOWN_FIX_ACTION[leakId]?.[itemId];
-      if (!actionId) return;
-      router.push(getFixRoute(leakId, actionId) as never);
-      return;
-    }
-    if (leakId === "subs") {
-      router.push(`/leak/subscription/${itemId}`);
-      return;
-    }
-    if (leakId === "debit") {
-      router.push(getFixRoute(leakId, `pause-${itemId}`) as never);
-    }
+  const openBreakdownFix = (itemId: string) => {
+    const actionId = BREAKDOWN_FIX_ACTION[leakId]?.[itemId];
+    if (!actionId) return;
+    router.push(getFixRoute(leakId, actionId) as never);
   };
 
   return (
-    <>
-      <FindingReview
-        amount={scaledDetail.amount}
-        evidence={review.evidence}
-        guidanceExtra={
-          <View className="mt-6">
-            <Text className="mb-2 text-[17px] font-bold text-foreground">How to stop this</Text>
-            <Text className="mb-4 text-[13px] leading-5 text-muted-foreground">
-              These actions stay on this leak. Tap one for the step-by-step guide.
-            </Text>
-            <FixActionsList
-              impact={fixContent.impact}
-              leakId={leakId}
-              sections={fixContent.sections}
-            />
-            {leakId === "subs" && forYouCards.length > 0 ? (
-              <View className="mt-7">
-                <ForYouSection
-                  cards={forYouCards}
-                  onAction={openForYouCard}
-                  onIgnore={dismissForYouCard}
-                />
+    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View className="px-5 pt-1">
+          <View className="mb-4 flex-row items-start justify-between">
+            <IconButton
+              accessibilityLabel="Go back"
+              className="mr-3 mt-1"
+              variant="muted"
+              onPress={() => router.back()}
+            >
+              <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
+            </IconButton>
+
+            <View className="min-w-0 flex-1 flex-row items-start gap-3">
+              <View className="h-11 w-11 items-center justify-center">
+                <detail.HeaderIcon color={tone.color} size={22} strokeWidth={2.2} />
               </View>
-            ) : null}
-          </View>
-        }
-        history={review.history}
-        historyExtra={
-          <View>
-            <PeriodTabs active={period} selectedColor={palette.primary} onChange={handlePeriodChange} />
-            {period === "Custom" ? (
-              <Pressable
-                className="mt-2 self-start rounded-full bg-muted px-3 py-1.5 active:opacity-75"
-                onPress={() => setShowCustomSheet(true)}
-              >
-                <Text className="text-[12px] font-medium text-foreground">
-                  Range: {customRange}
+              <View className="min-w-0 flex-1">
+                <Text className="text-[24px] font-bold text-foreground">{detail.title}</Text>
+                <Text className="mt-0.5 text-[13px] text-muted-foreground">
+                  {detail.subtitle}
                 </Text>
-              </Pressable>
-            ) : null}
+              </View>
+            </View>
+
+            <IconButton
+              accessibilityLabel="How we calculate"
+              className="mt-1"
+              variant="ghost"
+              onPress={() => setShowCalc(true)}
+            >
+              <HelpCircle color={palette.placeholder} size={20} strokeWidth={2} />
+            </IconButton>
           </View>
-        }
-        icon={review.icon}
-        known={review.known}
-        response={response}
-        saveError={saveError}
-        saving={savingResponse}
-        status={review.status}
-        steps={review.steps}
-        subtitle={detail.subtitle}
-        title={detail.title}
-        transactions={review.transactions}
-        uncertain={review.uncertain}
-        nextCharge={review.nextCharge}
-        why={
-          scaledDetail.didYouKnow ??
-          LEAK_CALC_COPY[leakId] ??
-          "We total avoidable charges linked to this leak for the selected period."
-        }
-        onInfo={() => setShowCalc(true)}
-        onOpenGuide={() => openGuide(leakId)}
-        onSave={onSaveResponse}
-        onTransactionPress={openTransaction}
-      />
+
+          <PeriodTabs
+            active={period}
+            onChange={handlePeriodChange}
+            selectedColor={tone.color}
+          />
+          {period === "Custom" ? (
+            <Pressable
+              onPress={() => setShowCustomSheet(true)}
+              className="mt-2 self-start rounded-full bg-muted px-3 py-1.5 active:opacity-75"
+            >
+              <Text className="text-[12px] font-medium text-foreground">
+                Range: {customRange}
+              </Text>
+            </Pressable>
+          ) : null}
+
+          <View className="mt-5 flex-row items-end justify-between gap-3">
+            <View className="min-w-0 flex-1">
+              <Text className="text-[13px] text-muted-foreground">
+                {scaledDetail.variant === "subscriptions" ? "You're paying" : "Total"}
+              </Text>
+              <Text className="mt-1 text-[28px] font-bold tracking-[-0.5px] text-foreground">
+                {scaledDetail.amount}
+              </Text>
+              <Text className="mt-1 text-[13px] text-muted-foreground">
+                {scaledDetail.onLabel}
+              </Text>
+            </View>
+            <View
+              className="mb-1 rounded-full px-3 py-1.5"
+              style={{ backgroundColor: withAlpha(tone.color, 0.14) }}
+            >
+              <Text className="text-[12px] font-semibold" style={{ color: tone.color }}>
+                {scaledDetail.changeLabel}
+              </Text>
+            </View>
+          </View>
+
+          {scaledDetail.variant === "breakdown" && scaledDetail.breakdown ? (
+            <>
+              <Text className="mb-3 mt-7 text-[17px] font-bold text-foreground">
+                Where it comes from
+              </Text>
+              <View className="gap-2">
+                {scaledDetail.breakdown.map((item) => (
+                  <Pressable
+                    key={item.id}
+                    onPress={() => openBreakdownFix(item.id)}
+                    className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-75"
+                  >
+                    <View className="h-10 w-10 items-center justify-center">
+                      <item.Icon color={tone.color} size={18} strokeWidth={2.2} />
+                    </View>
+                    <View className="min-w-0 flex-1">
+                      <Text className="text-[14px] font-semibold text-foreground">
+                        {item.title}
+                      </Text>
+                      <Text className="mt-0.5 text-[12px] text-muted-foreground">
+                        {item.description}
+                      </Text>
+                    </View>
+                    <View className="items-end">
+                      <Text className="text-[14px] font-bold text-foreground">
+                        {item.amount}
+                      </Text>
+                      <Text
+                        className="mt-0.5 text-[11px] font-semibold"
+                        style={{ color: tone.color }}
+                      >
+                        {item.percent}
+                      </Text>
+                    </View>
+                    <ChevronRight color={palette.placeholder} size={16} strokeWidth={2} />
+                  </Pressable>
+                ))}
+              </View>
+              {scaledDetail.didYouKnow ? (
+                <View
+                  className="mt-4 rounded-3xl p-4"
+                  style={{ backgroundColor: palette.surfaceSoft }}
+                >
+                  <Text className="text-[13px] leading-5 text-foreground">
+                    {scaledDetail.didYouKnow}
+                  </Text>
+                </View>
+              ) : null}
+            </>
+          ) : null}
+
+          {scaledDetail.variant === "subscriptions" && scaledDetail.subscriptions ? (
+            <>
+              <Text className="mb-3 mt-7 text-[17px] font-bold text-foreground">
+                {listTitle}
+              </Text>
+              <View className="gap-2">
+                {scaledDetail.subscriptions.map((item) => (
+                  <Pressable
+                    key={item.id}
+                    onPress={() => {
+                      if (leakId === "subs") {
+                        router.push(`/leak/subscription/${item.id}`);
+                        return;
+                      }
+                      if (leakId === "debit") {
+                        router.push(getFixRoute(leakId, `pause-${item.id}`) as never);
+                      }
+                    }}
+                    className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-75"
+                  >
+                    {item.logoDomain ? (
+                      <BrandLogo
+                        name={item.name}
+                        logoDomain={item.logoDomain}
+                        size={40}
+                        fallbackColor={resolveMarkColor(palette, item.markColor)}
+                        shape="squircle"
+                      />
+                    ) : item.brandId ? (
+                      <SimpleBrandLogo
+                        name={item.name}
+                        brandId={item.brandId}
+                        size={40}
+                        fallbackColor={resolveMarkColor(palette, item.markColor)}
+                        shape="squircle"
+                      />
+                    ) : (
+                      <View className="h-10 w-10 items-center justify-center">
+                        <Text
+                          className="text-[14px] font-bold"
+                          style={{ color: resolveMarkColor(palette, item.markColor) }}
+                        >
+                          {item.mark}
+                        </Text>
+                      </View>
+                    )}
+                    <View className="min-w-0 flex-1">
+                      <Text className="text-[14px] font-semibold text-foreground">
+                        {item.name}
+                      </Text>
+                      <Text className="mt-0.5 text-[12px] text-muted-foreground">
+                        {item.category} · {item.billing}
+                      </Text>
+                    </View>
+                    <View className="items-end">
+                      <Text className="text-[14px] font-bold text-foreground">
+                        {item.amount}
+                      </Text>
+                      <Text
+                        className="mt-0.5 text-[11px] font-semibold"
+                        style={{
+                          color:
+                            item.status === "Active" ? palette.success : palette.blue,
+                        }}
+                      >
+                        {leakId === "debit" ? "Tap for steps" : item.status}
+                      </Text>
+                    </View>
+                    <ChevronRight color={palette.placeholder} size={16} strokeWidth={2} />
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          ) : null}
+
+          {leakId === "subs" && forYouCards.length > 0 ? (
+            <View className="mt-7">
+              <ForYouSection
+                cards={forYouCards}
+                onAction={openForYouCard}
+                onIgnore={dismissForYouCard}
+              />
+            </View>
+          ) : null}
+
+          <Text className="mb-2 mt-8 text-[17px] font-bold text-foreground">
+            How to stop this
+          </Text>
+          <Text className="mb-4 text-[13px] leading-5 text-muted-foreground">
+            Follow the steps for this leak only. Tap an action to see exactly what to do.
+          </Text>
+          <FixActionsList
+            leakId={leakId}
+            sections={fixContent.sections}
+            impact={fixContent.impact}
+          />
+        </View>
+      </ScrollView>
+
       <InfoSheet
         visible={showCalc}
         title="How we calculate"
@@ -676,6 +826,6 @@ export default function LeakDetailScreen() {
           label: range,
         }))}
       />
-    </>
+    </SafeAreaView>
   );
 }

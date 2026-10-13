@@ -68,9 +68,25 @@ def test_thirty_day_payments_can_be_recurring_candidates() -> None:
     assert leak_types & {"recurring_payment_leak", "unknown_recurring_payment"}
 
 
-def test_weekly_payments_can_be_recurring_candidates() -> None:
+def test_weekly_grocery_purchases_are_not_recurring_bills() -> None:
     weekly = [
         _transaction(f"w-{index}", "50", when, merchant="WEEKLY SHOP", category="Groceries")
+        for index, when in enumerate(
+            (date(2026, 7, 1), date(2026, 7, 8), date(2026, 7, 15), date(2026, 7, 22))
+        )
+    ]
+    snapshot = build_financial_features("user-a", weekly)
+    assert matches_plausible_recurring_interval(snapshot.merchants[0].recurrence.average_interval_days)
+    behaviours = analyze_behaviour(snapshot)
+    assert not any(
+        item.behavior_type == "recurring_payment_pattern" for item in behaviours.observations
+    )
+    assert "recurring_payment_leak" not in {item.leak_type for item in _detect(weekly).leaks}
+
+
+def test_weekly_software_payments_can_be_recurring_candidates() -> None:
+    weekly = [
+        _transaction(f"w-{index}", "50", when, merchant="TOOL BOX", category="Software")
         for index, when in enumerate(
             (date(2026, 7, 1), date(2026, 7, 8), date(2026, 7, 15), date(2026, 7, 22))
         )
@@ -87,7 +103,7 @@ def test_statement_boilerplate_is_not_a_display_merchant() -> None:
     assert not is_reliable_merchant_display_name("ACCOUNT ID US FOR")
     assert not is_reliable_merchant_display_name("ZAR69.99 AMOUNT R69.99 REF")
     title = recurring_leak_title(subscription=False, merchant_name="ACCOUNT ID US FOR")
-    assert title == "Potential recurring payment"
+    assert title == "Unidentified recurring payment"
     assert "ACCOUNT" not in title
 
 
@@ -106,8 +122,9 @@ def test_duplicate_leak_is_verification_candidate_with_one_time_impact_label() -
         _transaction("later", "100", date(2026, 9, 30), merchant="OTHER", category="Shopping"),
     ]
     leak = next(item for item in _detect(duplicate).leaks if item.leak_type == "duplicate_payment_leak")
-    assert leak.title == "Potential duplicate payment requires verification"
+    assert leak.title == "Possible duplicate payment at Coffee — R50"
     assert "Duplicate payment detected" not in leak.title
+    assert "confirmed" not in leak.title.lower()
     assert leak.evidence.get("verification_required") is True
     assert leak.evidence.get("finding_kind") == "verification_required"
     assert leak.evidence.get("finding_focus") == "duplicate_merchant_payment"
@@ -205,12 +222,15 @@ def test_woolworths_duplicate_display_name_does_not_change_detection() -> None:
         if item.source_reasoning_id == analysis.reasoning_id
     )
     assert recommendation.recommendation_type == "verify_potential_duplicate"
-    assert set(analysis.evidence) == {
-        "potential_duplicate_amount",
-        "matching_transaction_count",
-        "date_span_days",
-        "verification_required",
-    }
+    assert "Woolworths" in leak.title
+    assert "Woolworths" in analysis.title
+    assert "Woolworths" in recommendation.title
+    assert analysis.evidence["merchant_key"] == "WOOLWORTHS"
+    assert analysis.evidence["merchant_display_name"] == "Woolworths"
+    assert analysis.evidence["observed_date"] == "2026-07-18"
+    assert analysis.evidence["verification_required"] is True
+    assert analysis.evidence["potential_duplicate_amount"] == Decimal("186.40")
+    assert analysis.evidence["matching_transaction_count"] == 2
 
 
 def test_card_purchase_boilerplate_has_no_merchant_display_name() -> None:
@@ -240,8 +260,7 @@ def test_card_purchase_boilerplate_has_no_merchant_display_name() -> None:
         for item in _detect(transactions).leaks
         if item.leak_type == "duplicate_payment_leak"
     ]
-    assert leaks
-    for leak in leaks:
-        assert leak.evidence.get("merchant_display_name") is None
-        assert "logo" not in leak.evidence
-        assert "merchant_logo" not in leak.evidence
+    # Card-purchase boilerplate must not form a merchant group or display name.
+    assert leaks == []
+    assert merchant_display_name_for("WITH CARD AT") is None
+    assert merchant_display_name_for("PURCHASE WITH CARD AT") is None

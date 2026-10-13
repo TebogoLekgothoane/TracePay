@@ -112,14 +112,26 @@ export default function FindingGuidanceScreen() {
                 </Text>
               </Section>
 
+              {guidance.source ? (
+                <Section title="Source">
+                  <Text className="text-[15px] leading-5 text-foreground">{guidance.source}</Text>
+                </Section>
+              ) : null}
+
+              <Section title="What happened">
+                <Text className="text-[15px] leading-5 text-foreground">
+                  {guidance.whatHappened}
+                </Text>
+              </Section>
+
               <Section title="Why it was flagged">
                 <Text className="text-[15px] leading-5 text-foreground">{guidance.reason}</Text>
               </Section>
 
-              <Section title="Evidence">
+              <Section title="Transactions involved">
                 {guidance.evidence.length === 0 ? (
                   <Text className="text-[15px] leading-5 text-muted-foreground">
-                    No extra evidence is safe to show.
+                    No extra transaction evidence is safe to show.
                   </Text>
                 ) : (
                   guidance.evidence.map((item) => (
@@ -171,7 +183,7 @@ export default function FindingGuidanceScreen() {
                 )}
               </Section>
 
-              <Section title="Next steps">
+              <Section title="What to do next">
                 {guidance.steps.map((step) => (
                   <Text key={step} className="text-[15px] leading-5 text-foreground">
                     {step}

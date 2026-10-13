@@ -82,7 +82,7 @@ function OnboardingPaginationComponent({
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const inactiveColor =
-    colorScheme === "dark" ? "rgba(167, 139, 250, 0.28)" : "rgb(226, 220, 242)";
+    colorScheme === "dark" ? "rgba(154, 108, 255, 0.28)" : "rgb(226, 220, 242)";
 
   return (
     <View

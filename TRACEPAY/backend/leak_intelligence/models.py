@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field
 
 from categorisation.models import CategorisationResult
 
+from .import_quality import StatementImportQuality
+
 
 @dataclass(frozen=True)
 class FeatureTransaction:
@@ -21,6 +23,7 @@ class FeatureTransaction:
     transaction_date: date | None = None
     transaction_type: Literal["debit", "credit"] | None = None
     is_duplicate: bool = False
+    statement_id: str | None = None
 
 
 class SpendingProfile(BaseModel):
@@ -241,6 +244,10 @@ class DuplicateCandidate(BaseModel):
     transaction_ids: list[str]
     transaction_dates: list[date]
     high_confidence_transaction_count: int = 0
+    distinct_description_count: int = 0
+    shared_reference_tokens: bool = False
+    nearby_reversal_or_refund: bool = False
+    match_basis: list[str] = Field(default_factory=list)
 
 
 class FinancialFeatureSnapshot(BaseModel):
@@ -250,6 +257,9 @@ class FinancialFeatureSnapshot(BaseModel):
     transaction_count: int
     date_start: date | None = None
     date_end: date | None = None
+    # Bounds used for opening/trailing completeness (may incorporate declared dates).
+    coverage_observation_start: date | None = None
+    coverage_observation_end: date | None = None
     spending_profile: SpendingProfile
     merchants: list[MerchantFeature] = Field(default_factory=list)
     categories: list[CategoryFeature] = Field(default_factory=list)
@@ -260,4 +270,7 @@ class FinancialFeatureSnapshot(BaseModel):
     payday: PaydaySpendingFeatures
     income: IncomeFeatures
     duplicate_candidates: list[DuplicateCandidate] = Field(default_factory=list)
+    # Sanitised statement-import quality; never includes file content or descriptions.
+    statement_import_quality: list[StatementImportQuality] = Field(default_factory=list)
+    import_ids_by_month: dict[str, list[str]] = Field(default_factory=dict)
 

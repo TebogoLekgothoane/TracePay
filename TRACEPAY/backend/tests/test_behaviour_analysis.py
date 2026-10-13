@@ -89,6 +89,9 @@ def test_category_decrease_and_low_confidence_suppression() -> None:
 
 def test_recurring_price_and_duplicate_patterns_are_neutral_candidates() -> None:
     transactions = [
+        _transaction("host-1", "120", date(2026, 8, 1), merchant="CLOUD HOST", category="Software"),
+        _transaction("host-2", "160", date(2026, 9, 1), merchant="CLOUD HOST", category="Software"),
+        _transaction("host-3", "220", date(2026, 10, 1), merchant="CLOUD HOST", category="Software"),
         _transaction("steers-1", "120", date(2026, 8, 1), merchant="STEERS", category="Restaurants"),
         _transaction("steers-2", "160", date(2026, 9, 1), merchant="STEERS", category="Restaurants"),
         _transaction("steers-3", "220", date(2026, 10, 1), merchant="STEERS", category="Restaurants"),
@@ -99,6 +102,12 @@ def test_recurring_price_and_duplicate_patterns_are_neutral_candidates() -> None
     types = {item.behavior_type for item in result.observations}
     assert "recurring_payment_pattern" in types
     assert "price_increase_pattern" in types
+    # Ordinary restaurant/grocery cadence is not treated as a recurring bill signal.
+    assert not any(
+        item.behavior_type == "recurring_payment_pattern"
+        and item.evidence.get("merchant_key") == "STEERS"
+        for item in result.observations
+    )
     price = next(item for item in result.observations if item.behavior_type == "price_increase_pattern")
     assert price.evidence.get("finding_focus") == "merchant_price_increase"
     duplicate = next(item for item in result.observations if item.behavior_type == "duplicate_payment_pattern")
@@ -1145,7 +1154,7 @@ def test_behaviour_and_completed_months_drop_the_same_incomplete_final_month() -
     snapshot = build_financial_features(
         "user-a",
         [
-            _transaction("jul", "100", date(2026, 7, 31)),
+            _transaction("jul", "100", date(2026, 7, 10)),
             _transaction("aug", "100", date(2026, 8, 31)),
             _transaction("sep", "400", date(2026, 9, 30)),
             _transaction("oct", "20", date(2026, 10, 10)),
@@ -1160,6 +1169,28 @@ def test_behaviour_and_completed_months_drop_the_same_incomplete_final_month() -
     )
     assert observation.evidence["current_period"] == months[-1]
     assert observation.evidence["months_compared"] == len(months)
+
+
+def test_late_opening_month_is_excluded_like_incomplete_final_month() -> None:
+    snapshot = build_financial_features(
+        "user-a",
+        [
+            _transaction("jul-late", "100", date(2026, 7, 25)),
+            _transaction("aug", "100", date(2026, 8, 15)),
+            _transaction("sep", "100", date(2026, 9, 15)),
+            _transaction("oct", "400", date(2026, 10, 15)),
+            _transaction("nov-partial", "20", date(2026, 11, 10)),
+        ],
+    )
+    months = [month.month for month in completed_months(snapshot)]
+    assert months == ["2026-08", "2026-09", "2026-10"]
+    observation = next(
+        item
+        for item in analyze_behaviour(snapshot).observations
+        if item.behavior_type == "spending_increase"
+    )
+    assert observation.evidence["current_period"] == "2026-10"
+    assert "2026-07" not in observation.evidence["baseline_months"]
 
 
 def test_behaviour_endpoint_requires_authentication() -> None:

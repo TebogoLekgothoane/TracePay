@@ -78,8 +78,8 @@ def test_card_purchase_prefix_uses_the_recognised_merchant() -> None:
     assert extract_merchant_name(north) != extract_merchant_name(south)
     assert "With Card At" not in (extract_merchant_name(north) or "")
     assert "With Card At" not in (extract_merchant_name(south) or "")
-    assert extract_merchant_name(online_mr) == "Online Purchase Mr Food"
-    assert extract_merchant_name(online_uber) == "Online Purchase Uber Eats"
+    assert extract_merchant_name(online_mr) == "Mr Food"
+    assert extract_merchant_name(online_uber) == "Uber Eats"
     assert mr_d == "PURCHASE: WITH CARD AT EPOS AT MR D FOOD"
 
 
@@ -329,6 +329,7 @@ def test_ai_disabled_still_applies_fallback(monkeypatch: pytest.MonkeyPatch, cap
     monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", False)
     monkeypatch.setattr("categorisation.service.settings.openai_api_key", "openai-test-key")
     monkeypatch.setattr("categorisation.service.settings.gemini_api_key", "gemini-test-key")
+    monkeypatch.setattr("categorisation.service.settings.xai_api_key", "")
 
     def fail_if_called(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("AI provider should not be called when disabled")
@@ -350,6 +351,8 @@ def test_ai_disabled_still_applies_fallback(monkeypatch: pytest.MonkeyPatch, cap
 def test_ai_enabled_keeps_provider_flow_reachable(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", True)
     monkeypatch.setattr("categorisation.service.settings.openai_api_key", "openai-test-key")
+    monkeypatch.setattr("categorisation.service.settings.gemini_api_key", "")
+    monkeypatch.setattr("categorisation.service.settings.xai_api_key", "")
     calls = 0
 
     def classify(items: list[object], _category_names: list[str]) -> dict[str, CategorisationResult]:
@@ -377,6 +380,7 @@ def test_ai_enabled_keeps_provider_flow_reachable(monkeypatch: pytest.MonkeyPatc
 def test_openai_failure_returns_empty_results(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "openai-test-key")
     monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "")
+    monkeypatch.setattr(ai_classifier.settings, "xai_api_key", "")
     monkeypatch.setattr(ai_classifier, "_request_openai", lambda *_args: None)
     assert ai_classifier.classify_batch(
         [ai_classifier.AiTransaction("0", "Purchase at Example", "-10", "debit")],
@@ -387,6 +391,7 @@ def test_openai_failure_returns_empty_results(monkeypatch: pytest.MonkeyPatch) -
 def test_openai_success_returns_validated_results(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "openai-test-key")
     monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "")
+    monkeypatch.setattr(ai_classifier.settings, "xai_api_key", "")
     monkeypatch.setattr(ai_classifier, "_request_openai", lambda *_args: {
         "choices": [{"message": {"content": '{"transactions":[{"transaction_id":"0","transaction_class":"spending","classification_confidence":0.9,"category_name":"Groceries","category_confidence":0.8,"reason":"Merchant purchase","merchant_name":"Example"}]}'}}],
     })
@@ -401,6 +406,7 @@ def test_openai_success_returns_validated_results(monkeypatch: pytest.MonkeyPatc
 def test_gemini_success_returns_validated_results(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "gemini-test-key")
     monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "")
+    monkeypatch.setattr(ai_classifier.settings, "xai_api_key", "")
     monkeypatch.setattr(ai_classifier, "_request_gemini", lambda *_args: {
         "candidates": [{"content": {"parts": [{"text": '{"transactions":[{"transaction_id":"0","transaction_class":"spending","classification_confidence":0.91,"category_name":"Groceries","category_confidence":0.88,"reason":"Merchant purchase","merchant_name":"Example"}]}'}]}}],
     })
@@ -415,6 +421,7 @@ def test_gemini_success_returns_validated_results(monkeypatch: pytest.MonkeyPatc
 def test_malformed_openai_response_is_rejected_safely(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "openai-test-key")
     monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "")
+    monkeypatch.setattr(ai_classifier.settings, "xai_api_key", "")
     monkeypatch.setattr(ai_classifier, "_request_openai", lambda *_args: {
         "choices": [{"message": {"content": "not-json"}}],
     })
@@ -453,6 +460,7 @@ def test_openai_response_text_rejects_missing_or_empty_content(payload: dict) ->
 def test_invalid_openai_category_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "openai-test-key")
     monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "")
+    monkeypatch.setattr(ai_classifier.settings, "xai_api_key", "")
     monkeypatch.setattr(ai_classifier, "_request_openai", lambda *_args: {
         "choices": [{"message": {"content": '{"transactions":[{"transaction_id":"0","transaction_class":"spending","classification_confidence":0.9,"category_name":"Not A Live Category","category_confidence":0.8,"reason":"Invalid","merchant_name":"Example"}]}'}}],
     })
@@ -512,6 +520,62 @@ def test_openai_timeout_fails_cleanly(monkeypatch: pytest.MonkeyPatch, caplog: p
     message = " ".join(record.getMessage() for record in caplog.records)
     assert "request_timeout provider=openai" in message
     assert "timeout_seconds=45" in message
+
+
+def test_gemini_is_preferred_over_openai_and_xai(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "gemini-test-key")
+    monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "openai-test-key")
+    monkeypatch.setattr(ai_classifier.settings, "xai_api_key", "xai-test-key")
+    called: list[str] = []
+
+    def gemini(*_args: object, **_kwargs: object) -> dict:
+        called.append("gemini")
+        return {
+            "candidates": [{
+                "content": {
+                    "parts": [{
+                        "text": (
+                            '{"transactions":[{"transaction_id":"0","transaction_class":"spending",'
+                            '"classification_confidence":0.9,"category_name":"Groceries",'
+                            '"category_confidence":0.9,"reason":"ok","merchant_name":"Example",'
+                            '"source_type":"merchant","payment_mechanism":"","supporting_text":"",'
+                            '"uncertainty":"identified"}]}'
+                        )
+                    }]
+                }
+            }]
+        }
+
+    def forbidden(name: str):
+        def _inner(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError(f"{name} should not run when Gemini succeeds")
+
+        return _inner
+
+    monkeypatch.setattr(ai_classifier, "_request_gemini", gemini)
+    monkeypatch.setattr(ai_classifier, "_request_openai", forbidden("openai"))
+    monkeypatch.setattr(ai_classifier, "_request_xai", forbidden("xai"))
+    result = ai_classifier.classify_batch(
+        [ai_classifier.AiTransaction("0", "Purchase at Example", "-10", "debit")],
+        ["Groceries"],
+    )["0"]
+    assert called == ["gemini"]
+    assert result.rule == "ai:gemini"
+
+
+def test_google_ai_studio_key_is_not_treated_as_xai() -> None:
+    from app.config import Settings
+
+    configured = Settings(
+        gemini_api_key="AQ.studio-key",
+        xai_api_key="AQ.should-not-be-xai",
+        openai_api_key="",
+    )
+    gemini_loaded, openai_loaded, xai_loaded = configured.categorisation_provider_keys()
+    assert gemini_loaded is True
+    assert openai_loaded is False
+    assert xai_loaded is False
+    assert configured.xai_api_key == ""
 
 
 def test_reprocessing_is_idempotent_and_does_not_duplicate(monkeypatch: pytest.MonkeyPatch) -> None:

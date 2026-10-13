@@ -11,6 +11,15 @@ from decimal import Decimal
 from .behaviour_models import BehaviourAnalysisResult, BehaviourObservation
 from .leak_models import LeakDetection, LeakDetectionResult
 from .leak_scoring import support_ratio
+from .merchant_display import (
+    debit_order_leak_title,
+    duplicate_leak_title,
+    is_reliable_merchant_display_name,
+    merchant_display_name_for,
+    recurring_leak_title,
+    repeated_payments_title,
+    spending_increase_title,
+)
 from .models import (
     CategoryFeature,
     FinancialFeatureSnapshot,
@@ -195,10 +204,11 @@ def _escalation_reasoning(
         if positive_contribution > ZERO
         else ZERO
     )
-    evidence = {
+    change_amount = current_total - previous_total
+    evidence: dict[str, object] = {
         "previous_total": previous_total,
         "current_total": current_total,
-        "absolute_change": current_total - previous_total,
+        "absolute_change": change_amount,
         "percentage_change": _percentage_change(previous_total, current_total),
         "previous_transaction_count": previous_count,
         "current_transaction_count": current_count,
@@ -210,13 +220,25 @@ def _escalation_reasoning(
         "amount_contribution_share": amount_share,
         "category": category,
     }
+    for key in (
+        "top_category_contributors",
+        "top_merchant_contributors",
+        "cause_identified",
+        "contributor_explanation",
+        "amounts_not_additive_with_category_findings",
+    ):
+        value = leak.evidence.get(key)
+        if value is not None:
+            evidence[key] = value
+    evidence.update(_source_evidence(leak))
+    source_title = _spending_source_title(leak, category, change_amount)
 
     frequency_material = count_change >= MATERIAL_COUNT_CHANGE
     amount_material = average_change >= MATERIAL_AVERAGE_CHANGE
     if frequency_material and amount_material:
         return _Draft(
             root_cause_type="transaction_pattern",
-            title="Frequency and average transaction value increased",
+            title=source_title or "Frequency and average transaction value increased",
             explanation=(
                 "The detected increase is supported by both more transactions and "
                 "a higher average transaction value. Both explanations materially "
@@ -240,7 +262,7 @@ def _escalation_reasoning(
     ):
         return _Draft(
             root_cause_type="price_increase",
-            title="Average transaction value increased",
+            title=source_title or "Average transaction value increased",
             explanation=(
                 "The spending increase aligns with a higher average transaction "
                 "value at a contributing merchant while transaction frequency "
@@ -258,7 +280,7 @@ def _escalation_reasoning(
     ):
         return _Draft(
             root_cause_type="frequency_increase",
-            title="Transaction frequency increased",
+            title=source_title or "Transaction frequency increased",
             explanation=(
                 "The spending increase was primarily associated with more "
                 "transactions; average transaction value did not increase enough "
@@ -275,7 +297,7 @@ def _escalation_reasoning(
     ):
         return _Draft(
             root_cause_type="amount_increase",
-            title="Average transaction value increased",
+            title=source_title or "Average transaction value increased",
             explanation=(
                 "The spending increase was primarily associated with a higher "
                 "average transaction value while transaction frequency remained "
@@ -290,7 +312,7 @@ def _escalation_reasoning(
     if category:
         return _Draft(
             root_cause_type="category_growth",
-            title=f"{category} spending increased",
+            title=source_title or f"{category} spending increased",
             explanation=(
                 "The category total increased materially, but changes in frequency "
                 "and average transaction value do not identify one dominant driver."
@@ -302,10 +324,17 @@ def _escalation_reasoning(
             evidence_strength=Decimal("0.62"),
             support=feature_support,
         )
+    cause_note = ""
+    if leak.evidence.get("cause_identified") is False:
+        cause_note = (
+            " Supported category or merchant contributors were not identified "
+            "from comparable periods."
+        )
     return _insufficient_draft(
         persistence,
         "The overall spending increase is statistically supported, but the "
-        "available aggregate evidence does not identify one dominant driver.",
+        "available aggregate evidence does not identify one dominant driver."
+        + cause_note,
         evidence,
     )
 
@@ -341,6 +370,7 @@ def _recurring_reasoning(
         "last_observed_date": last_observed,
         "duration_days": duration_days,
     }
+    evidence.update(_source_evidence(leak))
     if recurrence:
         evidence.update(
             {
@@ -360,22 +390,41 @@ def _recurring_reasoning(
         if merchant
         else Decimal("0.70")
     )
+    merchant_name = _text(evidence.get("merchant_key"))
     if leak.evidence.get("finding_focus") == "subscription_review":
-        title = "Potential subscription that may warrant review"
+        title = recurring_leak_title(
+            subscription=True,
+            merchant_name=merchant_name,
+            average_amount=average_amount,
+        )
         explanation = (
             "Subscription-category payments followed a billing-like interval with a "
             "stable amount pattern. This may warrant review, but the data does not "
             "show whether the service is still used or forgotten."
         )
     elif leak.evidence.get("finding_focus") == "debit_order_review":
-        title = "Potential debit order that may warrant review"
+        title = debit_order_leak_title(merchant_name=merchant_name)
         explanation = (
             "Payments described as debit orders followed a billing-like interval. "
             "This may warrant review, but the data does not show whether the "
             "underlying service is unused or no longer necessary."
         )
+    elif leak.evidence.get("finding_focus") == "repeated_payments_detected":
+        title = repeated_payments_title(
+            merchant_name=merchant_name,
+            average_amount=average_amount,
+        )
+        explanation = (
+            "Repeated payments followed a relatively stable interval and amount, but "
+            "the evidence is not strong enough to assert a subscription or recurring "
+            "bill. Treat this as a review cue only."
+        )
     else:
-        title = "Stable recurring payment pattern"
+        title = recurring_leak_title(
+            subscription=False,
+            merchant_name=merchant_name,
+            average_amount=average_amount,
+        )
         explanation = (
             "Payments followed a billing-like interval with a sufficiently stable "
             "amount pattern. This supports a recurring financial commitment, but "
@@ -639,23 +688,36 @@ def _duplicate_reasoning(leak: LeakDetection) -> _Draft:
     count = _integer(leak.evidence.get("transaction_count_in_group"))
     date_span = _integer(leak.evidence.get("date_span_days"))
     amount = _decimal(leak.evidence.get("candidate_amount"))
+    merchant_name = _text(leak.evidence.get("merchant_key"))
+    display_merchant = (
+        merchant_name if is_reliable_merchant_display_name(merchant_name) else None
+    )
+    evidence: dict[str, object] = {
+        "potential_duplicate_amount": amount,
+        "matching_transaction_count": count,
+        "date_span_days": date_span,
+        "verification_required": True,
+        "match_basis": leak.evidence.get("match_basis"),
+        "potential_not_confirmed_savings": True,
+        "uncertainty": leak.evidence.get("uncertainty"),
+    }
+    evidence.update(_source_evidence(leak))
+    observed = _text(leak.evidence.get("observed_date"))
+    if observed:
+        evidence["observed_date"] = observed
     return _Draft(
         root_cause_type="potential_duplicate",
-        title="Potential duplicate payment requires verification",
+        title=duplicate_leak_title(merchant_name=display_merchant, amount=amount),
         explanation=(
             "Multiple transactions shared the same merchant grouping, amount and "
-            "calendar day. This is a duplicate candidate only; the evidence does "
-            "not establish fraud, merchant error or an unauthorized payment."
+            "calendar day. Matching those fields alone does not establish a "
+            "duplicate, accidental purchase, fraud, merchant error or recoverable "
+            "amount. Manual verification is required."
         ),
-        evidence={
-            "potential_duplicate_amount": amount,
-            "matching_transaction_count": count,
-            "date_span_days": date_span,
-            "verification_required": True,
-        },
+        evidence=evidence,
         persistence="new",
         analysis_status="verification_required",
-        evidence_strength=Decimal("0.76"),
+        evidence_strength=Decimal("0.62"),
     )
 
 
@@ -900,6 +962,46 @@ def _root_cause_confidence(
     if draft.analysis_status == "insufficient_evidence":
         score = min(score, Decimal("0.52"))
     return round(float(max(Decimal("0.30"), min(Decimal("0.92"), score))), 2)
+
+
+def _source_evidence(leak: LeakDetection) -> dict[str, object]:
+    """Pass through safe merchant/source fields already present on the leak."""
+    evidence: dict[str, object] = {}
+    merchant_key = _text(leak.evidence.get("merchant_key"))
+    if merchant_key:
+        evidence["merchant_key"] = merchant_key
+        display = _text(leak.evidence.get("merchant_display_name"))
+        evidence["merchant_display_name"] = display or merchant_display_name_for(
+            merchant_key
+        )
+    focus = _text(leak.evidence.get("finding_focus"))
+    if focus:
+        evidence["finding_focus"] = focus
+    category = _text(leak.evidence.get("category_name"))
+    if category and "category" not in evidence:
+        evidence.setdefault("category_name", category)
+    return {key: value for key, value in evidence.items() if value is not None}
+
+
+def _spending_source_title(
+    leak: LeakDetection,
+    category: str | None,
+    change_amount: Decimal | None,
+) -> str | None:
+    merchant_key = _text(leak.evidence.get("merchant_key"))
+    if merchant_key:
+        return spending_increase_title(
+            source=merchant_key,
+            change_amount=change_amount,
+            source_is_merchant=True,
+        )
+    if category:
+        return spending_increase_title(
+            source=category,
+            change_amount=change_amount,
+            source_is_merchant=False,
+        )
+    return None
 
 
 def _merchant_for_recurring(

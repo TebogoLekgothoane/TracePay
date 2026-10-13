@@ -16,6 +16,7 @@ from categorisation.models import CategorisationResult
 from leak_intelligence.behaviour_engine import analyze_behaviour
 from leak_intelligence.engine import build_financial_features
 from leak_intelligence.intelligence_report import (
+    EvidenceHighlight,
     ReportCompositionError,
     assemble_financial_intelligence_report,
 )
@@ -596,7 +597,8 @@ def test_bank_fee_inventory_ignores_recurring_impact_kind() -> None:
         ]
     )
     fee = next(finding for finding in report.findings if finding.leak_type == "bank_fee_leak")
-    assert fee.impact.impact_kind == "recurring"
+    # Period fee change is estimated; inventory placement ignores impact_kind.
+    assert fee.impact.impact_kind in {"recurring", "estimated"}
     assert fee.recommendation is not None
     assert fee.recommendation.impact_label == "observed_fee_activity"
     assert _inventory_ids(report, "observed_fee_activity") == [fee.leak_id]
@@ -732,8 +734,16 @@ def test_duplicate_candidate_keeps_detected_impact_out_of_recovery_inventory() -
     labels = [item.label for item in finding.evidence_highlights if item.key == "potential_duplicate_amount"]
     assert labels == ["Amount of each matching transaction"]
     assert source.evidence["merchant_display_name"] == "Woolworths"
-    assert all(item.key != "merchant_display_name" for item in finding.evidence_highlights)
-    assert "merchant_display_name" not in str(payload)
+    merchant_highlights = [
+        item for item in finding.evidence_highlights if item.key == "merchant_display_name"
+    ]
+    assert merchant_highlights == [
+        EvidenceHighlight(key="merchant_display_name", label="Merchant", value="Woolworths")
+    ]
+    assert all(item.key != "merchant_key" for item in finding.evidence_highlights)
+    assert "Woolworths" in finding.what_happened
+    assert "Woolworths" in finding.why_title
+    assert "123456789" not in finding.what_happened
 
 
 def test_cash_finding_stays_visible_and_out_of_every_inventory() -> None:

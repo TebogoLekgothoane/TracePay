@@ -18,6 +18,11 @@ from leak_intelligence.finding_diff import (
     RegistryScopeError,
 )
 from leak_intelligence.finding_outcomes import FindingOutcomeCheck
+from leak_intelligence.merchant_display import (
+    display_merchant_label,
+    is_reliable_merchant_display_name,
+    merchant_display_name_for,
+)
 
 ACTION_TYPES = frozenset(
     {"reviewed", "steps_completed", "dismissed", "not_applicable"}
@@ -93,6 +98,7 @@ _SPENDING_FOCUS = {
     "cash_dependency": "Cash withdrawals",
     "subscription_review": "Subscriptions",
     "debit_order_review": "Debit orders",
+    "repeated_payments_detected": "Repeated payments",
 }
 _ANALYSIS = {
     "supported": (
@@ -129,6 +135,8 @@ class FindingGuidance:
     detection_status: str
     detection_status_label: str
     user_response: str | None
+    source: str | None
+    what_happened: str
     reason: str
     evidence: tuple[tuple[str, str], ...]
     known: tuple[str, ...]
@@ -208,24 +216,29 @@ def build_guidance(
     actions = _owned_actions(finding, history)
     kind = _kind(finding)
     values = _highlight_map(finding)
-    merchant = _named(values, ("merchant_display_name", "merchant_name", "merchant"))
+    merchant = _merchant_label(values)
     category = _named(values, ("category_name", "category")) or _SPENDING_FOCUS.get(
         finding.finding_focus or ""
     )
     fee_focus = _FEE_FOCUS.get(finding.finding_focus or "")
     period = _period(finding)
+    source = _source(merchant, category, fee_focus, kind)
+    title = _specific_title(kind, finding, merchant, category, fee_focus, values)
+    what_happened = _what_happened(kind, finding, merchant, category, fee_focus, values)
     reason, steps = _copy(kind, finding, merchant, category, fee_focus, period, values)
     latest = actions[-1].action_type if actions else None
     return FindingGuidance(
         finding_id=finding.id,
-        title=_LABELS.get(finding.leak_type, "Finding"),
+        title=title,
         detection_status=finding.status,
         detection_status_label=_STATUS_LABELS.get(finding.status, "Recorded"),
         user_response=latest,
+        source=source,
+        what_happened=what_happened,
         reason=reason,
         evidence=_evidence(finding),
-        known=_known(finding, merchant, category, fee_focus, period),
-        uncertain=_uncertain(finding, kind, actions),
+        known=_known(finding, merchant, category, fee_focus, period, source),
+        uncertain=_uncertain(finding, kind, actions, merchant),
         steps=steps,
         actions=actions,
     )
@@ -297,15 +310,21 @@ def _copy(
         )
     if kind == "duplicate":
         count = values.get("matching_transaction_count")
-        observed = (
-            "Two transactions may represent a duplicate payment."
+        amount = values.get("potential_duplicate_amount") or values.get("candidate_amount")
+        observed_date = values.get("observed_date")
+        who = f" at {merchant}" if merchant else ""
+        money = f" of {amount}" if amount else ""
+        when = f" on {observed_date}" if observed_date else ""
+        count_line = (
+            "Two transactions"
             if count == "2"
-            else "A group of transactions may represent a duplicate payment."
+            else (f"{count} transactions" if count else "Matching transactions")
         )
         return (
             (
-                f"{observed} They shared a merchant grouping, amount and calendar day. "
-                "This is a verification step."
+                f"{count_line}{who}{money}{when} shared the same merchant grouping, "
+                "amount and calendar day. This is a verification step only; matching "
+                "details do not prove a duplicate or a recoverable amount."
             ),
             (
                 "Compare the transactions and check whether one is pending or reversed.",
@@ -316,9 +335,18 @@ def _copy(
             ),
         )
     if kind == "recurring":
-        named = f" Merchant: {merchant}." if merchant else ""
+        if merchant:
+            lead = f"A recurring payment pattern was observed at {merchant}."
+        else:
+            lead = (
+                "An unidentified recurring payment pattern was observed. "
+                "The merchant could not be identified reliably from the available evidence."
+            )
+        average = values.get("average_payment") or values.get("average_amount")
+        if average:
+            lead = f"{lead} Average payment: {average}."
         return (
-            f"A recurring payment pattern was observed.{named}",
+            lead,
             (
                 (
                     "Verify whether the recurring payment is still wanted and whether "
@@ -347,14 +375,16 @@ def _copy(
             ),
         )
     if kind == "spending":
-        subject = category or merchant or _LABELS.get(finding.leak_type, "Spending")
+        subject = merchant or category or _LABELS.get(finding.leak_type, "Spending")
+        change = values.get("absolute_change") or values.get("change_amount")
         when = (
             f" The comparison period is {period}."
             if period
             else " A comparison period was not stored."
         )
+        change_line = f" increased by {change}" if change else " was flagged"
         return (
-            f"{subject} was flagged.{when}",
+            f"{subject}{change_line}.{when}",
             (
                 "Review the underlying transactions.",
                 _spending_follow_up(finding),
@@ -393,6 +423,7 @@ def _known(
     category: str | None,
     fee_focus: str | None,
     period: str | None,
+    source: str | None,
 ) -> tuple[str, ...]:
     known = [
         f"Finding type: {_LABELS.get(finding.leak_type, 'Finding')}.",
@@ -402,6 +433,8 @@ def _known(
             "This is not a savings figure."
         ),
     ]
+    if source:
+        known.append(f"Source: {source}.")
     if period:
         known.append(f"Comparison period: {period}.")
     if merchant:
@@ -413,7 +446,12 @@ def _known(
     return tuple(known)
 
 
-def _uncertain(finding: RegistryRow, kind: str, actions: Sequence[FindingAction]) -> tuple[str, ...]:
+def _uncertain(
+    finding: RegistryRow,
+    kind: str,
+    actions: Sequence[FindingAction],
+    merchant: str | None,
+) -> tuple[str, ...]:
     lines = [
         "Your response is stored separately and does not change detection status.",
         _ANALYSIS.get(
@@ -434,7 +472,138 @@ def _uncertain(finding: RegistryRow, kind: str, actions: Sequence[FindingAction]
             "Matching those fields does not establish that the amount is recoverable, "
             "and it is not recovered money."
         )
+    if kind == "recurring" and not merchant:
+        lines.append(
+            "The merchant or recipient could not be identified reliably from the "
+            "available transaction evidence."
+        )
     return tuple(lines)
+
+
+def _source(
+    merchant: str | None,
+    category: str | None,
+    fee_focus: str | None,
+    kind: str,
+) -> str | None:
+    if merchant:
+        return merchant
+    if fee_focus:
+        return fee_focus
+    if category:
+        return category
+    if kind == "recurring":
+        return "Unidentified merchant"
+    if kind == "duplicate":
+        return "Unidentified merchant or recipient"
+    return None
+
+
+def _specific_title(
+    kind: str,
+    finding: RegistryRow,
+    merchant: str | None,
+    category: str | None,
+    fee_focus: str | None,
+    values: dict[str, str],
+) -> str:
+    amount = values.get("average_payment") or values.get("average_amount")
+    duplicate_amount = values.get("potential_duplicate_amount") or values.get(
+        "candidate_amount"
+    )
+    change = values.get("absolute_change") or values.get("change_amount")
+    if kind == "duplicate":
+        if merchant and duplicate_amount:
+            return f"Possible duplicate payment at {merchant} — {duplicate_amount}"
+        if merchant:
+            return f"Possible duplicate payment at {merchant}"
+        return _LABELS.get(finding.leak_type, "Potential duplicate payment")
+    if kind == "recurring":
+        if finding.finding_focus == "repeated_payments_detected":
+            if merchant and amount:
+                return f"Repeated payments detected at {merchant} — {amount} average"
+            if merchant:
+                return f"Repeated payments detected at {merchant}"
+            return "Repeated payments detected"
+        if finding.leak_type == "subscription_leak" and merchant:
+            if amount:
+                return f"{merchant} subscription — {amount} recurring monthly payment"
+            return f"{merchant} subscription"
+        if merchant and amount:
+            return f"{merchant} — {amount} recurring payment"
+        if merchant:
+            return f"{merchant} recurring payment"
+        return "Unidentified recurring payment"
+    if kind == "fees":
+        if fee_focus:
+            return fee_focus[0].upper() + fee_focus[1:]
+        return _LABELS.get(finding.leak_type, "Bank fee pattern")
+    if kind == "spending":
+        subject = merchant or category
+        if subject and change:
+            return f"{subject} spending increased by {change}"
+        if subject:
+            return f"{subject} spending increased"
+        return _LABELS.get(finding.leak_type, "Spending increase")
+    return _LABELS.get(finding.leak_type, "Finding")
+
+
+def _what_happened(
+    kind: str,
+    finding: RegistryRow,
+    merchant: str | None,
+    category: str | None,
+    fee_focus: str | None,
+    values: dict[str, str],
+) -> str:
+    if kind == "duplicate":
+        count = values.get("matching_transaction_count") or "matching"
+        amount = values.get("potential_duplicate_amount") or values.get("candidate_amount")
+        who = merchant or "an unidentified merchant or recipient"
+        money = f" for {amount}" if amount else ""
+        return (
+            f"{count} same-day transactions at {who}{money} matched on merchant "
+            "grouping, amount and date."
+        )
+    if kind == "recurring":
+        who = merchant or "an unidentified merchant"
+        amount = values.get("average_payment") or values.get("average_amount")
+        money = f" averaging {amount}" if amount else ""
+        if finding.finding_focus == "repeated_payments_detected":
+            return (
+                f"Repeated payments were detected at {who}{money}. This is a review "
+                "cue only and does not confirm a subscription or bill."
+            )
+        return f"A recurring payment pattern was observed at {who}{money}."
+    if kind == "fees":
+        focus = fee_focus or "bank fee activity"
+        label = focus[0].upper() + focus[1:]
+        return f"{label} — observed in the analysed period."
+    if kind == "spending":
+        subject = merchant or category or "Spending"
+        change = values.get("absolute_change") or values.get("change_amount")
+        if change:
+            return (
+                f"{subject} spending increased by {change} compared with the "
+                "previous period."
+            )
+        return f"{subject} spending increased compared with the previous period."
+    return _LABELS.get(finding.leak_type, "A spending pattern was observed.")
+
+
+def _merchant_label(values: dict[str, str]) -> str | None:
+    named = _named(
+        values,
+        ("merchant_display_name", "merchant_name", "merchant", "merchant_key"),
+    )
+    if named:
+        return named
+    raw = values.get("merchant_key")
+    if not raw:
+        return None
+    if not is_reliable_merchant_display_name(raw):
+        return None
+    return merchant_display_name_for(raw) or display_merchant_label(raw)
 
 
 def _evidence(finding: RegistryRow) -> tuple[tuple[str, str], ...]:
@@ -485,8 +654,20 @@ def _safe_highlight(
 def _named(values: dict[str, str], keys: tuple[str, ...]) -> str | None:
     for key in keys:
         value = values.get(key)
-        if value and _SAFE_LABEL.fullmatch(value):
-            return value
+        if not value:
+            continue
+        cleaned = value.strip()
+        if key == "merchant_key" and is_reliable_merchant_display_name(cleaned):
+            label = merchant_display_name_for(cleaned) or display_merchant_label(cleaned)
+            if label and _SAFE_LABEL.fullmatch(label):
+                return label
+        if _SAFE_LABEL.fullmatch(cleaned):
+            if key in {"merchant_key", "merchant_display_name", "merchant_name", "merchant"}:
+                if is_reliable_merchant_display_name(cleaned):
+                    return merchant_display_name_for(cleaned) or display_merchant_label(
+                        cleaned
+                    )
+            return cleaned
     return None
 
 

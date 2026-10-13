@@ -123,13 +123,23 @@ async def extraction_preview(
     file: UploadFile = File(...),
     password: str | None = Form(default=None),
     authorization: str | None = Header(default=None),
+    x_tracepay_pdf_password: str | None = Header(default=None, alias="X-TracePay-Pdf-Password"),
     _user_id: str = Depends(require_supabase_user),
 ) -> dict[str, object]:
     """Extract and validate a PDF without writing financial data to the database."""
-    enforce_rate_limit(f"pdf-user:{_user_id}", 8, 15 * 60)
+    # Allow password retries + re-uploads without locking the user out quickly.
+    enforce_rate_limit(f"pdf-user:{_user_id}", 20, 15 * 60)
     _reject_oversized_content_length(request)
     filename = file.filename or "statement"
-    logger.info("extraction_started filename=%s content_type=%s", filename, file.content_type)
+    # Header backup: some RN FormData builds drop string fields after the file part.
+    unlock_password = (password or x_tracepay_pdf_password or "").strip() or None
+    logger.info(
+        "extraction_started filename=%s content_type=%s password_present=%s password_len=%s",
+        filename,
+        file.content_type,
+        unlock_password is not None,
+        len(unlock_password) if unlock_password else 0,
+    )
     if not filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=415, detail="Only PDF statements are supported.")
 
@@ -151,7 +161,7 @@ async def extraction_preview(
                 content,
                 filename,
                 _user_id,
-                password,
+                unlock_password,
                 category_names,
                 access_token,
             )

@@ -8,6 +8,13 @@ import { getSupabase } from "../../lib/supabase";
 import { buildTransactionDedupeKey } from "../transactions/transaction.dedupe";
 import { hashStatementContent, readPdfBytes } from "../transactions/statement-file";
 import {
+  assertExtractedBankMatchesSelected,
+  assertKnownStatementBankKey,
+  BANK_ALREADY_UPLOADED_MESSAGE,
+  bankSlotUniqueViolationMessage,
+  normalizeStatementBankKey,
+} from "./statement-bank";
+import {
   STATEMENT_IMPORT_STAGE_RATIO,
   type StatementImportProgress,
   type StatementImportStage,
@@ -312,17 +319,23 @@ function postPdfToProcessor(
     };
 
     const form = new FormData();
+    const trimmedPassword = password?.trim() ?? "";
+    // Append password before the file — some Android FormData builds drop
+    // trailing string parts after a { uri } file part.
+    if (trimmedPassword) {
+      form.append("password", trimmedPassword);
+    }
     form.append("file", {
       uri: file.uri,
       name: file.name,
       type: "application/pdf",
     } as unknown as Blob);
-    if (password?.trim()) {
-      form.append("password", password);
-    }
 
     request.open("POST", url);
     request.setRequestHeader("Authorization", `Bearer ${accessToken}`);
+    if (trimmedPassword) {
+      request.setRequestHeader("X-TracePay-Pdf-Password", trimmedPassword);
+    }
     request.send(form);
   });
 }
@@ -372,6 +385,84 @@ async function failAndCleanup(
   await supabase.from("transactions").delete().eq("statement_id", statementId);
   await supabase.storage.from("statements").remove([filePath]);
   throw new Error(message);
+}
+
+/** Banks that already hold an active statement slot for the signed-in user. */
+export async function listOccupiedStatementBankKeys(): Promise<string[]> {
+  const supabase = getSupabase();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData.user) {
+    return [];
+  }
+  const { data, error } = await supabase
+    .from("statement_imports")
+    .select("bank_key")
+    .eq("user_id", userData.user.id)
+    .eq("bank_slot_active", true)
+    .not("bank_key", "is", null);
+  if (error) {
+    console.warn("[TracePay][statement] occupied_banks_lookup_failed", {
+      message: error.message,
+    });
+    return [];
+  }
+  const keys = new Set<string>();
+  for (const row of data ?? []) {
+    if (typeof row.bank_key === "string" && row.bank_key) {
+      keys.add(row.bank_key);
+    }
+  }
+  return [...keys];
+}
+
+export function isStatementBankOccupied(
+  institution: string | null | undefined,
+  occupiedKeys: ReadonlyArray<string>,
+): boolean {
+  const key = normalizeStatementBankKey(institution);
+  if (!key) return false;
+  return occupiedKeys.includes(key);
+}
+
+async function releaseStaleBankSlots(
+  bankKey: string,
+  keepId: string | null,
+): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc("release_stale_statement_bank_slots", {
+    p_bank_key: bankKey,
+    p_keep_id: keepId,
+  });
+  if (error) {
+    console.warn("[TracePay][statement] release_stale_bank_slots_failed", {
+      message: error.message,
+      bankKey,
+    });
+  }
+}
+
+async function assertBankSlotAvailable(
+  userId: string,
+  bankKey: string,
+  excludeStatementId: string | null,
+): Promise<void> {
+  const supabase = getSupabase();
+  let query = supabase
+    .from("statement_imports")
+    .select("id, status, file_name")
+    .eq("user_id", userId)
+    .eq("bank_key", bankKey)
+    .eq("bank_slot_active", true);
+  if (excludeStatementId) {
+    query = query.neq("id", excludeStatementId);
+  }
+  const { data, error } = await query.maybeSingle();
+  if (error) {
+    throw new Error("Existing statements could not be checked for this bank.");
+  }
+  if (data) {
+    throw new Error(BANK_ALREADY_UPLOADED_MESSAGE);
+  }
 }
 
 async function assertStatementPeriodNotDuplicate(
@@ -472,6 +563,11 @@ async function persistPreview(
     accountId: account.id,
     accountName: account.name,
   });
+
+  assertExtractedBankMatchesSelected(
+    account.institution,
+    preview.statement.bank,
+  );
 
   await assertStatementPeriodNotDuplicate(
     account.id,
@@ -645,7 +741,8 @@ async function persistPreview(
   if (updateError) {
     if (updateError.code === "23505") {
       throw new Error(
-        "A statement for this account and date range is already imported.",
+        bankSlotUniqueViolationMessage(updateError.message) ??
+          "A statement for this account and date range is already imported.",
       );
     }
     throw new Error("The statement could not be marked as processed.");
@@ -727,7 +824,7 @@ export async function preparePdfStatement(
     throw new Error("Sign in before importing a statement.");
   }
 
-  const account = await requireAccountForImport(options.accountId);
+  let account = await requireAccountForImport(options.accountId);
 
   const id = options.resume?.statementId ?? Crypto.randomUUID();
   const filePath =
@@ -735,6 +832,41 @@ export async function preparePdfStatement(
   const isResume = Boolean(options.resume?.statementId && options.resume.filePath);
   let recordCreated = isResume;
   try {
+    // Resume must persist against the statement's original account or RLS rejects inserts.
+    if (isResume && options.resume) {
+      const { data: existingStatement, error: resumeLookupError } = await supabase
+        .from("statement_imports")
+        .select("account_id")
+        .eq("id", options.resume.statementId)
+        .eq("user_id", userData.user.id)
+        .maybeSingle();
+      if (resumeLookupError) {
+        throw new Error("Could not resume this statement import.");
+      }
+      const resumeAccountId =
+        typeof existingStatement?.account_id === "string"
+          ? existingStatement.account_id
+          : null;
+      if (!resumeAccountId) {
+        throw new Error("This statement import is no longer available. Choose the PDF again.");
+      }
+      if (resumeAccountId !== account.id) {
+        account = await requireAccountForImport(resumeAccountId);
+        console.info("[TracePay][statement] resume_account_rebound", {
+          statementId: options.resume.statementId,
+          accountId: account.id,
+        });
+      }
+    }
+
+    const bankKey = assertKnownStatementBankKey(account.institution);
+    await releaseStaleBankSlots(bankKey, isResume ? id : null);
+    await assertBankSlotAvailable(
+      userData.user.id,
+      bankKey,
+      isResume ? id : null,
+    );
+
     const fileBytes = await readPdfBytes(asset.uri);
     const fileSize = asset.size ?? fileBytes.byteLength;
     if (fileSize <= 0 || fileSize > MAX_FILE_SIZE) {
@@ -784,10 +916,14 @@ export async function preparePdfStatement(
           content_hash: contentHash,
           format: "pdf",
           status: "uploaded",
+          bank_key: bankKey,
         });
       if (importError) {
         await supabase.storage.from("statements").remove([filePath]);
-        throw new Error("The statement record could not be created.");
+        throw new Error(
+          bankSlotUniqueViolationMessage(importError.message) ??
+            "The statement record could not be created.",
+        );
       }
       recordCreated = true;
     } else {

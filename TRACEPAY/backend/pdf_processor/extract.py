@@ -192,9 +192,80 @@ def _render_pdf_pages(content: bytes) -> list[Any]:
         document.close()
 
 
-def _decrypt_if_needed(content: bytes, password: str | None) -> bytes:
+def _password_candidates(password: str) -> list[str]:
+    """Build unlock attempts (banks differ: full ID vs last 6 digits, spaces, etc.)."""
+    raw = password.strip()
+    candidates: list[str] = []
+    if raw:
+        candidates.append(raw)
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if digits and digits not in candidates:
+        candidates.append(digits)
+    # Full SA ID pasted → also try Standard Bank's last-6 convention.
+    if len(digits) == 13:
+        last_six = digits[-6:]
+        if last_six not in candidates:
+            candidates.append(last_six)
+    return candidates
+
+
+def _decrypt_with_pikepdf(content: bytes, candidates: list[str]) -> bytes | None:
+    try:
+        import pikepdf
+    except ImportError:
+        return None
+
+    saw_password_error = False
+    for candidate in candidates:
+        try:
+            with pikepdf.open(io.BytesIO(content), password=candidate) as pdf:
+                output = io.BytesIO()
+                pdf.save(output)
+                return output.getvalue()
+        except pikepdf.PasswordError:
+            saw_password_error = True
+            continue
+        except Exception as error:
+            logger.warning("pikepdf_decrypt_failed error_type=%s", type(error).__name__)
+            return None
+    if saw_password_error:
+        return None
+    return None
+
+
+def _decrypt_with_pypdf(content: bytes, candidates: list[str]) -> bytes | None:
     try:
         from pypdf import PdfReader, PdfWriter
+    except ImportError as error:
+        raise ExtractionError("pypdf is not installed.") from error
+
+    try:
+        probe = PdfReader(io.BytesIO(content), strict=False)
+    except Exception as error:
+        raise ExtractionError("The PDF could not be opened.") from error
+    if not probe.is_encrypted:
+        return content
+
+    for candidate in candidates:
+        try:
+            reader = PdfReader(io.BytesIO(content), strict=False)
+            decrypted = reader.decrypt(candidate)
+        except Exception:
+            continue
+        if not decrypted:
+            continue
+        output = io.BytesIO()
+        writer = PdfWriter()
+        for page in reader.pages:
+            writer.add_page(page)
+        writer.write(output)
+        return output.getvalue()
+    return None
+
+
+def _decrypt_if_needed(content: bytes, password: str | None) -> bytes:
+    try:
+        from pypdf import PdfReader
     except ImportError as error:
         raise ExtractionError("pypdf is not installed.") from error
 
@@ -204,18 +275,24 @@ def _decrypt_if_needed(content: bytes, password: str | None) -> bytes:
         raise ExtractionError("The PDF could not be opened.") from error
     if not reader.is_encrypted:
         return content
-    if not password:
-        raise PasswordRequiredError("This PDF is password protected. Please enter the password to continue.")
-    try:
-        decrypted = reader.decrypt(password)
-    except Exception as error:
-        raise InvalidPasswordError("The PDF password is incorrect. Please try again.") from error
-    if not decrypted:
-        raise InvalidPasswordError("The PDF password is incorrect. Please try again.")
+    if not password or not password.strip():
+        raise PasswordRequiredError(
+            "This PDF is password protected. Please enter the password to continue."
+        )
 
-    output = io.BytesIO()
-    writer = PdfWriter()
-    for page in reader.pages:
-        writer.add_page(page)
-    writer.write(output)
-    return output.getvalue()
+    candidates = _password_candidates(password)
+    logger.info(
+        "pdf_decrypt_attempt candidates=%s password_len=%s",
+        len(candidates),
+        len(password.strip()),
+    )
+
+    decrypted = _decrypt_with_pikepdf(content, candidates)
+    if decrypted is not None:
+        return decrypted
+
+    decrypted = _decrypt_with_pypdf(content, candidates)
+    if decrypted is not None:
+        return decrypted
+
+    raise InvalidPasswordError("The PDF password is incorrect. Please try again.")

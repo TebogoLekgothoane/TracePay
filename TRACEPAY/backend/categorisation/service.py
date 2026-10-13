@@ -15,8 +15,13 @@ from categorisation.rules import PURCHASE_REVERSAL_RULE
 from categorisation.constants import FALLBACK_CATEGORY, FALLBACK_CONFIDENCE
 from categorisation.merchant_memory import MerchantMemory, fetch_merchant_memory
 from categorisation.models import CategorisationResult
-from categorisation.normalize import normalize_description, normalize_for_matching
+from categorisation.normalize import (
+    is_bank_boilerplate_label,
+    normalize_description,
+    normalize_for_matching,
+)
 from categorisation.resolve import ensure_complete_classification, resolve_category_name
+from categorisation.source_identity import identify_source, trusted_merchant_for_memory
 
 logger = logging.getLogger("tracepay.categorisation")
 BATCH_SIZE = 50
@@ -98,21 +103,36 @@ def categorise_batch_with_metrics(
             _log_classification(item.transaction_id, deterministic, "deterministic")
             continue
         if deterministic.transaction_class != "unknown" or deterministic.category_name:
+            identity = identify_source(item.description)
+            merchant_name = (
+                identity.merchant_name
+                if identity.source_type == "merchant"
+                else None
+            )
             resolved = ensure_complete_classification(
-                deterministic,
+                deterministic.model_copy(update={"merchant_name": merchant_name}),
                 catalog,
-                merchant_name=deterministic.merchant_name,
+                merchant_name=merchant_name,
             )
             results[item.transaction_id] = resolved
             source_by_id[item.transaction_id] = "deterministic"
             deterministic_matches += 1
-            memory.remember(resolved.merchant_name, resolved)
+            trusted = trusted_merchant_for_memory(identity)
+            memory.remember(trusted, resolved)
             _log_classification(item.transaction_id, resolved, "deterministic")
             continue
 
-        remembered = memory.get(deterministic.merchant_name) or memory.get(
-            normalize_for_matching(item.description)
-        )
+        remembered = None
+        identity = identify_source(item.description)
+        trusted_lookup = trusted_merchant_for_memory(identity)
+        if trusted_lookup:
+            remembered = memory.get(trusted_lookup)
+        if remembered is None and deterministic.merchant_name and not is_bank_boilerplate_label(
+            deterministic.merchant_name
+        ):
+            remembered = memory.get(deterministic.merchant_name)
+        if remembered is None:
+            remembered = memory.get(normalize_for_matching(item.description))
         if remembered is not None and remembered.category_name not in {None, FALLBACK_CATEGORY}:
             remembered_result = ensure_complete_classification(
                 remembered.model_copy(
@@ -168,14 +188,17 @@ def categorise_batch_with_metrics(
     ai_requests = 0
     invalid_ai_results = 0
     ai_enabled = settings.ai_categorisation_enabled
-    has_provider_key = bool(settings.gemini_api_key.strip() or settings.openai_api_key.strip())
+    gemini_loaded, openai_loaded, xai_loaded = settings.categorisation_provider_keys()
+    has_provider_key = gemini_loaded or openai_loaded or xai_loaded
 
     if not ai_enabled:
         logger.info("[AI] skipped reason=disabled config=AI_CATEGORISATION_ENABLED")
     elif not unknown_items:
         logger.info("[AI] requests=0 reason=no_candidates")
     elif not has_provider_key:
-        logger.warning("[AI] requests=0 reason=missing_api_keys expected_env=GEMINI_API_KEY|OPENAI_API_KEY")
+        logger.warning(
+            "[AI] requests=0 reason=missing_api_keys expected_env=GEMINI_API_KEY|OPENAI_API_KEY|XAI_API_KEY"
+        )
     elif not catalog:
         logger.warning("[AI] requests=0 reason=empty_live_category_catalog")
     else:
@@ -210,18 +233,40 @@ def categorise_batch_with_metrics(
         )
         ai_result = ai_result_by_pattern.get(pattern)
         if ai_result is not None:
+            identity = identify_source(item.description)
+            deterministic_merchant = (
+                identity.merchant_name if identity.source_type == "merchant" else None
+            )
+            ai_merchant = ai_result.merchant_name
+            if ai_merchant and is_bank_boilerplate_label(ai_merchant):
+                ai_merchant = None
+            if identity.source_type != "merchant":
+                ai_merchant = None
             resolved = ensure_complete_classification(
-                ai_result,
+                ai_result.model_copy(update={"merchant_name": ai_merchant}),
                 catalog,
-                merchant_name=current.merchant_name or ai_result.merchant_name,
+                merchant_name=deterministic_merchant or ai_merchant,
             )
             results[item.transaction_id] = resolved
             source_by_id[item.transaction_id] = "ai"
-            memory.remember(resolved.merchant_name, resolved)
+            trusted = trusted_merchant_for_memory(identity)
+            if trusted:
+                memory.remember(trusted, resolved)
             _log_classification(item.transaction_id, resolved, "ai")
             continue
 
-        fallback = _fallback_other(current, catalog)
+        fallback = _fallback_other(
+            current.model_copy(
+                update={
+                    "merchant_name": (
+                        current.merchant_name
+                        if identify_source(item.description).source_type == "merchant"
+                        else None
+                    )
+                }
+            ),
+            catalog,
+        )
         results[item.transaction_id] = fallback
         source_by_id[item.transaction_id] = "fallback"
         fallback_classifications += 1

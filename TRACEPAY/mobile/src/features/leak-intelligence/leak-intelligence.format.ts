@@ -53,6 +53,8 @@ const PERCENT_KEYS = new Set([
 const SENSITIVE_EVIDENCE_KEYS = /(?:account|card|phone|reference|description|transaction_id|merchant_key|subject|token|fingerprint)/i;
 
 const CARD_PURCHASE_BOILERPLATE = /^(?:purchase\s+)?with\s+card\s+at(?:\s+epos(?:\s+at)?)?$/i;
+const BANK_BOILERPLATE_LABEL =
+  /^(?:purchase\s+)?with\s+card\s+at(?:\s+epos(?:\s+at)?)?$|^(?:recurring\s+payment(?:\s+from)?|money\s+transferred(?:\s+(?:in|out))?(?:\s+(?:for|from))?)(?:\s+\w{1,2})?$/i;
 
 export const DUPLICATE_MATCH_DISCLAIMER =
   "These transactions match on merchant, amount, and date. This is not a confirmed duplicate and not a guaranteed recovery.";
@@ -174,13 +176,21 @@ export function isCardPurchaseBoilerplate(value: string): boolean {
   return CARD_PURCHASE_BOILERPLATE.test(value.trim());
 }
 
+export function isBankBoilerplateLabel(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return true;
+  }
+  return BANK_BOILERPLATE_LABEL.test(trimmed);
+}
+
 export function merchantDisplayName(evidence: Record<string, unknown>): string | null {
   const value = evidence.merchant_display_name;
   if (typeof value !== "string") {
     return null;
   }
   const trimmed = value.trim();
-  if (!trimmed || isCardPurchaseBoilerplate(trimmed)) {
+  if (!trimmed || isCardPurchaseBoilerplate(trimmed) || isBankBoilerplateLabel(trimmed)) {
     return null;
   }
   return trimmed;

@@ -161,7 +161,8 @@ def test_combined_statement_categorisation_and_purchase_spending(statement) -> N
         Decimal("778.80"),
     ]
     assert snapshot.fees.bank_fee_total == Decimal("355")
-    assert snapshot.fees.account_fee_total == Decimal("150")
+    # Monthly account fees (150) plus typed service charges (45).
+    assert snapshot.fees.account_fee_total == Decimal("195")
     assert snapshot.fees.foreign_transaction_fee_total == Decimal("160")
     assert [month.foreign_transaction_fee_total for month in snapshot.months] == [
         Decimal("20"),

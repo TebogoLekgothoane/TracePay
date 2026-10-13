@@ -93,13 +93,19 @@ def _money(value: Decimal) -> str:
 
 
 def _public_title(leak_type: str, fallback: str) -> str:
-    """Reports remain safe to share when merchant grouping used description fallback."""
+    """Prefer the detector title when it is already merchant-safe.
+
+    Fall back to type-level generics only when the detector title is empty.
+    """
+    cleaned = fallback.strip()
+    if cleaned:
+        return cleaned
     generic = {
-        "subscription_leak": "Potential subscription payment",
-        "recurring_payment_leak": "Potential recurring payment",
-        "unknown_recurring_payment": "Potential recurring payment",
+        "subscription_leak": "Unidentified subscription payment",
+        "recurring_payment_leak": "Unidentified recurring payment",
+        "unknown_recurring_payment": "Unidentified recurring payment",
         "duplicate_payment_leak": "Potential duplicate payment requires verification",
         "bank_fee_leak": "Potential recurring banking fee burden",
         "spending_escalation_leak": "Potential spending escalation",
     }
-    return generic.get(leak_type, fallback)
+    return generic.get(leak_type, "Potential spending pattern")

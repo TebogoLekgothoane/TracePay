@@ -143,9 +143,10 @@ def test_service_charges_without_a_subtype_stay_generic() -> None:
 
     assert snapshot.fees.bank_fee_total == Decimal("120")
     assert snapshot.fees.foreign_transaction_fee_total is None
-    assert snapshot.fees.account_fee_total is None
+    assert snapshot.fees.account_fee_total == Decimal("120")
     assert len(fee_leaks) == 1
     assert fee_leaks[0].evidence["finding_focus"] == "monthly_banking_fee_trend"
+    assert fee_leaks[0].evidence["fee_type_breakdown"]["service_charges"] == Decimal("120")
     assert "spending_escalation_leak" not in {item.leak_type for item in leaks.leaks}
 
 

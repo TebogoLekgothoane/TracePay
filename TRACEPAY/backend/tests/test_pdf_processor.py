@@ -114,6 +114,39 @@ def test_password_protected_pdf_requires_and_accepts_password() -> None:
     assert 0 <= raw.extraction_confidence <= 1
 
 
+def test_password_candidates_include_sa_id_last_six() -> None:
+    from pdf_processor.extract import _password_candidates
+
+    assert _password_candidates(" 9001015800087 ") == [
+        "9001015800087",
+        "800087",
+    ]
+    assert _password_candidates("800087") == ["800087"]
+    assert _password_candidates("90 0101 5800 087") == [
+        "90 0101 5800 087",
+        "9001015800087",
+        "800087",
+    ]
+
+
+def test_password_protected_pdf_accepts_full_sa_id_when_last_six_is_password() -> None:
+    source = io.BytesIO()
+    canvas = Canvas(source)
+    canvas.drawString(50, 750, "SBSA statement")
+    canvas.save()
+
+    encrypted = io.BytesIO()
+    reader = PdfReader(io.BytesIO(source.getvalue()))
+    writer = PdfWriter()
+    writer.append_pages_from_reader(reader)
+    writer.encrypt("800087")
+    writer.write(encrypted)
+    content = encrypted.getvalue()
+
+    raw, _, _ = extract_layers(content, "9001015800087")
+    assert raw.pages == 1
+
+
 def test_plural_bank_statement_columns_are_normalized() -> None:
     debit = normalize_row(
         ["18/09/2026", "WOOLWORTHS", "", "", "450.00", "12550.00"],

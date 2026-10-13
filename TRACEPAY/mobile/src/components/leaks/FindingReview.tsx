@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertCircle,
   Ban,
@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   ChevronLeft,
   Eye,
-  MoreHorizontal,
   X,
 } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
@@ -27,6 +26,10 @@ import { COLORS, withAlpha } from "../../theme/colors";
 import { BrandLogo } from "../ui/BrandLogo";
 import { BridgedTextField } from "../ui/BridgedTextField";
 import { Button } from "../ui/Button";
+import {
+  DocumentActionsMenu,
+  type DocumentActionsMenuAction,
+} from "../ui/DocumentActionsMenu";
 import { IconButton } from "../ui/IconButton";
 import { resolveMarkColor } from "./LeakFlowShell";
 import { ReviewIconTile, ReviewStatusBadge, reviewIconColor, statusColor } from "./ReviewVisuals";
@@ -66,6 +69,9 @@ export type FindingReviewProps = {
   onOpenGuide?: () => void;
   historyExtra?: ReactNode;
   guidanceExtra?: ReactNode;
+  /** Native kebab menu actions (iOS + Android). */
+  menuActions?: DocumentActionsMenuAction[];
+  /** @deprecated Prefer `menuActions`. Kept for single-action callers. */
   onInfo?: () => void;
 };
 
@@ -89,16 +95,35 @@ export function FindingReview(props: FindingReviewProps) {
     router.back();
   };
 
+  const menuActions = useMemo((): DocumentActionsMenuAction[] => {
+    if (props.menuActions && props.menuActions.length > 0) {
+      return props.menuActions;
+    }
+    if (props.onInfo) {
+      return [
+        {
+          action: "info",
+          label: "How we calculate",
+          callback: props.onInfo,
+        },
+      ];
+    }
+    return [];
+  }, [props.menuActions, props.onInfo]);
+
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <View className="flex-row items-center justify-between px-5 pt-1">
         <IconButton accessibilityLabel="Go back" variant="ghost" onPress={back}>
           <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
         </IconButton>
-        {phase === "detail" && props.onInfo ? (
-          <IconButton accessibilityLabel="More about this finding" variant="ghost" onPress={props.onInfo}>
-            <MoreHorizontal color={palette.foreground} size={22} strokeWidth={2} />
-          </IconButton>
+        {phase === "detail" && menuActions.length > 0 ? (
+          <DocumentActionsMenu
+            actions={menuActions}
+            foregroundColor={palette.foreground}
+            mutedColor={palette.mutedForeground}
+            size={40}
+          />
         ) : (
           <View className="h-10 w-10" />
         )}

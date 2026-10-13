@@ -24,6 +24,8 @@ export type TransactionRow = {
   is_duplicate: boolean;
   category_id: string | null;
   category_source: CategorySource;
+  /** Merchant / brand from import rules + AI when available. */
+  merchantName: string | null;
   categories: { name: string } | { name: string }[] | null;
   account: TransactionAccount | null;
   /** Transaction time when the source provides one. Import time is not a transaction time. */

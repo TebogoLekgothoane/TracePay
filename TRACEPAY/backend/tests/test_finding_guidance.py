@@ -135,7 +135,7 @@ def test_notes_and_evidence_are_sanitised() -> None:
         )
     )
     rendered = " ".join(value for _label, value in guidance.evidence)
-    assert "WOOLWORTHS" in rendered
+    assert "Woolworths" in rendered or "WOOLWORTHS" in rendered
     assert "4111111111111111" not in rendered
     assert "123456789012" not in rendered
     assert "PURCHASE" not in rendered
@@ -170,10 +170,16 @@ def test_guidance_for_each_finding_type() -> None:
             evidence_highlights=(("category_name", "Category", "Groceries"),),
         )
     )
-    assert "WOOLWORTHS" in recurring.reason
+    assert "Woolworths" in recurring.reason
+    assert recurring.source == "Woolworths"
+    assert "Woolworths" in recurring.title
+    assert "Woolworths" in recurring.what_happened
     assert any("still wanted" in step for step in recurring.steps)
     assert any("contact the merchant or your bank" in step for step in recurring.steps)
-    assert "Two transactions may represent a duplicate payment." in duplicate.reason
+    assert "Two transactions" in duplicate.reason
+    assert "confirmed duplicate" not in duplicate.reason.lower()
+    assert "guaranteed recovery" not in duplicate.reason.lower()
+    assert "do not prove a duplicate" in duplicate.reason.lower()
     assert any("pending or reversed" in step for step in duplicate.steps)
     assert "SMS banking fees" in fees.reason
     assert any("fee schedule" in step for step in fees.steps)

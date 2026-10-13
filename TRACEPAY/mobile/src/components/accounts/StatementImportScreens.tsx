@@ -25,9 +25,9 @@ import {
   type StatementImportStage,
 } from "../../features/statement-import/statement-import.progress";
 import { COLORS } from "../../theme/colors";
-import { BridgedTextField } from "../ui/BridgedTextField";
 import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
+import { PasswordInput } from "../ui/PasswordInput";
 
 const TICK_MS = 400;
 
@@ -359,7 +359,10 @@ type PasswordProps = {
   fileName: string;
   bankName?: string | null;
   password: string;
-  passwordHint: string | null;
+  /** Bank-specific format tip (always shown when known). */
+  formatTip: string | null;
+  /** Shown after a failed unlock attempt. */
+  passwordError: string | null;
   busy: boolean;
   onPasswordChange: (value: string) => void;
   onUnlock: () => void;
@@ -371,7 +374,8 @@ export function StatementPasswordScreen({
   fileName,
   bankName,
   password,
-  passwordHint,
+  formatTip,
+  passwordError,
   busy,
   onPasswordChange,
   onUnlock,
@@ -380,6 +384,7 @@ export function StatementPasswordScreen({
 }: PasswordProps) {
   const palette = usePalette();
   const canUnlock = password.trim().length > 0 && !busy;
+  const hasError = Boolean(passwordError);
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
@@ -401,7 +406,7 @@ export function StatementPasswordScreen({
                 </View>
               </View>
               <Text className="mt-5 text-center text-[24px] font-bold tracking-[-0.4px] text-foreground">
-                Password required
+                {hasError ? "Incorrect password" : "Password required"}
               </Text>
               <Text className="mt-2 max-w-[320px] text-center text-[14px] leading-5 text-muted-foreground">
                 {bankName
@@ -425,31 +430,22 @@ export function StatementPasswordScreen({
             </View>
 
             <View className="mt-6">
-              <Text className="mb-2 text-[13px] font-semibold text-foreground">PDF password</Text>
-              <View className="overflow-hidden rounded-2xl border border-input-border bg-input">
-                <BridgedTextField
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!busy}
-                  hostStyle={{ height: 52 }}
-                  inputStyle={{
-                    height: 52,
-                    paddingHorizontal: 16,
-                    backgroundColor: "transparent",
-                    borderWidth: 0,
-                  }}
-                  placeholder="Enter the PDF password"
-                  returnKeyType="go"
-                  secureTextEntry
-                  value={password}
-                  onChangeText={onPasswordChange}
-                  onSubmitEditing={() => {
-                    if (canUnlock) onUnlock();
-                  }}
-                />
-              </View>
-              {passwordHint ? (
-                <Text className="mt-2 text-[13px] text-muted-foreground">{passwordHint}</Text>
+              <PasswordInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!busy}
+                error={passwordError}
+                label="PDF password"
+                placeholder="Enter the PDF password"
+                returnKeyType="go"
+                value={password}
+                onChangeText={onPasswordChange}
+                onSubmitEditing={() => {
+                  if (canUnlock) onUnlock();
+                }}
+              />
+              {formatTip ? (
+                <Text className="mt-2 text-[13px] leading-5 text-muted-foreground">{formatTip}</Text>
               ) : null}
             </View>
           </View>

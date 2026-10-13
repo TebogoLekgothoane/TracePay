@@ -35,8 +35,8 @@ const INNER_WIDTH = BAR_WIDTH - PAD_X * 2;
 const SLOT = INNER_WIDTH / TAB_ITEMS.length;
 const BLOB = 44;
 
-const GRADIENT_LIGHT = ["#F651C2", "#7955E7", "#327DFC"] as const;
-const GRADIENT_DARK = ["#F651C2", "#A78BFA", "#327DFC"] as const;
+const GRADIENT_LIGHT = ["#F651C2", "#8B5CF6", "#327DFC"] as const;
+const GRADIENT_DARK = ["#F651C2", "#9A6CFF", "#327DFC"] as const;
 
 export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
   const insets = useSafeAreaInsets();
@@ -108,8 +108,8 @@ export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
               height: BLOB,
               borderRadius: BLOB / 2,
               backgroundColor: isDark
-                ? "rgba(167, 139, 250, 0.14)"
-                : "rgba(121, 85, 231, 0.1)",
+                ? "rgba(154, 108, 255, 0.14)"
+                : "rgba(139, 92, 246, 0.1)",
             },
             blobStyle,
           ]}

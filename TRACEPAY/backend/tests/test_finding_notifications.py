@@ -176,7 +176,7 @@ def test_notification_copy_drops_sensitive_evidence() -> None:
     assert "guaranteed recovery" not in combined.lower()
     assert "you saved" not in combined.lower()
     assert "not money already saved" in notice.body
-    assert "WOOLWORTHS" in notice.body
+    assert "Woolworths" in notice.body
 
 
 def test_notification_migration_is_owner_scoped() -> None:

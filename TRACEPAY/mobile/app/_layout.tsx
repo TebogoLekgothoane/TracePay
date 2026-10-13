@@ -2,11 +2,16 @@ import "../src/theme/global.css";
 
 import { BottomSheetModalProvider } from "@expo/ui/community/bottom-sheet";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Stack, useRouter, useSegments } from "expo-router";
+import {
+  Stack,
+  useRootNavigationState,
+  useRouter,
+  useSegments,
+} from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useColorScheme } from "nativewind";
-import { View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import {
@@ -42,17 +47,27 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView
-      className={`flex-1 bg-background ${scheme === "dark" ? "dark" : ""}`}
-      style={{ flex: 1, backgroundColor: splashBackground }}
+      style={[styles.root, { backgroundColor: splashBackground }]}
     >
-      <BottomSheetModalProvider>
-        <AppLockProvider>
-          <RootNavigator colorScheme={scheme} />
-        </AppLockProvider>
-      </BottomSheetModalProvider>
+      <View
+        className={scheme === "dark" ? "dark" : undefined}
+        style={[styles.root, { backgroundColor: splashBackground }]}
+      >
+        <BottomSheetModalProvider>
+          <AppLockProvider>
+            <RootNavigator colorScheme={scheme} />
+          </AppLockProvider>
+        </BottomSheetModalProvider>
+      </View>
     </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+});
 
 function RootNavigator({
   colorScheme,
@@ -63,6 +78,8 @@ function RootNavigator({
   const [clientResetDone, setClientResetDone] = useState(false);
   const [hasSession, setHasSession] = useState<boolean | null>(null);
   const { clearDeviceLock, hasPin, isHydrated, isLocked, lockApp } = useAppLock();
+  const navigationState = useRootNavigationState();
+  const navigationReady = Boolean(navigationState?.key);
   const router = useRouter();
   const segments = useSegments();
   const palette = COLORS[colorScheme];
@@ -197,6 +214,7 @@ function RootNavigator({
   useEffect(() => {
     if (
       showAnimatedSplash ||
+      !navigationReady ||
       !isHydrated ||
       !clientResetDone ||
       hasSession === null
@@ -246,6 +264,7 @@ function RootNavigator({
     hasSession,
     isHydrated,
     isLocked,
+    navigationReady,
     routeState,
     router,
     showAnimatedSplash,
@@ -260,8 +279,10 @@ function RootNavigator({
 
   return (
     <View
-      className={`flex-1 bg-background ${isDark ? "dark" : ""}`}
-      style={{ flex: 1, backgroundColor: palette.background }}
+      style={{
+        flex: 1,
+        backgroundColor: palette.background,
+      }}
     >
       <StatusBar style={isDark ? "light" : "dark"} />
 
@@ -313,8 +334,7 @@ function RootNavigator({
       {shouldCoverProtectedContent ? (
         <View
           pointerEvents="auto"
-          className="absolute inset-0 bg-background"
-          style={{ backgroundColor: palette.background }}
+          style={[StyleSheet.absoluteFillObject, { backgroundColor: palette.background }]}
         />
       ) : null}
     </View>

@@ -63,7 +63,6 @@ export default function LeaksScreen() {
             <LeaksSummaryCard
               total="R1,820.40"
               changeLabel="↑ 18% vs last month"
-              spendingPercent="9%"
             />
           </View>
 

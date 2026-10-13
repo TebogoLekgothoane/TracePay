@@ -43,6 +43,8 @@ export type FindingGuidance = {
   detectionStatus: DetectionStatus;
   detectionStatusLabel: string;
   userResponse: ActionType | null;
+  source: string | null;
+  whatHappened: string;
   reason: string;
   evidence: { label: string; value: string }[];
   known: string[];
@@ -107,10 +109,16 @@ export function parseFindingGuidance(value: unknown): FindingGuidance | null {
   }
   const row = value as Record<string, unknown>;
   const findingId = identifier(row.finding_id);
-  const title = text(row.title, 120);
+  const title = text(row.title, 160);
   const detectionStatus = row.detection_status;
   const detectionStatusLabel = text(row.detection_status_label, 80);
   const reason = text(row.reason, 500);
+  const whatHappened =
+    row.what_happened == null || row.what_happened === undefined
+      ? reason
+      : text(row.what_happened, 500);
+  const source =
+    row.source == null || row.source === undefined ? null : text(row.source, 120);
   const userResponse = row.user_response == null ? null : row.user_response;
   if (
     !findingId ||
@@ -118,8 +126,10 @@ export function parseFindingGuidance(value: unknown): FindingGuidance | null {
     !title ||
     !detectionStatusLabel ||
     !reason ||
+    !whatHappened ||
     !isDetectionStatus(detectionStatus) ||
-    (userResponse !== null && !isActionType(userResponse))
+    (userResponse !== null && !isActionType(userResponse)) ||
+    (row.source != null && row.source !== undefined && source === null)
   ) {
     return null;
   }
@@ -141,6 +151,8 @@ export function parseFindingGuidance(value: unknown): FindingGuidance | null {
     detectionStatus,
     detectionStatusLabel,
     userResponse,
+    source,
+    whatHappened,
     reason,
     evidence: parseEvidence(row.evidence),
     known,

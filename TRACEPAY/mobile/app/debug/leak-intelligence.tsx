@@ -410,7 +410,7 @@ function FindingMark({
       className="items-center justify-center rounded-full bg-muted"
       style={{ width: 40, height: 40 }}
     >
-      <CategoryIcon color="#6366F1" size={18} strokeWidth={2.2} />
+      <CategoryIcon color="#8B5CF6" size={18} strokeWidth={2.2} />
     </View>
   );
 }

@@ -250,7 +250,7 @@ def subject_for_leak(leak: LeakDetection) -> str:
             if match:
                 return subject_key(match.group(1))
     if leak.leak_type == "duplicate_payment_leak":
-        # Unreliable merchants are not stored on the leak. Keep each fingerprint apart.
+        # Fallback only when no merchant grouping key was available.
         return f"fingerprint-{leak.fingerprint}"
     focus = _focus(leak.evidence.get("finding_focus"))
     if focus:

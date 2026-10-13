@@ -49,7 +49,7 @@ function LockedField({
   return (
     <View className="gap-1.5">
       <Text className="text-[13px] font-semibold text-foreground">{label}</Text>
-      <View className="h-[52px] flex-row items-center rounded-2xl border border-input-border bg-muted px-4">
+      <View className="h-[52px] flex-row items-center rounded-2xl bg-muted px-4">
         <Text
           className="min-w-0 flex-1 text-[16px] text-foreground"
           numberOfLines={1}

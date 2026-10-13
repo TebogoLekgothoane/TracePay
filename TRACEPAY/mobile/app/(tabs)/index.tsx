@@ -23,11 +23,9 @@ import {
   LINKED_ACCOUNTS_HREF,
 } from "../../src/features/accounts/account.navigation";
 import { formatBalanceAmountLabel } from "../../src/features/accounts/account-balance";
-import { formatOverviewAmount } from "../../src/features/analytics/financial-overview.service";
 import { firstNameFromFullName } from "../../src/features/auth/auth.validation";
 import { usePrivacyPreferences } from "../../src/features/privacy/privacy.preferences";
 import { useAccounts } from "../../src/hooks/useAccounts";
-import { useFinancialOverview } from "../../src/hooks/useFinancialOverview";
 import { useProfile } from "../../src/hooks/useProfile";
 import { COLORS } from "../../src/theme/colors";
 
@@ -37,7 +35,6 @@ export default function HomeScreen() {
   const { hideBalances, toggleHideBalances } = usePrivacyPreferences();
   const { profile } = useProfile();
   const { previews, balanceTotals, loading: accountsLoading } = useAccounts();
-  const { overview } = useFinancialOverview();
 
   const hour = new Date().getHours();
   const greeting =
@@ -55,7 +52,7 @@ export default function HomeScreen() {
         changeDirection: "up",
         Icon: Landmark,
         iconTone: "solid",
-        tint: "#7C3AED",
+        tint: "#8B5CF6",
         tintBg: "transparent",
         merchants: [],
       },
@@ -118,14 +115,9 @@ export default function HomeScreen() {
         ? "—"
         : "Add accounts";
 
-  const flowLabel =
-    overview && overview.transactionCount > 0
-      ? `In ${formatOverviewAmount(overview.moneyIn)} · Out ${formatOverviewAmount(overview.moneyOut)}`
-      : "Import statements to see cash flow";
-
-  const sourceLabel =
+  const metaLabel =
     previews.length === 0
-      ? "Add a statement to see balance"
+      ? "Add a statement to see your balance"
       : balanceTotals.subtitle;
 
   return (
@@ -154,14 +146,12 @@ export default function HomeScreen() {
 
           <BalanceCard
             balance={balanceLabel}
-            sourceLabel={sourceLabel}
-            changeLabel={flowLabel}
-            warningLabel={balanceTotals.warningReason}
+            metaLabel={metaLabel}
             hidden={hideBalances}
             onToggleVisibility={() => {
               void toggleHideBalances();
             }}
-            onScanLeaks={() => router.push("/analysis/scanning")}
+            onImportStatement={() => router.push(ADD_ACCOUNT_HREF)}
             onViewInsights={() => router.push("/(tabs)/budget")}
           />
 
@@ -194,11 +184,7 @@ export default function HomeScreen() {
           <LeakSummary
             items={leaks}
             onItemPress={(item) => {
-              router.push(
-                (item.id === "fees"
-                  ? "/leak/fees?view=summary"
-                  : `/leak/${item.id}`) as never,
-              );
+              router.push(`/leak/${item.id}` as never);
             }}
           />
 

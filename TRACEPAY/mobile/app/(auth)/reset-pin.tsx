@@ -63,7 +63,7 @@ export default function ResetPinScreen() {
           number.
         </Text>
 
-        <View className="mt-[38px] h-[60px] w-[258px] overflow-hidden rounded-2xl border-[1.5px] border-input-border bg-input">
+        <View className="mt-[38px] h-[60px] w-[258px] overflow-hidden rounded-2xl bg-input">
           <BridgedTextField
             autoFocus
             hostStyle={{ height: 60, width: 258 }}

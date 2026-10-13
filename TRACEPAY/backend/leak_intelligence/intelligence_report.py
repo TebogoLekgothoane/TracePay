@@ -79,6 +79,8 @@ _HIGHLIGHTS: tuple[tuple[str, str], ...] = (
     ("duration_days", "Duration in days"),
     ("first_observed_date", "First observed"),
     ("last_observed_date", "Last observed"),
+    ("observed_date", "Transaction date"),
+    ("merchant_display_name", "Merchant"),
     ("merchant_key", "Merchant"),
     ("fee_transaction_count", "Fee transactions"),
     ("completed_month_count", "Completed months"),
@@ -106,12 +108,17 @@ _HIGHLIGHTS: tuple[tuple[str, str], ...] = (
     ("transaction_count_in_group", "Matching transactions"),
     ("date_span_days", "Date span in days"),
     ("verification_required", "Verification required"),
+    ("monthly_average_fee", "Average monthly fees"),
+    ("recurring_fee_total", "Recurring fee total"),
+    ("one_off_fee_total", "One-off fee total"),
+    ("contributor_explanation", "Spending change contributors"),
 )
 _HIGHLIGHT_ALIASES: tuple[frozenset[str], ...] = (
     frozenset({"category", "category_name"}),
     frozenset({"average_payment", "average_amount"}),
     frozenset({"potential_duplicate_amount", "candidate_amount"}),
     frozenset({"matching_transaction_count", "transaction_count_in_group"}),
+    frozenset({"merchant_display_name", "merchant_key"}),
 )
 
 FindingsAvailability = Literal[

@@ -40,6 +40,7 @@ _RECOGNISED_MERCHANT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Woolworths", ("WOOLWORTHS",)),
     ("Checkers", ("CHECKERS",)),
     ("Shoprite", ("SHOPRITE",)),
+    ("Spar Express", ("SPAR EXPRESS",)),
     ("Spar", ("SPAR",)),
     ("Food Lovers", ("FOOD LOVERS", "FOODLOVERS")),
     ("Nando's", ("NANDO'S", "NANDOS")),
@@ -63,6 +64,19 @@ _RECOGNISED_MERCHANT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Spotify", ("SPOTIFY",)),
     ("Dstv", ("DSTV",)),
     ("Showmax", ("SHOWMAX",)),
+    ("CapCut", ("CAPCUT", "CAP CUT", "CAPCUT VIDEO", "GOOGLE CAPCUT")),
+    ("Google One", ("GOOGLE ONE",)),
+    ("OpenArt", ("OPENART", "OPEN ART", "OPENART AI")),
+    ("Adobe", ("ADOBE", "CREATIVE CLOUD")),
+    ("Microsoft", ("MICROSOFT", "OFFICE 365", "M365")),
+    ("Discord", ("DISCORD",)),
+    ("Apple", ("APPLE", "ITUNES", "APP STORE")),
+    ("PayShap", ("PAYSHAP", "PAY SHAP")),
+    ("MTN MoMo", ("MTN MOMO", "MTNMOMO")),
+    ("MTN", ("MTN",)),
+    ("Vodacom", ("VODACOM",)),
+    ("Cell C", ("CELL C", "CELLC")),
+    ("Telkom", ("TELKOM",)),
 )
 
 _RECOGNISED_MERCHANT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
@@ -255,6 +269,19 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule("description:data-bundle", "Airtime & Data", 0.95, contains("DATA BUNDLE")),
     Rule(
+        "description:mobile-purchase-phone",
+        "Airtime & Data",
+        0.88,
+        lambda description, _kind: (
+            "MOBILE PURCHASE" in description
+            and any(
+                token in description
+                for token in ("PHONE", "AIRTIME", "DATA", "MTN", "VODACOM", "CELL C", "TELKOM")
+            )
+            and recognised_merchant_label(description) is None
+        ),
+    ),
+    Rule(
         "description:cash-withdrawal",
         "Cash Withdrawal",
         0.95,
@@ -288,6 +315,33 @@ RULES: tuple[Rule, ...] = (
         0.95,
         contains("FIXED DEPOSIT"),
         transaction_class="savings",
+    ),
+    Rule(
+        "description:money-transferred",
+        "Transfers",
+        0.92,
+        lambda description, _kind: (
+            "MONEY TRANSFERRED" in description
+            and bool(
+                description.replace("MONEY TRANSFERRED IN FOR", "")
+                .replace("MONEY TRANSFERRED OUT FROM", "")
+                .replace("MONEY TRANSFERRED IN", "")
+                .replace("MONEY TRANSFERRED OUT", "")
+                .strip(" -/")
+            )
+            and not any(
+                token in description
+                for token in (
+                    "GOALSAVE",
+                    "LIVE BETTER",
+                    "ROUND-UP TRANSFER",
+                    "ROUND UP TRANSFER",
+                    "INTEREST SWEEP",
+                    "FIXED DEPOSIT",
+                )
+            )
+        ),
+        transaction_class="person_to_person",
     ),
     Rule(
         "description:person-payment",

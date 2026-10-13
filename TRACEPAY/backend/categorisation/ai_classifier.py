@@ -1,4 +1,4 @@
-"""AI categorisation fallback with Gemini (preferred) and OpenAI."""
+"""AI categorisation fallback with Grok (preferred), Gemini, and OpenAI."""
 
 from __future__ import annotations
 
@@ -11,8 +11,10 @@ from urllib.request import Request, urlopen
 
 from app.config import settings
 from categorisation.models import CategorisationResult
+from categorisation.normalize import extract_merchant_name, is_bank_boilerplate_label
 from categorisation.resolve import resolve_category_name
 from categorisation.sanitizer import sanitize_for_ai
+from categorisation.source_identity import validate_ai_source
 
 logger = logging.getLogger("tracepay.categorisation.ai")
 
@@ -61,7 +63,24 @@ def _category_schema() -> dict:
                         "category_name": {"type": "string"},
                         "category_confidence": {"type": "number", "minimum": 0, "maximum": 1},
                         "reason": {"type": "string"},
-                        "merchant_name": {"type": "string"},
+                        "merchant_name": {"type": ["string", "null"]},
+                        "source_type": {
+                            "type": "string",
+                            "enum": [
+                                "merchant",
+                                "person",
+                                "bank",
+                                "payment_processor",
+                                "payment_mechanism",
+                                "unknown",
+                            ],
+                        },
+                        "payment_mechanism": {"type": ["string", "null"]},
+                        "supporting_text": {"type": ["string", "null"]},
+                        "uncertainty": {
+                            "type": "string",
+                            "enum": ["identified", "uncertain", "unknown"],
+                        },
                     },
                     "required": [
                         "transaction_id",
@@ -71,6 +90,10 @@ def _category_schema() -> dict:
                         "category_confidence",
                         "reason",
                         "merchant_name",
+                        "source_type",
+                        "payment_mechanism",
+                        "supporting_text",
+                        "uncertainty",
                     ],
                     "additionalProperties": False,
                 },
@@ -110,6 +133,23 @@ def _gemini_category_schema() -> dict:
                         "category_confidence": {"type": "NUMBER"},
                         "reason": {"type": "STRING"},
                         "merchant_name": {"type": "STRING"},
+                        "source_type": {
+                            "type": "STRING",
+                            "enum": [
+                                "merchant",
+                                "person",
+                                "bank",
+                                "payment_processor",
+                                "payment_mechanism",
+                                "unknown",
+                            ],
+                        },
+                        "payment_mechanism": {"type": "STRING"},
+                        "supporting_text": {"type": "STRING"},
+                        "uncertainty": {
+                            "type": "STRING",
+                            "enum": ["identified", "uncertain", "unknown"],
+                        },
                     },
                     "required": [
                         "transaction_id",
@@ -119,6 +159,10 @@ def _gemini_category_schema() -> dict:
                         "category_confidence",
                         "reason",
                         "merchant_name",
+                        "source_type",
+                        "payment_mechanism",
+                        "supporting_text",
+                        "uncertainty",
                     ],
                 },
             },
@@ -132,9 +176,11 @@ def _validate_results(
     allowed: set[str],
     provider: str,
     expected_ids: set[str],
+    descriptions_by_id: dict[str, str] | None = None,
 ) -> tuple[dict[str, CategorisationResult], int]:
     results: dict[str, CategorisationResult] = {}
     rejected = 0
+    descriptions_by_id = descriptions_by_id or {}
     items = parsed.get("transactions", [])
     if not isinstance(items, list):
         return {}, 0
@@ -157,6 +203,33 @@ def _validate_results(
             continue
         try:
             transaction_class = item.get("transaction_class", "unknown")
+            description = descriptions_by_id.get(transaction_id)
+            raw_merchant = item.get("merchant_name")
+            if isinstance(raw_merchant, str):
+                raw_merchant = raw_merchant.strip() or None
+            else:
+                raw_merchant = None
+            identity = validate_ai_source(
+                description=description,
+                proposed_merchant=raw_merchant,
+                source_type=item.get("source_type") if isinstance(item.get("source_type"), str) else None,
+                payment_mechanism=(
+                    item.get("payment_mechanism")
+                    if isinstance(item.get("payment_mechanism"), str)
+                    else None
+                ),
+                uncertainty=item.get("uncertainty") if isinstance(item.get("uncertainty"), str) else None,
+                supporting_text=(
+                    item.get("supporting_text")
+                    if isinstance(item.get("supporting_text"), str)
+                    else None
+                ),
+            )
+            merchant_name = identity.merchant_name
+            if merchant_name is None:
+                deterministic = extract_merchant_name(description)
+                if deterministic and not is_bank_boilerplate_label(deterministic):
+                    merchant_name = deterministic
             result = CategorisationResult(
                 category_name=category_name,
                 category_confidence=float(item.get("category_confidence", 0)) if category_name else 0,
@@ -166,7 +239,7 @@ def _validate_results(
                     str(item.get("reason", ""))[:500]
                     or "Classified by AI based on transaction description"
                 ),
-                merchant_name=item.get("merchant_name") or None,
+                merchant_name=merchant_name,
                 rule=f"ai:{provider}",
             )
         except (TypeError, ValueError):
@@ -406,9 +479,81 @@ def _build_instructions(transactions: list[AiTransaction], allowed: list[str]) -
         "Savings and investment transfers are not spending. Merchant purchases are spending. Salary is income. "
         "Bank charges are bank_fee. Do not assume every PayShap transaction is an internal transfer, every incoming transaction is income, "
         "or every person-to-person payment is shopping.\n\n"
+        "Source identification: set source_type, merchant_name (or null), payment_mechanism, supporting_text, and uncertainty. "
+        "merchant_name must appear in the sanitised description or be a clear alias of text that does. "
+        "Strip bank boilerplate such as Recurring Card Purchase, Online Purchase, Payment Received, "
+        "Transfer Received from, Banking App, and Dl* before naming the merchant. "
+        "Prefer brand names for apps and subscriptions (CapCut, Google One, Uber, Netflix). "
+        "For Airtime Advance lines with no network named, merchant_name may be null. "
+        "For person-to-person payment received lines, keep source_type=person and merchant_name null. "
+        "Never treat bank wording such as RECURRING PAYMENT FROM, MONEY TRANSFERRED IN/OUT, PURCHASE WITH CARD AT, "
+        "or WITH CARD AT as a merchant. Payment processors are not the underlying merchant. "
+        "Person-to-person recipients are source_type=person with merchant_name null. "
+        "If the merchant cannot be identified, set merchant_name null, source_type=unknown, uncertainty=unknown.\n\n"
         f"Allowed categories: {json.dumps(allowed)}\n"
         f"Transactions: {json.dumps([{ 'transaction_id': item.transaction_id, 'description': sanitize_for_ai(item.description), 'amount': item.amount, 'type': item.transaction_type } for item in transactions])}"
     )
+
+
+def _request_xai(instructions: str, schema: dict, transactions_count: int) -> dict | None:
+    """Grok via the xAI OpenAI-compatible chat completions API."""
+    api_key = settings.xai_api_key.strip()
+    if not api_key:
+        logger.info("[AI] provider=xai skipped reason=missing_api_key expected_env=XAI_API_KEY")
+        return None
+    model = settings.xai_model.strip() or "grok-4-1-fast-non-reasoning"
+    timeout = max(1, settings.xai_timeout_seconds or settings.openai_timeout_seconds)
+    request_url = f"{settings.xai_base_url.rstrip('/')}/chat/completions"
+    body = json.dumps(
+        {
+            "model": model,
+            "temperature": 0,
+            "messages": [{"role": "user", "content": instructions}],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "transaction_categories",
+                    "schema": schema,
+                    "strict": True,
+                },
+            },
+        }
+    ).encode()
+    request = Request(
+        request_url,
+        data=body,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    logger.info(
+        "[AI] request_started provider=xai model=%s candidates=%s",
+        model,
+        transactions_count,
+    )
+    started = time.perf_counter()
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            output = json.loads(response.read().decode("utf-8"))
+        logger.info("[AI] request_success provider=xai model=%s", model)
+        return output
+    except HTTPError as error:
+        logger.error(
+            "[AI] request_failed provider=xai status=%s reason=%s response_body=%s",
+            error.code,
+            error.reason,
+            _safe_http_error_body(error),
+        )
+    except TimeoutError as error:
+        duration_ms = round((time.perf_counter() - started) * 1000, 1)
+        logger.error(
+            "[AI] request_timeout provider=xai timeout_seconds=%s error_type=%s duration_ms=%s",
+            timeout,
+            type(error).__name__,
+            duration_ms,
+        )
+    except (URLError, ValueError, json.JSONDecodeError) as error:
+        logger.exception("[AI] request_failed provider=xai error_type=%s", type(error).__name__)
+    return None
 
 
 def classify_batch(
@@ -416,10 +561,13 @@ def classify_batch(
     category_names: list[str],
 ) -> dict[str, CategorisationResult]:
     expected_ids = {item.transaction_id for item in transactions}
+    descriptions_by_id = {item.transaction_id: item.description for item in transactions}
+    gemini_loaded, openai_loaded, xai_loaded = settings.categorisation_provider_keys()
     logger.info(
-        "[AI] providers=gemini,openai gemini_key_loaded=%s openai_key_loaded=%s category_count=%s candidates=%s",
-        bool(settings.gemini_api_key.strip()),
-        bool(settings.openai_api_key.strip()),
+        "[AI] providers=gemini,openai,xai gemini_key_loaded=%s openai_key_loaded=%s xai_key_loaded=%s category_count=%s candidates=%s",
+        gemini_loaded,
+        openai_loaded,
+        xai_loaded,
         len(category_names),
         len(transactions),
     )
@@ -429,35 +577,48 @@ def classify_batch(
     if not category_names:
         logger.warning("[AI] skipped reason=empty_live_category_catalog")
         return {}
-    if not settings.gemini_api_key.strip() and not settings.openai_api_key.strip():
-        logger.warning("[AI] skipped reason=missing_api_keys expected_env=GEMINI_API_KEY|OPENAI_API_KEY")
+    if not (gemini_loaded or openai_loaded or xai_loaded):
+        logger.warning(
+            "[AI] skipped reason=missing_api_keys expected_env=GEMINI_API_KEY|OPENAI_API_KEY|XAI_API_KEY"
+        )
         return {}
 
     allowed = sorted(set(category_names))
     instructions = _build_instructions(transactions, allowed)
     schema = _category_schema()
 
-    # Prefer Gemini when configured; fall back to OpenAI.
+    # Prefer Gemini (Google AI Studio), then OpenAI, then optional Grok (xAI).
     providers: list[tuple[str, object]] = []
-    if settings.gemini_api_key.strip():
+    if gemini_loaded:
         providers.append(("gemini", _request_gemini))
-    if settings.openai_api_key.strip():
+    if openai_loaded:
         providers.append(("openai", _request_openai))
+    if xai_loaded:
+        providers.append(("xai", _request_xai))
 
     for provider_name, requester in providers:
-        output = requester(instructions, schema, len(transactions))  # type: ignore[operator]
+        try:
+            output = requester(instructions, schema, len(transactions))  # type: ignore[operator]
+        except Exception as error:  # noqa: BLE001 - AI must never interrupt imports
+            logger.exception(
+                "[AI] provider_request_failed provider=%s error_type=%s",
+                provider_name,
+                type(error).__name__,
+            )
+            continue
         if output is None:
             continue
         try:
             if provider_name == "gemini":
                 text = _gemini_response_text(output)
             else:
-                text = _openai_response_text(output)
+                text = _chat_response_text(output, provider_name)
             results, rejected = _validate_results(
                 json.loads(text),
                 set(allowed),
                 provider_name,
                 expected_ids,
+                descriptions_by_id,
             )
             logger.info(
                 "[AI] structured_json_parsed provider=%s accepted=%s rejected=%s",
@@ -470,6 +631,13 @@ def classify_batch(
         except (ValueError, TypeError, json.JSONDecodeError) as error:
             logger.exception(
                 "[AI] response_parse_failed provider=%s error_type=%s",
+                provider_name,
+                type(error).__name__,
+            )
+            continue
+        except Exception as error:  # noqa: BLE001 - keep imports resilient
+            logger.exception(
+                "[AI] unexpected_provider_failure provider=%s error_type=%s",
                 provider_name,
                 type(error).__name__,
             )

@@ -12,17 +12,35 @@ from .engine import RECURRENCE_MIN_OBSERVATIONS
 from .merchant_display import is_reliable_merchant_display_name
 from .common import ZERO
 from .models import ConfidenceSupport, FinancialFeatureSnapshot, MerchantFeature
-from .periods import completed_months, exclude_incomplete_final_month
+from .import_quality import unreliable_quality_affects_months
+from .periods import (
+    completed_months,
+    contiguous_month_suffix,
+    exclude_incomplete_final_month,
+    exclude_incomplete_opening_month,
+)
 from .recurrence_rules import matches_plausible_recurring_interval
 
 MIN_TREND_MONTHS = 3
 MIN_RELATIVE_CHANGE_PERCENT = Decimal("10")
 MIN_ABSOLUTE_CHANGE = Decimal("50")
+# Reject percentage comparisons when the baseline is too small to be meaningful.
+MIN_BASELINE_AMOUNT = Decimal("50")
 MIN_HIGH_CONFIDENCE_RATIO = Decimal("0.60")
 MIN_OBSERVATION_CONFIDENCE = 0.55
 MIN_WEEKEND_SPENDING_TRANSACTIONS = 10
 MIN_PAYDAY_SPENDING_TRANSACTIONS = 10
 MIN_FEE_BURDEN_TOTAL = Decimal("10")
+
+
+def _coverage_bounds(
+    snapshot: FinancialFeatureSnapshot,
+) -> tuple[date | None, date | None]:
+    """Observation bounds for incompleteness checks (declared dates when available)."""
+    return (
+        snapshot.coverage_observation_start or snapshot.date_start,
+        snapshot.coverage_observation_end or snapshot.date_end,
+    )
 
 
 def analyze_behaviour(snapshot: FinancialFeatureSnapshot) -> BehaviourAnalysisResult:
@@ -55,6 +73,7 @@ def _result(
 
 
 def _spending_observations(snapshot: FinancialFeatureSnapshot) -> list[BehaviourObservation]:
+    observation_start, observation_end = _coverage_bounds(snapshot)
     compare = _period_compare(
         [
             (
@@ -64,9 +83,25 @@ def _spending_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviour
             )
             for month in snapshot.months
         ],
-        snapshot.date_end,
+        observation_end,
+        observation_start,
     )
     if compare is None:
+        return []
+    compared_months = [
+        *[str(item) for item in (compare.get("baseline_months") or [])],
+        str(compare["current_period"]),
+    ]
+    imports_by_id = {
+        item.import_id: item for item in snapshot.statement_import_quality
+    }
+    if unreliable_quality_affects_months(
+        month_keys=compared_months,
+        import_ids_by_month=snapshot.import_ids_by_month,
+        imports_by_id=imports_by_id,
+    ):
+        # Confirmed import-quality failure for months in this comparison — do not
+        # emit an apparently reliable spending change finding.
         return []
     observation = _change_observation(
         behavior_type="spending_increase" if compare["change_amount"] > 0 else "spending_decrease",
@@ -87,12 +122,14 @@ def _spending_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviour
 def _category_observations(snapshot: FinancialFeatureSnapshot) -> list[BehaviourObservation]:
     observations = []
     for feature in snapshot.categories:
+        coverage_start, coverage_end = _coverage_bounds(snapshot)
         compare = _period_compare(
             [
                 (month, amount, feature.category_monthly_transaction_count.get(month, 0))
                 for month, amount in feature.category_monthly_total.items()
             ],
-            snapshot.date_end,
+            coverage_end,
+            coverage_start,
         )
         if compare is None:
             continue
@@ -125,12 +162,14 @@ def _merchant_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviour
     observations = []
     total_spending = snapshot.spending_profile.total_spending
     for feature in snapshot.merchants:
+        coverage_start, coverage_end = _coverage_bounds(snapshot)
         spend_compare = _period_compare(
             [
                 (month, amount, feature.merchant_monthly_transaction_count.get(month, 0))
                 for month, amount in feature.merchant_monthly_totals.items()
             ],
-            snapshot.date_end,
+            coverage_end,
+            coverage_start,
         )
         if spend_compare:
             observation = _change_observation(
@@ -158,7 +197,9 @@ def _merchant_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviour
                 observations.append(observation)
 
         frequency_compare = _count_compare(
-            feature.merchant_monthly_transaction_count, snapshot.date_end
+            feature.merchant_monthly_transaction_count,
+            coverage_end,
+            coverage_start,
         )
         if (
             frequency_compare
@@ -534,16 +575,29 @@ def _recurring_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviou
             and categories.get("Bank Fees", 0) == feature.merchant_transaction_count
         ):
             continue
+        # Ordinary repeated shopping is cadence evidence only, not a bill signal.
+        if is_repeated_shopping_merchant(feature):
+            continue
         merchant_label = (
             feature.merchant_name
             if is_reliable_merchant_display_name(feature.merchant_name)
             else "unidentified merchant"
         )
+        weak_commitment = is_weak_recurring_commitment(feature)
         observations.append(
             _observation(
                 "recurring_payment_pattern",
-                f"Recurring payment pattern at {merchant_label}",
-                "Payments followed a consistent interval and amount pattern.",
+                (
+                    f"Repeated payments detected at {merchant_label}"
+                    if weak_commitment
+                    else f"Recurring payment pattern at {merchant_label}"
+                ),
+                (
+                    "Payments repeated with a stable interval and amount, but the "
+                    "evidence is not strong enough to assert a subscription or bill."
+                    if weak_commitment
+                    else "Payments followed a consistent interval and amount pattern."
+                ),
                 "medium" if recurrence.recurrence_strength == "medium" else "high",
                 _confidence(
                     feature.confidence_support,
@@ -557,6 +611,12 @@ def _recurring_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviou
                     "average_interval_days": recurrence.average_interval_days,
                     "average_amount": recurrence.average_amount,
                     "amount_variance": recurrence.amount_variance,
+                    "interval_variance": recurrence.interval_variance,
+                    **(
+                        {"finding_focus": "repeated_payments_detected"}
+                        if weak_commitment
+                        else {}
+                    ),
                 },
                 [f"merchants[{feature.merchant_name}].recurrence"],
                 feature.merchant_first_transaction_date,
@@ -566,11 +626,16 @@ def _recurring_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviou
         for month in feature.merchant_monthly_totals:
             recurring_count_by_month[month] = recurring_count_by_month.get(month, 0) + 1
 
+    coverage_start, coverage_end = _coverage_bounds(snapshot)
     subscription_compare = _period_compare(
         [(month.month, month.subscription_total, 0) for month in snapshot.months],
-        snapshot.date_end,
+        coverage_end,
+        coverage_start,
+        minimum_baseline=MIN_FEE_BURDEN_TOTAL,
     )
-    count_compare = _count_compare(recurring_count_by_month, snapshot.date_end)
+    count_compare = _count_compare(
+        recurring_count_by_month, coverage_end, coverage_start
+    )
     if subscription_compare and count_compare and subscription_compare["change_amount"] > 0:
         if _material_change(
             subscription_compare["change_amount"], subscription_compare["change_percentage"]
@@ -673,9 +738,12 @@ def _cash_and_fee_observations(snapshot: FinancialFeatureSnapshot) -> list[Behav
         if spending not in (None, Decimal("0"))
         else None
     )
+    coverage_start, coverage_end = _coverage_bounds(snapshot)
     cash_compare = _period_compare(
         [(month.month, month.cash_withdrawal_total, 0) for month in snapshot.months],
-        snapshot.date_end,
+        coverage_end,
+        coverage_start,
+        minimum_baseline=MIN_FEE_BURDEN_TOTAL,
     )
     if cash.cash_withdrawal_count >= 3 and (
         cash_share is not None and cash_share >= Decimal("0.15")
@@ -713,7 +781,9 @@ def _cash_and_fee_observations(snapshot: FinancialFeatureSnapshot) -> list[Behav
         )
     fee_compare = _period_compare(
         [(month.month, month.bank_fee_total, 0) for month in snapshot.months],
-        snapshot.date_end,
+        coverage_end,
+        coverage_start,
+        minimum_baseline=MIN_FEE_BURDEN_TOTAL,
     )
     if (
         fee_compare
@@ -972,15 +1042,19 @@ def _duplicate_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviou
 def _period_compare(
     entries: list[tuple[str, Decimal, int]],
     observation_end: date | None,
+    observation_start: date | None = None,
+    *,
+    minimum_baseline: Decimal = MIN_BASELINE_AMOUNT,
 ) -> dict[str, Decimal | int | str] | None:
-    ordered = _completed_entries(entries, observation_end)
+    ordered = _comparable_month_entries(entries, observation_end, observation_start)
     if len(ordered) < MIN_TREND_MONTHS:
         return None
     current_month, current_amount, current_count = ordered[-1]
     previous = ordered[:-1]
     previous_amount = sum((item[1] for item in previous), Decimal("0")) / Decimal(len(previous))
     previous_count = sum(item[2] for item in previous) / Decimal(len(previous))
-    if previous_amount == 0:
+    # Missing history must not be treated as a zero baseline for percentage math.
+    if previous_amount < minimum_baseline:
         return None
     change_amount = current_amount - previous_amount
     if change_amount == 0:
@@ -995,15 +1069,24 @@ def _period_compare(
         "transaction_count_previous": previous_count,
         "transaction_count_current": current_count,
         "months_compared": len(ordered),
+        "baseline_month_count": len(previous),
+        "baseline_months": [item[0] for item in previous],
+        "baseline_period_start": previous[0][0],
+        "baseline_period_end": previous[-1][0],
+        "baseline_is_average": len(previous) > 1,
+        "periods_comparable": True,
     }
 
 
 def _count_compare(
-    counts: dict[str, int], observation_end: date | None
+    counts: dict[str, int],
+    observation_end: date | None,
+    observation_start: date | None = None,
 ) -> dict[str, Decimal | int | str] | None:
-    ordered = _completed_entries(
+    ordered = _comparable_month_entries(
         [(month, Decimal(count), count) for month, count in counts.items()],
         observation_end,
+        observation_start,
     )
     if len(ordered) < 2:
         return None
@@ -1024,14 +1107,74 @@ def _count_compare(
     }
 
 
-def _completed_entries(
-    entries: list[tuple[str, Decimal, int]], observation_end: date | None
+def _comparable_month_entries(
+    entries: list[tuple[str, Decimal, int]],
+    observation_end: date | None,
+    observation_start: date | None = None,
 ) -> list[tuple[str, Decimal, int]]:
-    return exclude_incomplete_final_month(
+    """Return contiguous completed months with comparable calendar durations.
+
+    Incomplete opening/trailing months are dropped. Gaps are not zero-filled;
+    only the contiguous suffix ending at the latest completed month is kept.
+    """
+    by_month = {
+        month: (month, amount, count)
+        for month, amount, count in _completed_entries(
+            entries, observation_end, observation_start
+        )
+    }
+    suffix = contiguous_month_suffix(list(by_month))
+    return [by_month[month] for month in suffix]
+
+
+def _completed_entries(
+    entries: list[tuple[str, Decimal, int]],
+    observation_end: date | None,
+    observation_start: date | None = None,
+) -> list[tuple[str, Decimal, int]]:
+    trimmed = exclude_incomplete_final_month(
         sorted(entries),
         observation_end,
         lambda entry: entry[0],
     )
+    return exclude_incomplete_opening_month(
+        trimmed,
+        observation_start,
+        lambda entry: entry[0],
+    )
+
+
+_REPEATED_SHOPPING_CATEGORIES = frozenset(
+    {"Groceries", "Shopping", "Restaurants", "Fast Food", "Fuel"}
+)
+
+
+def is_repeated_shopping_merchant(merchant: MerchantFeature) -> bool:
+    """True when most activity looks like ordinary shopping, not a billed commitment."""
+    total = merchant.merchant_transaction_count
+    if total <= 0:
+        return False
+    categories = merchant.merchant_category_transaction_count
+    shopping = sum(categories.get(name, 0) for name in _REPEATED_SHOPPING_CATEGORIES)
+    return shopping * 2 >= total
+
+
+def is_weak_recurring_commitment(merchant: MerchantFeature) -> bool:
+    """True when cadence exists but evidence is too weak to assert a bill/subscription."""
+    if merchant.debit_order_transaction_count * 2 >= merchant.merchant_transaction_count:
+        return False
+    subscription_tx = merchant.merchant_category_transaction_count.get("Subscriptions", 0)
+    if subscription_tx >= 2 and subscription_tx * 2 >= merchant.merchant_transaction_count:
+        return False
+    recurrence = merchant.recurrence
+    if recurrence.recurrence_strength != "high":
+        return True
+    average = recurrence.average_amount
+    variance = recurrence.amount_variance
+    if average in (None, ZERO) or variance is None:
+        return True
+    # High interval stability with amount CV above 10% is still weak for a fixed bill.
+    return (variance.sqrt() / average) > Decimal("0.10")
 
 
 def _change_observation(

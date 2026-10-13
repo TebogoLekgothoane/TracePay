@@ -68,6 +68,10 @@ export function readTransactionRow(value: unknown): TransactionRow | null {
     is_duplicate: row.is_duplicate === true,
     category_id: typeof row.category_id === "string" ? row.category_id : null,
     category_source: row.category_source === "manual" ? "manual" : "automatic",
+    merchantName:
+      typeof row.merchant_name === "string" && row.merchant_name.trim().length > 0
+        ? row.merchant_name.trim()
+        : null,
     categories: (row.categories as TransactionRow["categories"]) ?? null,
     account: readAccount(row.accounts, row.account_id),
     occurredAt: readOccurredAt(row),

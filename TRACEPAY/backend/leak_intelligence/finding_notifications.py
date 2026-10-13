@@ -15,6 +15,11 @@ from leak_intelligence.finding_diff import (
     RegistryPlan,
     RegistryScopeError,
 )
+from leak_intelligence.merchant_display import (
+    display_merchant_label,
+    is_reliable_merchant_display_name,
+    merchant_display_name_for,
+)
 
 _LONG_DIGITS = re.compile(r"\d{6,}")
 _SAFE_MERCHANT = re.compile(r"^[A-Za-z][A-Za-z0-9 &'.,-]{0,39}$")
@@ -90,7 +95,11 @@ def notifications_for_plan(
                 ),
                 channel="in_app",
                 delivery_status="created",
-                title=_title(item.row.leak_type, kind),
+                title=_title(
+                    item.row.leak_type,
+                    kind,
+                    item.row.evidence_highlights,
+                ),
                 body=_body(item.row.leak_type, item.row.evidence_highlights, kind),
                 created_at=observed_at,
             )
@@ -127,8 +136,31 @@ def _notify_kind(classification: str, write: bool, generation: int) -> str | Non
     return None
 
 
-def _title(leak_type: str, kind: str) -> str:
+def _title(
+    leak_type: str,
+    kind: str,
+    highlights: tuple[tuple[str, str, str | int | bool], ...],
+) -> str:
+    merchant = _merchant(highlights)
     label = _LABELS.get(leak_type, "Spending pattern")
+    if merchant:
+        if leak_type == "duplicate_payment_leak":
+            label = f"Possible duplicate payment at {merchant}"
+        elif leak_type in {
+            "subscription_leak",
+            "recurring_payment_leak",
+            "unknown_recurring_payment",
+        }:
+            label = f"{merchant} recurring payment"
+        elif leak_type in {
+            "spending_escalation_leak",
+            "airtime_data_leak",
+            "food_spending_leak",
+            "transport_spending_leak",
+        }:
+            label = f"{merchant} spending increase"
+        else:
+            label = f"{merchant} — {label}"
     if kind == "materially_changed":
         title = f"{label} changed"
     else:
@@ -145,14 +177,16 @@ def _body(
     if kind == "materially_changed":
         lead = "The evidence for this pattern changed enough to look again."
     elif leak_type == "duplicate_payment_leak":
+        who = f" at {merchant}" if merchant else ""
         lead = (
-            "Payments match on merchant, amount, and date. "
-            "This match still needs verification."
+            f"Payments{who} match on merchant, amount, and date. "
+            "This match still needs verification; matching details do not prove a "
+            "duplicate or a recoverable amount."
         )
+    elif merchant:
+        lead = f"A repeated pattern involving {merchant} showed up in your latest statement."
     else:
         lead = "A repeated pattern showed up in your latest statement."
-    if merchant:
-        lead = f"{lead} Merchant: {merchant}."
     body = f"{lead} {_NOT_SAVED}"
     return body[:400]
 
@@ -160,11 +194,24 @@ def _body(
 def _merchant(
     highlights: tuple[tuple[str, str, str | int | bool], ...],
 ) -> str | None:
-    for key, _label, value in highlights:
-        if key != "merchant_key" or not isinstance(value, str):
-            continue
-        cleaned = " ".join(value.split())
-        if not _SAFE_MERCHANT.fullmatch(cleaned) or _LONG_DIGITS.search(cleaned):
-            return None
-        return cleaned
+    preferred_keys = (
+        "merchant_display_name",
+        "merchant_name",
+        "merchant",
+        "merchant_key",
+    )
+    for preferred in preferred_keys:
+        for key, _label, value in highlights:
+            if key != preferred or not isinstance(value, str):
+                continue
+            cleaned = " ".join(value.split())
+            if (
+                not cleaned
+                or not _SAFE_MERCHANT.fullmatch(cleaned)
+                or _LONG_DIGITS.search(cleaned)
+            ):
+                continue
+            if not is_reliable_merchant_display_name(cleaned):
+                continue
+            return merchant_display_name_for(cleaned) or display_merchant_label(cleaned)
     return None

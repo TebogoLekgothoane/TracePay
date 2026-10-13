@@ -65,6 +65,29 @@ export function formatAccountSubtitle(account: FinancialAccount): string {
   return parts.join(" · ");
 }
 
+/** Card title on My accounts: nickname plus masked last four. */
+export function formatAccountCardTitle(account: FinancialAccount): string {
+  const name = account.name.trim() || formatAccountTypeLabel(account.accountType);
+  if (account.lastFourDigits) {
+    return `${name} •••• ${account.lastFourDigits}`;
+  }
+  return name;
+}
+
+export function formatInstitutionGroupLabel(account: FinancialAccount): string {
+  return account.institution?.trim() || "Other accounts";
+}
+
+export function formatAccountActivityLabel(
+  transactionCount: number,
+  importCount: number,
+): string {
+  const transactions =
+    transactionCount === 1 ? "1 transaction" : `${transactionCount} transactions`;
+  const imports = importCount === 1 ? "1 import" : `${importCount} imports`;
+  return `${transactions} · ${imports}`;
+}
+
 export function formatStatementCount(count: number): string {
   if (count === 1) {
     return "1 statement";
@@ -94,7 +117,10 @@ function hashString(value: string): number {
   return hash;
 }
 
-export function colorForAccount(account: FinancialAccount): string {
+export function colorForAccount(account: {
+  name: string;
+  institution?: string | null;
+}): string {
   const institutionKey = account.institution?.trim().toLowerCase() ?? "";
   if (institutionKey) {
     const exact = INSTITUTION_COLORS[institutionKey];

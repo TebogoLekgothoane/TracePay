@@ -6,12 +6,14 @@ duplicate-confirmation, recommendation, or affordability decisions.
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 from statistics import pvariance
 
 from .common import ZERO, amount_of, is_purchase_reversal, merchant_group_key, month_key
+from .import_quality import StatementImportQuality, resolve_coverage_observation_bounds
 from .models import (
     AmountTrend,
     CashFeatures,
@@ -39,8 +41,13 @@ RECURRENCE_MIN_OBSERVATIONS = 3
 INTERVAL_STABILITY_CV = Decimal("0.15")
 TREND_MIN_OBSERVATIONS = 3
 PAYDAY_MIN_OBSERVATIONS = 3
-DUPLICATE_DATE_WINDOW_DAYS = 1
+# Same calendar day only. Adjacent-day matches are legitimate repeats, not duplicates.
+DUPLICATE_DATE_WINDOW_DAYS = 0
 AMOUNT_TOLERANCE = Decimal("0.01")
+_REFERENCE_TOKEN = re.compile(
+    r"\b(?:REF|REFERENCE|AUTH|TRN|TXN)[\s:#-]*([A-Z0-9-]{4,})\b",
+    re.IGNORECASE,
+)
 CASH_WITHDRAWAL_CATEGORIES = {"Cash Withdrawal", "Cash Withdrawals", "ATM Cash Withdrawal"}
 # These stay in their own income, transfer, savings, and fee totals.
 # They are not purchase spending and do not enter merchant-payment features.
@@ -52,17 +59,36 @@ _NON_PURCHASE_CLASSES = frozenset(
 def build_financial_features(
     user_id: str,
     transactions: list[FeatureTransaction],
+    *,
+    statement_import_quality: list[StatementImportQuality] | None = None,
 ) -> FinancialFeatureSnapshot:
     """Build one user's financial observations from already categorised data."""
     if not user_id:
         raise ValueError("A user id is required for financial feature calculation.")
+
     active = _active_user_transactions(user_id, transactions)
     dates = [item.transaction_date for item in active if item.transaction_date is not None]
+    date_start = min(dates) if dates else None
+    date_end = max(dates) if dates else None
+    qualities = list(statement_import_quality or [])
+    import_ids_by_month: dict[str, list[str]] = {}
+    for item in active:
+        month = month_key(item)
+        if month is None or not item.statement_id:
+            continue
+        bucket = import_ids_by_month.setdefault(month, [])
+        if item.statement_id not in bucket:
+            bucket.append(item.statement_id)
+    coverage_start, coverage_end = resolve_coverage_observation_bounds(
+        date_start, date_end, qualities
+    )
     return FinancialFeatureSnapshot(
         user_id=user_id,
         transaction_count=len(active),
-        date_start=min(dates) if dates else None,
-        date_end=max(dates) if dates else None,
+        date_start=date_start,
+        date_end=date_end,
+        coverage_observation_start=coverage_start,
+        coverage_observation_end=coverage_end,
         spending_profile=build_spending_profile(active),
         merchants=_merchant_features(active),
         categories=_category_features(active),
@@ -73,6 +99,8 @@ def build_financial_features(
         payday=_payday_spending_features(active),
         income=_income_features(active),
         duplicate_candidates=_duplicate_candidates(active),
+        statement_import_quality=qualities,
+        import_ids_by_month=import_ids_by_month,
     )
 
 
@@ -657,11 +685,17 @@ def _fee_subtype(transaction: FeatureTransaction) -> str | None:
         or "NSF CHARGE" in description
     ):
         return "insufficient_funds"
-    if "ACCOUNT" in description or "MONTHLY FEE" in description:
+    if (
+        "ACCOUNT" in description
+        or "MONTHLY FEE" in description
+        or "SERVICE CHARGE" in description
+        or "SERVICE FEE" in description
+        or "BANK CHARGE" in description
+    ):
         return "account"
     if "FOREIGN TRANSACTION FEE" in description:
         return "foreign"
-    if "TRANSACTION FEE" in description:
+    if "TRANSACTION FEE" in description or "PAYMENT FEE" in description:
         return "transaction"
     return None
 
@@ -800,11 +834,20 @@ def _weekend_features(transactions: list[FeatureTransaction]) -> WeekendSpending
 def _without_same_day_amount_duplicates(
     transactions: list[FeatureTransaction],
 ) -> list[FeatureTransaction]:
-    """Keep one transaction for each same-merchant, same-day, same-amount group."""
+    """Keep one transaction for each same-day, same-amount group.
+
+    Prefer a confirmed merchant key. For fees and cash rows without a merchant,
+    fall back to category/description so statement copies are not double-counted.
+    """
     buckets: defaultdict[tuple[str, date], list[FeatureTransaction]] = defaultdict(list)
     kept: list[FeatureTransaction] = []
     for item in transactions:
         key = merchant_group_key(item)
+        if key is None:
+            category = (item.categorisation.category_name or "").strip().upper()
+            description = (item.description or "").strip().upper()
+            if category or description:
+                key = f"{category}|{description}"
         if key is None or item.transaction_date is None:
             kept.append(item)
             continue
@@ -911,7 +954,11 @@ def _duplicate_candidates(
 ) -> list[DuplicateCandidate]:
     groups: defaultdict[str, list[FeatureTransaction]] = defaultdict(list)
     for item in transactions:
-        if item.categorisation.transaction_class == "bank_fee" or is_purchase_reversal(item):
+        if (
+            item.categorisation.transaction_class in _NON_PURCHASE_CLASSES
+            or item.categorisation.transaction_class == "person_to_person"
+            or is_purchase_reversal(item)
+        ):
             continue
         if item.transaction_date is not None and (merchant := merchant_group_key(item)) is not None:
             groups[merchant].append(item)
@@ -930,17 +977,53 @@ def _duplicate_candidates(
                 current.append(item)
                 continue
             if len(current) > 1:
-                candidates.append(_candidate(merchant, current))
+                candidates.append(_candidate(merchant, current, transactions))
             current = [item]
         if len(current) > 1:
-            candidates.append(_candidate(merchant, current))
+            candidates.append(_candidate(merchant, current, transactions))
     return candidates
 
 
+def _reference_tokens(description: str | None) -> set[str]:
+    if not description:
+        return set()
+    return {match.group(1).upper() for match in _REFERENCE_TOKEN.finditer(description)}
+
+
 def _candidate(
-    merchant: str, transactions: list[FeatureTransaction]
+    merchant: str,
+    transactions: list[FeatureTransaction],
+    all_transactions: list[FeatureTransaction],
 ) -> DuplicateCandidate:
     dates = [item.transaction_date for item in transactions if item.transaction_date is not None]
+    descriptions = {
+        (item.description or "").strip().upper()
+        for item in transactions
+        if (item.description or "").strip()
+    }
+    reference_sets = [_reference_tokens(item.description) for item in transactions]
+    non_empty_refs = [refs for refs in reference_sets if refs]
+    shared_refs = False
+    if len(non_empty_refs) >= 2:
+        shared_refs = bool(set.intersection(*non_empty_refs))
+    observed = dates[0] if dates else None
+    nearby_reversal = False
+    if observed is not None:
+        group_amount = amount_of(transactions[0])
+        group_ids = {item.transaction_id for item in transactions}
+        for item in all_transactions:
+            if item.transaction_id in group_ids or item.transaction_date != observed:
+                continue
+            if abs(amount_of(item) - group_amount) > AMOUNT_TOLERANCE:
+                continue
+            if is_purchase_reversal(item) or item.transaction_type == "credit":
+                nearby_reversal = True
+                break
+    match_basis = ["merchant", "amount", "calendar_day"]
+    if shared_refs:
+        match_basis.append("shared_reference")
+    if nearby_reversal:
+        match_basis.append("nearby_reversal_or_refund")
     return DuplicateCandidate(
         group_key=f"{merchant}:{dates[0].isoformat()}:{amount_of(transactions[0])}",
         merchant_name=merchant,
@@ -951,4 +1034,8 @@ def _candidate(
             item.categorisation.classification_confidence >= HIGH_CONFIDENCE
             for item in transactions
         ),
+        distinct_description_count=len(descriptions),
+        shared_reference_tokens=shared_refs,
+        nearby_reversal_or_refund=nearby_reversal,
+        match_basis=match_basis,
     )

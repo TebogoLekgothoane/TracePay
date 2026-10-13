@@ -59,16 +59,10 @@ export function OTPInput({
     >
       <View className="flex-row justify-between gap-2" pointerEvents="none">
         {Array.from({ length }, (_, index) => {
-          const focused =
-            digits.length === index ||
-            (digits.length === length && index === length - 1);
-
           return (
             <View
               key={index}
-              className={`h-14 flex-1 items-center justify-center rounded-2xl border bg-input ${
-                focused ? "border-primary" : "border-input-border"
-              }`}
+              className="h-14 flex-1 items-center justify-center overflow-hidden rounded-2xl bg-input"
             >
               <Text className="text-center text-[22px] font-semibold text-foreground">
                 {digits[index] ?? ""}

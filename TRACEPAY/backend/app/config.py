@@ -1,7 +1,7 @@
 import base64
 import json
 
-from pydantic import field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _PDF_EXTRACTION_TRUE = {"1", "true", "yes", "on"}
@@ -20,7 +20,10 @@ def _explicit_pdf_extraction_opt_in(value: object) -> bool:
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        populate_by_name=True,
     )
 
     app_name: str = "TRACEPAY API"
@@ -34,6 +37,14 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4.1-mini"
     openai_base_url: str = "https://api.openai.com/v1"
     openai_timeout_seconds: int = 120
+    # Real Grok keys come from console.x.ai. GROK_API_KEY is accepted as an alias.
+    xai_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("XAI_API_KEY", "GROK_API_KEY"),
+    )
+    xai_model: str = "grok-4-1-fast-non-reasoning"
+    xai_base_url: str = "https://api.x.ai/v1"
+    xai_timeout_seconds: int = 120
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-4-6"
     anthropic_base_url: str = "https://api.anthropic.com"
@@ -62,6 +73,23 @@ class Settings(BaseSettings):
         if not isinstance(value, str) or not value.strip():
             return "production"
         return value.strip().lower()
+
+    @field_validator("xai_api_key", mode="after")
+    @classmethod
+    def _reject_google_ai_studio_keys_as_xai(cls, value: str) -> str:
+        """Google AI Studio keys belong in GEMINI_API_KEY, not XAI/GROK."""
+        cleaned = (value or "").strip()
+        if cleaned.startswith("AQ."):
+            return ""
+        return cleaned
+
+    def categorisation_provider_keys(self) -> tuple[bool, bool, bool]:
+        """Return (gemini, openai, xai) key presence for categorisation."""
+        return (
+            bool(self.gemini_api_key.strip()),
+            bool(self.openai_api_key.strip()),
+            bool(self.xai_api_key.strip()),
+        )
 
     def supabase_publishable_key(self) -> str:
         """Return the anon/publishable key only. A service-role value is treated as missing."""

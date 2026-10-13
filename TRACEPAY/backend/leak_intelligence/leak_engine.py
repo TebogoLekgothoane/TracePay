@@ -5,18 +5,34 @@ from __future__ import annotations
 from datetime import datetime, time, timezone
 from decimal import Decimal
 
-from .behaviour_engine import MIN_FEE_BURDEN_TOTAL, MIN_RELATIVE_CHANGE_PERCENT, MIN_TREND_MONTHS
+from .behaviour_engine import (
+    MIN_FEE_BURDEN_TOTAL,
+    MIN_RELATIVE_CHANGE_PERCENT,
+    MIN_TREND_MONTHS,
+    is_repeated_shopping_merchant,
+    is_weak_recurring_commitment,
+)
 from .behaviour_models import BehaviourAnalysisResult, BehaviourObservation
 from .leak_keys import leak_fingerprint, subject_key
 from .leak_models import LeakDetection, LeakDetectionResult, LeakType
 from .leak_scoring import leak_confidence, severity_for_impact, support_ratio
 from .merchant_display import (
+    debit_order_leak_title,
+    duplicate_leak_title,
     is_reliable_merchant_display_name,
     merchant_display_name_for,
     recurring_leak_title,
+    repeated_payments_title,
+    spending_increase_title,
 )
 from .engine import RECURRENCE_MIN_OBSERVATIONS
-from .models import CashFeatures, FeeFeatures, FinancialFeatureSnapshot, MerchantFeature
+from .models import (
+    CashFeatures,
+    ConfidenceSupport,
+    FeeFeatures,
+    FinancialFeatureSnapshot,
+    MerchantFeature,
+)
 from .periods import completed_months
 from .recurrence_rules import matches_plausible_recurring_interval
 from .service import CONVENIENCE_FOOD_CATEGORIES, TRANSPORT_CATEGORIES
@@ -145,7 +161,8 @@ def _bank_fee_leaks(
         typed_total = fees.overdraft_fee_total or Decimal("0")
     elif insufficient_funds_burden:
         typed_total = fees.insufficient_funds_fee_total or Decimal("0")
-    if change >= MIN_IMPACT:
+    impact_is_period_change = change >= MIN_IMPACT
+    if impact_is_period_change:
         impact = change
     elif monthly_average >= MIN_IMPACT:
         impact = monthly_average
@@ -153,6 +170,8 @@ def _bank_fee_leaks(
         impact = typed_total / Decimal(max(1, len(completed_months(snapshot))))
     else:
         impact = monthly_average
+    # Annualise the recurring monthly average, not a one-period MoM delta.
+    annual_basis = monthly_average if monthly_average and monthly_average >= MIN_IMPACT else impact
     confidence = leak_confidence(
         support=None,
         observation_count=fees.bank_fee_transaction_count,
@@ -162,7 +181,10 @@ def _bank_fee_leaks(
     if confidence is None:
         return []
     title = "Potential recurring banking fee burden"
-    description = "Repeated banking fees may represent a material ongoing cost pattern."
+    description = (
+        "Repeated banking fees may represent a material ongoing cost pattern. "
+        "This does not claim that every fee is avoidable or can be eliminated."
+    )
     if sms_banking_burden:
         title = "Potential SMS banking charge burden"
         description = (
@@ -211,11 +233,16 @@ def _bank_fee_leaks(
             "not prove that fees could be eliminated or that a cheaper product was "
             "available."
         )
+    fee_breakdown = _fee_type_breakdown(fees)
     evidence: dict[str, object] = {
         "monthly_average_fee": monthly_average,
         "bank_fee_transaction_count": fees.bank_fee_transaction_count,
         "bank_fee_ratio": ratio,
         "fee_change_amount": change if change > 0 else None,
+        "fee_type_breakdown": fee_breakdown,
+        "recurring_fee_total": fee_breakdown.get("recurring_total"),
+        "one_off_fee_total": fee_breakdown.get("one_off_total"),
+        "fees_are_not_all_avoidable": True,
         "finding_kind": "potential_leak",
     }
     if sms_banking_burden:
@@ -263,8 +290,8 @@ def _bank_fee_leaks(
             title=title,
             description=description,
             monthly_impact=impact,
-            annual_impact=impact * Decimal("12"),
-            impact_kind="recurring",
+            annual_impact=annual_basis * Decimal("12"),
+            impact_kind="estimated" if impact_is_period_change else "recurring",
             confidence=confidence,
             severity=severity_for_impact(impact, persistent=True, confidence=confidence),
             evidence=evidence,
@@ -280,9 +307,13 @@ def _recurring_leaks(
 ) -> list[LeakDetection]:
     findings = []
     recurring_observations = observations.get("recurring_payment_pattern", [])
+    # Only suppress recurring when a same-day duplicate candidate exists.
+    # Adjacent-day repeats must not block legitimate subscription detection.
     duplicate_merchants = {
-        observation.evidence.get("merchant_key")
-        for observation in observations.get("duplicate_payment_pattern", [])
+        candidate.merchant_name
+        for candidate in snapshot.duplicate_candidates
+        if candidate.transaction_dates
+        and (max(candidate.transaction_dates) - min(candidate.transaction_dates)).days == 0
     }
     for merchant in snapshot.merchants:
         recurrence = merchant.recurrence
@@ -314,13 +345,29 @@ def _recurring_leaks(
             and merchant.debit_order_transaction_count * 2 >= total_tx
             and is_reliable_merchant_display_name(merchant.merchant_name)
         )
-        if (_coffee_habit_merchant(merchant) or _convenience_store_habit_merchant(merchant) or _airtime_repeat_merchant(merchant) or _data_repeat_merchant(merchant)) and not is_subscription and not debit_order_review:
+        if (
+            _coffee_habit_merchant(merchant)
+            or _convenience_store_habit_merchant(merchant)
+            or _airtime_repeat_merchant(merchant)
+            or _data_repeat_merchant(merchant)
+            or is_repeated_shopping_merchant(merchant)
+        ) and not is_subscription and not debit_order_review:
             continue
         is_unknown = not categories or set(categories).issubset({"Other"})
         reliable_merchant = is_reliable_merchant_display_name(merchant.merchant_name)
+        average_amount = recurrence.average_amount
+        weak_commitment = (
+            not is_subscription
+            and not debit_order_review
+            and is_weak_recurring_commitment(merchant)
+        )
         if is_subscription:
             leak_type: LeakType = "subscription_leak"
-            title = recurring_leak_title(subscription=True, merchant_name=merchant.merchant_name)
+            title = recurring_leak_title(
+                subscription=True,
+                merchant_name=merchant.merchant_name,
+                average_amount=average_amount,
+            )
             description = (
                 "Recurring subscription-category payments followed a stable billing-like "
                 "interval. This may warrant review; available data does not show whether "
@@ -329,31 +376,57 @@ def _recurring_leaks(
             ceiling = Decimal("0.90") if recurrence.recurrence_strength == "high" else Decimal("0.78")
         elif debit_order_review:
             leak_type = "unknown_recurring_payment" if is_unknown else "recurring_payment_leak"
-            title = "Potential debit order that may warrant review"
+            title = debit_order_leak_title(merchant_name=merchant.merchant_name)
             description = (
                 "Recurring payments described as debit orders followed a stable billing-like "
                 "interval. This may warrant review; available data does not show whether "
                 "the underlying service is still used."
             )
             ceiling = Decimal("0.78") if is_unknown else Decimal("0.85")
+        elif weak_commitment:
+            leak_type = "unknown_recurring_payment" if is_unknown else "recurring_payment_leak"
+            title = repeated_payments_title(
+                merchant_name=merchant.merchant_name if reliable_merchant else None,
+                average_amount=average_amount,
+            )
+            description = (
+                "Repeated payments were detected with a relatively stable interval and "
+                "amount. This is not enough evidence to assert a subscription or recurring "
+                "bill; treat it as a review cue only."
+            )
+            ceiling = Decimal("0.62") if is_unknown or not reliable_merchant else Decimal("0.68")
         elif is_unknown or not reliable_merchant:
             leak_type = "unknown_recurring_payment" if is_unknown else "recurring_payment_leak"
-            title = recurring_leak_title(subscription=False, merchant_name=None)
+            title = recurring_leak_title(
+                subscription=False,
+                merchant_name=None,
+                average_amount=average_amount if not reliable_merchant else None,
+            )
             description = (
-                "A stable billing-like payment interval was observed, but the merchant could not be shown safely."
+                "A stable billing-like payment interval was observed, but the merchant could not be identified reliably."
                 if not reliable_merchant
                 else "A stable recurring payment was observed, but its category could not be identified confidently."
             )
             ceiling = Decimal("0.70")
         else:
             leak_type = "recurring_payment_leak"
-            title = recurring_leak_title(subscription=False, merchant_name=merchant.merchant_name)
+            title = recurring_leak_title(
+                subscription=False,
+                merchant_name=merchant.merchant_name,
+                average_amount=average_amount,
+            )
             description = "Payments at this merchant followed a stable billing-like interval and amount pattern."
             ceiling = Decimal("0.85") if recurrence.recurrence_strength == "high" else Decimal("0.72")
         confidence = leak_confidence(
             support=merchant.confidence_support,
             observation_count=recurrence.observation_count,
-            pattern_strength=Decimal("1") if recurrence.recurrence_strength == "high" else Decimal("0.75"),
+            pattern_strength=(
+                Decimal("0.55")
+                if weak_commitment
+                else Decimal("1")
+                if recurrence.recurrence_strength == "high"
+                else Decimal("0.75")
+            ),
             ceiling=ceiling,
         )
         if confidence is None:
@@ -366,17 +439,23 @@ def _recurring_leaks(
                 title=title,
                 description=description,
                 monthly_impact=impact,
-                annual_impact=impact * Decimal("12"),
+                annual_impact=None if weak_commitment else impact * Decimal("12"),
                 impact_kind="recurring",
                 confidence=confidence,
-                severity=severity_for_impact(impact, persistent=True, confidence=confidence),
+                severity=severity_for_impact(
+                    impact,
+                    persistent=not weak_commitment,
+                    confidence=confidence,
+                ),
                 evidence={
                     "merchant_key": merchant.merchant_name
-                    if reliable_merchant and (not is_unknown or debit_order_review)
+                    if reliable_merchant and (not is_unknown or debit_order_review or weak_commitment)
                     else None,
                     "observation_count": recurrence.observation_count,
                     "average_interval_days": recurrence.average_interval_days,
                     "average_amount": recurrence.average_amount,
+                    "amount_variance": recurrence.amount_variance,
+                    "interval_variance": recurrence.interval_variance,
                     "recurrence_strength": recurrence.recurrence_strength,
                     "first_observed_date": merchant.merchant_first_transaction_date,
                     "last_observed_date": merchant.merchant_last_transaction_date,
@@ -387,6 +466,8 @@ def _recurring_leaks(
                         if is_subscription
                         else {"finding_focus": "debit_order_review"}
                         if debit_order_review
+                        else {"finding_focus": "repeated_payments_detected"}
+                        if weak_commitment
                         else {}
                     ),
                 },
@@ -415,20 +496,44 @@ def _spending_escalation_leaks(
         if change is None or change < MIN_IMPACT:
             continue
         confidence = min(observation.confidence, 0.80)
+        contributors = _spending_contributor_breakdown(snapshot, observation)
+        if contributors.get("top_category_contributors"):
+            description = (
+                "Overall spending increased materially above the previous observed baseline. "
+                "Supported category contributors are listed in evidence where comparable "
+                "periods allow. This finding is separate from category-specific findings "
+                "and must not be added to them when estimating total impact."
+            )
+        else:
+            description = (
+                "Overall spending increased materially above the previous observed baseline. "
+                "The available comparable evidence does not yet identify a dominant category "
+                "or merchant cause. This finding is separate from category-specific findings "
+                "and must not be added to them when estimating total impact."
+            )
         findings.append(
             _leak(
                 snapshot=snapshot,
                 leak_type="spending_escalation_leak",
                 subject="aggregate-spending",
-                title="Potential spending escalation",
-                description="Overall spending increased materially above the previous observed baseline.",
+                title=spending_increase_title(
+                    source=None,
+                    change_amount=change,
+                ),
+                description=description,
                 monthly_impact=change,
-                annual_impact=change * Decimal("12"),
+                # One-period estimated deltas are not defensible to annualise.
+                annual_impact=None,
                 impact_kind="estimated",
                 confidence=confidence,
-                severity=severity_for_impact(change, persistent=True, confidence=confidence),
+                severity=severity_for_impact(
+                    change, persistent=False, confidence=confidence
+                ),
                 evidence={
                     **_escalation_evidence(observation),
+                    **contributors,
+                    "amounts_not_additive_with_category_findings": True,
+                    "annual_impact_omitted_reason": "single_period_estimated_change",
                     "finding_kind": "potential_leak",
                 },
                 behaviour_ids=[observation.observation_id],
@@ -488,12 +593,18 @@ def _category_leaks(
         ):
             continue
         confidence = min(observation.confidence, 0.78)
+        pattern_evidence = _category_spend_pattern_evidence(
+            snapshot, category, observation
+        )
         evidence = {
             **_escalation_evidence(observation),
             "category_name": category,
             "category_transaction_count": feature.category_transaction_count,
             "classification_support_ratio": support_ratio(feature.confidence_support),
+            "amounts_not_additive_with_overall_escalation": True,
+            "annual_impact_omitted_reason": "single_period_estimated_change",
             "finding_kind": "potential_leak",
+            **pattern_evidence,
         }
         if feature.airtime_only:
             airtime_merchants = [
@@ -520,9 +631,14 @@ def _category_leaks(
             )
             if len(airtime_merchants) == 1 and is_reliable_merchant_display_name(airtime_merchants[0]):
                 evidence["merchant_key"] = airtime_merchants[0]
-            title = "Airtime spending increased"
-            description = (
-                "Airtime spending increased over the analysed period and may warrant review."
+            title = _category_increase_title(
+                default="Airtime",
+                merchant_key=evidence.get("merchant_key"),
+                change_amount=change,
+            )
+            description = _category_increase_description(
+                "Airtime spending increased over the analysed period and may warrant review.",
+                pattern_evidence,
             )
         elif feature.data_only:
             data_merchants = [
@@ -544,9 +660,14 @@ def _category_leaks(
             )
             if len(data_merchants) == 1 and is_reliable_merchant_display_name(data_merchants[0]):
                 evidence["merchant_key"] = data_merchants[0]
-            title = "Mobile data spending increased"
-            description = (
-                "Mobile data spending increased over the analysed period and may warrant review."
+            title = _category_increase_title(
+                default="Mobile data",
+                merchant_key=evidence.get("merchant_key"),
+                change_amount=change,
+            )
+            description = _category_increase_description(
+                "Mobile data spending increased over the analysed period and may warrant review.",
+                pattern_evidence,
             )
         elif feature.ride_hailing_only:
             ride_merchants = [
@@ -568,9 +689,14 @@ def _category_leaks(
             )
             if len(ride_merchants) == 1 and is_reliable_merchant_display_name(ride_merchants[0]):
                 evidence["merchant_key"] = ride_merchants[0]
-            title = "Ride-hailing spending increased"
-            description = (
-                "Ride-hailing spending increased over the analysed period and may warrant review."
+            title = _category_increase_title(
+                default="Ride-hailing",
+                merchant_key=evidence.get("merchant_key"),
+                change_amount=change,
+            )
+            description = _category_increase_description(
+                "Ride-hailing spending increased over the analysed period and may warrant review.",
+                pattern_evidence,
             )
         elif leak_type == "food_spending_leak" and feature.food_delivery_only:
             delivery_merchants = [
@@ -592,10 +718,22 @@ def _category_leaks(
             )
             if len(delivery_merchants) == 1 and is_reliable_merchant_display_name(delivery_merchants[0]):
                 evidence["merchant_key"] = delivery_merchants[0]
-            title = "Food delivery spending increased"
-            description = (
-                "Food delivery spending increased over the analysed period and may warrant review."
+            title = _category_increase_title(
+                default="Food delivery",
+                merchant_key=evidence.get("merchant_key"),
+                change_amount=change,
             )
+            description = _category_increase_description(
+                "Food delivery spending increased over the analysed period and may warrant review.",
+                pattern_evidence,
+            )
+        else:
+            title = spending_increase_title(
+                source=category,
+                change_amount=change,
+                source_is_merchant=False,
+            )
+            description = _category_increase_description(description, pattern_evidence)
         findings.append(
             _leak(
                 snapshot=snapshot,
@@ -604,16 +742,159 @@ def _category_leaks(
                 title=title,
                 description=description,
                 monthly_impact=change,
-                annual_impact=change * Decimal("12"),
+                # One-period estimated category deltas are not defensible to annualise.
+                annual_impact=None,
                 impact_kind="estimated",
                 confidence=confidence,
-                severity=severity_for_impact(change, persistent=True, confidence=confidence),
+                severity=severity_for_impact(
+                    change, persistent=False, confidence=confidence
+                ),
                 evidence=evidence,
                 behaviour_ids=[observation.observation_id],
                 feature_refs=observation.supporting_features,
             )
         )
     return findings
+
+
+def _category_increase_title(
+    *,
+    default: str,
+    merchant_key: object,
+    change_amount: Decimal | None,
+) -> str:
+    if isinstance(merchant_key, str) and is_reliable_merchant_display_name(merchant_key):
+        return spending_increase_title(
+            source=merchant_key,
+            change_amount=change_amount,
+            source_is_merchant=True,
+        )
+    return spending_increase_title(
+        source=default,
+        change_amount=change_amount,
+        source_is_merchant=False,
+    )
+
+
+def _category_increase_description(
+    base: str,
+    pattern_evidence: dict[str, object],
+) -> str:
+    """Append supported merchant/count patterns without inventing a cause."""
+    summary = pattern_evidence.get("supporting_pattern_summary")
+    if isinstance(summary, str) and summary.strip():
+        return f"{base} {summary}"
+    return base
+
+
+def _category_spend_pattern_evidence(
+    snapshot: FinancialFeatureSnapshot,
+    category: str,
+    observation: BehaviourObservation,
+) -> dict[str, object]:
+    """List merchants and count shifts that support a category spend increase."""
+    baseline_months = observation.evidence.get("baseline_months")
+    current_period = observation.evidence.get("current_period")
+    previous_count = _decimal(observation.evidence.get("transaction_count_previous"))
+    current_count = _decimal(observation.evidence.get("transaction_count_current"))
+    if not isinstance(current_period, str):
+        return {
+            "supporting_merchants": [],
+            "cause_identified": False,
+        }
+    months = (
+        [str(item) for item in baseline_months]
+        if isinstance(baseline_months, list) and baseline_months
+        else (
+            [str(observation.evidence["previous_period"])]
+            if isinstance(observation.evidence.get("previous_period"), str)
+            else []
+        )
+    )
+    months_by_key = {month.month: month for month in snapshot.months}
+    current_month = months_by_key.get(current_period)
+    if current_month is None or not months:
+        return {
+            "supporting_merchants": [],
+            "cause_identified": False,
+        }
+
+    merchant_deltas: list[tuple[str, Decimal, int, int]] = []
+    merchants = set()
+    for month_key in [*months, current_period]:
+        month = months_by_key.get(month_key)
+        if month is not None:
+            merchants.update(month.merchant_totals)
+    for merchant in merchants:
+        if not is_reliable_merchant_display_name(merchant):
+            continue
+        feature = next(
+            (item for item in snapshot.merchants if item.merchant_name == merchant),
+            None,
+        )
+        if feature is None:
+            continue
+        category_share = feature.merchant_category_transaction_count.get(category, 0)
+        if category_share <= 0 or category_share * 2 < feature.merchant_transaction_count:
+            continue
+        baseline_total = Decimal("0")
+        baseline_tx = 0
+        present = 0
+        for month_key in months:
+            month = months_by_key.get(month_key)
+            if month is None:
+                continue
+            present += 1
+            baseline_total += month.merchant_totals.get(merchant) or Decimal("0")
+            baseline_tx += feature.merchant_monthly_transaction_count.get(month_key, 0)
+        if present == 0:
+            continue
+        baseline_avg = baseline_total / Decimal(present)
+        current_total = current_month.merchant_totals.get(merchant) or Decimal("0")
+        current_tx = feature.merchant_monthly_transaction_count.get(current_period, 0)
+        delta = current_total - baseline_avg
+        if delta >= MIN_IMPACT:
+            merchant_deltas.append(
+                (merchant, delta, int(round(baseline_tx / present)), current_tx)
+            )
+    merchant_deltas.sort(key=lambda item: item[1], reverse=True)
+    supporting = [
+        {
+            "merchant_key": name,
+            "merchant_display_name": merchant_display_name_for(name),
+            "change_amount": amount,
+            "transaction_count_previous": previous_tx,
+            "transaction_count_current": current_tx,
+        }
+        for name, amount, previous_tx, current_tx in merchant_deltas[:3]
+    ]
+    summary_parts: list[str] = []
+    if supporting:
+        labels = [
+            str(item["merchant_display_name"] or item["merchant_key"])
+            for item in supporting
+            if item.get("merchant_display_name") or item.get("merchant_key")
+        ]
+        if labels:
+            summary_parts.append(
+                "Supporting merchants in comparable months: " + ", ".join(labels) + "."
+            )
+    if (
+        previous_count is not None
+        and current_count is not None
+        and current_count > previous_count
+    ):
+        summary_parts.append(
+            f"Purchase count moved from {previous_count:.0f} to {current_count:.0f} "
+            "across the compared periods."
+        )
+    return {
+        "supporting_merchants": supporting,
+        "transaction_count_previous": previous_count,
+        "transaction_count_current": current_count,
+        "cause_identified": bool(supporting),
+        "supporting_pattern_summary": " ".join(summary_parts) if summary_parts else None,
+    }
 
 
 def _category_leak_definition(
@@ -821,6 +1102,10 @@ def _duplicate_leaks(
 ) -> list[LeakDetection]:
     findings = []
     observation_ids = _observation_ids(observations.get("duplicate_payment_pattern", []))
+    # One registry identity per merchant. Prefer the highest potential-impact
+    # same-day candidate so distinct merchants stay distinct while identity keys
+    # remain stable across detector versions.
+    selected_by_merchant: dict[str, object] = {}
     for candidate in snapshot.duplicate_candidates:
         dates = candidate.transaction_dates
         high_confidence_ratio = (
@@ -835,24 +1120,71 @@ def _duplicate_leaks(
             or high_confidence_ratio < Decimal("0.60")
         ):
             continue
+        # Refunds/reversals on the same day weaken the accidental-duplicate claim.
+        if candidate.nearby_reversal_or_refund:
+            continue
+        # Divergent descriptions without a shared payment reference are weak
+        # same-merchant/amount/date matches and are often intentional repeats.
+        if (
+            candidate.distinct_description_count > 1
+            and not candidate.shared_reference_tokens
+        ):
+            continue
         impact = candidate.amount * Decimal(len(dates) - 1)
+        current = selected_by_merchant.get(candidate.merchant_name)
+        if current is None or impact > current[0]:  # type: ignore[index]
+            selected_by_merchant[candidate.merchant_name] = (impact, candidate)
+
+    for impact, candidate in selected_by_merchant.values():  # type: ignore[misc]
+        dates = candidate.transaction_dates
+        support = ConfidenceSupport(
+            supporting_transaction_count=len(dates),
+            high_confidence_transaction_count=candidate.high_confidence_transaction_count,
+            low_confidence_transaction_count=(
+                len(dates) - candidate.high_confidence_transaction_count
+            ),
+        )
+        # Matching merchant+amount+date alone is weak; do not inflate confidence.
+        pattern_strength = Decimal("0.48")
+        if candidate.shared_reference_tokens:
+            pattern_strength = Decimal("0.58")
+        if candidate.distinct_description_count <= 1:
+            pattern_strength = min(pattern_strength, Decimal("0.52"))
         confidence = leak_confidence(
-            support=None,
+            support=support,
             observation_count=len(dates),
-            pattern_strength=Decimal("0.65"),
+            pattern_strength=pattern_strength,
             ceiling=Decimal("0.68"),
         )
         if confidence is None:
             continue
+        display_merchant = (
+            candidate.merchant_name
+            if is_reliable_merchant_display_name(candidate.merchant_name)
+            else None
+        )
+        alternate_count = sum(
+            1
+            for other in snapshot.duplicate_candidates
+            if other.merchant_name == candidate.merchant_name
+            and other.group_key != candidate.group_key
+            and other.transaction_dates
+            and (max(other.transaction_dates) - min(other.transaction_dates)).days == 0
+        )
         findings.append(
             _leak(
                 snapshot=snapshot,
                 leak_type="duplicate_payment_leak",
                 subject=candidate.merchant_name,
-                title="Potential duplicate payment requires verification",
+                title=duplicate_leak_title(
+                    merchant_name=display_merchant,
+                    amount=candidate.amount,
+                ),
                 description=(
                     "Same-day transactions with the same merchant and amount were grouped as a "
-                    "duplicate candidate that requires manual verification."
+                    "duplicate candidate that requires manual verification. Matching merchant, "
+                    "amount and date alone does not confirm a duplicate, accidental payment, "
+                    "error, or recoverable amount."
                 ),
                 monthly_impact=impact,
                 annual_impact=None,
@@ -861,16 +1193,26 @@ def _duplicate_leaks(
                 severity=severity_for_impact(impact, persistent=False, confidence=confidence),
                 evidence={
                     "finding_focus": "duplicate_merchant_payment",
-                    "merchant_key": candidate.merchant_name
-                    if is_reliable_merchant_display_name(candidate.merchant_name)
-                    else None,
+                    # Always persist the grouping key for identity continuity; display
+                    # filtering happens separately and must not flip identity keys.
+                    "merchant_key": candidate.merchant_name,
                     "candidate_amount": candidate.amount,
                     "transaction_count_in_group": len(dates),
                     "group_total": candidate.amount * Decimal(len(dates)),
                     "observed_date": dates[0].isoformat(),
                     "date_span_days": 0,
+                    "match_basis": list(candidate.match_basis),
+                    "distinct_description_count": candidate.distinct_description_count,
+                    "shared_reference_tokens": candidate.shared_reference_tokens,
+                    "nearby_reversal_or_refund": candidate.nearby_reversal_or_refund,
+                    "alternate_same_merchant_candidate_count": alternate_count,
+                    "potential_not_confirmed_savings": True,
                     "verification_required": True,
                     "finding_kind": "verification_required",
+                    "uncertainty": (
+                        "Matching fields can occur for intentional repeat purchases. "
+                        "Manual verification is required before treating this as a duplicate."
+                    ),
                 },
                 behaviour_ids=observation_ids,
                 feature_refs=["duplicate_candidates"],
@@ -1189,9 +1531,157 @@ def _escalation_evidence(observation: BehaviourObservation) -> dict:
         "transaction_count_previous",
         "transaction_count_current",
         "months_compared",
+        "baseline_month_count",
+        "baseline_months",
+        "baseline_period_start",
+        "baseline_period_end",
+        "baseline_is_average",
+        "periods_comparable",
     )
     return {
         key: observation.evidence[key]
         for key in keys
         if key in observation.evidence
     } | {"behaviour_confidence": observation.confidence}
+
+
+def _fee_type_breakdown(fees: FeeFeatures) -> dict[str, object]:
+    """Group observed fee totals into useful types without claiming avoidability."""
+    typed = {
+        "service_charges": fees.account_fee_total or Decimal("0"),
+        "payment_fees": (fees.immediate_payment_fee_total or Decimal("0"))
+        + (fees.transaction_fee_total or Decimal("0")),
+        "balance_enquiry_fees": fees.balance_enquiry_fee_total or Decimal("0"),
+        "sms_fees": fees.sms_fee_total or Decimal("0"),
+        "atm_fees": fees.atm_fee_total or Decimal("0"),
+        "card_fees": fees.card_fee_total or Decimal("0"),
+        "foreign_transaction_fees": fees.foreign_transaction_fee_total or Decimal("0"),
+        "interest_charges": fees.interest_charge_total or Decimal("0"),
+        "overdraft_fees": fees.overdraft_fee_total or Decimal("0"),
+        "insufficient_funds_fees": fees.insufficient_funds_fee_total or Decimal("0"),
+    }
+    recurring_total = (
+        typed["service_charges"]
+        + typed["sms_fees"]
+        + typed["card_fees"]
+    )
+    one_off_total = (
+        typed["payment_fees"]
+        + typed["balance_enquiry_fees"]
+        + typed["atm_fees"]
+        + typed["foreign_transaction_fees"]
+        + typed["interest_charges"]
+        + typed["overdraft_fees"]
+        + typed["insufficient_funds_fees"]
+    )
+    classified = recurring_total + one_off_total
+    return {
+        **{key: value for key, value in typed.items() if value > 0},
+        "recurring_total": recurring_total,
+        "one_off_total": one_off_total,
+        "unclassified_fee_total": max(Decimal("0"), fees.bank_fee_total - classified),
+    }
+
+
+def _spending_contributor_breakdown(
+    snapshot: FinancialFeatureSnapshot,
+    observation: BehaviourObservation,
+) -> dict[str, object]:
+    """Identify supported category/merchant contributors for overall escalation.
+
+    Contributors are compared against the same multi-month baseline average used
+    for ``change_amount``, not a single prior month, so shares stay aligned.
+    """
+    baseline_months = observation.evidence.get("baseline_months")
+    previous_period = observation.evidence.get("previous_period")
+    current_period = observation.evidence.get("current_period")
+    change = _decimal(observation.evidence.get("change_amount")) or Decimal("0")
+    months_by_key = {month.month: month for month in snapshot.months}
+    if not isinstance(current_period, str):
+        return {
+            "cause_identified": False,
+            "top_category_contributors": [],
+            "top_merchant_contributors": [],
+        }
+    baseline_keys = (
+        [str(item) for item in baseline_months]
+        if isinstance(baseline_months, list) and baseline_months
+        else [str(previous_period)]
+        if isinstance(previous_period, str)
+        else []
+    )
+    baseline_months_data = [
+        months_by_key[key] for key in baseline_keys if key in months_by_key
+    ]
+    current_month = months_by_key.get(current_period)
+    if not baseline_months_data or current_month is None or change <= 0:
+        return {
+            "cause_identified": False,
+            "top_category_contributors": [],
+            "top_merchant_contributors": [],
+        }
+
+    def _baseline_average(totals_for) -> Decimal:
+        return sum((totals_for(month) for month in baseline_months_data), Decimal("0")) / Decimal(
+            len(baseline_months_data)
+        )
+
+    category_deltas: list[tuple[str, Decimal]] = []
+    categories: set[str] = set()
+    for month in baseline_months_data:
+        categories.update(month.category_totals)
+    categories.update(current_month.category_totals)
+    for category in categories:
+        baseline = _baseline_average(
+            lambda month, name=category: month.category_totals.get(name) or Decimal("0")
+        )
+        delta = (current_month.category_totals.get(category) or Decimal("0")) - baseline
+        if delta >= MIN_IMPACT:
+            category_deltas.append((category, delta))
+    category_deltas.sort(key=lambda item: item[1], reverse=True)
+
+    merchant_deltas: list[tuple[str, Decimal]] = []
+    merchants: set[str] = set()
+    for month in baseline_months_data:
+        merchants.update(month.merchant_totals)
+    merchants.update(current_month.merchant_totals)
+    for merchant in merchants:
+        if not is_reliable_merchant_display_name(merchant):
+            continue
+        baseline = _baseline_average(
+            lambda month, name=merchant: month.merchant_totals.get(name) or Decimal("0")
+        )
+        delta = (current_month.merchant_totals.get(merchant) or Decimal("0")) - baseline
+        if delta >= MIN_IMPACT:
+            merchant_deltas.append((merchant, delta))
+    merchant_deltas.sort(key=lambda item: item[1], reverse=True)
+
+    top_categories = [
+        {
+            "category_name": name,
+            "change_amount": amount,
+            "share_of_overall_change": (amount / change) if change > 0 else None,
+        }
+        for name, amount in category_deltas[:3]
+    ]
+    top_merchants = [
+        {
+            "merchant_key": name,
+            "merchant_display_name": merchant_display_name_for(name),
+            "change_amount": amount,
+            "share_of_overall_change": (amount / change) if change > 0 else None,
+        }
+        for name, amount in merchant_deltas[:3]
+    ]
+    explained = sum((item["change_amount"] for item in top_categories), Decimal("0"))
+    return {
+        "cause_identified": bool(top_categories) and explained >= (change * Decimal("0.40")),
+        "top_category_contributors": top_categories,
+        "top_merchant_contributors": top_merchants,
+        "contributor_explanation": (
+            "Listed contributors are supported by comparable monthly totals against the "
+            "same baseline used for the overall change."
+            if top_categories
+            else "Cause not yet identified from comparable category or merchant totals."
+        ),
+    }

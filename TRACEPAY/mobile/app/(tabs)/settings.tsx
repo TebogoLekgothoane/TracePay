@@ -68,7 +68,7 @@ const ACCOUNT_ROWS: SettingsRow[] = [
   },
   {
     id: "accounts",
-    label: "Linked accounts",
+    label: "My accounts",
     Icon: Wallet,
     href: LINKED_ACCOUNTS_HREF,
   },

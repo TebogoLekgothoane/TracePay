@@ -488,8 +488,9 @@ def test_cash_pattern_and_non_frequency_food_do_not_invent_frequency_advice() ->
     assert [item.recommendation_type for item in result.recommendations] == [
         "monitor_spending_pattern"
     ]
-    assert result.recommendations[0].title == "Monitor spending pattern"
+    assert result.recommendations[0].title == "Monitor Fast Food spending pattern"
     assert "higher average transaction value" in result.recommendations[0].explanation
+    assert "Fast Food" in result.recommendations[0].explanation
 
 
 def _transaction(
