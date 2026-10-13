@@ -93,9 +93,11 @@ function RootNavigator({
     const isUnlockRoute = isAuthRoute && screen === "unlock";
     const isFinancialSetupRoute =
       isAuthRoute &&
-      ["financial-data-consent", "financial-accounts-setup"].includes(
-        screen ?? "",
-      );
+      [
+        "financial-data-consent",
+        "consent-form",
+        "financial-accounts-setup",
+      ].includes(screen ?? "");
     const isPinSetupRoute =
       isAuthRoute &&
       ["device-security", "confirm-pin", "biometric-setup"].includes(
@@ -251,6 +253,19 @@ function RootNavigator({
       let active = true;
       void resolveAuthenticatedHomeHref().then((href) => {
         if (active) {
+          router.replace(href);
+        }
+      });
+      return () => {
+        active = false;
+      };
+    }
+
+    // Statement upload is required — keep users out of the app until they have an account.
+    if (routeState.isProtectedRoute) {
+      let active = true;
+      void resolveAuthenticatedHomeHref().then((href) => {
+        if (active && href !== "/(tabs)") {
           router.replace(href);
         }
       });

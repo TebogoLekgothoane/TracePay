@@ -215,21 +215,18 @@ def _decrypt_with_pikepdf(content: bytes, candidates: list[str]) -> bytes | None
     except ImportError:
         return None
 
-    saw_password_error = False
     for candidate in candidates:
         try:
+            # Empty string is intentional — many SA bank PDFs use an empty user password.
             with pikepdf.open(io.BytesIO(content), password=candidate) as pdf:
                 output = io.BytesIO()
                 pdf.save(output)
                 return output.getvalue()
         except pikepdf.PasswordError:
-            saw_password_error = True
             continue
         except Exception as error:
             logger.warning("pikepdf_decrypt_failed error_type=%s", type(error).__name__)
             return None
-    if saw_password_error:
-        return None
     return None
 
 
@@ -263,6 +260,13 @@ def _decrypt_with_pypdf(content: bytes, candidates: list[str]) -> bytes | None:
     return None
 
 
+def _try_decrypt(content: bytes, candidates: list[str]) -> bytes | None:
+    decrypted = _decrypt_with_pikepdf(content, candidates)
+    if decrypted is not None:
+        return decrypted
+    return _decrypt_with_pypdf(content, candidates)
+
+
 def _decrypt_if_needed(content: bytes, password: str | None) -> bytes:
     try:
         from pypdf import PdfReader
@@ -275,6 +279,14 @@ def _decrypt_if_needed(content: bytes, password: str | None) -> bytes:
         raise ExtractionError("The PDF could not be opened.") from error
     if not reader.is_encrypted:
         return content
+
+    # Many SA bank statements (incl. Standard Bank) are encrypted with an empty
+    # user password. Phone Files opens them without a prompt; try that first.
+    empty_unlock = _try_decrypt(content, [""])
+    if empty_unlock is not None:
+        logger.info("pdf_decrypt_empty_user_password")
+        return empty_unlock
+
     if not password or not password.strip():
         raise PasswordRequiredError(
             "This PDF is password protected. Please enter the password to continue."
@@ -287,11 +299,7 @@ def _decrypt_if_needed(content: bytes, password: str | None) -> bytes:
         len(password.strip()),
     )
 
-    decrypted = _decrypt_with_pikepdf(content, candidates)
-    if decrypted is not None:
-        return decrypted
-
-    decrypted = _decrypt_with_pypdf(content, candidates)
+    decrypted = _try_decrypt(content, candidates)
     if decrypted is not None:
         return decrypted
 

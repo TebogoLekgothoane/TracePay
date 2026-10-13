@@ -55,7 +55,8 @@ export function BankImportList({
         Choose your bank
       </Text>
       <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">
-        Select a bank, then pick a statement PDF. TracePay allows one statement per bank.
+        A bank statement is required to continue. Select your bank, then upload a
+        PDF. One statement per bank.
       </Text>
 
       <View className="mt-5 flex-row items-center rounded-2xl bg-input px-3.5">

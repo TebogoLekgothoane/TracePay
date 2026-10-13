@@ -1,6 +1,5 @@
 import { FINANCIAL_ACCOUNTS_SETUP_HREF } from "../accounts/account.navigation";
-import { loadFinancialAccountsSetupDismissed } from "../accounts/account-setup.service";
-import { listAccounts } from "../accounts/account.service";
+import { hasSavedStatementTransactions } from "../accounts/account.service";
 
 export type AuthenticatedHomeHref =
   | typeof FINANCIAL_ACCOUNTS_SETUP_HREF
@@ -12,18 +11,18 @@ export function authFlowParams(flow: unknown): { flow: string } | Record<string,
   return typeof flow === "string" && flow.length > 0 ? { flow } : {};
 }
 
+/**
+ * Home is only available after at least one statement import saved transactions.
+ * Empty provisional bank accounts are pruned and do not unlock the app.
+ */
 export async function resolveAuthenticatedHomeHref(): Promise<AuthenticatedHomeHref> {
   try {
-    const [accounts, setupDismissed] = await Promise.all([
-      listAccounts(),
-      loadFinancialAccountsSetupDismissed(),
-    ]);
-    if (accounts.length > 0 || setupDismissed) {
+    if (await hasSavedStatementTransactions()) {
       return "/(tabs)";
     }
     return FINANCIAL_ACCOUNTS_SETUP_HREF;
   } catch {
-    return "/(tabs)";
+    return FINANCIAL_ACCOUNTS_SETUP_HREF;
   }
 }
 

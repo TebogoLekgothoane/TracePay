@@ -1,4 +1,5 @@
 import { getSupabase, isSupabaseConfigured } from "../../lib/supabase";
+import { clearStatementPdfPassword } from "../statement-import/statement-pdf-password.service";
 import { AccountError } from "./account.errors";
 import {
   readAccountBalanceRow,
@@ -288,6 +289,20 @@ export async function discardEmptyImportAccount(
   const userId = await requireAuthenticatedUserId();
   const supabase = getSupabase();
 
+  const { data: accountRow, error: accountError } = await supabase
+    .from("accounts")
+    .select("id, connection_source")
+    .eq("id", accountId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (accountError || !accountRow) {
+    return;
+  }
+  if (accountRow.connection_source !== "statement_import") {
+    return;
+  }
+
   const [{ count: processedCount, error: processedError }, { count: txCount, error: txError }] =
     await Promise.all([
       supabase
@@ -324,6 +339,41 @@ export async function discardEmptyImportAccount(
       message: error instanceof Error ? error.message : "unknown",
     });
   }
+}
+
+/** Drop statement-import shells with no saved transactions, then return remaining accounts. */
+export async function pruneEmptyStatementImportAccounts(): Promise<
+  FinancialAccount[]
+> {
+  const accounts = await listAccounts();
+  const emptyImports = accounts.filter(
+    (account) => account.connectionSource === "statement_import",
+  );
+  if (emptyImports.length > 0) {
+    await Promise.all(
+      emptyImports.map((account) => discardEmptyImportAccount(account.id)),
+    );
+  }
+  return listAccounts();
+}
+
+export async function hasSavedStatementTransactions(): Promise<boolean> {
+  const accounts = await pruneEmptyStatementImportAccounts();
+  if (accounts.length === 0) {
+    return false;
+  }
+
+  const userId = await requireAuthenticatedUserId();
+  const { count, error } = await getSupabase()
+    .from("transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .limit(1);
+
+  if (error) {
+    return accounts.length > 0;
+  }
+  return (count ?? 0) > 0;
 }
 
 export async function updateAccountName(
@@ -381,6 +431,8 @@ export async function deleteAccount(accountId: string): Promise<void> {
   if (!accountId) {
     throw new AccountError("Account not found.");
   }
+
+  await clearStatementPdfPassword(accountId);
 
   const supabase = getSupabase();
   const mutationId = ++mutationCounter;

@@ -46,7 +46,7 @@ export const STATEMENT_PDF_PASSWORD_TIPS: Partial<
   Nedbank:
     "Usually your full 13-digit SA ID number, or your date of birth as DDMMYYYY.",
   "Standard Bank":
-    "Usually the last 6 digits of your SA ID (no spaces). If that fails, try the full 13-digit ID, or open the PDF in your phone’s Files app to confirm the password.",
+    "Many Standard Bank PDFs open without a password. If TracePay asks, try the last 6 digits of your SA ID (no spaces), then the full 13-digit ID.",
   TymeBank: "Use the password from your TymeBank statement email or download.",
 };
 
@@ -61,7 +61,7 @@ export function incorrectPdfPasswordMessage(
   bankName: string | null | undefined,
 ): string {
   if (bankName === "Standard Bank") {
-    return "That password didn't work. Try the last 6 digits of your SA ID, then the full 13-digit ID with no spaces. Confirm it opens in Files before retrying here.";
+    return "That password didn't work. Many Standard Bank PDFs need no password — re-pick the file, or try the last 6 digits of your SA ID, then the full 13-digit ID.";
   }
   if (bankName === "FNB") {
     return "That password didn't work. FNB usually needs the last 4 digits of your SA ID plus the last 4 of your account number.";

@@ -69,6 +69,14 @@ export default function AuthLayout() {
       />
 
       <Stack.Screen
+        name="consent-form"
+        options={{
+          headerShown: false,
+          gestureEnabled: true,
+        }}
+      />
+
+      <Stack.Screen
         name="financial-accounts-setup"
         options={{
           headerShown: false,

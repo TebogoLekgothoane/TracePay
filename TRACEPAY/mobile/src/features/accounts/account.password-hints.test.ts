@@ -25,15 +25,17 @@ function test(name: string, run: () => void): void {
   }
 }
 
-test("Standard Bank tip points at last 6 ID digits", () => {
+test("Standard Bank tip mentions silent open and last 6 ID digits", () => {
   const tip = statementPdfPasswordTip("Standard Bank");
   assertEqual(tip !== null, true, "tip exists");
+  assertIncludes(tip!, "without a password", "empty-password note");
   assertIncludes(tip!, "last 6 digits", "tip text");
   assertIncludes(tip!, "full 13-digit", "mentions full ID fallback");
 });
 
 test("incorrect Standard Bank password names the last-6 rule", () => {
   const message = incorrectPdfPasswordMessage("Standard Bank");
+  assertIncludes(message, "no password", "empty-password note");
   assertIncludes(message, "last 6 digits", "error text");
   assertIncludes(message, "full 13-digit", "mentions full ID fallback");
 });

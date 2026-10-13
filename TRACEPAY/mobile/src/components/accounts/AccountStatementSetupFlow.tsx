@@ -37,7 +37,14 @@ import {
 } from "../../features/accounts/account.validation";
 import { BANK_ALREADY_UPLOADED_MESSAGE } from "../../features/statement-import/statement-bank";
 import {
+  importNoticeToneForMessage,
+  NO_TRANSACTIONS_FOUND_MESSAGE,
+  toUserFacingImportMessage,
+  type ImportNoticeTone,
+} from "../../features/statement-import/statement-import.messages";
+import {
   isFindingReconciliationError,
+  isPdfImportCancelled,
   isPdfPasswordChallenge,
   isStatementBankOccupied,
   listOccupiedStatementBankKeys,
@@ -46,6 +53,11 @@ import {
   type PdfImportResume,
   type StatementImportStage,
 } from "../../features/statement-import/statement-import.service";
+import {
+  clearStatementPdfPassword,
+  loadStatementPdfPassword,
+  saveStatementPdfPassword,
+} from "../../features/statement-import/statement-pdf-password.service";
 import { COLORS } from "../../theme/colors";
 
 type Props = {
@@ -84,6 +96,8 @@ export function AccountStatementSetupFlow({
   const bankRef = useRef<SaInstitution | null>(initialInstitution);
   /** Account created for this import attempt — remove if extract/save never succeeds. */
   const provisionalAccountIdRef = useRef<string | null>(null);
+  const importAbortRef = useRef<AbortController | null>(null);
+  const importGenerationRef = useRef(0);
 
   const [bank, setBank] = useState<SaInstitution | null>(initialInstitution);
   const [accountId, setAccountId] = useState<string | null>(existingAccountId);
@@ -95,6 +109,7 @@ export function AccountStatementSetupFlow({
 
   const [file, setFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageTone, setMessageTone] = useState<ImportNoticeTone>("error");
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<StatementImportStage | null>(null);
   const [password, setPassword] = useState("");
@@ -173,12 +188,19 @@ export function AccountStatementSetupFlow({
       .catch(() => setFormError("Account not found."));
   }, [existingAccountId]);
 
+  const showImportNotice = useCallback((text: string, tone?: ImportNoticeTone) => {
+    const next = toUserFacingImportMessage(text);
+    setMessage(next);
+    setMessageTone(tone ?? importNoticeToneForMessage(next));
+  }, []);
+
   const clearImport = useCallback(() => {
     if (busy) return;
     const provisionalId = provisionalAccountIdRef.current;
     provisionalAccountIdRef.current = null;
     setFile(null);
     setMessage(null);
+    setMessageTone("error");
     setPasswordRequired(false);
     setPasswordError(null);
     setPassword("");
@@ -198,16 +220,61 @@ export function AccountStatementSetupFlow({
     });
   }, [busy]);
 
-  const leave = (force = false) => {
+  const abortImportAndStay = (force = false) => {
     if (busy && !force) return;
     const provisionalId = provisionalAccountIdRef.current;
     provisionalAccountIdRef.current = null;
     if (provisionalId) {
       void discardEmptyImportAccount(provisionalId);
     }
+    processLock.current = false;
+    setBusy(false);
+    setFile(null);
+    setMessage(null);
+    setMessageTone("error");
+    setPasswordRequired(false);
+    setPasswordError(null);
+    setPassword("");
+    setResume(null);
+    setStage(null);
+    setReconciliationImportId(null);
+    setExtractedCount(0);
+    setAccountId(null);
+    setLoadedAccount(null);
+    setAccountBank(null);
+  };
+
+  const cancelActiveImport = () => {
+    importGenerationRef.current += 1;
+    importAbortRef.current?.abort();
+    importAbortRef.current = null;
+    abortImportAndStay(true);
+    // Keep the selected bank so they can pick another PDF for the same bank.
+    if (bankRef.current) {
+      setBank(bankRef.current);
+      setCreatingNew(true);
+    }
+  };
+
+  const leave = (force = false) => {
+    if (busy && !force) return;
+    // Onboarding requires a successful statement upload — back/cancel only resets the import.
     if (mode === "onboarding") {
-      void dismissFinancialAccountsSetup();
-      return router.replace("/(tabs)");
+      if (busy || stage) {
+        cancelActiveImport();
+        return;
+      }
+      abortImportAndStay(force);
+      return;
+    }
+    if (busy || stage) {
+      cancelActiveImport();
+      return;
+    }
+    const provisionalId = provisionalAccountIdRef.current;
+    provisionalAccountIdRef.current = null;
+    if (provisionalId) {
+      void discardEmptyImportAccount(provisionalId);
     }
     if (returnTo) return router.replace(returnTo as Href);
     router.back();
@@ -275,8 +342,13 @@ export function AccountStatementSetupFlow({
       return;
     }
     processLock.current = true;
+    const generation = ++importGenerationRef.current;
+    importAbortRef.current?.abort();
+    const controller = new AbortController();
+    importAbortRef.current = controller;
     setBusy(true);
     setMessage(null);
+    setMessageTone("error");
     setFormError(null);
     setPasswordRequired(false);
     setPasswordError(null);
@@ -294,35 +366,92 @@ export function AccountStatementSetupFlow({
         setStage(null);
         return;
       }
+
+      let effectivePassword = nextPassword.trim();
+      if (!effectivePassword) {
+        const saved = await loadStatementPdfPassword(targetAccountId);
+        if (saved) {
+          effectivePassword = saved;
+        }
+      }
+
       const preview = await preparePdfStatement(asset, {
         accountId: targetAccountId,
-        password: nextPassword.trim(),
+        password: effectivePassword,
         resume: nextResume,
+        signal: controller.signal,
         onProgress: (progress) => {
-          if (mountedRef.current) setStage(progress.stage);
+          if (
+            mountedRef.current &&
+            generation === importGenerationRef.current
+          ) {
+            setStage(progress.stage);
+          }
         },
       });
-      // Transactions saved — keep the linked account.
+      if (generation !== importGenerationRef.current) {
+        return;
+      }
+      const inserted =
+        preview.findingSummary?.inserted ?? preview.transactions.length;
+      if (inserted <= 0) {
+        // Never keep a bank account without saved transactions.
+        const discardId = provisionalAccountIdRef.current ?? targetAccountId;
+        provisionalAccountIdRef.current = null;
+        await discardEmptyImportAccount(discardId);
+        if (!mountedRef.current || generation !== importGenerationRef.current) {
+          return;
+        }
+        setAccountId(null);
+        setLoadedAccount(null);
+        setAccountBank(null);
+        setResume(null);
+        showImportNotice(NO_TRANSACTIONS_FOUND_MESSAGE, "info");
+        setStage(null);
+        return;
+      }
+      // Transactions saved — keep the linked account and remember PDF password.
       provisionalAccountIdRef.current = null;
-      if (mountedRef.current) {
+      if (effectivePassword) {
+        await saveStatementPdfPassword(targetAccountId, effectivePassword);
+      }
+      if (mountedRef.current && generation === importGenerationRef.current) {
         setReconciliationImportId(null);
-        finishSavedImport(
-          preview.findingSummary?.inserted ?? preview.transactions.length,
-          preview.findingSummary,
-        );
+        finishSavedImport(inserted, preview.findingSummary);
       }
     } catch (error) {
+      if (
+        isPdfImportCancelled(error) ||
+        generation !== importGenerationRef.current
+      ) {
+        return;
+      }
       if (isPdfPasswordChallenge(error)) {
+        const challengeAccountId =
+          provisionalAccountIdRef.current ?? accountId ?? existingAccountId;
+        if (challengeAccountId) {
+          // Drop a stale saved password so the next unlock attempt is clean.
+          const typedPassword = nextPassword.trim();
+          if (!typedPassword) {
+            await clearStatementPdfPassword(challengeAccountId);
+          }
+        }
         if (!mountedRef.current) return;
         setResume({
           statementId: error.statementId,
           filePath: error.filePath,
         });
         setPasswordRequired(true);
+        const autoTriedSaved = !nextPassword.trim();
+        if (autoTriedSaved) {
+          setPassword("");
+        }
         setPasswordError(
-          error.code === "invalid_password"
-            ? incorrectPdfPasswordMessage(selectedBank ?? bankRef.current)
-            : null,
+          autoTriedSaved
+            ? null
+            : error.code === "invalid_password"
+              ? incorrectPdfPasswordMessage(selectedBank ?? bankRef.current)
+              : null,
         );
         setStage(null);
         return;
@@ -333,7 +462,7 @@ export function AccountStatementSetupFlow({
         if (!mountedRef.current) return;
         setReconciliationImportId(error.statementImportId);
         setExtractedCount(error.extractedCount);
-        setMessage(error.message);
+        showImportNotice(error.message, "error");
         setStage(null);
         return;
       }
@@ -341,11 +470,18 @@ export function AccountStatementSetupFlow({
       if (!mountedRef.current) return;
       setResume(null);
       setReconciliationImportId(null);
-      setMessage(error instanceof Error ? error.message : "The PDF could not be processed.");
+      showImportNotice(
+        error instanceof Error ? error.message : "The PDF could not be processed.",
+      );
       setStage(null);
     } finally {
-      processLock.current = false;
-      if (mountedRef.current) setBusy(false);
+      if (importAbortRef.current === controller) {
+        importAbortRef.current = null;
+      }
+      if (generation === importGenerationRef.current) {
+        processLock.current = false;
+        if (mountedRef.current) setBusy(false);
+      }
     }
   };
 
@@ -418,6 +554,7 @@ export function AccountStatementSetupFlow({
     if (!reconciliationImportId || busy) return;
     setBusy(true);
     setMessage(null);
+    setMessageTone("error");
     try {
       const counts = await retryFindingReconciliation(reconciliationImportId);
       if (!mountedRef.current) return;
@@ -427,11 +564,12 @@ export function AccountStatementSetupFlow({
       if (!mountedRef.current) return;
       if (isFindingReconciliationError(error)) {
         setReconciliationImportId(error.statementImportId);
-        setMessage(error.message);
+        showImportNotice(error.message, "error");
         return;
       }
-      setMessage(
+      showImportNotice(
         "Finding reconciliation could not finish. Your statement is saved. Try again.",
+        "error",
       );
     } finally {
       if (mountedRef.current) setBusy(false);
@@ -470,7 +608,9 @@ export function AccountStatementSetupFlow({
         formatTip={statementPdfPasswordTip(bankName)}
         password={password}
         passwordError={passwordError}
-        onChooseAnother={clearImport}
+        onChangeFile={() => {
+          void pickPdf(bankRef.current);
+        }}
         onClose={() => leave()}
         onPasswordChange={(value) => {
           setPassword(value);
@@ -491,7 +631,7 @@ export function AccountStatementSetupFlow({
         bankName={bankName}
         fileSizeBytes={file?.size}
         stage={stage}
-        onClose={() => leave(true)}
+        onCancel={cancelActiveImport}
       />
     );
   }
@@ -525,8 +665,18 @@ export function AccountStatementSetupFlow({
         >
           <View className="pb-8">
             {message && !passwordRequired ? (
-              <View className="mt-4 rounded-2xl bg-destructive/10 px-4 py-3">
-                <Text className="text-center text-[13px] text-destructive">{message}</Text>
+              <View
+                className={`mt-4 rounded-2xl px-4 py-3 ${
+                  messageTone === "info" ? "bg-primary/10" : "bg-destructive/10"
+                }`}
+              >
+                <Text
+                  className={`text-center text-[13px] leading-5 ${
+                    messageTone === "info" ? "text-foreground" : "text-destructive"
+                  }`}
+                >
+                  {message}
+                </Text>
                 {reconciliationImportId ? (
                   <Button className="mt-3" onPress={() => void retryReconciliation()}>
                     Try again
@@ -636,12 +786,6 @@ export function AccountStatementSetupFlow({
             ) : null}
           </View>
         </ScrollView>
-
-        {mode === "onboarding" ? (
-          <Button className="mb-2" disabled={busy} variant="outline" onPress={() => leave()}>
-            Skip for now
-          </Button>
-        ) : null}
       </View>
     </SafeAreaView>
   );

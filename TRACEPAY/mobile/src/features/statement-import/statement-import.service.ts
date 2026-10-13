@@ -15,6 +15,10 @@ import {
   normalizeStatementBankKey,
 } from "./statement-bank";
 import {
+  isNoTransactionsImportMessage,
+  NO_TRANSACTIONS_FOUND_MESSAGE,
+} from "./statement-import.messages";
+import {
   STATEMENT_IMPORT_STAGE_RATIO,
   type StatementImportProgress,
   type StatementImportStage,
@@ -111,7 +115,24 @@ export type PreparePdfStatementOptions = {
   password?: string;
   resume?: PdfImportResume | null;
   onProgress?: (progress: StatementImportProgress) => void;
+  /** Abort in-flight upload/extract when the user cancels tracing. */
+  signal?: AbortSignal;
 };
+
+export const PDF_IMPORT_CANCELLED_MESSAGE = "PDF processing was cancelled.";
+
+export function isPdfImportCancelled(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /PDF processing was cancelled/i.test(error.message)
+  );
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw new Error(PDF_IMPORT_CANCELLED_MESSAGE);
+  }
+}
 
 function reportProgress(
   onProgress: PreparePdfStatementOptions["onProgress"],
@@ -282,32 +303,50 @@ function postPdfToProcessor(
   accessToken: string,
   file: { uri: string; name: string },
   password: string | undefined,
+  signal?: AbortSignal,
 ): Promise<{ status: number; payload: ProcessorPreviewPayload }> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error(PDF_IMPORT_CANCELLED_MESSAGE));
+      return;
+    }
+
     const request = new XMLHttpRequest();
     let timedOut = false;
+    let userCancelled = false;
 
     const timeout = setTimeout(() => {
       timedOut = true;
       request.abort();
     }, PDF_PROCESSOR_TIMEOUT_MS);
 
-    request.onerror = () => {
+    const onSignalAbort = () => {
+      userCancelled = true;
+      request.abort();
+    };
+    signal?.addEventListener("abort", onSignalAbort, { once: true });
+
+    const clearListeners = () => {
       clearTimeout(timeout);
+      signal?.removeEventListener("abort", onSignalAbort);
+    };
+
+    request.onerror = () => {
+      clearListeners();
       reject(new Error("Could not reach the PDF processor."));
     };
     request.onabort = () => {
-      clearTimeout(timeout);
+      clearListeners();
       reject(
         new Error(
-          timedOut
+          timedOut && !userCancelled
             ? "PDF processing timed out after 300 seconds. Check that the processor is running and reachable, then try again."
-            : "PDF processing was cancelled.",
+            : PDF_IMPORT_CANCELLED_MESSAGE,
         ),
       );
     };
     request.onload = () => {
-      clearTimeout(timeout);
+      clearListeners();
       try {
         resolve({
           status: request.status,
@@ -368,23 +407,37 @@ function passwordChallengeFromDetail(
   return null;
 }
 
+function isEmptyStatementOutcome(message: string): boolean {
+  return isNoTransactionsImportMessage(message);
+}
+
 async function failAndCleanup(
   statementId: string,
   filePath: string,
   message: string,
 ): Promise<never> {
-  console.error("[TracePay][statement] cleanup_failed_import", {
-    statementId,
-    message,
-  });
+  const userMessage = isEmptyStatementOutcome(message)
+    ? NO_TRANSACTIONS_FOUND_MESSAGE
+    : message;
+  if (isEmptyStatementOutcome(message)) {
+    console.info("[TracePay][statement] empty_statement_import", {
+      statementId,
+      message: userMessage,
+    });
+  } else {
+    console.error("[TracePay][statement] cleanup_failed_import", {
+      statementId,
+      message: userMessage,
+    });
+  }
   const supabase = getSupabase();
   await supabase
     .from("statement_imports")
-    .update({ status: "failed", error_message: message })
+    .update({ status: "failed", error_message: userMessage })
     .eq("id", statementId);
   await supabase.from("transactions").delete().eq("statement_id", statementId);
   await supabase.storage.from("statements").remove([filePath]);
-  throw new Error(message);
+  throw new Error(userMessage);
 }
 
 /** Banks that already hold an active statement slot for the signed-in user. */
@@ -790,6 +843,7 @@ export async function preparePdfStatement(
   options: PreparePdfStatementOptions,
 ): Promise<PdfStatementPreview> {
   const onProgress = options.onProgress;
+  const signal = options.signal;
   const name = asset.name || "statement.pdf";
   console.info("[TracePay][statement] import_started", {
     filename: name,
@@ -808,6 +862,7 @@ export async function preparePdfStatement(
     throw new Error("PDF statements must be smaller than 20 MB.");
   }
 
+  throwIfAborted(signal);
   reportProgress(onProgress, "preparing");
 
   const supabase = getSupabase();
@@ -890,6 +945,7 @@ export async function preparePdfStatement(
     }
 
     if (!isResume) {
+      throwIfAborted(signal);
       reportProgress(onProgress, "uploading");
       const { error: uploadError } = await supabase.storage
         .from("statements")
@@ -900,6 +956,7 @@ export async function preparePdfStatement(
       if (uploadError) {
         throw new Error("The statement could not be uploaded securely.");
       }
+      throwIfAborted(signal);
       console.info("[TracePay][statement] storage_upload_completed", {
         statementId: id,
         sizeBytes: fileSize,
@@ -952,6 +1009,7 @@ export async function preparePdfStatement(
         "The PDF processor is not configured yet.",
       );
     }
+    throwIfAborted(signal);
     reportProgress(onProgress, "extracting");
     console.info("[TracePay][statement] processor_request_started", {
       statementId: id,
@@ -962,7 +1020,9 @@ export async function preparePdfStatement(
       sessionData.session.access_token,
       { uri: asset.uri, name },
       options.password,
+      signal,
     );
+    throwIfAborted(signal);
     const validation = payload.validation;
     console.info("[TracePay][statement] processor_request_completed", {
       statementId: id,
@@ -1081,10 +1141,36 @@ export async function preparePdfStatement(
     if (isPdfPasswordChallenge(error) || error instanceof FindingReconciliationError) {
       throw error;
     }
-    console.error("[TracePay][statement] import_failed", {
-      statementId: id,
-      message: errorMessage(error, "PDF processing failed."),
-    });
+    if (isPdfImportCancelled(error)) {
+      console.info("[TracePay][statement] import_cancelled", {
+        statementId: id,
+      });
+      if (recordCreated) {
+        const supabase = getSupabase();
+        await supabase
+          .from("statement_imports")
+          .update({
+            status: "failed",
+            error_message: PDF_IMPORT_CANCELLED_MESSAGE,
+          })
+          .eq("id", id);
+        await supabase.from("transactions").delete().eq("statement_id", id);
+        await supabase.storage.from("statements").remove([filePath]);
+      }
+      throw error;
+    }
+    const failedMessage = errorMessage(error, "PDF processing failed.");
+    if (isEmptyStatementOutcome(failedMessage)) {
+      console.info("[TracePay][statement] empty_statement_import", {
+        statementId: id,
+        message: failedMessage,
+      });
+    } else {
+      console.error("[TracePay][statement] import_failed", {
+        statementId: id,
+        message: failedMessage,
+      });
+    }
     if (recordCreated) {
       return await failAndCleanup(
         id,

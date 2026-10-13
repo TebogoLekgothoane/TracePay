@@ -4,6 +4,7 @@ import {
   Clock3,
   FileText,
   Hourglass,
+  Info,
   Lock,
   RefreshCw,
   ScanSearch,
@@ -16,7 +17,14 @@ import {
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -147,7 +155,7 @@ function Header({
     <View className="relative min-h-11 flex-row items-center justify-center px-4">
       <View className="absolute left-3 z-10 w-11">
         {onBack ? (
-          <IconButton accessibilityLabel="Go back" variant="ghost" onPress={onBack}>
+          <IconButton accessibilityLabel="Go back" variant="outline" onPress={onBack}>
             <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
           </IconButton>
         ) : null}
@@ -159,18 +167,12 @@ function Header({
   );
 }
 
-function ProgressBar({
-  percent,
-  fillClassName = "bg-foreground",
-}: {
-  percent: number;
-  fillClassName?: string;
-}) {
+function ProgressBar({ percent }: { percent: number }) {
   const width = Math.max(0, Math.min(100, percent));
 
   return (
     <View className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-      <View className={`h-1.5 rounded-full ${fillClassName}`} style={{ width: `${width}%` }} />
+      <View className="h-1.5 rounded-full bg-primary" style={{ width: `${width}%` }} />
     </View>
   );
 }
@@ -186,11 +188,11 @@ function DocumentCard({
   const label = bankName ? `${bankName.toUpperCase()} STATEMENT` : "BANK STATEMENT";
 
   return (
-    <View className="w-[220px] rounded-[22px] border border-border bg-card px-4 pb-3.5 pt-4 shadow-md">
+    <View className="w-[220px] rounded-3xl border border-border bg-card px-4 pb-3.5 pt-4">
       <View className="mb-3.5 flex-row items-center">
-        <FileText color={palette.foreground} size={16} strokeWidth={2.2} />
+        <FileText color={palette.primary} size={16} strokeWidth={2.2} />
         <Text
-          className="ml-2 text-[11px] font-bold uppercase tracking-[0.7px] text-foreground"
+          className="ml-2 text-[11px] font-semibold uppercase tracking-[0.7px] text-muted-foreground"
           numberOfLines={1}
         >
           {label}
@@ -226,7 +228,7 @@ function ConnectedStepper({ current }: { current: number }) {
                 <View
                   className={`h-0 flex-1 border-t-[1.5px] ${
                     lineReached
-                      ? "border-solid border-foreground"
+                      ? "border-solid border-primary"
                       : "border-dashed border-border"
                   }`}
                 />
@@ -236,17 +238,17 @@ function ConnectedStepper({ current }: { current: number }) {
               <View
                 className={`h-7 w-7 items-center justify-center rounded-full border-[1.5px] ${
                   done
-                    ? "border-foreground bg-foreground"
+                    ? "border-primary bg-primary"
                     : active
-                      ? "border-dashed border-foreground bg-card"
+                      ? "border-primary bg-primary/10"
                       : "border-solid border-border bg-card"
                 }`}
               >
                 {done ? (
-                  <Check color={palette.background} size={14} strokeWidth={3} />
+                  <Check color={COLORS.white} size={14} strokeWidth={3} />
                 ) : (
                   <Icon
-                    color={active ? palette.foreground : palette.mutedForeground}
+                    color={active ? palette.primary : palette.mutedForeground}
                     size={14}
                     strokeWidth={2.2}
                   />
@@ -256,7 +258,7 @@ function ConnectedStepper({ current }: { current: number }) {
                 <View
                   className={`h-0 flex-1 border-t-[1.5px] ${
                     nextReached
-                      ? "border-solid border-foreground"
+                      ? "border-solid border-primary"
                       : "border-dashed border-border"
                   }`}
                 />
@@ -283,14 +285,14 @@ type ProcessingProps = {
   stage: StatementImportStage;
   fileSizeBytes?: number | null;
   bankName?: string | null;
-  onClose?: () => void;
+  onCancel: () => void;
 };
 
 export function StatementProcessingScreen({
   stage,
   fileSizeBytes,
   bankName,
-  onClose,
+  onCancel,
 }: ProcessingProps) {
   const palette = usePalette();
   const { elapsedMs, extractElapsedMs } = useImportClock(stage);
@@ -301,17 +303,19 @@ export function StatementProcessingScreen({
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
-      <Header title="Tracing statement" onBack={onClose} />
+      <Header title="Tracing statement" onBack={onCancel} />
 
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="px-5 pb-7 pt-2">
           <View className="items-center pt-2">
             <DocumentCard bankName={bankName} percent={percent} />
 
-            <Text className="mt-6 text-[44px] font-bold tracking-[-1.2px] text-foreground">
+            <Text className="mt-6 text-[30px] font-bold tracking-[-0.7px] text-foreground">
               {percent}%
             </Text>
-            <Text className="mt-1 text-[17px] font-semibold text-foreground">{step.headline}</Text>
+            <Text className="mt-2 text-[24px] font-bold tracking-[-0.4px] text-foreground">
+              {step.headline}
+            </Text>
             <Text className="mt-2 max-w-[300px] text-center text-[14px] leading-5 text-muted-foreground">
               {step.detail(bankName ?? null)}
             </Text>
@@ -319,38 +323,58 @@ export function StatementProcessingScreen({
             <View className="mt-4 flex-row items-center justify-center gap-2">
               <View className="flex-row items-center gap-1.5 rounded-full bg-muted px-3 py-1.5">
                 <Clock3 color={palette.mutedForeground} size={13} strokeWidth={2.2} />
-                <Text className="text-[12px] font-semibold text-muted-foreground">
+                <Text className="text-[12px] font-medium text-muted-foreground">
                   {formatElapsed(elapsedMs)}
                 </Text>
               </View>
               <View className="flex-row items-center gap-1.5 rounded-full bg-muted px-3 py-1.5">
                 <Hourglass color={palette.mutedForeground} size={13} strokeWidth={2.2} />
-                <Text className="text-[12px] font-semibold text-muted-foreground">
+                <Text className="text-[12px] font-medium text-muted-foreground">
                   {formatRemainingCompact(remainingMs)}
                 </Text>
               </View>
             </View>
           </View>
 
-          <View className="mt-7 rounded-3xl border border-border bg-card px-3.5 pb-4 pt-[18px] shadow-sm">
+          <View className="mt-7 rounded-3xl border border-border bg-card px-3.5 pb-4 pt-[18px]">
             <ConnectedStepper current={current} />
 
             <View className="mt-5 flex-row items-center gap-3">
               <View className="flex-1">
                 <ProgressBar percent={percent} />
               </View>
-              <Text className="text-[12px] font-bold text-foreground">{percent}%</Text>
+              <Text className="text-[12px] font-semibold text-primary">{percent}%</Text>
             </View>
 
             <View className="mt-4 flex-row items-center justify-center gap-1.5">
-              <ShieldCheck color={palette.mutedForeground} size={13} strokeWidth={2.2} />
+              <ShieldCheck color={palette.primary} size={13} strokeWidth={2.2} />
               <Text className="text-[12px] text-muted-foreground">
                 Your financial data stays private.
               </Text>
             </View>
           </View>
+
+          <View className="mt-4 flex-row items-start gap-3 rounded-3xl bg-primary/10 px-4 py-3.5">
+            <Info
+              color={palette.primary}
+              size={16}
+              strokeWidth={2.2}
+              style={{ marginTop: 1 }}
+            />
+            <Text className="min-w-0 flex-1 text-[13px] leading-5 text-foreground">
+              Please stay on this screen until tracing finishes. Leaving TracePay
+              or switching apps can stop the scan, and you’ll need to upload
+              again.
+            </Text>
+          </View>
         </View>
       </ScrollView>
+
+      <View className="border-t border-border px-5 pb-2 pt-4">
+        <Button variant="outline" onPress={onCancel}>
+          Cancel
+        </Button>
+      </View>
     </SafeAreaView>
   );
 }
@@ -367,7 +391,8 @@ type PasswordProps = {
   onPasswordChange: (value: string) => void;
   onUnlock: () => void;
   onClose: () => void;
-  onChooseAnother: () => void;
+  /** Opens the system file picker so the user can swap the PDF. */
+  onChangeFile: () => void;
 };
 
 export function StatementPasswordScreen({
@@ -380,7 +405,7 @@ export function StatementPasswordScreen({
   onPasswordChange,
   onUnlock,
   onClose,
-  onChooseAnother,
+  onChangeFile,
 }: PasswordProps) {
   const palette = usePalette();
   const canUnlock = password.trim().length > 0 && !busy;
@@ -400,11 +425,7 @@ export function StatementPasswordScreen({
         >
           <View className="flex-1 justify-center pb-4">
             <View className="items-center">
-              <View className="h-20 w-20 items-center justify-center rounded-[24px] border border-border bg-card">
-                <View className="h-12 w-12 items-center justify-center rounded-2xl bg-primary/15">
-                  <Lock color={palette.primary} size={24} strokeWidth={2.2} />
-                </View>
-              </View>
+              <Lock color={palette.primary} size={24} strokeWidth={2.2} />
               <Text className="mt-5 text-center text-[24px] font-bold tracking-[-0.4px] text-foreground">
                 {hasError ? "Incorrect password" : "Password required"}
               </Text>
@@ -414,19 +435,24 @@ export function StatementPasswordScreen({
                   : "Enter the password for this statement PDF."}
               </Text>
 
-              <View className="mt-5 w-full flex-row items-center gap-3 rounded-2xl border border-border bg-card px-3.5 py-3">
-                <View className="h-10 w-10 items-center justify-center rounded-xl bg-muted">
-                  <FileText color={palette.primary} size={18} strokeWidth={2} />
-                </View>
-                <View className="min-w-0 flex-1">
-                  <Text className="text-[14px] font-semibold text-foreground" numberOfLines={1}>
-                    {fileName}
-                  </Text>
-                  {bankName ? (
-                    <Text className="mt-0.5 text-[12px] text-muted-foreground">{bankName}</Text>
-                  ) : null}
-                </View>
-              </View>
+              <Pressable
+                accessibilityHint="Opens the file picker to choose a different PDF"
+                accessibilityLabel={`Selected statement ${fileName}. Tap to change.`}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: busy }}
+                className={`mt-5 w-full rounded-2xl bg-input px-3.5 py-3 ${
+                  busy ? "opacity-50" : "active:opacity-80"
+                }`}
+                disabled={busy}
+                onPress={onChangeFile}
+              >
+                <Text className="text-[14px] font-semibold text-foreground" numberOfLines={1}>
+                  {fileName}
+                </Text>
+                <Text className="mt-0.5 text-[12px] text-muted-foreground">
+                  {bankName ? `${bankName} · Tap to change` : "Tap to change"}
+                </Text>
+              </Pressable>
             </View>
 
             <View className="mt-6">
@@ -451,12 +477,9 @@ export function StatementPasswordScreen({
           </View>
         </ScrollView>
 
-        <View className="gap-3 px-5 pb-2">
+        <View className="px-5 pb-2">
           <Button disabled={!canUnlock} loading={busy} onPress={onUnlock}>
             Unlock and continue
-          </Button>
-          <Button disabled={busy} variant="outline" onPress={onChooseAnother}>
-            Choose another PDF
           </Button>
         </View>
       </KeyboardAvoidingView>

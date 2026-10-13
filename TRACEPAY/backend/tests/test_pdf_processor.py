@@ -114,6 +114,28 @@ def test_password_protected_pdf_requires_and_accepts_password() -> None:
     assert 0 <= raw.extraction_confidence <= 1
 
 
+def test_empty_user_password_pdf_opens_without_prompt() -> None:
+    """Bank PDFs often encrypt with an empty user password — Files opens them silently."""
+    source = io.BytesIO()
+    canvas = Canvas(source)
+    canvas.drawString(50, 750, "Standard Bank statement")
+    canvas.save()
+
+    encrypted = io.BytesIO()
+    reader = PdfReader(io.BytesIO(source.getvalue()))
+    writer = PdfWriter()
+    writer.append_pages_from_reader(reader)
+    writer.encrypt(user_password="", owner_password="owner-only")
+    writer.write(encrypted)
+    content = encrypted.getvalue()
+
+    probe = PdfReader(io.BytesIO(content), strict=False)
+    assert probe.is_encrypted
+
+    raw, _, _ = extract_layers(content)
+    assert raw.pages == 1
+
+
 def test_password_candidates_include_sa_id_last_six() -> None:
     from pdf_processor.extract import _password_candidates
 
