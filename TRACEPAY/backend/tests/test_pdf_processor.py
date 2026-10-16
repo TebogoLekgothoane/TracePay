@@ -1,5 +1,5 @@
 import io
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 
 import pytest
@@ -8,7 +8,7 @@ from reportlab.pdfgen.canvas import Canvas
 
 from pdf_processor.extract import InvalidPasswordError, PasswordRequiredError, extract_layers
 from pdf_processor.models import Transaction
-from pdf_processor.normalise import has_usable_structured_text, normalize_row, parse_amount, parse_date, parse_text_rows
+from pdf_processor.normalise import has_usable_structured_text, normalize_row, parse_amount, parse_date, parse_text_rows, parse_time
 from pdf_processor.tables import align_row_to_headers, is_transaction_table, merge_continuation_rows
 from pdf_processor.validate import validate_transactions
 
@@ -26,6 +26,18 @@ def test_amount_and_date_normalisation() -> None:
     assert parse_amount("1.500,00") == Decimal("1500.00")
     assert parse_amount("12,3456") is None
     assert parse_date("18/09/26") == date(2026, 9, 18)
+    assert parse_time("18/09/2026 14:30:05") == time(14, 30, 5)
+    assert parse_time("18/09/2026") is None
+
+
+def test_transaction_time_is_preserved_when_statement_has_a_time_column() -> None:
+    transaction = normalize_row(
+        ["18/09/2026", "14:30", "WOOLWORTHS", "450.00"],
+        ["date", "time", "description", "debit"],
+        2,
+    )
+    assert transaction is not None
+    assert transaction.transaction_time == time(14, 30)
 
 
 def test_debit_credit_columns_become_signed_canonical_amount() -> None:

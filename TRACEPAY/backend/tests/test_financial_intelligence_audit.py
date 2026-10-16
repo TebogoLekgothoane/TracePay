@@ -48,6 +48,33 @@ def test_transfer_initials_and_payshap_are_not_confirmed_merchants() -> None:
     assert merchant_key("PAYSHAP PAY BY SHAPID") == ""
 
 
+def test_payshap_formatting_variants_remain_payment_mechanisms() -> None:
+    for description in (
+        "PAYSHAP PAY BY SHAPID",
+        "PAY SHAP PAY BY SHAPID",
+        "PAY BY SHAPID",
+        "PayShap - Pay by ShapID",
+    ):
+        identity = identify_source(description)
+        classified = classify_transaction(description, "debit")
+
+        assert identity.source_type == "payment_mechanism", description
+        assert identity.merchant_name is None, description
+        assert classified.transaction_class == "person_to_person", description
+        assert classified.merchant_name is None, description
+        assert merchant_key(description) == "", description
+
+
+def test_payshap_does_not_change_distinct_merchant_identity() -> None:
+    identity = identify_source("PAYSHAP PAYMENT TO WOOLWORTHS")
+    classified = classify_transaction("PAYSHAP PAYMENT TO WOOLWORTHS", "debit")
+
+    assert identity.source_type == "merchant"
+    assert identity.merchant_name == "Woolworths"
+    assert classified.transaction_class == "spending"
+    assert classified.merchant_name == "Woolworths"
+
+
 def test_card_purchase_merchant_key_prefers_catalogue_remainder() -> None:
     assert merchant_key("PURCHASE WITH CARD AT MR D FOOD") == "MR D"
     assert merchant_key("WITH CARD AT UBER") == "UBER"

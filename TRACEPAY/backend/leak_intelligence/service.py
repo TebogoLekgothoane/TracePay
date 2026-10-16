@@ -13,6 +13,38 @@ FOOD_CATEGORIES = frozenset({"Groceries", "Restaurants", "Fast Food"})
 CONVENIENCE_FOOD_CATEGORIES = FOOD_CATEGORIES - frozenset({"Groceries"})
 TRANSPORT_CATEGORIES = {"Ride Hailing", "Public Transport", "Fuel"}
 CASH_WITHDRAWAL_CATEGORIES = {"Cash Withdrawal", "Cash Withdrawals", "ATM Cash Withdrawal"}
+ESSENTIAL_SPENDING_CATEGORIES = frozenset(
+    {
+        "Groceries",
+        "Fuel",
+        "Public Transport",
+        "Insurance",
+        "Medical",
+        "Healthcare",
+        "Utilities",
+        "Rent",
+        "Accommodation",
+    }
+)
+STREAMING_MERCHANT_KEYS = frozenset(
+    {
+        "netflix",
+        "showmax",
+        "dstv",
+        "multichoice",
+        "disney",
+        "disneyplus",
+        "disney plus",
+        "prime video",
+        "amazon prime",
+        "youtube premium",
+        "apple tv",
+        "hbo",
+        "hbo max",
+        "paramount",
+        "paramount plus",
+    }
+)
 
 
 def _category_amounts(transactions: list[FeatureTransaction]) -> tuple[dict[str, Decimal], dict[str, int]]:

@@ -71,7 +71,8 @@ _RECOGNISED_MERCHANT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Microsoft", ("MICROSOFT", "OFFICE 365", "M365")),
     ("Discord", ("DISCORD",)),
     ("Apple", ("APPLE", "ITUNES", "APP STORE")),
-    ("PayShap", ("PAYSHAP", "PAY SHAP")),
+    ("Mr Price", ("MR PRICE", "MRPRICE")),
+    ("Wild Coast Go Karts", ("WILD COAST GO KARTS",)),
     ("MTN MoMo", ("MTN MOMO", "MTNMOMO")),
     ("MTN", ("MTN",)),
     ("Vodacom", ("VODACOM",)),
@@ -193,6 +194,8 @@ RULES: tuple[Rule, ...] = (
     Rule("merchant:pick-n-pay", "Groceries", 1.00, contains("PICK N PAY", "PICKNPAY")),
     Rule("merchant:spar", "Groceries", 1.00, contains("SPAR")),
     Rule("merchant:foodlovers", "Groceries", 1.00, contains("FOODLOVERS", "FOOD LOVERS")),
+    Rule("merchant:mr-price", "Shopping", 1.00, contains("MR PRICE", "MRPRICE")),
+    Rule("merchant:wild-coast-go-karts", "Entertainment", 1.00, contains("WILD COAST GO KARTS")),
     Rule(
         "merchant:food-and-spaza",
         "Groceries",

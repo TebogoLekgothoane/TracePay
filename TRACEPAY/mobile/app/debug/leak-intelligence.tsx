@@ -1,6 +1,7 @@
 import { Redirect, router } from "expo-router";
 import {
   ArrowLeftRight,
+  ChevronDown,
   ChevronLeft,
   Fuel,
   ShieldAlert,
@@ -15,6 +16,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Pressable,
   ScrollView,
   Text,
   View,
@@ -30,6 +32,7 @@ import {
   formatCurrency,
   formatDuplicateFinding,
   formatFindingEvidence,
+  formatIrregularFinding,
   formatImpactKind,
   formatPrimaryImpactLabel,
   merchantDisplayName,
@@ -190,6 +193,7 @@ function ResultContent({
     leaks: LeakDetection[];
   };
 }) {
+  const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
   return (
     <View className="mt-6">
       <View className="flex-row gap-3">
@@ -204,7 +208,12 @@ function ResultContent({
       {result.leaks.length === 0 ? <EmptyState /> : null}
       <View className="mt-5 gap-4">
         {result.leaks.map((leak) => (
-          <LeakCard key={leak.fingerprint} leak={leak} />
+          <LeakCard
+            key={leak.fingerprint}
+            leak={leak}
+            expanded={expandedFinding === leak.fingerprint}
+            onToggle={() => setExpandedFinding((current) => current === leak.fingerprint ? null : leak.fingerprint)}
+          />
         ))}
       </View>
     </View>
@@ -234,12 +243,25 @@ function EmptyState() {
   );
 }
 
-function LeakCard({ leak }: { leak: LeakDetection }) {
+function LeakCard({
+  leak,
+  expanded,
+  onToggle,
+}: {
+  leak: LeakDetection;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const { colorScheme } = useColorScheme();
+  const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const duplicate =
     leak.leak_type === "duplicate_payment_leak" ? formatDuplicateFinding(leak) : null;
+  const irregular = leak.leak_type === "irregular_transaction_leak";
   const evidence = duplicate
     ? duplicate.rows
-    : formatFindingEvidence(leak.leak_type, leak.evidence);
+    : irregular && expanded
+      ? formatIrregularFinding(leak.evidence)
+      : formatFindingEvidence(leak.leak_type, leak.evidence);
   const merchant = merchantDisplayName(leak.evidence);
   const category =
     typeof leak.evidence.category_name === "string" ? leak.evidence.category_name : null;
@@ -268,7 +290,7 @@ function LeakCard({ leak }: { leak: LeakDetection }) {
 
       <View className="mt-5 flex-row gap-3">
         <Metric
-          label={formatPrimaryImpactLabel(leak.impact_kind)}
+          label={irregular ? "Transaction amount" : formatPrimaryImpactLabel(leak.impact_kind)}
           value={formatCurrency(leak.estimated_monthly_impact)}
         />
         <Metric
@@ -281,11 +303,30 @@ function LeakCard({ leak }: { leak: LeakDetection }) {
         />
       </View>
       <View className="mt-3 flex-row gap-3">
-        <Metric label="Confidence" value={formatConfidence(leak.confidence)} />
+        <Metric label={irregular ? "Confidence (heuristic)" : "Confidence"} value={formatConfidence(leak.confidence)} />
         <Metric label="Impact kind" value={formatImpactKind(leak.impact_kind)} />
       </View>
 
-      <Text className="mt-5 text-[13px] font-semibold uppercase tracking-[0.7px] text-muted-foreground">
+      {irregular ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          className="mt-5 flex-row items-center justify-between rounded-2xl bg-muted/40 px-4 py-3 active:opacity-75"
+          onPress={onToggle}
+        >
+          <View className="min-w-0 flex-1">
+            <Text className="text-[13px] font-semibold text-foreground">
+              {expanded ? "Hide transaction evidence" : "View transaction evidence"}
+            </Text>
+            <Text className="mt-0.5 text-[12px] text-muted-foreground">
+              Exact transaction, date, source description and baseline
+            </Text>
+          </View>
+          <ChevronDown color={palette.placeholder} size={18} strokeWidth={2} />
+        </Pressable>
+      ) : null}
+
+      <Text className={`${irregular && !expanded ? "mt-4" : "mt-5"} text-[13px] font-semibold uppercase tracking-[0.7px] text-muted-foreground`}>
         Evidence
       </Text>
       {evidence.length ? (
@@ -293,12 +334,12 @@ function LeakCard({ leak }: { leak: LeakDetection }) {
           {evidence.map((item) => (
             <View
               key={item.label}
-              className="flex-row items-center justify-between gap-4 rounded-xl bg-muted/40 px-3 py-2.5"
+              className="flex-row items-start gap-3 rounded-xl bg-muted/40 px-3 py-2.5"
             >
               <Text className="min-w-0 flex-1 text-[13px] text-muted-foreground">
                 {item.label}
               </Text>
-              <Text className="text-right text-[13px] font-semibold text-foreground">
+              <Text className="min-w-0 flex-1 text-right text-[13px] font-semibold text-foreground">
                 {item.value}
               </Text>
             </View>
@@ -309,8 +350,18 @@ function LeakCard({ leak }: { leak: LeakDetection }) {
           Aggregate evidence is available for this pattern.
         </Text>
       )}
+      {irregular && expanded && typeof leak.evidence.transaction_id === "string" ? (
+        <View className="mt-3 rounded-xl bg-muted/20 px-3 py-2.5">
+          <Text className="text-[11px] font-semibold uppercase tracking-[0.6px] text-muted-foreground">
+            Developer transaction ID
+          </Text>
+          <Text selectable className="mt-1 text-[12px] text-foreground">
+            {leak.evidence.transaction_id}
+          </Text>
+        </View>
+      ) : null}
       <Text className="mt-4 text-[12px] text-muted-foreground">
-        Status: {humanize(leak.status)} · Detected period:{" "}
+        Status: {humanize(leak.status)} · Analysis period:{" "}
         {formatPeriod(leak.period_start, leak.period_end)}
       </Text>
     </View>

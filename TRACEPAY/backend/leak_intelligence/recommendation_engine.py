@@ -136,6 +136,8 @@ def _classify(
         return None
     if _is_cash_pattern(analysis):
         return None
+    if analysis.evidence.get("finding_focus") == "unusual_transaction":
+        return "monitor_spending_pattern", "standalone", analysis.reasoning_id
 
     category = _category_name(analysis)
     if (
@@ -175,6 +177,25 @@ def _copy_for(
     if recommendation_type == "review_recurring_payment":
         merchant = _merchant_name(analysis)
         subject = f" at {merchant}" if merchant else ""
+        if analysis.evidence.get("finding_focus") == "missing_expected_recurring_payment":
+            title = (
+                f"Review inactive recurring payment at {merchant}"
+                if merchant
+                else "Review inactive recurring payment"
+            )
+            return (
+                title,
+                (
+                    f"A previously regular payment{subject} was not observed within its "
+                    "expected billing window. This recommendation is a verification step "
+                    "and does not establish that the service was cancelled."
+                ),
+                (
+                    "Verify whether the recurring payment was delayed, billed under "
+                    "another description, or stopped. TracePay will not contact the "
+                    "merchant or bank."
+                ),
+            )
         title = (
             f"Review {merchant} recurring payment"
             if merchant
@@ -258,6 +279,26 @@ def _copy_for(
 def _monitor_copy(analysis: FinancialReasoning) -> tuple[str, str, str]:
     merchant = _merchant_name(analysis)
     category = _category_name(analysis)
+    if analysis.evidence.get("finding_focus") == "unusual_transaction":
+        who = f" at {merchant}" if merchant else ""
+        cat_clause = f" in {category}" if category else ""
+        title = (
+            f"Review unusual transaction at {merchant}"
+            if merchant
+            else "Review unusual transaction"
+        )
+        return (
+            title,
+            (
+                f"A single transaction{who}{cat_clause} was materially larger than the "
+                "category baseline. This recommendation is a verification step and does "
+                "not establish an error or unauthorised charge."
+            ),
+            (
+                "Check the transaction date and amount against your receipts or records. "
+                "TracePay will not dispute the charge or contact the bank."
+            ),
+        )
     subject = merchant or category or "Spending"
     driver = _driver_sentence(analysis, subject)
     if merchant:

@@ -29,6 +29,20 @@ const EVIDENCE_LABELS: Record<string, string> = {
   transaction_count_in_group: "Transactions in group",
   date_span_days: "Date span",
   verification_required: "Verification required",
+  transaction_amount: "Actual transaction amount",
+  merchant_display_name: "Merchant",
+  original_description: "Statement description",
+  transaction_date: "Transaction date",
+  transaction_time: "Transaction time",
+  transaction_type: "Transaction type",
+  baseline_sample_size: "Baseline sample size",
+  category_median_amount: "Baseline median amount",
+  difference_from_baseline: "Difference from baseline",
+  amount_multiple_of_category_median: "Amount / baseline median",
+  outlier_rule: "Outlier rule",
+  confidence_basis: "Confidence basis",
+  confidence_is_calibrated: "Confidence calibrated",
+  transaction_id: "Internal transaction reference",
   first_observed_date: "First observed",
   last_observed_date: "Last observed",
 };
@@ -43,6 +57,9 @@ const CURRENCY_KEYS = new Set([
   "cash_withdrawal_total",
   "atm_fee_total",
   "candidate_amount",
+  "transaction_amount",
+  "category_median_amount",
+  "difference_from_baseline",
 ]);
 
 const PERCENT_KEYS = new Set([
@@ -50,7 +67,7 @@ const PERCENT_KEYS = new Set([
   "bank_fee_ratio",
 ]);
 
-const SENSITIVE_EVIDENCE_KEYS = /(?:account|card|phone|reference|description|transaction_id|merchant_key|subject|token|fingerprint)/i;
+const SENSITIVE_EVIDENCE_KEYS = /(?:account|card|phone|reference|description|transaction_id|merchant_key|merchant_display_name|subject|token|fingerprint)/i;
 
 const CARD_PURCHASE_BOILERPLATE = /^(?:purchase\s+)?with\s+card\s+at(?:\s+epos(?:\s+at)?)?$/i;
 const BANK_BOILERPLATE_LABEL =
@@ -244,4 +261,34 @@ export function formatFindingEvidence(
     return rows;
   }
   return [{ label: "Merchant", value: merchant }, ...rows];
+}
+
+export function formatIrregularFinding(evidence: Record<string, unknown>): EvidenceRow[] {
+  const safeKeys = [
+    "merchant_display_name",
+    "transaction_amount",
+    "transaction_date",
+    "transaction_time",
+    "original_description",
+    "category_name",
+    "transaction_type",
+    "category_transaction_count",
+    "baseline_sample_size",
+    "category_median_amount",
+    "difference_from_baseline",
+    "amount_multiple_of_category_median",
+    "outlier_rule",
+    "confidence_basis",
+    "confidence_is_calibrated",
+    "verification_required",
+  ];
+  return safeKeys.flatMap((key) => {
+    const value = evidence[key];
+    if (value === null || value === undefined || value === "") {
+      if (key === "merchant_display_name") return [{ label: "Merchant", value: "Unknown merchant" }];
+      if (key === "transaction_time") return [{ label: "Transaction time", value: "Time not available" }];
+      return [];
+    }
+    return [{ label: EVIDENCE_LABELS[key] ?? key, value: formatEvidenceValue(key, value) }];
+  });
 }

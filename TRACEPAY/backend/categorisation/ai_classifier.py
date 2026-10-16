@@ -11,7 +11,6 @@ from urllib.request import Request, urlopen
 
 from app.config import settings
 from categorisation.models import CategorisationResult
-from categorisation.normalize import extract_merchant_name, is_bank_boilerplate_label
 from categorisation.resolve import resolve_category_name
 from categorisation.sanitizer import sanitize_for_ai
 from categorisation.source_identity import validate_ai_source
@@ -64,6 +63,13 @@ def _category_schema() -> dict:
                         "category_confidence": {"type": "number", "minimum": 0, "maximum": 1},
                         "reason": {"type": "string"},
                         "merchant_name": {"type": ["string", "null"]},
+                        "merchant_identification_status": {
+                            "type": "string",
+                            "enum": ["identified", "candidate", "unknown"],
+                        },
+                        "merchant_confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                        "evidence": {"type": "array", "items": {"type": "string"}},
+                        "alternative_candidates": {"type": "array", "items": {"type": "string"}},
                         "source_type": {
                             "type": "string",
                             "enum": [
@@ -90,6 +96,10 @@ def _category_schema() -> dict:
                         "category_confidence",
                         "reason",
                         "merchant_name",
+                        "merchant_identification_status",
+                        "merchant_confidence",
+                        "evidence",
+                        "alternative_candidates",
                         "source_type",
                         "payment_mechanism",
                         "supporting_text",
@@ -133,6 +143,13 @@ def _gemini_category_schema() -> dict:
                         "category_confidence": {"type": "NUMBER"},
                         "reason": {"type": "STRING"},
                         "merchant_name": {"type": "STRING"},
+                        "merchant_identification_status": {
+                            "type": "STRING",
+                            "enum": ["identified", "candidate", "unknown"],
+                        },
+                        "merchant_confidence": {"type": "NUMBER"},
+                        "evidence": {"type": "ARRAY", "items": {"type": "STRING"}},
+                        "alternative_candidates": {"type": "ARRAY", "items": {"type": "STRING"}},
                         "source_type": {
                             "type": "STRING",
                             "enum": [
@@ -159,6 +176,10 @@ def _gemini_category_schema() -> dict:
                         "category_confidence",
                         "reason",
                         "merchant_name",
+                        "merchant_identification_status",
+                        "merchant_confidence",
+                        "evidence",
+                        "alternative_candidates",
                         "source_type",
                         "payment_mechanism",
                         "supporting_text",
@@ -209,16 +230,32 @@ def _validate_results(
                 raw_merchant = raw_merchant.strip() or None
             else:
                 raw_merchant = None
+            merchant_status = item.get("merchant_identification_status")
+            merchant_confidence = item.get("merchant_confidence")
+            source_type = item.get("source_type")
+            uncertainty = item.get("uncertainty")
+            try:
+                merchant_confidence_value = float(merchant_confidence)
+            except (TypeError, ValueError):
+                merchant_confidence_value = 0.0
+            merchant_is_verified = (
+                merchant_status == "identified"
+                and source_type == "merchant"
+                and uncertainty == "identified"
+                and merchant_confidence_value >= settings.ai_merchant_identification_min_confidence
+            )
+            if not merchant_is_verified:
+                raw_merchant = None
             identity = validate_ai_source(
                 description=description,
                 proposed_merchant=raw_merchant,
-                source_type=item.get("source_type") if isinstance(item.get("source_type"), str) else None,
+                source_type=source_type if isinstance(source_type, str) else None,
                 payment_mechanism=(
                     item.get("payment_mechanism")
                     if isinstance(item.get("payment_mechanism"), str)
                     else None
                 ),
-                uncertainty=item.get("uncertainty") if isinstance(item.get("uncertainty"), str) else None,
+                uncertainty=uncertainty if isinstance(uncertainty, str) else None,
                 supporting_text=(
                     item.get("supporting_text")
                     if isinstance(item.get("supporting_text"), str)
@@ -226,10 +263,6 @@ def _validate_results(
                 ),
             )
             merchant_name = identity.merchant_name
-            if merchant_name is None:
-                deterministic = extract_merchant_name(description)
-                if deterministic and not is_bank_boilerplate_label(deterministic):
-                    merchant_name = deterministic
             result = CategorisationResult(
                 category_name=category_name,
                 category_confidence=float(item.get("category_confidence", 0)) if category_name else 0,
@@ -479,8 +512,12 @@ def _build_instructions(transactions: list[AiTransaction], allowed: list[str]) -
         "Savings and investment transfers are not spending. Merchant purchases are spending. Salary is income. "
         "Bank charges are bank_fee. Do not assume every PayShap transaction is an internal transfer, every incoming transaction is income, "
         "or every person-to-person payment is shopping.\n\n"
-        "Source identification: set source_type, merchant_name (or null), payment_mechanism, supporting_text, and uncertainty. "
+        "Source identification: set source_type, merchant_name (or null), merchant_identification_status, merchant_confidence, "
+        "evidence, alternative_candidates, payment_mechanism, supporting_text, and uncertainty. "
         "merchant_name must appear in the sanitised description or be a clear alias of text that does. "
+        "Use merchant_identification_status=identified only when the description directly supports it; then source_type=merchant, "
+        "uncertainty=identified, and merchant_confidence must reflect that support. For candidate or unknown, merchant_name must be null. "
+        "Evidence must be concise, description-derived features; alternatives are optional and must not be promoted as merchants. "
         "Strip bank boilerplate such as Recurring Card Purchase, Online Purchase, Payment Received, "
         "Transfer Received from, Banking App, and Dl* before naming the merchant. "
         "Prefer brand names for apps and subscriptions (CapCut, Google One, Uber, Netflix). "

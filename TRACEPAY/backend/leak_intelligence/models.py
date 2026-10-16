@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 from typing import Literal
 
@@ -21,6 +21,7 @@ class FeatureTransaction:
     description: str = ""
     merchant_name: str | None = None
     transaction_date: date | None = None
+    transaction_time: time | None = None
     transaction_type: Literal["debit", "credit"] | None = None
     is_duplicate: bool = False
     statement_id: str | None = None
@@ -115,7 +116,9 @@ class MerchantFeature(BaseModel):
     debit_order_transaction_count: int = 0
     insurance_transaction_count: int = 0
     coffee_transaction_count: int = 0
+    coffee_total_amount: Decimal = Decimal("0")
     convenience_store_transaction_count: int = 0
+    convenience_store_total_amount: Decimal = Decimal("0")
     airtime_transaction_count: int = 0
     airtime_only: bool = False
     data_transaction_count: int = 0
@@ -212,6 +215,10 @@ class WeekendSpendingFeatures(BaseModel):
     weekend_spending_total: Decimal = Decimal("0")
     weekday_spending_total: Decimal = Decimal("0")
     weekend_spending_share: Decimal | None = None
+    weekend_calendar_days: int = 0
+    weekday_calendar_days: int = 0
+    weekend_daily_average: Decimal | None = None
+    weekday_daily_average: Decimal | None = None
 
 
 class PaydaySpendingFeatures(BaseModel):
@@ -225,6 +232,12 @@ class PaydaySpendingFeatures(BaseModel):
     post_income_spending_total: Decimal = Decimal("0")
     post_income_spending_share: Decimal | None = None
     income_event_dates: list[date] = Field(default_factory=list)
+    salary_event_count: int = 0
+    salary_event_dates: list[date] = Field(default_factory=list)
+    post_salary_spending_total: Decimal = Decimal("0")
+    post_salary_discretionary_total: Decimal = Decimal("0")
+    post_salary_essential_total: Decimal = Decimal("0")
+    post_salary_spending_share: Decimal | None = None
 
 
 class IncomeFeatures(BaseModel):
@@ -247,7 +260,27 @@ class DuplicateCandidate(BaseModel):
     distinct_description_count: int = 0
     shared_reference_tokens: bool = False
     nearby_reversal_or_refund: bool = False
+    min_time_gap_minutes: int | None = None
     match_basis: list[str] = Field(default_factory=list)
+
+
+class IrregularCandidate(BaseModel):
+    """A transaction that is unusual relative to the user's own history."""
+
+    transaction_id: str
+    merchant_name: str | None = None
+    amount: Decimal
+    transaction_date: date | None = None
+    transaction_time: time | None = None
+    transaction_description: str = ""
+    transaction_type: Literal["debit", "credit"] | None = None
+    category_name: str | None = None
+    category_transaction_count: int = 0
+    baseline_sample_size: int = 0
+    category_median_amount: Decimal | None = None
+    difference_from_baseline: Decimal | None = None
+    amount_multiple_of_category_median: Decimal | None = None
+    reason: str
 
 
 class FinancialFeatureSnapshot(BaseModel):
@@ -270,6 +303,7 @@ class FinancialFeatureSnapshot(BaseModel):
     payday: PaydaySpendingFeatures
     income: IncomeFeatures
     duplicate_candidates: list[DuplicateCandidate] = Field(default_factory=list)
+    irregular_candidates: list[IrregularCandidate] = Field(default_factory=list)
     # Sanitised statement-import quality; never includes file content or descriptions.
     statement_import_quality: list[StatementImportQuality] = Field(default_factory=list)
     import_ids_by_month: dict[str, list[str]] = Field(default_factory=dict)

@@ -15,6 +15,7 @@ import {
   normalizeStatementBankKey,
 } from "./statement-bank";
 import {
+  isExpectedImportNotice,
   isNoTransactionsImportMessage,
   NO_TRANSACTIONS_FOUND_MESSAGE,
 } from "./statement-import.messages";
@@ -37,6 +38,7 @@ export type { StatementImportProgress, StatementImportStage };
 
 export type ExtractedTransaction = {
   date: string;
+  transaction_time?: string | null;
   description: string;
   amount: number | string;
   type: "debit" | "credit";
@@ -419,8 +421,8 @@ async function failAndCleanup(
   const userMessage = isEmptyStatementOutcome(message)
     ? NO_TRANSACTIONS_FOUND_MESSAGE
     : message;
-  if (isEmptyStatementOutcome(message)) {
-    console.info("[TracePay][statement] empty_statement_import", {
+  if (isExpectedImportNotice(userMessage)) {
+    console.info("[TracePay][statement] import_notice", {
       statementId,
       message: userMessage,
     });
@@ -677,6 +679,7 @@ async function persistPreview(
       account_id: account.id,
       statement_id: preview.statementId,
       date: transaction.date,
+      transaction_time: transaction.transaction_time ?? null,
       description: transaction.description,
       amount: transaction.amount,
       type: transaction.type,
@@ -706,7 +709,7 @@ async function persistPreview(
   let { error } = await supabase.from("transactions").insert(rows);
   if (
     error &&
-    /merchant_name|reference|extraction_method|transaction_class|classification_confidence|classification_reason/i.test(
+    /transaction_time|merchant_name|reference|extraction_method|transaction_class|classification_confidence|classification_reason/i.test(
       error.message ?? "",
     )
   ) {
@@ -716,6 +719,7 @@ async function persistPreview(
     const legacyRows = rows.map(
       ({
         transaction_class: _transactionClass,
+        transaction_time: _transactionTime,
         classification_confidence: _classificationConfidence,
         classification_reason: _classificationReason,
         merchant_name: _merchantName,
@@ -1160,8 +1164,8 @@ export async function preparePdfStatement(
       throw error;
     }
     const failedMessage = errorMessage(error, "PDF processing failed.");
-    if (isEmptyStatementOutcome(failedMessage)) {
-      console.info("[TracePay][statement] empty_statement_import", {
+    if (isExpectedImportNotice(failedMessage)) {
+      console.info("[TracePay][statement] import_notice", {
         statementId: id,
         message: failedMessage,
       });

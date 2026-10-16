@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
-from statistics import pvariance
+from statistics import median, pvariance
 
 from .common import ZERO, amount_of, is_purchase_reversal, merchant_group_key, month_key
 from .import_quality import StatementImportQuality, resolve_coverage_observation_bounds
@@ -24,6 +24,7 @@ from .models import (
     FeatureTransaction,
     FinancialFeatureSnapshot,
     IncomeFeatures,
+    IrregularCandidate,
     MerchantFeature,
     MonthlyFeature,
     PaydaySpendingFeatures,
@@ -34,7 +35,7 @@ from .recurrence_rules import (
     matches_plausible_recurring_interval,
     recurrence_strength_cap_for_interval,
 )
-from .service import build_spending_profile
+from .service import ESSENTIAL_SPENDING_CATEGORIES, build_spending_profile
 
 HIGH_CONFIDENCE = 0.85
 RECURRENCE_MIN_OBSERVATIONS = 3
@@ -99,6 +100,7 @@ def build_financial_features(
         payday=_payday_spending_features(active),
         income=_income_features(active),
         duplicate_candidates=_duplicate_candidates(active),
+        irregular_candidates=_irregular_candidates(active),
         statement_import_quality=qualities,
         import_ids_by_month=import_ids_by_month,
     )
@@ -238,6 +240,17 @@ def _recurrence(transactions: list[FeatureTransaction]) -> RecurrenceFeature:
         feature.recurrence_strength = recurrence_strength_cap_for_interval(
             average_interval, "medium"
         )
+    elif (
+        len(amounts) >= 3
+        and average_interval <= Decimal("400")
+        and interval_cv <= Decimal("0.35")
+        and _coefficient_of_variation(amounts[:-1]) is not None
+        and _coefficient_of_variation(amounts[:-1]) <= Decimal("0.10")
+        and amounts[-1] > (_average(amounts[:-1]) or ZERO)
+    ):
+        feature.recurrence_strength = recurrence_strength_cap_for_interval(
+            average_interval, "medium"
+        )
     else:
         feature.recurrence_strength = "low"
     return feature
@@ -292,11 +305,11 @@ def _coefficient_of_variation(values: list[Decimal]) -> Decimal | None:
     return variance.sqrt() / average
 
 
-def _coffee_transaction_count(transactions: list[FeatureTransaction]) -> int:
-    """Count coffee purchases once per same-day, same-amount duplicate group."""
+def _coffee_purchases(transactions: list[FeatureTransaction]) -> list[FeatureTransaction]:
+    """Coffee purchases counted once per same-day, same-amount duplicate group."""
     coffee = [item for item in transactions if _is_coffee_transaction(item)]
     coffee.sort(key=lambda item: (item.transaction_date or date.min, item.transaction_id))
-    counted = 0
+    unique: list[FeatureTransaction] = []
     previous: FeatureTransaction | None = None
     for item in coffee:
         if previous is not None and item.transaction_date and previous.transaction_date:
@@ -305,9 +318,17 @@ def _coffee_transaction_count(transactions: list[FeatureTransaction]) -> int:
             if same_amount and nearby:
                 previous = item
                 continue
-        counted += 1
+        unique.append(item)
         previous = item
-    return counted
+    return unique
+
+
+def _coffee_transaction_count(transactions: list[FeatureTransaction]) -> int:
+    return len(_coffee_purchases(transactions))
+
+
+def _coffee_total(transactions: list[FeatureTransaction]) -> Decimal:
+    return sum((amount_of(item) for item in _coffee_purchases(transactions)), ZERO)
 
 
 def _is_airtime_transaction(transaction: FeatureTransaction) -> bool:
@@ -428,11 +449,11 @@ def _is_coffee_transaction(transaction: FeatureTransaction) -> bool:
     return "COFFEE" in text.split()
 
 
-def _convenience_store_transaction_count(transactions: list[FeatureTransaction]) -> int:
-    """Count convenience-store purchases once per same-day, same-amount duplicate group."""
+def _convenience_store_purchases(transactions: list[FeatureTransaction]) -> list[FeatureTransaction]:
+    """Convenience-store purchases counted once per same-day, same-amount group."""
     purchases = [item for item in transactions if _is_convenience_store_transaction(item)]
     purchases.sort(key=lambda item: (item.transaction_date or date.min, item.transaction_id))
-    counted = 0
+    unique: list[FeatureTransaction] = []
     previous: FeatureTransaction | None = None
     for item in purchases:
         if (
@@ -444,14 +465,23 @@ def _convenience_store_transaction_count(transactions: list[FeatureTransaction])
         ):
             previous = item
             continue
-        counted += 1
+        unique.append(item)
         previous = item
-    return counted
+    return unique
+
+
+def _convenience_store_transaction_count(transactions: list[FeatureTransaction]) -> int:
+    return len(_convenience_store_purchases(transactions))
+
+
+def _convenience_store_total(transactions: list[FeatureTransaction]) -> Decimal:
+    return sum((amount_of(item) for item in _convenience_store_purchases(transactions)), ZERO)
 
 
 def _is_convenience_store_transaction(transaction: FeatureTransaction) -> bool:
     text = f"{transaction.merchant_name or ''} {transaction.description}".upper()
-    return "SPAR EXPRESS" in text
+    compact = text.replace("-", " ").replace("'", "")
+    return "SPAR EXPRESS" in text or "7 ELEVEN" in compact or "SEVEN ELEVEN" in compact
 
 
 def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantFeature]:
@@ -984,6 +1014,74 @@ def _duplicate_candidates(
     return candidates
 
 
+def _irregular_candidates(
+    transactions: list[FeatureTransaction],
+) -> list[IrregularCandidate]:
+    """Keep only explainable outliers; transfers and people are never leak candidates."""
+    eligible = [
+        item
+        for item in transactions
+        if item.transaction_date is not None
+        and item.transaction_type != "credit"
+        and item.categorisation.transaction_class
+        not in _NON_PURCHASE_CLASSES | {"person_to_person", "transfer"}
+        and _has_reliable_irregular_category(item)
+        and amount_of(item) > ZERO
+    ]
+    amounts_by_category: defaultdict[str, list[Decimal]] = defaultdict(list)
+    for item in eligible:
+        category = item.categorisation.category_name or "Other"
+        amounts_by_category[category].append(amount_of(item))
+    candidates: list[IrregularCandidate] = []
+    for item in eligible:
+        category = item.categorisation.category_name or "Other"
+        amounts = amounts_by_category[category]
+        if len(amounts) < 4:
+            continue
+        baseline_amounts = [
+            amount_of(other)
+            for other in eligible
+            if other.transaction_id != item.transaction_id
+            and (other.categorisation.category_name or "Other") == category
+        ]
+        if len(baseline_amounts) < 3:
+            continue
+        baseline = Decimal(str(median(baseline_amounts)))
+        if baseline <= ZERO:
+            continue
+        multiple = amount_of(item) / baseline
+        if multiple < Decimal("3") or amount_of(item) < Decimal("500"):
+            continue
+        candidates.append(
+            IrregularCandidate(
+                transaction_id=item.transaction_id,
+                merchant_name=merchant_group_key(item),
+                amount=amount_of(item),
+                transaction_date=item.transaction_date,
+                transaction_time=item.transaction_time,
+                transaction_description=item.description,
+                transaction_type=item.transaction_type,
+                category_name=category,
+                category_transaction_count=len(amounts),
+                baseline_sample_size=len(baseline_amounts),
+                category_median_amount=baseline,
+                difference_from_baseline=amount_of(item) - baseline,
+                amount_multiple_of_category_median=multiple,
+                reason="amount_outlier_for_category",
+            )
+        )
+    return candidates
+
+
+def _has_reliable_irregular_category(item: FeatureTransaction) -> bool:
+    category = (item.categorisation.category_name or "").strip()
+    if not category or category.casefold() == "other":
+        return False
+    if (item.categorisation.rule or "").startswith("fallback"):
+        return False
+    return item.categorisation.category_confidence >= Decimal("0.70")
+
+
 def _reference_tokens(description: str | None) -> set[str]:
     if not description:
         return set()
@@ -1024,6 +1122,9 @@ def _candidate(
         match_basis.append("shared_reference")
     if nearby_reversal:
         match_basis.append("nearby_reversal_or_refund")
+    min_time_gap = _min_time_gap_minutes(transactions)
+    if min_time_gap is not None and min_time_gap <= 15:
+        match_basis.append("close_timestamp")
     return DuplicateCandidate(
         group_key=f"{merchant}:{dates[0].isoformat()}:{amount_of(transactions[0])}",
         merchant_name=merchant,
@@ -1037,5 +1138,19 @@ def _candidate(
         distinct_description_count=len(descriptions),
         shared_reference_tokens=shared_refs,
         nearby_reversal_or_refund=nearby_reversal,
+        min_time_gap_minutes=min_time_gap,
         match_basis=match_basis,
     )
+
+
+def _min_time_gap_minutes(transactions: list[FeatureTransaction]) -> int | None:
+    times = sorted(
+        item.transaction_time.hour * 3600
+        + item.transaction_time.minute * 60
+        + item.transaction_time.second
+        for item in transactions
+        if item.transaction_time is not None
+    )
+    if len(times) < 2:
+        return None
+    return min((times[idx + 1] - times[idx]) // 60 for idx in range(len(times) - 1))

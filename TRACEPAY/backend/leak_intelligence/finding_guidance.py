@@ -27,6 +27,9 @@ from leak_intelligence.merchant_display import (
 ACTION_TYPES = frozenset(
     {"reviewed", "steps_completed", "dismissed", "not_applicable"}
 )
+USAGE_ANSWERS = frozenset(
+    {"frequently", "sometimes", "rarely", "never", "not_sure"}
+)
 NOTE_LIMIT = 280
 
 _LONG_DIGITS = re.compile(r"\d{6,}")
@@ -47,6 +50,7 @@ _RECURRING = frozenset(
         "subscription_leak",
         "recurring_payment_leak",
         "unknown_recurring_payment",
+        "inactive_recurring_payment_leak",
     }
 )
 _SPENDING = frozenset(
@@ -63,6 +67,8 @@ _LABELS = {
     "subscription_leak": "Recurring subscription",
     "recurring_payment_leak": "Recurring payment",
     "unknown_recurring_payment": "Recurring payment",
+    "inactive_recurring_payment_leak": "Inactive recurring payment",
+    "irregular_transaction_leak": "Unusual transaction",
     "bank_fee_leak": "Bank fee pattern",
     "spending_escalation_leak": "Spending increase",
     "cash_usage_leak": "Cash withdrawal pattern",
@@ -144,6 +150,7 @@ class FindingGuidance:
     steps: tuple[str, ...]
     actions: tuple[FindingAction, ...]
     outcome_checks: tuple[FindingOutcomeCheck, ...] = ()
+    usage_answer: str | None = None
 
 
 def sanitise_note(note: str | None) -> str | None:
@@ -209,6 +216,8 @@ def record_user_action(
 def build_guidance(
     finding: RegistryRow,
     history: Sequence[FindingAction] = (),
+    *,
+    usage_answer: str | None = None,
 ) -> FindingGuidance:
     """Guidance from stored finding fields. This does not rerun detection."""
     if finding.id is None:
@@ -223,9 +232,16 @@ def build_guidance(
     fee_focus = _FEE_FOCUS.get(finding.finding_focus or "")
     period = _period(finding)
     source = _source(merchant, category, fee_focus, kind)
+    valid_usage = (
+        usage_answer
+        if finding.leak_type == "subscription_leak" and usage_answer in USAGE_ANSWERS
+        else None
+    )
     title = _specific_title(kind, finding, merchant, category, fee_focus, values)
     what_happened = _what_happened(kind, finding, merchant, category, fee_focus, values)
-    reason, steps = _copy(kind, finding, merchant, category, fee_focus, period, values)
+    reason, steps = _copy(
+        kind, finding, merchant, category, fee_focus, period, values, valid_usage
+    )
     latest = actions[-1].action_type if actions else None
     return FindingGuidance(
         finding_id=finding.id,
@@ -237,10 +253,11 @@ def build_guidance(
         what_happened=what_happened,
         reason=reason,
         evidence=_evidence(finding),
-        known=_known(finding, merchant, category, fee_focus, period, source),
-        uncertain=_uncertain(finding, kind, actions, merchant),
+        known=_known(finding, merchant, category, fee_focus, period, source, valid_usage),
+        uncertain=_uncertain(finding, kind, actions, merchant, valid_usage),
         steps=steps,
         actions=actions,
+        usage_answer=valid_usage,
     )
 
 
@@ -274,6 +291,8 @@ def _kind(finding: RegistryRow) -> str:
         return "insufficient"
     if finding.leak_type == "duplicate_payment_leak" or finding.root_cause_type == "potential_duplicate":
         return "duplicate"
+    if finding.leak_type == "irregular_transaction_leak" or finding.finding_focus == "unusual_transaction":
+        return "irregular"
     if finding.leak_type in _RECURRING or finding.root_cause_type == "recurring_commitment":
         return "recurring"
     if finding.leak_type == "bank_fee_leak" or finding.root_cause_type == "fee_accumulation":
@@ -298,6 +317,7 @@ def _copy(
     fee_focus: str | None,
     period: str | None,
     values: dict[str, str],
+    usage_answer: str | None = None,
 ) -> tuple[str, tuple[str, ...]]:
     if kind == "insufficient":
         return (
@@ -334,7 +354,48 @@ def _copy(
                 ),
             ),
         )
+    if kind == "irregular":
+        amount = values.get("transaction_amount") or _money(finding.detected_amount)
+        who = f" at {merchant}" if merchant else ""
+        cat_clause = f" in {category}" if category else ""
+        when = f" on {values['transaction_date']}" if values.get("transaction_date") else ""
+        return (
+            (
+                f"A single transaction of {amount}{who}{cat_clause}{when} was materially "
+                "larger than the category baseline. This is a verification cue only and "
+                "does not establish an error or unauthorised charge."
+            ),
+            (
+                "Compare the transaction date and amount against your receipts or records.",
+                (
+                    "If the transaction was not authorised, contact the merchant or your "
+                    "bank. TracePay will not dispute the charge or contact the bank."
+                ),
+            ),
+        )
     if kind == "recurring":
+        if (
+            finding.leak_type == "inactive_recurring_payment_leak"
+            or finding.finding_focus == "missing_expected_recurring_payment"
+        ):
+            who = f" at {merchant}" if merchant else ""
+            last_date = values.get("last_observed_date")
+            last_clause = f" Last observed on {last_date}." if last_date else ""
+            return (
+                (
+                    f"A previously regular payment{who} has not appeared within its "
+                    f"expected billing window.{last_clause} This is a verification step "
+                    "only and does not establish that the service was cancelled."
+                ),
+                (
+                    "Check whether the payment was delayed, billed under another description, or stopped.",
+                    (
+                        "If you still need the service or need to confirm its status, "
+                        "contact the merchant or your bank. TracePay will not change "
+                        "the payment."
+                    ),
+                ),
+            )
         if merchant:
             lead = f"A recurring payment pattern was observed at {merchant}."
         else:
@@ -345,6 +406,21 @@ def _copy(
         average = values.get("average_payment") or values.get("average_amount")
         if average:
             lead = f"{lead} Average payment: {average}."
+        if usage_answer in {"never", "rarely"}:
+            return (
+                lead,
+                (
+                    (
+                        "You reported low or no usage for this subscription. Review "
+                        "cancellation or downgrade options with the merchant or your "
+                        "bank. TracePay will not stop or change the payment."
+                    ),
+                    (
+                        "Verify the merchant and the amount. If the payment is not wanted, "
+                        "contact the merchant or your bank."
+                    ),
+                ),
+            )
         return (
             lead,
             (
@@ -424,6 +500,7 @@ def _known(
     fee_focus: str | None,
     period: str | None,
     source: str | None,
+    usage_answer: str | None = None,
 ) -> tuple[str, ...]:
     known = [
         f"Finding type: {_LABELS.get(finding.leak_type, 'Finding')}.",
@@ -443,6 +520,8 @@ def _known(
         known.append(f"Category: {category}.")
     if fee_focus:
         known.append(f"Supported fee focus: {fee_focus}.")
+    if usage_answer:
+        known.append(f"User-confirmed usage: {usage_answer.replace('_', ' ')}.")
     return tuple(known)
 
 
@@ -451,6 +530,7 @@ def _uncertain(
     kind: str,
     actions: Sequence[FindingAction],
     merchant: str | None,
+    usage_answer: str | None = None,
 ) -> tuple[str, ...]:
     lines = [
         "Your response is stored separately and does not change detection status.",
@@ -467,6 +547,11 @@ def _uncertain(
         )
     if any(action.action_type == "steps_completed" for action in actions):
         lines.append("Completing steps does not mean money was saved or recovered.")
+    if usage_answer:
+        lines.append(
+            "User-confirmed usage is recorded as review context and does not "
+            "cancel the payment or establish verified savings."
+        )
     if kind == "duplicate":
         lines.append(
             "Matching those fields does not establish that the amount is recoverable, "
@@ -518,7 +603,20 @@ def _specific_title(
         if merchant:
             return f"Possible duplicate payment at {merchant}"
         return _LABELS.get(finding.leak_type, "Potential duplicate payment")
+    if kind == "irregular":
+        if merchant:
+            return f"Unusual transaction at {merchant}"
+        if category:
+            return f"Unusual transaction in {category}"
+        return _LABELS.get(finding.leak_type, "Unusual transaction")
     if kind == "recurring":
+        if (
+            finding.leak_type == "inactive_recurring_payment_leak"
+            or finding.finding_focus == "missing_expected_recurring_payment"
+        ):
+            if merchant:
+                return f"Inactive recurring payment at {merchant}"
+            return _LABELS.get(finding.leak_type, "Inactive recurring payment")
         if finding.finding_focus == "repeated_payments_detected":
             if merchant and amount:
                 return f"Repeated payments detected at {merchant} — {amount} average"
@@ -565,8 +663,24 @@ def _what_happened(
             f"{count} same-day transactions at {who}{money} matched on merchant "
             "grouping, amount and date."
         )
+    if kind == "irregular":
+        amount = values.get("transaction_amount") or _money(finding.detected_amount)
+        who = f" at {merchant}" if merchant else ""
+        cat_clause = f" in {category}" if category else ""
+        return (
+            f"A single transaction of {amount}{who}{cat_clause} was materially "
+            "above the category baseline."
+        )
     if kind == "recurring":
         who = merchant or "an unidentified merchant"
+        if (
+            finding.leak_type == "inactive_recurring_payment_leak"
+            or finding.finding_focus == "missing_expected_recurring_payment"
+        ):
+            return (
+                f"A previously regular payment at {who} has not appeared within its "
+                "expected billing window."
+            )
         amount = values.get("average_payment") or values.get("average_amount")
         money = f" averaging {amount}" if amount else ""
         if finding.finding_focus == "repeated_payments_detected":

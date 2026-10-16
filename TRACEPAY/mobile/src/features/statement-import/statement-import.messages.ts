@@ -1,5 +1,7 @@
 /** User-facing copy for statement import outcomes that aren't hard failures. */
 
+import { isBankMismatchError } from "./statement-bank";
+
 export const NO_TRANSACTIONS_FOUND_MESSAGE =
   "We opened this statement, but it doesn't include any transactions TracePay can use. Upload a statement with your transaction history to continue.";
 
@@ -15,6 +17,12 @@ export function isNoTransactionsImportMessage(message: string): boolean {
   );
 }
 
+export function isExpectedImportNotice(message: string): boolean {
+  return (
+    isNoTransactionsImportMessage(message) || isBankMismatchError(message)
+  );
+}
+
 export function toUserFacingImportMessage(raw: string): string {
   const text = raw.trim();
   if (!text) {
@@ -27,5 +35,5 @@ export function toUserFacingImportMessage(raw: string): string {
 }
 
 export function importNoticeToneForMessage(message: string): ImportNoticeTone {
-  return isNoTransactionsImportMessage(message) ? "info" : "error";
+  return isExpectedImportNotice(message) ? "info" : "error";
 }

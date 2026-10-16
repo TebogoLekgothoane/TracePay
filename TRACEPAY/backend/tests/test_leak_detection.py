@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, time, timezone
 from decimal import Decimal
 
 from typing import get_args
@@ -11,7 +11,12 @@ from categorisation.models import CategorisationResult
 from leak_intelligence.behaviour_engine import analyze_behaviour
 from leak_intelligence.engine import build_financial_features
 from leak_intelligence.leak_engine import detect_leaks
+from leak_intelligence.finding_diff import build_observation, plan_registry_changes
+from leak_intelligence.finding_guidance import build_guidance
+from leak_intelligence.finding_notifications import assign_finding_ids
+from leak_intelligence.intelligence_report import assemble_financial_intelligence_report
 from leak_intelligence.reasoning_engine import analyze_financial_reasoning
+from leak_intelligence.recommendation_engine import recommend_actions
 from leak_intelligence.recommendation_models import RecommendationType
 from leak_intelligence.leak_report import render_leak_report
 from leak_intelligence.models import FeatureTransaction
@@ -28,6 +33,7 @@ def _transaction(
     confidence: float = 0.95,
     transaction_type: str = "debit",
     description: str = "SHOP",
+    transaction_time: time | None = None,
     user_id: str = "user-a",
 ) -> FeatureTransaction:
     return FeatureTransaction(
@@ -35,6 +41,7 @@ def _transaction(
         user_id=user_id,
         amount=Decimal(amount),
         transaction_date=when,
+        transaction_time=transaction_time,
         merchant_name=merchant,
         description=description,
         transaction_type=transaction_type,  # type: ignore[arg-type]
@@ -60,6 +67,66 @@ def _types(transactions: list[FeatureTransaction]) -> set[str]:
 def test_empty_and_single_transaction_have_no_leaks() -> None:
     assert _detect([]).leaks == []
     assert _detect([_transaction("one", "500", date(2026, 8, 1))]).leaks == []
+
+
+def test_irregular_transaction_is_evidence_backed_and_not_fraud() -> None:
+    transactions = [
+        _transaction("g-1", "100", date(2026, 7, 1)),
+        _transaction("g-2", "110", date(2026, 8, 1)),
+        _transaction("g-3", "90", date(2026, 9, 1)),
+        _transaction(
+            "g-4",
+            "900",
+            date(2026, 10, 1),
+            merchant="NEW SHOP",
+            description="NEW SHOP REF 123456789",
+            transaction_time=time(14, 30),
+        ),
+    ]
+    leak = next(item for item in _detect(transactions).leaks if item.leak_type == "irregular_transaction_leak")
+    assert leak.evidence["transaction_id"] == "g-4"
+    assert leak.evidence["transaction_amount"] == Decimal("900")
+    assert leak.evidence["transaction_date"] == date(2026, 10, 1)
+    assert leak.evidence["transaction_time"] == time(14, 30)
+    assert leak.evidence["original_description"] == "NEW SHOP REF [REDACTED]"
+    assert leak.evidence["baseline_sample_size"] == 3
+    assert leak.evidence["category_median_amount"] == Decimal("100")
+    assert leak.evidence["difference_from_baseline"] == Decimal("800")
+    assert leak.evidence["confidence_is_calibrated"] is False
+    assert leak.evidence["not_proof_of_fraud"] is True
+    assert leak.impact_kind == "one_time"
+
+
+def test_irregular_transaction_without_source_time_is_explicitly_unknown() -> None:
+    transactions = [
+        _transaction("g-1", "100", date(2026, 7, 1)),
+        _transaction("g-2", "110", date(2026, 8, 1)),
+        _transaction("g-3", "90", date(2026, 9, 1)),
+        _transaction("g-4", "900", date(2026, 10, 1)),
+    ]
+    leak = next(item for item in _detect(transactions).leaks if item.leak_type == "irregular_transaction_leak")
+    assert leak.evidence["transaction_time"] is None
+
+
+def test_irregular_transaction_skips_unreliable_other_category_baselines() -> None:
+    transactions = [
+        _transaction(f"other-{index}", amount, date(2026, 7 + index, 1), category="Other", confidence=0.35)
+        for index, amount in enumerate((100, 110, 90, 900))
+    ]
+
+    assert "irregular_transaction_leak" not in _types(transactions)
+
+
+def test_inactive_recurring_payment_stays_potential() -> None:
+    transactions = [
+        _transaction(f"netflix-{index}", "99", when, merchant="NETFLIX", category="Subscriptions")
+        for index, when in enumerate((date(2026, 7, 1), date(2026, 8, 1), date(2026, 9, 1), date(2026, 10, 1)))
+    ]
+    transactions.append(_transaction("later", "20", date(2026, 12, 1), merchant="SHOP"))
+    leak = next(item for item in _detect(transactions).leaks if item.leak_type == "inactive_recurring_payment_leak")
+    assert leak.status == "active"
+    assert leak.evidence["not_proof_of_cancellation"] is True
+    assert leak.evidence["verification_required"] is True
 
 
 def test_bank_fee_leak_annualizes_material_fee_escalation() -> None:
@@ -2086,3 +2153,246 @@ def test_leak_endpoint_is_sanitized(monkeypatch) -> None:
     assert response.status_code == 200
     assert "transaction_ids" not in response.text
     assert "123456789" not in response.text
+
+
+def test_irregular_transaction_requires_both_3x_median_and_r500() -> None:
+    normal_high_value = [
+        _transaction("g-1", "600", date(2026, 7, 2), merchant="CHECKERS", category="Groceries"),
+        _transaction("g-2", "620", date(2026, 8, 2), merchant="CHECKERS", category="Groceries"),
+        _transaction("g-3", "610", date(2026, 9, 2), merchant="CHECKERS", category="Groceries"),
+        _transaction("g-4", "650", date(2026, 9, 29), merchant="CHECKERS", category="Groceries"),
+    ]
+    assert "irregular_transaction_leak" not in _types(normal_high_value)
+
+    small_3x_value = [
+        _transaction("s-1", "50", date(2026, 7, 2), merchant="CHECKERS", category="Groceries"),
+        _transaction("s-2", "50", date(2026, 8, 2), merchant="CHECKERS", category="Groceries"),
+        _transaction("s-3", "50", date(2026, 9, 2), merchant="CHECKERS", category="Groceries"),
+        _transaction("s-4", "200", date(2026, 9, 29), merchant="CHECKERS", category="Groceries"),
+    ]
+    assert "irregular_transaction_leak" not in _types(small_3x_value)
+
+    qualifying_outlier = [
+        _transaction("q-1", "200", date(2026, 7, 2), merchant="CHECKERS", category="Groceries"),
+        _transaction("q-2", "200", date(2026, 8, 2), merchant="CHECKERS", category="Groceries"),
+        _transaction("q-3", "200", date(2026, 9, 2), merchant="CHECKERS", category="Groceries"),
+        _transaction(
+            "q-4",
+            "900",
+            date(2026, 9, 29),
+            merchant="CHECKERS",
+            category="Groceries",
+            transaction_time=time(14, 30),
+        ),
+    ]
+    snapshot = build_financial_features("user-a", qualifying_outlier)
+    behaviours = analyze_behaviour(snapshot)
+    leaks = detect_leaks(snapshot, behaviours)
+    reasoning = analyze_financial_reasoning(snapshot, behaviours, leaks)
+    recommendations = recommend_actions(reasoning)
+    report = assemble_financial_intelligence_report(
+        snapshot, behaviours, leaks, reasoning, recommendations
+    )
+
+    leak = next(item for item in leaks.leaks if item.leak_type == "irregular_transaction_leak")
+    assert "and at least R500" in str(leak.evidence.get("outlier_rule"))
+    analysis = next(item for item in reasoning.analyses if item.leak_id == leak.leak_id)
+    assert analysis.root_cause_type == "transaction_pattern"
+    assert analysis.analysis_status == "verification_required"
+    assert analysis.evidence["not_proof_of_fraud"] is True
+    rec = next(
+        item
+        for item in recommendations.recommendations
+        if item.source_reasoning_id == analysis.reasoning_id
+    )
+    assert rec.recommendation_type == "monitor_spending_pattern"
+    assert "unusual transaction" in rec.title.lower()
+    finding = next(item for item in report.findings if item.leak_id == leak.leak_id)
+    obs = build_observation(user_id="user-a", leak=leak, finding=finding)
+    plan = assign_finding_ids(
+        plan_registry_changes(
+            user_id="user-a",
+            existing=(),
+            observations=[obs],
+            statement_import_id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            observed_at=datetime(2026, 10, 10, tzinfo=timezone.utc),
+        )
+    )
+    guidance = build_guidance(plan.writes[0])
+    assert "Unusual transaction" in guidance.title
+    assert "receipts" in " ".join(guidance.steps).lower()
+
+
+def test_inactive_recurring_payment_wires_through_reasoning_and_guidance() -> None:
+    transactions = [
+        _transaction(
+            "net-1",
+            "199",
+            date(2026, 5, 1),
+            merchant="NETFLIX",
+            category="Subscriptions",
+            description="NETFLIX",
+        ),
+        _transaction(
+            "net-2",
+            "199",
+            date(2026, 6, 1),
+            merchant="NETFLIX",
+            category="Subscriptions",
+            description="NETFLIX",
+        ),
+        _transaction(
+            "net-3",
+            "199",
+            date(2026, 7, 1),
+            merchant="NETFLIX",
+            category="Subscriptions",
+            description="NETFLIX",
+        ),
+        _transaction(
+            "recent",
+            "120",
+            date(2026, 9, 30),
+            merchant="CHECKERS",
+            category="Groceries",
+        ),
+    ]
+    snapshot = build_financial_features("user-a", transactions)
+    behaviours = analyze_behaviour(snapshot)
+    leaks = detect_leaks(snapshot, behaviours)
+    reasoning = analyze_financial_reasoning(snapshot, behaviours, leaks)
+    recommendations = recommend_actions(reasoning)
+    report = assemble_financial_intelligence_report(
+        snapshot, behaviours, leaks, reasoning, recommendations
+    )
+
+    leak = next(
+        item for item in leaks.leaks if item.leak_type == "inactive_recurring_payment_leak"
+    )
+    analysis = next(item for item in reasoning.analyses if item.leak_id == leak.leak_id)
+    assert analysis.root_cause_type == "recurring_commitment"
+    assert analysis.analysis_status == "verification_required"
+    assert analysis.evidence["not_proof_of_cancellation"] is True
+    rec = next(
+        item
+        for item in recommendations.recommendations
+        if item.source_reasoning_id == analysis.reasoning_id
+    )
+    assert rec.recommendation_type == "review_recurring_payment"
+    assert "inactive recurring payment" in rec.title.lower()
+    finding = next(item for item in report.findings if item.leak_id == leak.leak_id)
+    obs = build_observation(user_id="user-a", leak=leak, finding=finding)
+    plan = assign_finding_ids(
+        plan_registry_changes(
+            user_id="user-a",
+            existing=(),
+            observations=[obs],
+            statement_import_id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            observed_at=datetime(2026, 10, 10, tzinfo=timezone.utc),
+        )
+    )
+    guidance = build_guidance(plan.writes[0])
+    assert "Inactive recurring payment" in guidance.title
+    assert "delayed" in " ".join(guidance.steps).lower()
+
+
+def test_specific_fee_burdens_stay_specific_alongside_flat_monthly_account_fee() -> None:
+    transactions = []
+    for month in (7, 8, 9):
+        transactions.append(
+            _transaction(
+                f"acct-{month}",
+                "50",
+                date(2026, month, 30 if month == 9 else 2),
+                merchant=None,
+                category="Bank Fees",
+                transaction_class="bank_fee",
+                description="MONTHLY ACCOUNT FEE",
+            )
+        )
+        transactions.append(
+            _transaction(
+                f"sms-{month}",
+                "12",
+                date(2026, month, 15),
+                merchant=None,
+                category="Bank Fees",
+                transaction_class="bank_fee",
+                description="SMS NOTIFICATION FEE",
+            )
+        )
+    leaks = _detect(transactions).leaks
+    fee_leak = next(item for item in leaks if item.leak_type == "bank_fee_leak")
+    assert fee_leak.evidence["finding_focus"] == "sms_banking"
+    assert fee_leak.evidence["sms_fee_total"] == Decimal("36")
+
+
+def test_steep_subscription_price_hike_preserves_recurrence_and_attaches_price_creep() -> None:
+    transactions = [
+        _transaction(
+            f"sub-{idx}",
+            amount,
+            when,
+            merchant="NETFLIX",
+            category="Subscriptions",
+            description="NETFLIX",
+        )
+        for idx, (amount, when) in enumerate(
+            (
+                ("99", date(2026, 7, 1)),
+                ("99", date(2026, 8, 1)),
+                ("99", date(2026, 9, 1)),
+                ("199", date(2026, 10, 1)),
+            )
+        )
+    ]
+    snapshot = build_financial_features("user-a", transactions)
+    behaviours = analyze_behaviour(snapshot)
+    leaks = detect_leaks(snapshot, behaviours)
+    reasoning = analyze_financial_reasoning(snapshot, behaviours, leaks)
+
+    sub_leak = next(item for item in leaks.leaks if item.leak_type == "subscription_leak")
+    assert sub_leak.evidence["finding_focus"] == "subscription_review"
+    assert sub_leak.evidence["price_change_focus"] == "subscription_price_creep"
+    assert sub_leak.evidence["latest_amount"] == Decimal("199")
+    assert sub_leak.evidence["previous_average_amount"] == Decimal("99")
+    analysis = next(item for item in reasoning.analyses if item.leak_id == sub_leak.leak_id)
+    assert analysis.persistence == "increasing"
+    assert "higher than the prior average" in analysis.explanation
+
+
+def test_same_day_duplicate_timestamp_gap_boosts_confidence() -> None:
+    untimed = [
+        _transaction("u-1", "180", date(2026, 7, 18), merchant="TAKEALOT", category="Shopping"),
+        _transaction("u-2", "180", date(2026, 7, 18), merchant="TAKEALOT", category="Shopping"),
+        _transaction("u-3", "80", date(2026, 9, 30), merchant="CHECKERS", category="Groceries"),
+    ]
+    timed_close = [
+        _transaction(
+            "t-1",
+            "180",
+            date(2026, 7, 18),
+            merchant="TAKEALOT",
+            category="Shopping",
+            transaction_time=time(10, 15, 0),
+        ),
+        _transaction(
+            "t-2",
+            "180",
+            date(2026, 7, 18),
+            merchant="TAKEALOT",
+            category="Shopping",
+            transaction_time=time(10, 17, 30),
+        ),
+        _transaction("t-3", "80", date(2026, 9, 30), merchant="CHECKERS", category="Groceries"),
+    ]
+    untimed_leak = next(
+        item for item in _detect(untimed).leaks if item.leak_type == "duplicate_payment_leak"
+    )
+    timed_leak = next(
+        item for item in _detect(timed_close).leaks if item.leak_type == "duplicate_payment_leak"
+    )
+    assert timed_leak.evidence["min_time_gap_minutes"] == 2
+    assert "close_timestamp" in timed_leak.evidence["match_basis"]
+    assert timed_leak.confidence > untimed_leak.confidence
+

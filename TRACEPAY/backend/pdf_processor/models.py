@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 from typing import Literal
 
@@ -17,6 +17,7 @@ class RawExtraction(BaseModel):
 
 class Transaction(BaseModel):
     date: date
+    transaction_time: time | None = None
     description: str = Field(min_length=1, max_length=500)
     amount: Decimal
     type: Literal["debit", "credit"]

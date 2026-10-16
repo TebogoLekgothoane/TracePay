@@ -23,8 +23,10 @@ BANK_MISMATCH_MESSAGE = (
 )
 
 # Longest / most specific aliases first (aligned with statement_schema._BANK_ALIASES).
+# GoTyme (Tyme Group) maps to TymeBank — TracePay's supported Tyme slot.
 _BANK_KEY_ALIASES: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"(?<![a-z0-9])go\s*tyme(?![a-z0-9])"), "gotyme"),
+    (re.compile(r"(?<![a-z0-9])go\s*tyme(?![a-z0-9])"), "tymebank"),
+    (re.compile(r"^gotyme$"), "tymebank"),
     (re.compile(r"(?<![a-z0-9])tyme\s*bank(?![a-z0-9])"), "tymebank"),
     (re.compile(r"^tymebank$"), "tymebank"),
     (re.compile(r"(?<![a-z0-9])standard\s*bank(?![a-z0-9])"), "standard bank"),
@@ -66,5 +68,13 @@ def assert_extracted_bank_matches_selected(
     if extracted_key is None:
         raise ValueError(BANK_UNIDENTIFIED_MESSAGE)
     if extracted_key != selected_key:
+        selected_label = (selected_institution or "").strip()
+        extracted_label = (extracted_bank or "").strip()
+        if selected_label and extracted_label:
+            raise ValueError(
+                f"This PDF looks like a {extracted_label} statement, "
+                f"but you selected {selected_label}. "
+                "Choose the matching bank and try again."
+            )
         raise ValueError(BANK_MISMATCH_MESSAGE)
     return selected_key

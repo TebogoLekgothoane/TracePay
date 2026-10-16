@@ -27,6 +27,20 @@ _IMPORT_QUALITY_SELECT = (
     "id,balance_reconciliation,rows_detected,rows_rejected,"
     "extraction_confidence,statement_start_date,statement_end_date"
 )
+_TRANSACTION_SELECT = (
+    "id,user_id,date,transaction_time,description,amount,type,is_duplicate,merchant_name,"
+    "statement_id,category_confidence,category_rule,transaction_class,"
+    "classification_confidence,classification_reason,categories(name)"
+)
+_TRANSACTION_SELECT_WITHOUT_OPTIONAL_TIME = (
+    "id,user_id,date,description,amount,type,is_duplicate,merchant_name,"
+    "statement_id,category_confidence,category_rule,transaction_class,"
+    "classification_confidence,classification_reason,categories(name)"
+)
+
+
+class _OptionalTransactionColumnUnavailable(RuntimeError):
+    """The deployed PostgREST schema predates an optional transaction field."""
 
 
 async def build_user_feature_snapshot(
@@ -106,7 +120,28 @@ def _authenticated_get(
     try:
         with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
             return json.loads(response.read().decode("utf-8"))
-    except (HTTPError, URLError, TimeoutError, ValueError) as error:
+    except HTTPError as error:
+        body = ""
+        try:
+            body = error.read(4096).decode("utf-8", errors="replace").lower()
+        except (OSError, UnicodeError):
+            pass
+        if (
+            error.code == 400
+            and "transaction_time" in body
+            and ("column" in body or "schema cache" in body)
+        ):
+            raise _OptionalTransactionColumnUnavailable from error
+        logger.warning(
+            "feature_data_fetch_failed error_type=%s upstream_status=%s",
+            type(error).__name__,
+            error.code,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Financial data is temporarily unavailable. Please try again.",
+        ) from error
+    except (URLError, TimeoutError, ValueError) as error:
         logger.warning(
             "feature_data_fetch_failed error_type=%s",
             type(error).__name__,
@@ -119,11 +154,34 @@ def _authenticated_get(
 
 def _fetch_transaction_rows(user_id: str, access_token: str) -> list[dict[str, Any]]:
     project_url, publishable_key = _supabase_config()
-    select = (
-        "id,user_id,date,description,amount,type,is_duplicate,merchant_name,"
-        "statement_id,category_confidence,category_rule,transaction_class,"
-        "classification_confidence,classification_reason,categories(name)"
-    )
+    try:
+        return _fetch_transaction_pages(
+            project_url,
+            publishable_key,
+            user_id,
+            access_token,
+            _TRANSACTION_SELECT,
+        )
+    except _OptionalTransactionColumnUnavailable:
+        logger.warning(
+            "feature_optional_column_unavailable column=transaction_time fallback=legacy_select"
+        )
+        return _fetch_transaction_pages(
+            project_url,
+            publishable_key,
+            user_id,
+            access_token,
+            _TRANSACTION_SELECT_WITHOUT_OPTIONAL_TIME,
+        )
+
+
+def _fetch_transaction_pages(
+    project_url: str,
+    publishable_key: str,
+    user_id: str,
+    access_token: str,
+    select: str,
+) -> list[dict[str, Any]]:
     url = (
         f"{project_url}/rest/v1/transactions?select={quote(select, safe='(),')}"
         f"&user_id=eq.{quote(user_id, safe='-')}&is_duplicate=eq.false"

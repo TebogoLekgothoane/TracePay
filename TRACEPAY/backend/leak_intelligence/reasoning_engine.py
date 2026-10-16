@@ -116,6 +116,10 @@ def _reason_about_leak(
         draft = _duplicate_reasoning(leak)
     elif leak.leak_type in _RECURRING_LEAK_TYPES:
         draft = _recurring_reasoning(snapshot, leak, related)
+    elif leak.leak_type == "inactive_recurring_payment_leak":
+        draft = _inactive_recurring_reasoning(snapshot, leak, related)
+    elif leak.leak_type == "irregular_transaction_leak":
+        draft = _irregular_transaction_reasoning(leak)
     elif leak.leak_type == "bank_fee_leak":
         draft = _fee_reasoning(snapshot, leak)
     elif leak.leak_type == "cash_usage_leak":
@@ -378,6 +382,19 @@ def _recurring_reasoning(
                 "amount_variation": recurrence.amount_variance,
             }
         )
+    for key in (
+        "price_change_focus",
+        "previous_average_amount",
+        "latest_amount",
+        "amount_change",
+        "amount_change_percentage",
+        "baseline_interval_days",
+        "current_interval_days",
+        "interval_change_days",
+    ):
+        value = leak.evidence.get(key)
+        if value is not None:
+            evidence[key] = value
     if observation_count is None or observation_count < 3 or interval is None:
         return _insufficient_draft(
             persistence,
@@ -385,6 +402,8 @@ def _recurring_reasoning(
             "insufficient to characterize the commitment reliably.",
             evidence,
         )
+    if evidence.get("price_change_focus") is not None:
+        persistence = "increasing"
     support = (
         support_ratio(merchant.confidence_support)
         if merchant
@@ -429,6 +448,19 @@ def _recurring_reasoning(
             "Payments followed a billing-like interval with a sufficiently stable "
             "amount pattern. This supports a recurring financial commitment, but "
             "does not indicate whether the payment is wanted or avoidable."
+        )
+    if evidence.get("price_change_focus") is not None:
+        explanation += (
+            " The latest observed charge was higher than the prior average, which "
+            "reflects observed amounts without proving an official price change."
+        )
+    if (
+        evidence.get("baseline_interval_days") is not None
+        and evidence.get("current_interval_days") is not None
+    ):
+        explanation += (
+            " The observed billing interval also shifted compared with earlier "
+            "payments."
         )
     return _Draft(
         root_cause_type="recurring_commitment",
@@ -705,6 +737,9 @@ def _duplicate_reasoning(leak: LeakDetection) -> _Draft:
     observed = _text(leak.evidence.get("observed_date"))
     if observed:
         evidence["observed_date"] = observed
+    min_gap = _integer(leak.evidence.get("min_time_gap_minutes"))
+    if min_gap is not None:
+        evidence["min_time_gap_minutes"] = min_gap
     return _Draft(
         root_cause_type="potential_duplicate",
         title=duplicate_leak_title(merchant_name=display_merchant, amount=amount),
@@ -718,6 +753,98 @@ def _duplicate_reasoning(leak: LeakDetection) -> _Draft:
         persistence="new",
         analysis_status="verification_required",
         evidence_strength=Decimal("0.62"),
+    )
+
+
+def _inactive_recurring_reasoning(
+    snapshot: FinancialFeatureSnapshot,
+    leak: LeakDetection,
+    related: list[BehaviourObservation],
+) -> _Draft:
+    merchant = _merchant_for_recurring(snapshot, leak, related)
+    support = (
+        support_ratio(merchant.confidence_support)
+        if merchant
+        else Decimal("0.70")
+    )
+    last_observed = _date(leak.evidence.get("last_observed_date"))
+    expected_interval = _decimal(leak.evidence.get("expected_interval_days"))
+    days_since = _integer(leak.evidence.get("days_since_last_observed"))
+    observation_count = _integer(leak.evidence.get("observation_count"))
+    evidence: dict[str, object] = {
+        "last_observed_date": last_observed,
+        "expected_interval_days": expected_interval,
+        "days_since_last_observed": days_since,
+        "observation_count": observation_count,
+        "verification_required": True,
+        "not_proof_of_cancellation": True,
+    }
+    evidence.update(_source_evidence(leak))
+    merchant_display = _text(evidence.get("merchant_display_name")) or _text(
+        evidence.get("merchant_key")
+    )
+    title = (
+        f"Inactive recurring payment at {merchant_display}"
+        if merchant_display
+        else "Inactive recurring payment"
+    )
+    return _Draft(
+        root_cause_type="recurring_commitment",
+        title=title,
+        explanation=(
+            "A previously regular payment was not observed within its expected billing "
+            "window. This may reflect a delayed charge, a changed billing description, "
+            "or a stopped service, and requires verification rather than assuming "
+            "cancellation."
+        ),
+        evidence={key: value for key, value in evidence.items() if value is not None},
+        persistence="temporary",
+        analysis_status="verification_required",
+        evidence_strength=Decimal("0.72"),
+        support=support,
+    )
+
+
+def _irregular_transaction_reasoning(leak: LeakDetection) -> _Draft:
+    amount = _decimal(leak.evidence.get("transaction_amount"))
+    category = _text(leak.evidence.get("category_name"))
+    median_amount = _decimal(leak.evidence.get("category_median_amount"))
+    difference = _decimal(leak.evidence.get("difference_from_baseline"))
+    multiple = _decimal(leak.evidence.get("amount_multiple_of_category_median"))
+    sample_size = _integer(leak.evidence.get("baseline_sample_size"))
+    tx_date = _date(leak.evidence.get("transaction_date"))
+    tx_time = _text(leak.evidence.get("transaction_time"))
+    evidence: dict[str, object] = {
+        "transaction_amount": amount,
+        "category_name": category,
+        "category_median_amount": median_amount,
+        "difference_from_baseline": difference,
+        "amount_multiple_of_category_median": multiple,
+        "baseline_sample_size": sample_size,
+        "transaction_date": tx_date,
+        "transaction_time": tx_time,
+        "verification_required": True,
+        "not_proof_of_fraud": True,
+    }
+    evidence.update(_source_evidence(leak))
+    merchant_display = _text(evidence.get("merchant_display_name"))
+    title = (
+        f"Unusual transaction at {merchant_display}"
+        if merchant_display
+        else "Unusual transaction for category baseline"
+    )
+    return _Draft(
+        root_cause_type="transaction_pattern",
+        title=title,
+        explanation=(
+            "A single transaction was at least three times the category median and "
+            "at least R500 across the observed baseline. This may be a legitimate "
+            "one-off purchase and requires verification; it is not evidence of fraud."
+        ),
+        evidence={key: value for key, value in evidence.items() if value is not None},
+        persistence="new",
+        analysis_status="verification_required",
+        evidence_strength=Decimal("0.65"),
     )
 
 
@@ -840,7 +967,7 @@ def _series_for_leak(
             month.category_totals.get(category, ZERO) if category else ZERO
             for month in months
         ]
-    if leak.leak_type in _RECURRING_LEAK_TYPES:
+    if leak.leak_type in _RECURRING_LEAK_TYPES or leak.leak_type == "inactive_recurring_payment_leak":
         merchant = _merchant_for_recurring(snapshot, leak, related)
         return _merchant_series(snapshot, merchant)
     return []

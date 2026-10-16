@@ -12,7 +12,7 @@ from categorisation.sanitizer import sanitize_for_ai
 
 from .extract import decrypt_pdf_content
 from .models import ExtractedStatement, Transaction
-from .normalise import parse_date
+from .normalise import parse_date, parse_time
 from .statement_schema import resolve_extracted_statement
 
 logger = logging.getLogger("tracepay.pdf.ai_extract")
@@ -33,6 +33,7 @@ _ANTHROPIC_TOOL_SCHEMA: dict[str, Any] = {
                 "type": "object",
                 "properties": {
                     "date": {"type": "string", "description": "ISO date YYYY-MM-DD"},
+                    "transaction_time": {"type": ["string", "null"], "description": "Time only when printed on the statement, HH:MM[:SS]"},
                     "description": {"type": "string"},
                     "amount": {
                         "type": "number",
@@ -79,6 +80,7 @@ _GEMINI_SCHEMA: dict[str, Any] = {
                 "type": "OBJECT",
                 "properties": {
                     "date": {"type": "STRING"},
+                    "transaction_time": {"type": "STRING", "nullable": True},
                     "description": {"type": "STRING"},
                     "amount": {"type": "NUMBER"},
                     "direction": {"type": "STRING", "enum": ["debit", "credit"]},
@@ -98,7 +100,7 @@ _INSTRUCTIONS = (
     "Fill bank, account_number_last4, account_type, statement_start_date, statement_end_date, "
     "opening_balance and closing_balance when they appear. Dates must be YYYY-MM-DD. "
     "Each transaction needs date, description, signed amount (debits negative, credits positive), "
-    "direction (debit or credit), balance_after when shown, and reference when shown."
+    "direction (debit or credit), transaction_time when printed, balance_after when shown, and reference when shown."
 )
 
 
@@ -507,6 +509,7 @@ def _parse_transactions(parsed: dict) -> list[Transaction]:
             transactions.append(
                 Transaction(
                     date=date_value,
+                    transaction_time=parse_time(str(item.get("transaction_time", ""))),
                     description=description,
                     amount=signed,
                     type=raw_type,  # type: ignore[arg-type]

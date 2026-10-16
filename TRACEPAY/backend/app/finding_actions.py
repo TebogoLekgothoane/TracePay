@@ -25,6 +25,7 @@ from app.finding_registry import (
 from leak_intelligence.finding_diff import RegistryRow, RegistryScopeError
 from leak_intelligence.finding_guidance import (
     ACTION_TYPES,
+    USAGE_ANSWERS,
     FindingAction,
     FindingGuidance,
     InvalidActionNote,
@@ -40,9 +41,11 @@ logger = logging.getLogger("tracepay.finding_actions")
 
 _ACTION_COLUMNS = "id,user_id,finding_id,action_type,note,created_at"
 _OUTCOME_COLUMNS = "id,user_id,finding_id,statement_import_id,outcome,basis,checked_at"
+_USAGE_COLUMNS = "id,user_id,finding_id,usage_answer,confirmed_at"
 LoadFinding = Callable[[str, str, str], RegistryRow | None]
 LoadActions = Callable[[str, str, str], tuple[FindingAction, ...]]
 SaveAction = Callable[[str, FindingAction], FindingAction]
+LoadUsage = Callable[[str, str, str], str | None]
 
 
 class FindingActionRequest(BaseModel):
@@ -62,6 +65,7 @@ def load_finding_guidance(user_id: str, access_token: str, finding_id: str) -> F
         finding_id,
         load_finding=_load_finding,
         load_actions=_load_actions,
+        load_usage=_load_usage_answer,
     )
     return replace(
         guidance,
@@ -87,6 +91,7 @@ def save_finding_action(
         load_finding=_load_finding,
         load_actions=_load_actions,
         save_action=_insert_action,
+        load_usage=_load_usage_answer,
     )
     return replace(
         guidance,
@@ -101,6 +106,7 @@ def guidance_payload(guidance: FindingGuidance) -> dict[str, object]:
         "detection_status": guidance.detection_status,
         "detection_status_label": guidance.detection_status_label,
         "user_response": guidance.user_response,
+        "usage_answer": guidance.usage_answer,
         "source": guidance.source,
         "what_happened": guidance.what_happened,
         "reason": guidance.reason,
@@ -140,9 +146,19 @@ def _load(
     *,
     load_finding: LoadFinding,
     load_actions: LoadActions,
+    load_usage: LoadUsage | None = None,
 ) -> FindingGuidance:
     finding = _visible_finding(user_id, access_token, finding_id, load_finding)
-    return build_guidance(finding, load_actions(user_id, access_token, finding_id))
+    usage = (
+        load_usage(user_id, access_token, finding_id)
+        if load_usage is not None and finding.leak_type == "subscription_leak"
+        else None
+    )
+    return build_guidance(
+        finding,
+        load_actions(user_id, access_token, finding_id),
+        usage_answer=usage,
+    )
 
 
 def _save(
@@ -155,6 +171,7 @@ def _save(
     load_finding: LoadFinding,
     load_actions: LoadActions,
     save_action: SaveAction,
+    load_usage: LoadUsage | None = None,
 ) -> FindingGuidance:
     finding = _visible_finding(user_id, access_token, finding_id, load_finding)
     status_before = finding.status
@@ -191,7 +208,12 @@ def _save(
         user_id[:8],
         stored.action_type,
     )
-    return build_guidance(unchanged, history[:-1] + (stored,))
+    usage = (
+        load_usage(user_id, access_token, finding_id)
+        if load_usage is not None and unchanged.leak_type == "subscription_leak"
+        else None
+    )
+    return build_guidance(unchanged, history[:-1] + (stored,), usage_answer=usage)
 
 
 def _visible_finding(
@@ -311,6 +333,25 @@ def _load_actions(user_id: str, access_token: str, finding_id: str) -> tuple[Fin
         _parse_action(row, user_id, finding_id)
         for row in _request_json(url, access_token, method="GET")
     )
+
+
+def _load_usage_answer(user_id: str, access_token: str, finding_id: str) -> str | None:
+    url = _filter_url(
+        "subscription_usage_confirmations",
+        _USAGE_COLUMNS,
+        user_id,
+        f"&finding_id=eq.{quote(finding_id, safe='')}&order=confirmed_at.desc&limit=1",
+    )
+    rows = _request_json(url, access_token, method="GET")
+    if not rows:
+        return None
+    row = rows[0]
+    if row.get("user_id") != user_id or row.get("finding_id") != finding_id:
+        raise HTTPException(status_code=403, detail="That finding belongs to a different user.")
+    answer = row.get("usage_answer")
+    if isinstance(answer, str) and answer in USAGE_ANSWERS:
+        return answer
+    return None
 
 
 def _insert_action(access_token: str, action: FindingAction) -> FindingAction:

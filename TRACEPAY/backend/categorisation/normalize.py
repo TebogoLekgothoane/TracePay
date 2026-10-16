@@ -77,6 +77,7 @@ _BOILERPLATE_LABELS = frozenset(
         "PAY BY SHAP",
         "PAY BY SHAPID",
         "PAYSHAP PAY BY SHAPID",
+        "PAY SHAP PAY BY SHAPID",
         "MOBILE PURCHASE",
         "MOBILE PURCHASE FOR PHONE",
         "PHONE",

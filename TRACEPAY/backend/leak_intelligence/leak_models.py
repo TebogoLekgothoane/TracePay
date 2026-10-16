@@ -14,10 +14,18 @@ LeakType = Literal[
     "recurring_payment_leak",
     "spending_escalation_leak",
     "duplicate_payment_leak",
+    "duplicate_debit_order_leak",
+    "duplicate_streaming_leak",
+    "irregular_transaction_leak",
+    "inactive_recurring_payment_leak",
     "cash_usage_leak",
     "airtime_data_leak",
     "food_spending_leak",
     "transport_spending_leak",
+    "coffee_spending_leak",
+    "convenience_store_leak",
+    "weekend_spending_leak",
+    "payday_spending_leak",
     "unknown_recurring_payment",
 ]
 LeakSeverity = Literal["low", "medium", "high"]

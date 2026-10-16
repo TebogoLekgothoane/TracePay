@@ -42,6 +42,16 @@ function asDate(value: unknown): string | null {
   return value.trim();
 }
 
+function asTime(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  if (typeof value !== "string" || !/^\d{2}:\d{2}(?::\d{2})?$/.test(value.trim())) {
+    return null;
+  }
+  return value.trim();
+}
+
 function asConfidence(value: unknown, fallback = 0): number | null {
   if (value === undefined || value === null) {
     return fallback;
@@ -59,6 +69,7 @@ export function parseExtractedTransaction(value: unknown): ExtractedTransaction 
 
   const row = value as Record<string, unknown>;
   const date = asDate(row.date);
+  const transactionTime = asTime(row.transaction_time);
   const description = typeof row.description === "string" ? row.description.trim() : "";
   const amount = asAmount(row.amount);
   const type =
@@ -69,6 +80,9 @@ export function parseExtractedTransaction(value: unknown): ExtractedTransaction 
         : null;
 
   if (!date || description.length < 1 || description.length > 500 || amount === null) {
+    return null;
+  }
+  if (row.transaction_time !== undefined && row.transaction_time !== null && transactionTime === null) {
     return null;
   }
   if (type !== "debit" && type !== "credit") {
@@ -106,6 +120,7 @@ export function parseExtractedTransaction(value: unknown): ExtractedTransaction 
 
   return {
     date,
+    transaction_time: transactionTime,
     description,
     amount,
     type,

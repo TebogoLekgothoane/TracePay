@@ -28,6 +28,8 @@ _LABELS = {
     "subscription_leak": "Recurring subscription",
     "recurring_payment_leak": "Recurring payment",
     "unknown_recurring_payment": "Recurring payment",
+    "inactive_recurring_payment_leak": "Inactive recurring payment",
+    "irregular_transaction_leak": "Unusual transaction",
     "bank_fee_leak": "Bank fee pattern",
     "spending_escalation_leak": "Spending increase",
     "cash_usage_leak": "Cash withdrawal pattern",

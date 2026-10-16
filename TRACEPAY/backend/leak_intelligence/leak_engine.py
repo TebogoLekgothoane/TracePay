@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, time, timezone
 from decimal import Decimal
+import re
 
 from .behaviour_engine import (
     MIN_FEE_BURDEN_TOTAL,
@@ -56,6 +57,8 @@ def detect_leaks(
     findings = [
         *_bank_fee_leaks(snapshot, observations),
         *_recurring_leaks(snapshot, observations),
+        *_inactive_recurring_leaks(snapshot),
+        *_irregular_transaction_leaks(snapshot),
         *_spending_escalation_leaks(snapshot, observations),
         *_category_leaks(snapshot, observations),
         *_cash_leaks(snapshot, observations),
@@ -63,6 +66,142 @@ def detect_leaks(
     ]
     deduplicated = {finding.fingerprint: finding for finding in findings}
     return _result(snapshot, sorted(deduplicated.values(), key=lambda item: (-item.confidence, item.leak_id)))
+
+
+def _inactive_recurring_leaks(snapshot: FinancialFeatureSnapshot) -> list[LeakDetection]:
+    """Report a missed expected charge as a review cue, never as cancellation/resolution."""
+    if snapshot.date_end is None:
+        return []
+    findings: list[LeakDetection] = []
+    for merchant in snapshot.merchants:
+        recurrence = merchant.recurrence
+        interval = recurrence.average_interval_days
+        amount = recurrence.average_amount
+        last_date = merchant.merchant_last_transaction_date
+        if (
+            recurrence.recurrence_strength not in {"medium", "high"}
+            or recurrence.observation_count < 3
+            or interval is None
+            or amount is None
+            or last_date is None
+            or not matches_plausible_recurring_interval(interval)
+            or not is_reliable_merchant_display_name(merchant.merchant_name)
+        ):
+            continue
+        days_since = (snapshot.date_end - last_date).days
+        if days_since <= max(30, int(interval * Decimal("1.6"))):
+            continue
+        monthly = amount * Decimal("30") / interval
+        confidence = leak_confidence(
+            support=merchant.confidence_support,
+            observation_count=recurrence.observation_count,
+            pattern_strength=Decimal("0.72"),
+            ceiling=Decimal("0.78"),
+        )
+        if confidence is None:
+            continue
+        findings.append(
+            _leak(
+                snapshot=snapshot,
+                leak_type="inactive_recurring_payment_leak",
+                subject=merchant.merchant_name,
+                title=f"Inactive recurring payment at {merchant.merchant_name}",
+                description=(
+                    "A previously regular payment has not appeared within its expected "
+                    "billing window. This may be delayed, cancelled, or missing from the "
+                    "available statement history and requires confirmation."
+                ),
+                monthly_impact=monthly,
+                annual_impact=monthly * Decimal("12"),
+                impact_kind="estimated",
+                confidence=confidence,
+                severity=severity_for_impact(monthly, persistent=False, confidence=confidence),
+                evidence={
+                    "finding_focus": "missing_expected_recurring_payment",
+                    "merchant_key": merchant.merchant_name,
+                    "last_observed_date": last_date,
+                    "expected_interval_days": interval,
+                    "days_since_last_observed": days_since,
+                    "observation_count": recurrence.observation_count,
+                    "status_basis": "potential",
+                    "verification_required": True,
+                    "not_proof_of_cancellation": True,
+                },
+                behaviour_ids=[],
+                feature_refs=["merchants[].recurrence", "merchants[].merchant_last_transaction_date"],
+            )
+        )
+    return findings
+
+
+def _irregular_transaction_leaks(snapshot: FinancialFeatureSnapshot) -> list[LeakDetection]:
+    findings: list[LeakDetection] = []
+    for candidate in snapshot.irregular_candidates:
+        if candidate.amount_multiple_of_category_median is None:
+            continue
+        confidence = leak_confidence(
+            support=None,
+            observation_count=candidate.baseline_sample_size,
+            pattern_strength=Decimal("0.60"),
+            ceiling=Decimal("0.70"),
+        )
+        if confidence is None:
+            continue
+        merchant_display = merchant_display_name_for(candidate.merchant_name)
+        merchant = merchant_display or "Unknown merchant"
+        safe_description = _safe_transaction_description(candidate.transaction_description)
+        findings.append(
+            _leak(
+                snapshot=snapshot,
+                leak_type="irregular_transaction_leak",
+                subject=candidate.transaction_id,
+                title=f"Unusual transaction at {merchant}",
+                description=(
+                    "This transaction is unusually large for its category. It may be a "
+                    "legitimate one-off purchase; it is not evidence of fraud."
+                ),
+                monthly_impact=candidate.amount,
+                annual_impact=None,
+                impact_kind="one_time",
+                confidence=confidence,
+                severity=severity_for_impact(candidate.amount, persistent=False, confidence=confidence),
+                evidence={
+                    "finding_focus": "unusual_transaction",
+                    "transaction_id": candidate.transaction_id,
+                    "merchant_key": candidate.merchant_name,
+                    "merchant_display_name": merchant_display,
+                    "transaction_amount": candidate.amount,
+                    "original_description": safe_description,
+                    "category_name": candidate.category_name,
+                    "transaction_type": candidate.transaction_type,
+                    "transaction_date": candidate.transaction_date,
+                    "transaction_time": candidate.transaction_time,
+                    "category_transaction_count": candidate.category_transaction_count,
+                    "baseline_sample_size": candidate.baseline_sample_size,
+                    "category_median_amount": candidate.category_median_amount,
+                    "difference_from_baseline": candidate.difference_from_baseline,
+                    "amount_multiple_of_category_median": candidate.amount_multiple_of_category_median,
+                    "outlier_rule": "At least 3 eligible baseline transactions; flagged amount is at least 3x the category median and at least R500.",
+                    "confidence_basis": "uncalibrated_heuristic_outlier_score",
+                    "confidence_is_calibrated": False,
+                    "verification_required": True,
+                    "not_proof_of_fraud": True,
+                },
+                behaviour_ids=[],
+                feature_refs=["irregular_candidates"],
+            )
+        )
+    return findings
+
+
+_LONG_DIGITS = re.compile(r"\b\d{6,}\b")
+
+
+def _safe_transaction_description(description: str) -> str | None:
+    cleaned = " ".join(description.split())[:500]
+    if not cleaned:
+        return None
+    return _LONG_DIGITS.sub("[REDACTED]", cleaned)
 
 
 def _result(
@@ -97,23 +236,24 @@ def _bank_fee_leaks(
     )
     fee_observations = observations.get("fee_accumulation", [])
     ratio = snapshot.spending_profile.bank_fee_ratio or Decimal("0")
+    eligible_fee_totals = _eligible_non_account_fee_pool(fees, fee_observations)
     immediate = fees.immediate_payment_fee_total or Decimal("0")
     immediate_burden = (
         immediate >= MIN_IMPACT
-        and immediate == fees.bank_fee_total
-        and fee_observations
+        and immediate in eligible_fee_totals
+        and bool(fee_observations)
     )
     enquiry = fees.balance_enquiry_fee_total or Decimal("0")
     balance_enquiry_burden = (
         enquiry >= MIN_IMPACT
-        and enquiry == fees.bank_fee_total
-        and fee_observations
+        and enquiry in eligible_fee_totals
+        and bool(fee_observations)
     )
     sms = fees.sms_fee_total or Decimal("0")
     sms_banking_burden = (
         sms >= MIN_IMPACT
-        and sms == fees.bank_fee_total
-        and fee_observations
+        and sms in eligible_fee_totals
+        and bool(fee_observations)
     )
     foreign_burden = _foreign_transaction_fee_burden(snapshot, fees, fee_observations)
     interest_burden = _interest_charge_burden(fees, fee_observations)
@@ -307,6 +447,8 @@ def _recurring_leaks(
 ) -> list[LeakDetection]:
     findings = []
     recurring_observations = observations.get("recurring_payment_pattern", [])
+    price_observations = observations.get("price_increase_pattern", [])
+    frequency_observations = observations.get("frequency_change_pattern", [])
     # Only suppress recurring when a same-day duplicate candidate exists.
     # Adjacent-day repeats must not block legitimate subscription detection.
     duplicate_merchants = {
@@ -431,6 +573,23 @@ def _recurring_leaks(
         )
         if confidence is None:
             continue
+        price_obs = _matching_recurring_price_observation(
+            price_observations, merchant.merchant_name
+        )
+        frequency_obs = _matching_observation(
+            frequency_observations, merchant.merchant_name
+        )
+        supporting_ids = list(
+            dict.fromkeys(
+                [
+                    *_matching_observation_ids(
+                        recurring_observations, merchant.merchant_name
+                    ),
+                    *([price_obs.observation_id] if price_obs else []),
+                    *([frequency_obs.observation_id] if frequency_obs else []),
+                ]
+            )
+        )
         findings.append(
             _leak(
                 snapshot=snapshot,
@@ -470,10 +629,9 @@ def _recurring_leaks(
                         if weak_commitment
                         else {}
                     ),
+                    **_recurring_signal_evidence(price_obs, frequency_obs),
                 },
-                behaviour_ids=_matching_observation_ids(
-                    recurring_observations, merchant.merchant_name
-                ),
+                behaviour_ids=supporting_ids,
                 feature_refs=[
                     f"merchants[{merchant.merchant_name}].recurrence",
                     f"merchants[{merchant.merchant_name}].confidence_support",
@@ -1145,16 +1303,20 @@ def _duplicate_leaks(
             ),
         )
         # Matching merchant+amount+date alone is weak; do not inflate confidence.
+        close_timestamp = (
+            candidate.min_time_gap_minutes is not None
+            and candidate.min_time_gap_minutes <= 15
+        )
         pattern_strength = Decimal("0.48")
-        if candidate.shared_reference_tokens:
+        if candidate.shared_reference_tokens or close_timestamp:
             pattern_strength = Decimal("0.58")
-        if candidate.distinct_description_count <= 1:
+        if candidate.distinct_description_count <= 1 and not close_timestamp:
             pattern_strength = min(pattern_strength, Decimal("0.52"))
         confidence = leak_confidence(
             support=support,
             observation_count=len(dates),
             pattern_strength=pattern_strength,
-            ceiling=Decimal("0.68"),
+            ceiling=Decimal("0.70") if close_timestamp else Decimal("0.68"),
         )
         if confidence is None:
             continue
@@ -1212,6 +1374,11 @@ def _duplicate_leaks(
                     "uncertainty": (
                         "Matching fields can occur for intentional repeat purchases. "
                         "Manual verification is required before treating this as a duplicate."
+                    ),
+                    **(
+                        {"min_time_gap_minutes": candidate.min_time_gap_minutes}
+                        if candidate.min_time_gap_minutes is not None
+                        else {}
                     ),
                 },
                 behaviour_ids=observation_ids,
@@ -1419,6 +1586,21 @@ def _insufficient_funds_fee_burden(
     )
 
 
+def _eligible_non_account_fee_pool(
+    fees: FeeFeatures,
+    fee_observations: list[BehaviourObservation],
+) -> set[Decimal]:
+    eligible = {fees.bank_fee_total}
+    account_total = fees.account_fee_total or Decimal("0")
+    if (
+        account_total > 0
+        and fees.bank_fee_total > account_total
+        and not _bool_evidence(fee_observations, "overall_monthly_fee_trend")
+    ):
+        eligible.add(fees.bank_fee_total - account_total)
+    return eligible
+
+
 def _specific_fee_burden(
     total: Decimal,
     count: int,
@@ -1430,7 +1612,7 @@ def _specific_fee_burden(
         not fee_observations
         or count < 2
         or total < MIN_IMPACT
-        or total != fees.bank_fee_total
+        or total not in _eligible_non_account_fee_pool(fees, fee_observations)
     ):
         return False
     return Decimal(high_confidence_count) / Decimal(count) >= Decimal("0.60")
@@ -1462,6 +1644,58 @@ def _matching_observation_ids(
         for observation in observations
         if observation.evidence.get("merchant_key") == merchant
     ]
+
+
+def _matching_observation(
+    observations: list[BehaviourObservation], merchant: str
+) -> BehaviourObservation | None:
+    return next(
+        (
+            observation
+            for observation in observations
+            if observation.evidence.get("merchant_key") == merchant
+        ),
+        None,
+    )
+
+
+def _matching_recurring_price_observation(
+    observations: list[BehaviourObservation], merchant: str
+) -> BehaviourObservation | None:
+    return next(
+        (
+            observation
+            for observation in observations
+            if observation.evidence.get("merchant_key") == merchant
+            and observation.evidence.get("finding_focus")
+            in {
+                "subscription_price_creep",
+                "debit_order_amount_increase",
+                "insurance_premium_increase",
+            }
+        ),
+        None,
+    )
+
+
+def _recurring_signal_evidence(
+    price_obs: BehaviourObservation | None,
+    frequency_obs: BehaviourObservation | None,
+) -> dict[str, object]:
+    payload: dict[str, object] = {}
+    if price_obs is not None:
+        ev = price_obs.evidence
+        payload["price_change_focus"] = ev.get("finding_focus")
+        payload["previous_average_amount"] = ev.get("average_previous_amount")
+        payload["latest_amount"] = ev.get("latest_amount")
+        payload["amount_change"] = ev.get("change_amount")
+        payload["amount_change_percentage"] = ev.get("change_percentage")
+    if frequency_obs is not None:
+        ev = frequency_obs.evidence
+        payload["baseline_interval_days"] = ev.get("baseline_interval_days")
+        payload["current_interval_days"] = ev.get("current_interval_days")
+        payload["interval_change_days"] = ev.get("interval_change_days")
+    return {key: value for key, value in payload.items() if value is not None}
 
 
 def _bool_evidence(observations: list[BehaviourObservation], key: str) -> bool:

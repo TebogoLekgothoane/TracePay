@@ -18,9 +18,11 @@ export const BANK_REQUIRED_MESSAGE =
 
 /** Alias needles → canonical key. Longest / most specific first. */
 const BANK_ALIAS_KEYS: ReadonlyArray<{ needle: RegExp; key: string }> = [
-  { needle: /(?:^|[^a-z0-9])go\s*tyme(?:[^a-z0-9]|$)/, key: "gotyme" },
+  // GoTyme (Tyme Group) statements map to TymeBank — TracePay's supported Tyme slot.
+  { needle: /(?:^|[^a-z0-9])go\s*tyme(?:[^a-z0-9]|$)/, key: "tymebank" },
   { needle: /(?:^|[^a-z0-9])tyme\s*bank(?:[^a-z0-9]|$)/, key: "tymebank" },
   { needle: /^tymebank$/, key: "tymebank" },
+  { needle: /^gotyme$/, key: "tymebank" },
   { needle: /(?:^|[^a-z0-9])standard\s*bank(?:[^a-z0-9]|$)/, key: "standard bank" },
   { needle: /(?:^|[^a-z0-9])first\s*national(?:[^a-z0-9]|$)/, key: "fnb" },
   { needle: /(?:^|[^a-z0-9])fnb(?:[^a-z0-9]|$)/, key: "fnb" },
@@ -61,6 +63,18 @@ export function assertKnownStatementBankKey(
  * After PDF extraction: require a confident bank match against the selected institution.
  * Does not guess or silently accept unidentified banks.
  */
+export function bankMismatchMessage(
+  selectedInstitution: string | null | undefined,
+  extractedBank: string | null | undefined,
+): string {
+  const selected = selectedInstitution?.trim();
+  const extracted = extractedBank?.trim();
+  if (selected && extracted) {
+    return `This PDF looks like a ${extracted} statement, but you selected ${selected}. Choose the matching bank and try again.`;
+  }
+  return BANK_MISMATCH_MESSAGE;
+}
+
 export function assertExtractedBankMatchesSelected(
   selectedInstitution: string | null | undefined,
   extractedBank: string | null | undefined,
@@ -74,12 +88,19 @@ export function assertExtractedBankMatchesSelected(
     throw new Error(BANK_UNIDENTIFIED_MESSAGE);
   }
   if (extractedKey !== selectedKey) {
-    throw new Error(BANK_MISMATCH_MESSAGE);
+    throw new Error(bankMismatchMessage(selectedInstitution, extractedBank));
   }
 }
 
 export function isBankAlreadyUploadedError(message: string): boolean {
   return /already uploaded a statement from this bank/i.test(message);
+}
+
+export function isBankMismatchError(message: string): boolean {
+  return (
+    /different bank than the one you selected/i.test(message) ||
+    /looks like a .+ statement, but you selected/i.test(message)
+  );
 }
 
 export function bankSlotUniqueViolationMessage(errorMessage: string | null | undefined): string | null {

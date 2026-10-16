@@ -1,5 +1,5 @@
 import re
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
 
 from .models import Transaction
@@ -31,6 +31,16 @@ DATE_FORMATS = (
     "%b %d %Y",
     "%b %d, %Y",
 )
+
+
+def parse_time(value: str) -> time | None:
+    match = re.search(r"\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b", value.strip())
+    if not match:
+        return None
+    try:
+        return time(int(match.group(1)), int(match.group(2)), int(match.group(3) or 0))
+    except ValueError:
+        return None
 
 
 def parse_date(value: str) -> date | None:
@@ -197,6 +207,8 @@ def normalize_row(row: list[str], headers: list[str], row_number: int) -> Transa
     )
     return Transaction(
         date=transaction_date,
+        transaction_time=parse_time(date_value)
+        or parse_time(next((values[name] for name in values if name in {"time", "transaction time"} and values[name]), "")),
         description=description,
         amount=signed_amount,
         type=transaction_type,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time
 from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping
 
@@ -64,6 +64,7 @@ def feature_transaction_from_row(row: Mapping[str, Any], *, expected_user_id: st
         description=_optional_text(row, "description") or "",
         merchant_name=_optional_text(row, "merchant_name"),
         transaction_date=_date(row.get("date")),
+        transaction_time=_time(row.get("transaction_time")),
         transaction_type=transaction_type,
         is_duplicate=bool(row.get("is_duplicate", False)),
         statement_id=_optional_text(row, "statement_id"),
@@ -104,6 +105,17 @@ def _date(value: Any) -> date | None:
         return date.fromisoformat(value)
     except ValueError as error:
         raise FeatureRowValidationError("Transaction date is invalid.") from error
+
+
+def _time(value: Any) -> time | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise FeatureRowValidationError("Transaction time is invalid.")
+    try:
+        return time.fromisoformat(value)
+    except ValueError as error:
+        raise FeatureRowValidationError("Transaction time is invalid.") from error
 
 
 def _confidence(value: Any) -> float:

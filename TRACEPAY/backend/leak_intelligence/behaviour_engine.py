@@ -820,9 +820,12 @@ def _cash_and_fee_observations(snapshot: FinancialFeatureSnapshot) -> list[Behav
     if not any(item.behavior_type == "fee_accumulation" for item in observations):
         enquiry = snapshot.fees.balance_enquiry_fee_total or ZERO
         sms = snapshot.fees.sms_fee_total or ZERO
+        immediate = snapshot.fees.immediate_payment_fee_total or ZERO
         if _typed_bank_fee_repetition_eligible(snapshot, enquiry):
             observations.append(_typed_fee_repetition_observation(snapshot))
         elif _typed_bank_fee_repetition_eligible(snapshot, sms):
+            observations.append(_typed_fee_repetition_observation(snapshot))
+        elif _typed_bank_fee_repetition_eligible(snapshot, immediate):
             observations.append(_typed_fee_repetition_observation(snapshot))
         elif _typed_bank_fee_repetition_eligible(
             snapshot, snapshot.fees.foreign_transaction_fee_total or ZERO
@@ -843,13 +846,22 @@ def _cash_and_fee_observations(snapshot: FinancialFeatureSnapshot) -> list[Behav
     return observations
 
 
+def _eligible_fee_totals(snapshot: FinancialFeatureSnapshot) -> set[Decimal]:
+    fees = snapshot.fees
+    eligible = {fees.bank_fee_total}
+    account_total = fees.account_fee_total or ZERO
+    if account_total > ZERO and fees.bank_fee_total > account_total:
+        eligible.add(fees.bank_fee_total - account_total)
+    return eligible
+
+
 def _typed_bank_fee_repetition_eligible(
     snapshot: FinancialFeatureSnapshot, typed_total: Decimal
 ) -> bool:
     fees = snapshot.fees
     if (
         typed_total < MIN_FEE_BURDEN_TOTAL
-        or typed_total != fees.bank_fee_total
+        or typed_total not in _eligible_fee_totals(snapshot)
         or fees.bank_fee_transaction_count < 2
     ):
         return False
@@ -898,11 +910,12 @@ def _fee_accumulation_observation(
         **compare,
         "bank_fee_transaction_count": snapshot.fees.bank_fee_transaction_count,
     }
-    if immediate >= MIN_FEE_BURDEN_TOTAL and immediate == snapshot.fees.bank_fee_total:
+    eligible = _eligible_fee_totals(snapshot)
+    if immediate >= MIN_FEE_BURDEN_TOTAL and immediate in eligible:
         payload["immediate_payment_fee_total"] = immediate
-    if enquiry >= MIN_FEE_BURDEN_TOTAL and enquiry == snapshot.fees.bank_fee_total:
+    if enquiry >= MIN_FEE_BURDEN_TOTAL and enquiry in eligible:
         payload["balance_enquiry_fee_total"] = enquiry
-    if sms >= MIN_FEE_BURDEN_TOTAL and sms == snapshot.fees.bank_fee_total:
+    if sms >= MIN_FEE_BURDEN_TOTAL and sms in eligible:
         payload["sms_fee_total"] = sms
     return _observation(
         "fee_accumulation",

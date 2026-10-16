@@ -24,6 +24,12 @@ from app.finding_actions import (
     save_finding_action,
 )
 from app.finding_registry import reconcile_findings_after_import
+from app.subscription_usage import (
+    SubscriptionUsageRequest,
+    load_subscription_usage,
+    save_subscription_usage,
+    usage_payload,
+)
 from app.financial_reasoning import build_user_financial_reasoning
 from app.financial_recommendations import build_user_financial_recommendations
 from app.leak_detection import build_user_leak_detections
@@ -390,6 +396,38 @@ async def finding_guidance(
     except FindingNotFound:
         raise HTTPException(status_code=404, detail="That finding was not found.") from None
     return guidance_payload(guidance)
+
+
+@app.get("/subscription-findings/{finding_id}/usage")
+async def subscription_usage(
+    finding_id: str,
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Read the latest user usage answer without changing finding state."""
+    enforce_rate_limit(f"subscription-usage:{_user_id}", 30, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    return usage_payload(load_subscription_usage(_user_id, access_token, finding_id))
+
+
+@app.post("/subscription-findings/{finding_id}/usage")
+async def save_subscription_usage_answer(
+    finding_id: str,
+    request: SubscriptionUsageRequest,
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Append a user usage answer; this never resolves or reclassifies a finding."""
+    enforce_rate_limit(f"subscription-usage-write:{_user_id}", 20, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    stored = save_subscription_usage(
+        _user_id,
+        access_token,
+        finding_id,
+        request,
+        confirmed_at=datetime.now(timezone.utc),
+    )
+    return usage_payload(stored)
 
 
 @app.post("/finding-registry/{finding_id}/actions")

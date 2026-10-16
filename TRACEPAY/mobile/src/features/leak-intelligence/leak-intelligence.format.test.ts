@@ -5,6 +5,7 @@ import {
   formatDuplicateFinding,
   formatEvidence,
   formatFindingEvidence,
+  formatIrregularFinding,
   formatImpactKind,
   formatPercentValue,
   formatPrimaryImpactLabel,
@@ -36,6 +37,30 @@ test("formats monetary and confidence values", () => {
   assert(formatImpactKind("one_time") === "One-time", "formats impact kind");
   assert(formatPrimaryImpactLabel("one_time") === "Potential amount", "one-time impact label");
   assert(formatPrimaryImpactLabel("recurring") === "Monthly impact", "recurring impact label");
+});
+
+test("irregular finding shows the exact transaction and baseline evidence", () => {
+  const rows = formatIrregularFinding({
+    merchant_display_name: "Shell",
+    transaction_amount: "900",
+    transaction_date: "2026-10-01",
+    transaction_time: null,
+    original_description: "SHELL REF [REDACTED]",
+    category_name: "Groceries",
+    transaction_id: "tx-4",
+    baseline_sample_size: 3,
+    category_median_amount: "100",
+    difference_from_baseline: "800",
+    amount_multiple_of_category_median: "9",
+    confidence_is_calibrated: false,
+    verification_required: true,
+  });
+  assert(rows.some((row) => row.label === "Actual transaction amount" && row.value.includes("900")), "actual amount");
+  assert(rows.some((row) => row.label === "Transaction date" && row.value === "2026-10-01"), "date");
+  assert(rows.some((row) => row.label === "Transaction time" && row.value === "Time not available"), "missing time");
+  assert(rows.some((row) => row.label === "Baseline sample size" && row.value === "3"), "baseline sample");
+  assert(rows.some((row) => row.label === "Difference from baseline" && row.value.includes("800")), "difference");
+  assert(rows.some((row) => row.label === "Statement description" && row.value.includes("REDACTED")), "description");
 });
 
 test("formats fee share with two decimal places and no duplicate percent", () => {

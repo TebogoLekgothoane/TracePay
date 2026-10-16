@@ -85,7 +85,7 @@ def categorise_batch_with_metrics(
     merchant_memory: MerchantMemory | None = None,
 ) -> CategorisationRun:
     catalog = set(category_names or [])
-    memory = merchant_memory or fetch_merchant_memory(access_token)
+    memory = merchant_memory if merchant_memory is not None else fetch_merchant_memory(access_token)
     results: dict[str, CategorisationResult] = {}
     source_by_id: dict[str, str] = {}
 
@@ -240,8 +240,6 @@ def categorise_batch_with_metrics(
             ai_merchant = ai_result.merchant_name
             if ai_merchant and is_bank_boilerplate_label(ai_merchant):
                 ai_merchant = None
-            if identity.source_type != "merchant":
-                ai_merchant = None
             resolved = ensure_complete_classification(
                 ai_result.model_copy(update={"merchant_name": ai_merchant}),
                 catalog,
@@ -249,7 +247,7 @@ def categorise_batch_with_metrics(
             )
             results[item.transaction_id] = resolved
             source_by_id[item.transaction_id] = "ai"
-            trusted = trusted_merchant_for_memory(identity)
+            trusted = deterministic_merchant or ai_merchant
             if trusted:
                 memory.remember(trusted, resolved)
             _log_classification(item.transaction_id, resolved, "ai")

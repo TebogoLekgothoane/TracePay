@@ -2,7 +2,6 @@ import {
   assertExtractedBankMatchesSelected,
   assertKnownStatementBankKey,
   BANK_ALREADY_UPLOADED_MESSAGE,
-  BANK_MISMATCH_MESSAGE,
   BANK_UNIDENTIFIED_MESSAGE,
   bankSlotUniqueViolationMessage,
   normalizeStatementBankKey,
@@ -47,6 +46,11 @@ test("first upload bank key resolves for supported institutions", () => {
   assertEqual(normalizeStatementBankKey("First National Bank"), "fnb", "fnb alias");
   assertEqual(normalizeStatementBankKey("Standard Bank"), "standard bank", "standard");
   assertEqual(assertKnownStatementBankKey("TymeBank"), "tymebank", "tyme");
+  assertEqual(normalizeStatementBankKey("GoTyme"), "tymebank", "gotyme maps to tymebank");
+});
+
+test("GoTyme statement matches selected TymeBank", () => {
+  assertExtractedBankMatchesSelected("TymeBank", "GoTyme");
 });
 
 test("unknown or empty bank is not guessed", () => {
@@ -83,7 +87,7 @@ test("unidentified extracted bank is blocked with a clear message", () => {
 test("mismatched extracted bank is blocked", () => {
   assertThrows(
     () => assertExtractedBankMatchesSelected("Capitec", "FNB"),
-    new RegExp(BANK_MISMATCH_MESSAGE.slice(0, 40)),
+    /looks like a FNB statement/,
   );
 });
 

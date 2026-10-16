@@ -154,6 +154,27 @@ def test_common_statement_descriptions(description: str, category: str) -> None:
     assert classify_transaction(description, "debit").category_name == category
 
 
+@pytest.mark.parametrize(
+    ("description", "merchant", "category"),
+    [
+        (
+            "Wild Coast Go Karts East London (Card 4426)",
+            "Wild Coast Go Karts",
+            "Entertainment",
+        ),
+        ("Mr Price Vincent (Card 4426)", "Mr Price", "Shopping"),
+    ],
+)
+def test_card_suffixes_and_locations_do_not_hide_known_merchants(
+    description: str, merchant: str, category: str
+) -> None:
+    result = classify_transaction(description, "debit")
+
+    assert result.merchant_name == merchant
+    assert result.category_name == category
+    assert result.transaction_class == "spending"
+
+
 def test_blank_description_falls_back_to_other(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
@@ -240,6 +261,7 @@ def test_merchant_memory_applies_when_rules_miss(monkeypatch: pytest.MonkeyPatch
 
 def test_ai_low_confidence_category_is_preserved(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", True)
+    monkeypatch.setattr("categorisation.service.settings.openai_api_key", "test-openai-key")
 
     def fake_classify_batch(*_args: object, **_kwargs: object) -> dict[str, CategorisationResult]:
         return {"0": CategorisationResult(
@@ -263,6 +285,7 @@ def test_ai_low_confidence_category_is_preserved(monkeypatch: pytest.MonkeyPatch
 
 def test_duplicate_ai_pattern_is_applied_to_every_transaction(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", True)
+    monkeypatch.setattr("categorisation.service.settings.openai_api_key", "test-openai-key")
 
     calls = 0
 
@@ -293,6 +316,7 @@ def test_duplicate_ai_pattern_is_applied_to_every_transaction(monkeypatch: pytes
 
 def test_partial_ai_batch_maps_hits_and_fallbacks_misses(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", True)
+    monkeypatch.setattr("categorisation.service.settings.openai_api_key", "test-openai-key")
 
     def fake_classify_batch(items: list[object], _category_names: list[str]) -> dict[str, CategorisationResult]:
         # Only return a result for the first candidate; others must fall back.
@@ -401,6 +425,125 @@ def test_openai_success_returns_validated_results(monkeypatch: pytest.MonkeyPatc
     )["0"]
     assert result.rule == "ai:openai"
     assert result.category_name == "Groceries"
+
+
+def test_ai_identified_merchant_is_retained_only_with_supported_high_confidence() -> None:
+    parsed = {
+        "transactions": [
+            {
+                "transaction_id": "0",
+                "transaction_class": "spending",
+                "classification_confidence": 0.9,
+                "category_name": "Subscriptions",
+                "category_confidence": 0.9,
+                "reason": "NETFLIX.COM directly identifies the merchant.",
+                "merchant_name": "Netflix",
+                "merchant_identification_status": "identified",
+                "merchant_confidence": 0.92,
+                "evidence": ["NETFLIX.COM"],
+                "alternative_candidates": [],
+                "source_type": "merchant",
+                "payment_mechanism": None,
+                "supporting_text": "NETFLIX.COM",
+                "uncertainty": "identified",
+            }
+        ]
+    }
+
+    results, rejected = ai_classifier._validate_results(
+        parsed,
+        {"Subscriptions"},
+        "openai",
+        {"0"},
+        {"0": "NETFLIX.COM 1234"},
+    )
+
+    assert rejected == 0
+    assert results["0"].merchant_name == "Netflix"
+
+
+@pytest.mark.parametrize(
+    ("merchant_status", "merchant_confidence", "merchant_name"),
+    [
+        ("candidate", 0.92, "Netflix"),
+        ("identified", 0.50, "Netflix"),
+        ("identified", 0.92, "Unrelated Merchant"),
+    ],
+)
+def test_ai_ambiguous_or_unsupported_merchants_stay_unknown(
+    merchant_status: str,
+    merchant_confidence: float,
+    merchant_name: str,
+) -> None:
+    parsed = {
+        "transactions": [
+            {
+                "transaction_id": "0",
+                "transaction_class": "spending",
+                "classification_confidence": 0.8,
+                "category_name": "Shopping",
+                "category_confidence": 0.8,
+                "reason": "The category is independent of merchant identification.",
+                "merchant_name": merchant_name,
+                "merchant_identification_status": merchant_status,
+                "merchant_confidence": merchant_confidence,
+                "evidence": ["ABC SERVICES"],
+                "alternative_candidates": ["ABC Retail"],
+                "source_type": "merchant",
+                "payment_mechanism": None,
+                "supporting_text": "ABC SERVICES",
+                "uncertainty": "identified",
+            }
+        ]
+    }
+
+    results, rejected = ai_classifier._validate_results(
+        parsed,
+        {"Shopping"},
+        "openai",
+        {"0"},
+        {"0": "ABC SERVICES 48291 REF 7712"},
+    )
+
+    assert rejected == 0
+    assert results["0"].merchant_name is None
+    assert results["0"].category_name == "Shopping"
+
+
+def test_verified_ai_merchant_can_be_reused_by_memory(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", True)
+    monkeypatch.setattr("categorisation.service.settings.openai_api_key", "test-openai-key")
+    memory = MerchantMemory()
+
+    def fake_classify_batch(items: list[object], _category_names: list[str]) -> dict[str, CategorisationResult]:
+        return {
+            items[0].transaction_id: CategorisationResult(
+                category_name="Shopping",
+                category_confidence=0.95,
+                transaction_class="spending",
+                classification_confidence=0.95,
+                classification_reason="Description directly names Mystery Mart.",
+                merchant_name="Mystery Mart",
+                rule="ai:openai",
+            )
+        }
+
+    monkeypatch.setattr("categorisation.service.classify_batch", fake_classify_batch)
+    first = categorise_batch(
+        [CategorisableTransaction("0", "MYSTERY MART", Decimal("-10"), "debit")],
+        LIVE_CATEGORIES,
+        merchant_memory=memory,
+    )["0"]
+    monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", False)
+    second = categorise_batch(
+        [CategorisableTransaction("1", "MYSTERY MART", Decimal("-20"), "debit")],
+        LIVE_CATEGORIES,
+        merchant_memory=memory,
+    )["1"]
+
+    assert first.merchant_name == "Mystery Mart"
+    assert second.rule == "merchant_memory"
+    assert second.merchant_name == "Mystery Mart"
 
 
 def test_gemini_success_returns_validated_results(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -597,6 +740,7 @@ def test_reprocessing_is_idempotent_and_does_not_duplicate(monkeypatch: pytest.M
 
 def test_pipeline_metrics_cover_mixed_batch(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", True)
+    monkeypatch.setattr("categorisation.service.settings.openai_api_key", "test-openai-key")
 
     def fake_classify_batch(items: list[object], _category_names: list[str]) -> dict[str, CategorisationResult]:
         return {

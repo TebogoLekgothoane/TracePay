@@ -77,6 +77,8 @@ def _leak_lines(index: int, leak: LeakDetection) -> list[str]:
 
 
 def _primary_impact(leak: LeakDetection) -> tuple[str, str]:
+    if leak.leak_type == "irregular_transaction_leak":
+        return "Transaction amount", _money(leak.estimated_monthly_impact)
     if leak.impact_kind == "one_time":
         return "Potential amount", _money(leak.estimated_monthly_impact)
     return "Monthly impact", _money(leak.estimated_monthly_impact)
@@ -105,6 +107,8 @@ def _public_title(leak_type: str, fallback: str) -> str:
         "recurring_payment_leak": "Unidentified recurring payment",
         "unknown_recurring_payment": "Unidentified recurring payment",
         "duplicate_payment_leak": "Potential duplicate payment requires verification",
+        "inactive_recurring_payment_leak": "Potential inactive recurring payment",
+        "irregular_transaction_leak": "Potential unusual transaction requires verification",
         "bank_fee_leak": "Potential recurring banking fee burden",
         "spending_escalation_leak": "Potential spending escalation",
     }

@@ -349,7 +349,7 @@ function RootNavigator({
       {shouldCoverProtectedContent ? (
         <View
           pointerEvents="auto"
-          style={[StyleSheet.absoluteFillObject, { backgroundColor: palette.background }]}
+          style={[StyleSheet.absoluteFill, { backgroundColor: palette.background }]}
         />
       ) : null}
     </View>

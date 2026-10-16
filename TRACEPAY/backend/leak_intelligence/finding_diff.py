@@ -25,6 +25,7 @@ _RECURRING = frozenset(
         "subscription_leak",
         "recurring_payment_leak",
         "unknown_recurring_payment",
+        "inactive_recurring_payment_leak",
     }
 )
 _CATEGORY = frozenset(
