@@ -219,6 +219,18 @@ class WeekendSpendingFeatures(BaseModel):
     weekday_calendar_days: int = 0
     weekend_daily_average: Decimal | None = None
     weekday_daily_average: Decimal | None = None
+    discretionary_weekend_transaction_count: int = 0
+    discretionary_weekday_transaction_count: int = 0
+    discretionary_weekend_total: Decimal = Decimal("0")
+    discretionary_weekday_total: Decimal = Decimal("0")
+    discretionary_weekend_share: Decimal | None = None
+    discretionary_weekend_daily_average: Decimal | None = None
+    discretionary_weekday_daily_average: Decimal | None = None
+    active_weekend_count: int = 0
+    weekend_monthly_totals: dict[str, Decimal] = Field(default_factory=dict)
+    discretionary_weekend_monthly_totals: dict[str, Decimal] = Field(default_factory=dict)
+    top_weekend_categories: list[str] = Field(default_factory=list)
+    top_weekend_merchants: list[str] = Field(default_factory=list)
 
 
 class PaydaySpendingFeatures(BaseModel):
@@ -238,6 +250,12 @@ class PaydaySpendingFeatures(BaseModel):
     post_salary_discretionary_total: Decimal = Decimal("0")
     post_salary_essential_total: Decimal = Decimal("0")
     post_salary_spending_share: Decimal | None = None
+    post_salary_discretionary_transaction_count: int = 0
+    outside_salary_window_discretionary_total: Decimal = Decimal("0")
+    post_salary_discretionary_share: Decimal | None = None
+    salary_cycles_with_discretionary_spike: int = 0
+    top_post_salary_discretionary_categories: list[str] = Field(default_factory=list)
+    top_post_salary_discretionary_merchants: list[str] = Field(default_factory=list)
 
 
 class IncomeFeatures(BaseModel):
@@ -262,6 +280,11 @@ class DuplicateCandidate(BaseModel):
     nearby_reversal_or_refund: bool = False
     min_time_gap_minutes: int | None = None
     match_basis: list[str] = Field(default_factory=list)
+    is_debit_order: bool = False
+    recurring_debit_order_count: int = 0
+    recurring_debit_order_months: int = 0
+    billing_date_shift_days: int = 0
+    amount_variance: Decimal = Decimal("0")
 
 
 class IrregularCandidate(BaseModel):

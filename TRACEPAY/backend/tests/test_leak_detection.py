@@ -2396,3 +2396,360 @@ def test_same_day_duplicate_timestamp_gap_boosts_confidence() -> None:
     assert "close_timestamp" in timed_leak.evidence["match_basis"]
     assert timed_leak.confidence > untimed_leak.confidence
 
+
+def test_fi024_duplicate_debit_order_handles_shifted_dates_reversals_and_imports() -> None:
+    # Shifted billing date within 5 days + slight fee variance + recurring history => detected
+    shifted = [
+        _transaction(
+            "do-jul",
+            "850",
+            date(2026, 7, 1),
+            merchant="OUTSURANCE",
+            category="Insurance",
+            description="DEBIT ORDER OUTSURANCE REF POL8821",
+        ),
+        _transaction(
+            "do-aug",
+            "850",
+            date(2026, 8, 1),
+            merchant="OUTSURANCE",
+            category="Insurance",
+            description="DEBIT ORDER OUTSURANCE REF POL8821",
+        ),
+        _transaction(
+            "do-sep-1",
+            "850",
+            date(2026, 9, 1),
+            merchant="OUTSURANCE",
+            category="Insurance",
+            description="DEBIT ORDER OUTSURANCE REF POL8821",
+        ),
+        _transaction(
+            "do-sep-2",
+            "865",
+            date(2026, 9, 4),
+            merchant="OUTSURANCE",
+            category="Insurance",
+            description="DEBIT ORDER OUTSURANCE REF POL8821",
+        ),
+    ]
+    leak = next(
+        item
+        for item in _detect(shifted).leaks
+        if item.leak_type == "duplicate_debit_order_leak"
+    )
+    assert leak.evidence["finding_focus"] == "duplicate_debit_order"
+    assert leak.evidence["billing_date_shift_days"] == 3
+    assert leak.evidence["amount_variance"] == Decimal("15")
+    assert leak.evidence["verification_required"] is True
+    assert "duplicate_payment_leak" not in _types(shifted)
+
+    # Reversal within 7 days suppresses duplicate debit order
+    with_reversal = [
+        *shifted,
+        _transaction(
+            "do-sep-rev",
+            "865",
+            date(2026, 9, 6),
+            merchant="OUTSURANCE",
+            category="Insurance",
+            description="REVERSAL DEBIT ORDER OUTSURANCE REF POL8821",
+            transaction_type="credit",
+        ),
+    ]
+    assert "duplicate_debit_order_leak" not in _types(with_reversal)
+
+
+def test_fi017_duplicate_streaming_detects_concurrent_and_ignores_switched_or_saas() -> None:
+    concurrent_video = [
+        _transaction(
+            f"nf-{m}",
+            "199",
+            date(2026, m, 5),
+            merchant="NETFLIX",
+            category="Subscriptions",
+            description="NETFLIX.COM",
+        )
+        for m in (7, 8, 9)
+    ] + [
+        _transaction(
+            f"dstv-{m}",
+            "299",
+            date(2026, m, 10),
+            merchant="DSTV",
+            category="Subscriptions",
+            description="DSTV SUBSCRIPTION",
+        )
+        for m in (7, 8, 9)
+    ]
+    leak = next(
+        item
+        for item in _detect(concurrent_video).leaks
+        if item.leak_type == "duplicate_streaming_leak"
+    )
+    assert leak.evidence["finding_focus"] == "duplicate_streaming_services"
+    assert leak.evidence["combined_monthly_streaming_spend"] == Decimal("498")
+    assert leak.evidence["overlapping_month_count"] == 3
+
+    # Switched service (Netflix in Jul/Aug, Showmax only in Sep) is not concurrent in latest month
+    switched = [
+        _transaction("nf-7", "199", date(2026, 7, 5), merchant="NETFLIX", category="Subscriptions"),
+        _transaction("nf-8", "199", date(2026, 8, 5), merchant="NETFLIX", category="Subscriptions"),
+        _transaction("sm-8", "99", date(2026, 8, 12), merchant="SHOWMAX", category="Subscriptions"),
+        _transaction("sm-9", "99", date(2026, 9, 12), merchant="SHOWMAX", category="Subscriptions"),
+    ]
+    assert "duplicate_streaming_leak" not in _types(switched)
+
+    # Non-streaming SaaS (iCloud + Microsoft 365) must not trigger duplicate streaming
+    saas = [
+        _transaction(f"ic-{m}", "49", date(2026, m, 5), merchant="ICLOUD", category="Subscriptions")
+        for m in (7, 8, 9)
+    ] + [
+        _transaction(f"ms-{m}", "129", date(2026, m, 9), merchant="MICROSOFT 365", category="Subscriptions")
+        for m in (7, 8, 9)
+    ]
+    assert "duplicate_streaming_leak" not in _types(saas)
+
+
+def test_fi032_weekend_spending_leak_detects_discretionary_spike_and_excludes_bills() -> None:
+    # Discretionary weekend spike across 4 weekends with weekday baseline
+    txs: list[FeatureTransaction] = []
+    # Weekday discretionary baseline in Jul, Aug, Sep
+    for idx, d in enumerate(
+        (
+            date(2026, 7, 7),
+            date(2026, 7, 15),
+            date(2026, 8, 5),
+            date(2026, 8, 19),
+            date(2026, 9, 9),
+            date(2026, 9, 16),
+        )
+    ):
+        txs.append(
+            _transaction(
+                f"wkday-{idx}",
+                "80",
+                d,
+                merchant="STER KINEKOR",
+                category="Entertainment",
+                description="POS PURCHASE STER KINEKOR",
+            )
+        )
+    # Weekend discretionary spend escalating in Sep across 4 weekends
+    weekend_dates_amounts = [
+        (date(2026, 7, 4), "220"),
+        (date(2026, 7, 18), "220"),
+        (date(2026, 8, 1), "240"),
+        (date(2026, 8, 15), "240"),
+        (date(2026, 9, 5), "420"),
+        (date(2026, 9, 6), "380"),
+        (date(2026, 9, 12), "450"),
+        (date(2026, 9, 19), "410"),
+    ]
+    for idx, (d, amt) in enumerate(weekend_dates_amounts):
+        txs.append(
+            _transaction(
+                f"wkend-{idx}",
+                amt,
+                d,
+                merchant="SPUR",
+                category="Restaurants",
+                description="POS PURCHASE SPUR STEAK RANCH",
+            )
+        )
+    leak = next(
+        item for item in _detect(txs).leaks if item.leak_type == "weekend_spending_leak"
+    )
+    assert leak.evidence["finding_focus"] == "weekend_spending_spike"
+    assert leak.evidence["active_weekend_count"] >= 4
+    assert leak.evidence["discretionary_weekend_daily_average"] > leak.evidence["discretionary_weekday_daily_average"]
+
+    # Weekend rent debit orders should not trigger weekend_spending_leak
+    weekend_bills = [
+        _transaction(
+            f"rent-{m}",
+            "6500",
+            date(2026, m, 1),  # Aug 1 2026 is a Saturday
+            merchant="PROP RENTALS",
+            category="Rent",
+            description="DEBIT ORDER PROP RENTALS",
+        )
+        for m in (7, 8, 9)
+    ] + [
+        _transaction(f"util-{idx}", "500", d, merchant="ESKOM", category="Utilities", description="DEBIT ORDER ESKOM")
+        for idx, d in enumerate((date(2026, 7, 4), date(2026, 8, 2), date(2026, 9, 5), date(2026, 9, 6)))
+    ]
+    assert "weekend_spending_leak" not in _types(weekend_bills)
+
+
+def test_fi033_payday_spending_leak_detects_discretionary_post_salary_and_excludes_bills() -> None:
+    txs: list[FeatureTransaction] = []
+    for idx, pay_date in enumerate((date(2026, 7, 25), date(2026, 8, 25), date(2026, 9, 25))):
+        txs.append(
+            _transaction(
+                f"sal-{idx}",
+                "22000",
+                pay_date,
+                merchant="ACME PAYROLL",
+                category="Salary",
+                transaction_class="income",
+                transaction_type="credit",
+                description="SALARY ACME PAYROLL",
+            )
+        )
+        # Discretionary binge within 0..3 days after salary
+        txs.append(
+            _transaction(
+                f"disc-a-{idx}",
+                "650",
+                pay_date,
+                merchant="ZARA",
+                category="Shopping",
+                description="POS PURCHASE ZARA SANDTON",
+            )
+        )
+        txs.append(
+            _transaction(
+                f"disc-b-{idx}",
+                "420",
+                pay_date.replace(day=pay_date.day + 1),
+                merchant="UBER EATS",
+                category="Restaurants",
+                description="POS PURCHASE UBER EATS",
+            )
+        )
+        # Essential debit order on payday (must be separated into post_salary_essential_total)
+        txs.append(
+            _transaction(
+                f"rent-{idx}",
+                "7500",
+                pay_date,
+                merchant="HOME LOAN",
+                category="Rent",
+                description="DEBIT ORDER HOME LOAN",
+            )
+        )
+        # Small mid-month discretionary spend
+        txs.append(
+            _transaction(
+                f"mid-{idx}",
+                "120",
+                pay_date.replace(day=12),
+                merchant="STER KINEKOR",
+                category="Entertainment",
+                description="POS PURCHASE STER KINEKOR",
+            )
+        )
+    leak = next(
+        item for item in _detect(txs).leaks if item.leak_type == "payday_spending_leak"
+    )
+    assert leak.evidence["finding_focus"] == "payday_spending_pattern"
+    assert leak.evidence["salary_event_count"] == 3
+    assert leak.evidence["salary_cycles_with_discretionary_spike"] == 3
+    assert leak.evidence["post_salary_discretionary_total"] == Decimal("3210")
+    assert leak.evidence["post_salary_essential_total"] == Decimal("22500")
+
+    # End-of-month rent + debit orders only after salary => no payday_spending_leak
+    obligations_only: list[FeatureTransaction] = []
+    for idx, pay_date in enumerate((date(2026, 7, 25), date(2026, 8, 25), date(2026, 9, 25))):
+        obligations_only.append(
+            _transaction(
+                f"sal-ob-{idx}",
+                "20000",
+                pay_date,
+                merchant="ACME PAYROLL",
+                category="Salary",
+                transaction_class="income",
+                transaction_type="credit",
+                description="SALARY ACME PAYROLL",
+            )
+        )
+        obligations_only.append(
+            _transaction(
+                f"bond-{idx}",
+                "8000",
+                pay_date,
+                merchant="FNB HOME LOAN",
+                category="Rent",
+                description="DEBIT ORDER FNB HOME LOAN",
+            )
+        )
+        obligations_only.append(
+            _transaction(
+                f"ins-{idx}",
+                "1200",
+                pay_date.replace(day=26),
+                merchant="OUTSURANCE",
+                category="Insurance",
+                description="DEBIT ORDER OUTSURANCE",
+            )
+        )
+    assert "payday_spending_leak" not in _types(obligations_only)
+
+
+def test_new_fi_leaks_integrate_through_reasoning_recommendations_report_and_guidance() -> None:
+    txs: list[FeatureTransaction] = [
+        # Duplicate streaming (Netflix + Showmax)
+        *[
+            _transaction(f"nf-{m}", "199", date(2026, m, 5), merchant="NETFLIX", category="Subscriptions")
+            for m in (7, 8, 9)
+        ],
+        *[
+            _transaction(f"sm-{m}", "99", date(2026, m, 12), merchant="SHOWMAX", category="Subscriptions")
+            for m in (7, 8, 9)
+        ],
+        # Duplicate debit order (OUTsurance)
+        _transaction("do-7", "850", date(2026, 7, 1), merchant="OUTSURANCE", category="Insurance", description="DEBIT ORDER OUTSURANCE REF P1"),
+        _transaction("do-8", "850", date(2026, 8, 1), merchant="OUTSURANCE", category="Insurance", description="DEBIT ORDER OUTSURANCE REF P1"),
+        _transaction("do-9a", "850", date(2026, 9, 1), merchant="OUTSURANCE", category="Insurance", description="DEBIT ORDER OUTSURANCE REF P1"),
+        _transaction("do-9b", "850", date(2026, 9, 2), merchant="OUTSURANCE", category="Insurance", description="DEBIT ORDER OUTSURANCE REF P1"),
+        # Coffee habit (Seattle Coffee)
+        *[
+            _transaction(f"cf-{i}", "50", date(2026, 7 + (i // 3), 2 + (i % 3) * 5), merchant="SEATTLE COFFEE", category="Restaurants", description="POS PURCHASE SEATTLE COFFEE")
+            for i in range(6)
+        ],
+        # Convenience store habit (Spar Express)
+        *[
+            _transaction(f"sp-{i}", "65", date(2026, 7 + (i // 3), 3 + (i % 3) * 6), merchant="SPAR EXPRESS", category="Groceries", description="POS PURCHASE SPAR EXPRESS")
+            for i in range(6)
+        ],
+    ]
+    snapshot = build_financial_features("user-a", txs)
+    behaviours = analyze_behaviour(snapshot)
+    leaks = detect_leaks(snapshot, behaviours)
+    reasoning = analyze_financial_reasoning(snapshot, behaviours, leaks)
+    recommendations = recommend_actions(reasoning)
+    report = assemble_financial_intelligence_report(
+        snapshot, behaviours, leaks, reasoning, recommendations
+    )
+    rendered = render_leak_report(leaks)
+    assert "TRACEPAY LEAK INTELLIGENCE REPORT" in rendered
+
+    detected_types = {item.leak_type for item in leaks.leaks}
+    assert "duplicate_streaming_leak" in detected_types
+    assert "duplicate_debit_order_leak" in detected_types
+    assert "coffee_spending_leak" in detected_types
+    assert "convenience_store_leak" in detected_types
+
+    findings_by_id = {f.leak_id: f for f in report.findings}
+    now = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    observations = [
+        build_observation(user_id="user-a", leak=leak, finding=findings_by_id[leak.leak_id])
+        for leak in leaks.leaks
+    ]
+    plan = assign_finding_ids(
+        plan_registry_changes(
+            user_id="user-a",
+            existing=(),
+            observations=observations,
+            statement_import_id="imp-1",
+            observed_at=now,
+        )
+    )
+    for item in plan.items:
+        guidance = build_guidance(item.row)
+        assert guidance.title
+        assert guidance.what_happened
+        assert guidance.steps
+
+

@@ -360,8 +360,83 @@ def test_fi030_convenience_store_scenario_matches_pipeline() -> None:
     )
     assert observation.behavior_type == "spending_habit_pattern"
     assert observation.evidence.get("merchant_key") == "SPAR EXPRESS"
+    leak = next(
+        item
+        for item in evaluation.leaks.leaks
+        if item.leak_type == "convenience_store_leak"
+    )
+    assert leak.evidence.get("finding_focus") == "convenience_store_spending"
+    assert leak.evidence.get("merchant_key") == "SPAR EXPRESS"
+    assert leak.evidence.get("convenience_store_transaction_count") == 10
     assert "food_spending_leak" not in evaluation.leak_types
     assert "unnecessary" in observation.description
+
+
+def test_fi028_coffee_spending_scenario_matches_pipeline() -> None:
+    scenario = load_intelligence_scenario("FI-028-coffee-spending-pattern")
+    evaluation = evaluate_intelligence_scenario(scenario)
+    mismatch = expectation_mismatch(scenario, evaluation)
+    assert mismatch is None, mismatch
+    leak = next(
+        item for item in evaluation.leaks.leaks if item.leak_type == "coffee_spending_leak"
+    )
+    assert leak.evidence["finding_focus"] == "coffee_spending_habit"
+    assert leak.evidence["coffee_transaction_count"] == 8
+    assert leak.evidence["coffee_total_amount"] == Decimal("394.00")
+    assert leak.evidence["merchant_key"] == "SEATTLE COFFEE"
+    assert "subscription_leak" not in evaluation.leak_types
+    assert "food_spending_leak" not in evaluation.leak_types
+
+    negative = load_intelligence_scenario("FI-028-occasional-coffee")
+    negative_eval = evaluate_intelligence_scenario(negative)
+    assert expectation_mismatch(negative, negative_eval) is None
+    assert "coffee_spending_leak" not in negative_eval.leak_types
+
+
+def test_fi024_duplicate_debit_orders_scenario_matches_pipeline() -> None:
+    scenario = load_intelligence_scenario("FI-024-duplicate-debit-orders")
+    evaluation = evaluate_intelligence_scenario(scenario)
+    mismatch = expectation_mismatch(scenario, evaluation)
+    assert mismatch is None, mismatch
+    leak = next(
+        item
+        for item in evaluation.leaks.leaks
+        if item.leak_type == "duplicate_debit_order_leak"
+    )
+    assert leak.evidence["finding_focus"] == "duplicate_debit_order"
+    assert leak.evidence["merchant_key"] == "OUTSURANCE"
+    assert leak.evidence["candidate_amount"] == Decimal("850.00")
+    assert leak.evidence["recurring_debit_order_months"] == 3
+    assert leak.evidence["verification_required"] is True
+    assert "duplicate_payment_leak" not in evaluation.leak_types
+
+    negative = load_intelligence_scenario("FI-024-separate-policies-not-duplicate")
+    negative_eval = evaluate_intelligence_scenario(negative)
+    assert expectation_mismatch(negative, negative_eval) is None
+    assert "duplicate_debit_order_leak" not in negative_eval.leak_types
+
+
+def test_fi017_duplicate_streaming_services_scenario_matches_pipeline() -> None:
+    scenario = load_intelligence_scenario("FI-017-duplicate-streaming-services")
+    evaluation = evaluate_intelligence_scenario(scenario)
+    mismatch = expectation_mismatch(scenario, evaluation)
+    assert mismatch is None, mismatch
+    leak = next(
+        item
+        for item in evaluation.leaks.leaks
+        if item.leak_type == "duplicate_streaming_leak"
+    )
+    assert leak.evidence["finding_focus"] == "duplicate_streaming_services"
+    assert leak.evidence["streaming_subcategory"] == "video_streaming"
+    assert leak.evidence["active_streaming_service_count"] == 2
+    assert set(leak.evidence["streaming_merchants"]) == {"NETFLIX", "SHOWMAX"}
+    assert leak.evidence["combined_monthly_streaming_spend"] == Decimal("298.00")
+    assert leak.evidence["overlapping_month_count"] == 3
+
+    negative = load_intelligence_scenario("FI-017-mixed-video-and-music-not-duplicate")
+    negative_eval = evaluate_intelligence_scenario(negative)
+    assert expectation_mismatch(negative, negative_eval) is None
+    assert "duplicate_streaming_leak" not in negative_eval.leak_types
 
 
 def test_fi029_fast_food_scenario_is_food_spending_not_coffee() -> None:

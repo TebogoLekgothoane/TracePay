@@ -229,3 +229,25 @@ test("payloads without merchant_display_name still parse and render", () => {
   assert(finding.rows.some((row) => row.label === "Transaction date"), "date still shown");
   assert(finding.disclaimer === DUPLICATE_MATCH_DISCLAIMER, "disclaimer still shown");
 });
+
+test("formats new FI-017, FI-024, FI-028, FI-030, FI-032, and FI-033 evidence fields", () => {
+  const rows = formatEvidence({
+    billing_date_shift_days: 3,
+    amount_variance: "15.00",
+    active_streaming_service_count: 2,
+    combined_monthly_streaming_spend: "298.00",
+    coffee_transaction_count: 8,
+    coffee_total_amount: "394.00",
+    convenience_store_transaction_count: 10,
+    convenience_store_total_amount: "759.99",
+    discretionary_weekend_daily_average: "412.50",
+    post_salary_discretionary_total: "3210.00",
+  });
+  assert(rows.some((r) => r.label === "Billing date shift" && r.value === "3 days"), "shift days");
+  assert(rows.some((r) => r.label === "Amount variance" && r.value.includes("15")), "variance");
+  assert(rows.some((r) => r.label === "Active streaming services" && r.value === "2"), "streaming count");
+  assert(rows.some((r) => r.label === "Combined monthly streaming spend" && r.value.includes("298")), "streaming spend");
+  assert(rows.some((r) => r.label === "Coffee transactions" && r.value === "8"), "coffee count");
+  assert(rows.some((r) => r.label === "Convenience-store visits" && r.value === "10"), "convenience count");
+});
+

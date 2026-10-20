@@ -46,6 +46,7 @@ const HELP_HREF = "/settings/help";
 const NOTIFICATIONS_HREF = "/settings/notifications";
 const SYNTHETIC_INTELLIGENCE_DEBUG_HREF = "/debug/synthetic-intelligence";
 const LEAK_INTELLIGENCE_DEBUG_HREF = "/debug/leak-intelligence";
+const SUBSCRIPTIONS_DEBUG_HREF = "/debug/subscriptions";
 const FINANCIAL_REASONING_DEBUG_HREF = "/debug/financial-reasoning";
 const FINANCIAL_RECOMMENDATIONS_DEBUG_HREF = "/debug/financial-recommendations";
 
@@ -271,6 +272,13 @@ export default function ProfileScreen() {
           value: "Dev only",
           Icon: FlaskConical,
           href: LEAK_INTELLIGENCE_DEBUG_HREF,
+        },
+        {
+          id: "subscriptions-debug",
+          label: "Subscriptions (debug)",
+          value: "Dev only",
+          Icon: FlaskConical,
+          href: SUBSCRIPTIONS_DEBUG_HREF,
         },
         {
           id: "financial-reasoning-debug",

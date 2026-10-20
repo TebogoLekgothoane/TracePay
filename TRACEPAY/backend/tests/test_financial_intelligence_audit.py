@@ -194,6 +194,102 @@ def test_overall_escalation_lists_supported_contributors_without_adding_impacts(
         assert leak.evidence.get("cause_identified") is False
 
 
+def test_large_misclassified_transfers_do_not_create_irregular_findings() -> None:
+    transfers = [
+        _transaction(
+            f"t-{index}",
+            "100",
+            date(2026, 7 + index, 1),
+            merchant=None,
+            category="Transfers",
+            transaction_class="spending",
+            confidence=0.92,
+            description="BANKING APP TRANSFER",
+        )
+        for index in range(3)
+    ] + [
+        _transaction(
+            "big",
+            "5000",
+            date(2026, 10, 1),
+            merchant=None,
+            category="Transfers",
+            transaction_class="spending",
+            confidence=0.92,
+            description="BANKING APP TRANSFER",
+        )
+    ]
+    assert "irregular_transaction_leak" not in {item.leak_type for item in _detect(transfers).leaks}
+
+    internal = [
+        _transaction(
+            f"i-{index}",
+            "500",
+            date(2026, 7 + index, 1),
+            merchant=None,
+            category="Transfers",
+            transaction_class="internal_transfer",
+            confidence=0.95,
+            description="MONEY TRANSFERRED OUT FROM GOALSAVE",
+        )
+        for index in range(3)
+    ] + [
+        _transaction(
+            "big-internal",
+            "8000",
+            date(2026, 10, 1),
+            merchant=None,
+            category="Transfers",
+            transaction_class="internal_transfer",
+            confidence=0.95,
+            description="MONEY TRANSFERRED OUT FROM GOALSAVE",
+        )
+    ]
+    assert "irregular_transaction_leak" not in {item.leak_type for item in _detect(internal).leaks}
+
+
+def test_unknown_merchant_alone_does_not_create_irregular_findings() -> None:
+    transactions = [
+        _transaction(
+            f"u-{index}",
+            "100",
+            date(2026, 7 + index, 1),
+            merchant=None,
+            category="Other",
+            transaction_class="unknown",
+            confidence=0.35,
+            description="MYSTERY PAYMENT",
+        )
+        for index in range(3)
+    ] + [
+        _transaction(
+            "large-unknown",
+            "9000",
+            date(2026, 10, 1),
+            merchant=None,
+            category="Other",
+            transaction_class="unknown",
+            confidence=0.35,
+            description="MYSTERY PAYMENT",
+        )
+    ]
+    assert "irregular_transaction_leak" not in {item.leak_type for item in _detect(transactions).leaks}
+
+
+def test_eft_and_banking_app_transfers_classify_without_merchant_identity() -> None:
+    eft = classify_transaction("EFT for CAPITEC J MAPHOSA", "debit")
+    assert eft.transaction_class == "person_to_person"
+    assert eft.merchant_name is None
+
+    internal = classify_transaction("Banking App Transfer to Main Account", "debit")
+    assert internal.transaction_class == "internal_transfer"
+    assert internal.merchant_name is None
+
+    person = classify_transaction("Banking App Transfer to Tebogo", "debit")
+    assert person.transaction_class == "person_to_person"
+    assert person.merchant_name is None
+
+
 def test_bank_fee_evidence_distinguishes_recurring_and_one_off_types() -> None:
     transactions = [
         _transaction(

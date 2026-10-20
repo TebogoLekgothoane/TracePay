@@ -172,6 +172,10 @@ def is_bank_boilerplate_label(value: str | None) -> bool:
         return True
     if remainder.upper() in _BOILERPLATE_LABELS:
         return True
+    if upper.startswith("TRANSFER TO ") or upper.startswith("TRANSFER FROM "):
+        return True
+    if upper.startswith("EFT TO ") or upper.startswith("EFT FROM ") or upper.startswith("EFT FOR "):
+        return True
     return False
 
 

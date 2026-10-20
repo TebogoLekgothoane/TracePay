@@ -1,0 +1,38 @@
+[
+  {
+    "id": "fi028-neg-coffee-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-04",
+    "description": "POS PURCHASE SEATTLE COFFEE SANDTON",
+    "amount": "45.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SEATTLE COFFEE",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi028-neg-coffee-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-12",
+    "description": "POS PURCHASE SEATTLE COFFEE SANDTON",
+    "amount": "45.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SEATTLE COFFEE",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  }
+]

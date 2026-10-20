@@ -12,6 +12,7 @@ _RECURRING_TYPES = frozenset(
         "subscription_leak",
         "recurring_payment_leak",
         "unknown_recurring_payment",
+        "duplicate_streaming_leak",
         "bank_fee_leak",
         "cash_usage_leak",
     }
@@ -22,6 +23,10 @@ _ESCALATION_TYPES = frozenset(
         "food_spending_leak",
         "transport_spending_leak",
         "airtime_data_leak",
+        "coffee_spending_leak",
+        "convenience_store_leak",
+        "weekend_spending_leak",
+        "payday_spending_leak",
     }
 )
 
@@ -44,7 +49,9 @@ def render_leak_report(result: LeakDetectionResult) -> str:
     recurring = sum(counts[t] for t in counts if t in _RECURRING_TYPES)
     escalation = sum(counts[t] for t in counts if t in _ESCALATION_TYPES)
     fee = counts.get("bank_fee_leak", 0)
-    duplicate = counts.get("duplicate_payment_leak", 0)
+    duplicate = counts.get("duplicate_payment_leak", 0) + counts.get(
+        "duplicate_debit_order_leak", 0
+    )
 
     lines.extend(
         [
@@ -107,9 +114,15 @@ def _public_title(leak_type: str, fallback: str) -> str:
         "recurring_payment_leak": "Unidentified recurring payment",
         "unknown_recurring_payment": "Unidentified recurring payment",
         "duplicate_payment_leak": "Potential duplicate payment requires verification",
+        "duplicate_debit_order_leak": "Potential duplicate debit order requires verification",
+        "duplicate_streaming_leak": "Overlapping active streaming subscriptions",
         "inactive_recurring_payment_leak": "Potential inactive recurring payment",
         "irregular_transaction_leak": "Potential unusual transaction requires verification",
         "bank_fee_leak": "Potential recurring banking fee burden",
         "spending_escalation_leak": "Potential spending escalation",
+        "coffee_spending_leak": "Recurring coffee spending pattern",
+        "convenience_store_leak": "Repeated convenience-store spending",
+        "weekend_spending_leak": "Discretionary weekend spending spike",
+        "payday_spending_leak": "Post-payday discretionary spending concentration",
     }
     return generic.get(leak_type, "Potential spending pattern")

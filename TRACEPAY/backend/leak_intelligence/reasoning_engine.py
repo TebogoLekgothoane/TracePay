@@ -52,6 +52,12 @@ _CATEGORY_LEAK_TYPES = {
     "food_spending_leak",
     "transport_spending_leak",
 }
+_HABIT_AND_PATTERN_LEAK_TYPES = {
+    "coffee_spending_leak",
+    "convenience_store_leak",
+    "weekend_spending_leak",
+    "payday_spending_leak",
+}
 
 
 @dataclass
@@ -114,6 +120,10 @@ def _reason_about_leak(
     ]
     if leak.leak_type == "duplicate_payment_leak":
         draft = _duplicate_reasoning(leak)
+    elif leak.leak_type == "duplicate_debit_order_leak":
+        draft = _duplicate_debit_order_reasoning(leak)
+    elif leak.leak_type == "duplicate_streaming_leak":
+        draft = _duplicate_streaming_reasoning(leak)
     elif leak.leak_type in _RECURRING_LEAK_TYPES:
         draft = _recurring_reasoning(snapshot, leak, related)
     elif leak.leak_type == "inactive_recurring_payment_leak":
@@ -124,6 +134,8 @@ def _reason_about_leak(
         draft = _fee_reasoning(snapshot, leak)
     elif leak.leak_type == "cash_usage_leak":
         draft = _cash_reasoning(snapshot, leak)
+    elif leak.leak_type in _HABIT_AND_PATTERN_LEAK_TYPES:
+        draft = _habit_or_pattern_reasoning(snapshot, leak)
     elif (
         leak.leak_type == "spending_escalation_leak"
         or leak.leak_type in _CATEGORY_LEAK_TYPES
@@ -756,6 +768,118 @@ def _duplicate_reasoning(leak: LeakDetection) -> _Draft:
     )
 
 
+def _duplicate_debit_order_reasoning(leak: LeakDetection) -> _Draft:
+    count = _integer(leak.evidence.get("transaction_count_in_group"))
+    date_span = _integer(leak.evidence.get("date_span_days"))
+    amount = _decimal(leak.evidence.get("candidate_amount"))
+    evidence: dict[str, object] = {
+        "potential_duplicate_amount": amount,
+        "matching_transaction_count": count,
+        "date_span_days": date_span,
+        "billing_date_shift_days": _integer(leak.evidence.get("billing_date_shift_days")),
+        "amount_variance": _decimal(leak.evidence.get("amount_variance")),
+        "recurring_debit_order_count": _integer(leak.evidence.get("recurring_debit_order_count")),
+        "recurring_debit_order_months": _integer(leak.evidence.get("recurring_debit_order_months")),
+        "verification_required": True,
+        "match_basis": leak.evidence.get("match_basis"),
+        "potential_not_confirmed_savings": True,
+        "uncertainty": leak.evidence.get("uncertainty"),
+    }
+    evidence.update(_source_evidence(leak))
+    observed = _text(leak.evidence.get("observed_date"))
+    if observed:
+        evidence["observed_date"] = observed
+    return _Draft(
+        root_cause_type="potential_duplicate",
+        title=leak.title,
+        explanation=(
+            "Two or more debit-order collections for the same merchant occurred within "
+            "the same billing cycle alongside established recurring debit-order history. "
+            "This may reflect a double collection, an arrears catch-up, or separate "
+            "mandates, and requires verification before disputing the debit order."
+        ),
+        evidence={key: value for key, value in evidence.items() if value is not None},
+        persistence="new",
+        analysis_status="verification_required",
+        evidence_strength=Decimal("0.66"),
+    )
+
+
+def _duplicate_streaming_reasoning(leak: LeakDetection) -> _Draft:
+    evidence: dict[str, object] = {
+        "finding_focus": "duplicate_streaming_services",
+        "streaming_subcategory": leak.evidence.get("streaming_subcategory"),
+        "active_streaming_service_count": _integer(
+            leak.evidence.get("active_streaming_service_count")
+        ),
+        "streaming_merchants": leak.evidence.get("streaming_merchants"),
+        "streaming_service_names": leak.evidence.get("streaming_service_names"),
+        "combined_monthly_streaming_spend": _decimal(
+            leak.evidence.get("combined_monthly_streaming_spend")
+        ),
+        "overlapping_months": leak.evidence.get("overlapping_months"),
+        "overlapping_month_count": _integer(leak.evidence.get("overlapping_month_count")),
+        "verification_required": True,
+    }
+    return _Draft(
+        root_cause_type="recurring_commitment",
+        title=leak.title,
+        explanation=(
+            "Multiple recurring streaming subscriptions in the same media category were "
+            "active across overlapping billing months. Statement data shows concurrent "
+            "recurring charges but cannot determine household usage or whether all "
+            "subscriptions are intentionally kept."
+        ),
+        evidence={key: value for key, value in evidence.items() if value is not None},
+        persistence="persistent",
+        analysis_status="supported",
+        evidence_strength=Decimal("0.78"),
+    )
+
+
+def _habit_or_pattern_reasoning(
+    snapshot: FinancialFeatureSnapshot,
+    leak: LeakDetection,
+) -> _Draft:
+    evidence: dict[str, object] = dict(leak.evidence)
+    evidence.update(_source_evidence(leak))
+    persistence: Persistence = (
+        "persistent" if leak.impact_kind == "recurring" else "temporary"
+    )
+    if leak.leak_type == "coffee_spending_leak":
+        explanation = (
+            "Frequent small-to-medium cafe and coffee purchases accumulated into a "
+            "measurable monthly outlay across the observed period. This reflects "
+            "cumulative transaction frequency rather than a single large charge."
+        )
+    elif leak.leak_type == "convenience_store_leak":
+        explanation = (
+            "Repeated convenience-store and forecourt quick-stop visits accumulated "
+            "into a material monthly spend total across the observed period."
+        )
+    elif leak.leak_type == "weekend_spending_leak":
+        explanation = (
+            "Calendar-normalised discretionary spending per weekend day materially "
+            "exceeded weekday discretionary spending after excluding fixed bills, "
+            "debit orders, and essential groceries."
+        )
+    else:
+        explanation = (
+            "A substantial share of discretionary spending occurred within the "
+            "three-day window immediately following salary credits across multiple "
+            "pay cycles, after controlling for essential bills and debit orders."
+        )
+    return _Draft(
+        root_cause_type="transaction_pattern",
+        title=leak.title,
+        explanation=explanation,
+        evidence=evidence,
+        persistence=persistence,
+        analysis_status="supported",
+        evidence_strength=Decimal("0.76"),
+    )
+
+
 def _inactive_recurring_reasoning(
     snapshot: FinancialFeatureSnapshot,
     leak: LeakDetection,
@@ -1059,8 +1183,10 @@ def _avoidability(
         return "unknown", None, None
     if leak.leak_type == "cash_usage_leak":
         return "medium", 0.56, None
-    if leak.leak_type in _CATEGORY_LEAK_TYPES:
-        return "medium", 0.52, None
+    if leak.leak_type in _CATEGORY_LEAK_TYPES or leak.leak_type in _HABIT_AND_PATTERN_LEAK_TYPES:
+        return "medium", 0.54, None
+    if leak.leak_type == "duplicate_streaming_leak":
+        return "medium", 0.58, None
     return "unknown", None, None
 
 

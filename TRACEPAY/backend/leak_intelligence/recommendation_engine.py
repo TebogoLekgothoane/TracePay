@@ -136,8 +136,15 @@ def _classify(
         return None
     if _is_cash_pattern(analysis):
         return None
-    if analysis.evidence.get("finding_focus") == "unusual_transaction":
+    focus = analysis.evidence.get("finding_focus")
+    if focus in {
+        "unusual_transaction",
+        "weekend_spending_spike",
+        "payday_spending_pattern",
+    }:
         return "monitor_spending_pattern", "standalone", analysis.reasoning_id
+    if focus in {"coffee_spending_habit", "convenience_store_spending"}:
+        return "review_high_frequency_spending", "standalone", analysis.reasoning_id
 
     category = _category_name(analysis)
     if (
@@ -177,6 +184,27 @@ def _copy_for(
     if recommendation_type == "review_recurring_payment":
         merchant = _merchant_name(analysis)
         subject = f" at {merchant}" if merchant else ""
+        if analysis.evidence.get("finding_focus") == "duplicate_streaming_services":
+            services = analysis.evidence.get("streaming_service_names")
+            names_label = (
+                ", ".join(str(s) for s in services[:3])
+                if isinstance(services, list) and services
+                else "streaming services"
+            )
+            return (
+                f"Review overlapping streaming subscriptions ({names_label})",
+                (
+                    f"Multiple recurring streaming subscriptions ({names_label}) were "
+                    "concurrently active across overlapping billing months. Statement "
+                    "data shows the combined recurring outlay but does not determine "
+                    "household usage or whether any subscription is redundant."
+                ),
+                (
+                    "Review your active streaming subscriptions and decide whether all "
+                    "concurrent services are still wanted. TracePay will not cancel or "
+                    "modify any subscription."
+                ),
+            )
         if analysis.evidence.get("finding_focus") == "missing_expected_recurring_payment":
             title = (
                 f"Review inactive recurring payment at {merchant}"
@@ -215,6 +243,40 @@ def _copy_for(
             ),
         )
     if recommendation_type == "review_high_frequency_spending":
+        focus = analysis.evidence.get("finding_focus")
+        merchant = _merchant_name(analysis)
+        if focus == "coffee_spending_habit":
+            where = f" at {merchant}" if merchant else ""
+            return (
+                f"Review coffee spending frequency{where}",
+                (
+                    f"Repeated small-to-medium coffee purchases{where} accumulated into "
+                    "a recurring monthly spend pattern over the observed period. This "
+                    "recommendation is shown so cumulative frequency and monthly cost "
+                    "can be reviewed."
+                ),
+                (
+                    "Review how often coffee purchases occur and whether the cumulative "
+                    "monthly spend aligns with your preferences. TracePay has not judged "
+                    "individual purchases."
+                ),
+            )
+        if focus == "convenience_store_spending":
+            where = f" at {merchant}" if merchant else ""
+            return (
+                f"Review convenience-store spending{where}",
+                (
+                    f"Frequent convenience-store and quick-stop purchases{where} "
+                    "accumulated into a measurable monthly spend pattern. This "
+                    "recommendation is shown so visit frequency and cumulative cost "
+                    "can be reviewed."
+                ),
+                (
+                    "Review whether some convenience-store top-up visits could be "
+                    "consolidated into planned grocery trips if desired. TracePay has "
+                    "not judged individual purchases."
+                ),
+            )
         category = _category_name(analysis) or "food"
         return (
             "Review spending frequency",
@@ -248,6 +310,26 @@ def _copy_for(
         count = _integer(analysis.evidence.get("matching_transaction_count"))
         merchant = _merchant_name(analysis)
         who = f" at {merchant}" if merchant else ""
+        if analysis.evidence.get("finding_focus") == "duplicate_debit_order":
+            title = (
+                f"Verify possible duplicate debit order at {merchant}"
+                if merchant
+                else "Verify possible duplicate debit order"
+            )
+            return (
+                title,
+                (
+                    f"Multiple debit-order collections{who} occurred within the same "
+                    "billing cycle alongside established recurring debit-order history. "
+                    "This is a verification step and does not confirm a billing error or "
+                    "recoverable amount."
+                ),
+                (
+                    "Check your debit-order mandate and statement references before "
+                    "contacting the biller or bank. TracePay will not dispute or reverse "
+                    "the debit order."
+                ),
+            )
         observed = (
             f"Two transactions{who} may represent a duplicate payment."
             if count == 2
@@ -279,7 +361,36 @@ def _copy_for(
 def _monitor_copy(analysis: FinancialReasoning) -> tuple[str, str, str]:
     merchant = _merchant_name(analysis)
     category = _category_name(analysis)
-    if analysis.evidence.get("finding_focus") == "unusual_transaction":
+    focus = analysis.evidence.get("finding_focus")
+    if focus == "weekend_spending_spike":
+        return (
+            "Monitor weekend discretionary spending",
+            (
+                "Discretionary weekend spending per calendar day was materially higher "
+                "than weekday discretionary spending after excluding fixed bills, debit "
+                "orders, and essential groceries."
+            ),
+            (
+                "Review weekend discretionary categories and merchants to see whether "
+                "the weekend pace matches your goals. TracePay will not set a budget or "
+                "restrict transactions."
+            ),
+        )
+    if focus == "payday_spending_pattern":
+        return (
+            "Monitor post-payday discretionary spending",
+            (
+                "A substantial share of discretionary spending occurred within three "
+                "days of salary credits across multiple pay cycles, after excluding "
+                "rent, debit orders, and essential obligations."
+            ),
+            (
+                "Review discretionary purchases in the days right after payday to "
+                "pace spending across the full pay cycle if helpful. TracePay will not "
+                "move money or change financial settings."
+            ),
+        )
+    if focus == "unusual_transaction":
         who = f" at {merchant}" if merchant else ""
         cat_clause = f" in {category}" if category else ""
         title = (

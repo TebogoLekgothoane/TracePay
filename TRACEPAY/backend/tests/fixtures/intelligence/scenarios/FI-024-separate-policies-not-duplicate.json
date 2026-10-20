@@ -1,0 +1,110 @@
+[
+  {
+    "id": "fi024-neg-jul-life",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-01",
+    "description": "DEBIT ORDER SANLAM LIFE POL 1111",
+    "amount": "620.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SANLAM",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Insurance"
+    }
+  },
+  {
+    "id": "fi024-neg-jul-car",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-01",
+    "description": "DEBIT ORDER SANLAM SHORT TERM POL 2222",
+    "amount": "620.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SANLAM",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Insurance"
+    }
+  },
+  {
+    "id": "fi024-neg-aug-life",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-01",
+    "description": "DEBIT ORDER SANLAM LIFE POL 1111",
+    "amount": "620.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SANLAM",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Insurance"
+    }
+  },
+  {
+    "id": "fi024-neg-aug-car",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-01",
+    "description": "DEBIT ORDER SANLAM SHORT TERM POL 2222",
+    "amount": "620.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SANLAM",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Insurance"
+    }
+  },
+  {
+    "id": "fi024-neg-sep-life",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-01",
+    "description": "DEBIT ORDER SANLAM LIFE POL 1111",
+    "amount": "620.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SANLAM",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Insurance"
+    }
+  },
+  {
+    "id": "fi024-neg-sep-car",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-01",
+    "description": "DEBIT ORDER SANLAM SHORT TERM POL 2222",
+    "amount": "620.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SANLAM",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Insurance"
+    }
+  }
+]

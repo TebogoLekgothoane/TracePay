@@ -10,6 +10,8 @@ from .behaviour_engine import (
     MIN_FEE_BURDEN_TOTAL,
     MIN_RELATIVE_CHANGE_PERCENT,
     MIN_TREND_MONTHS,
+    _coverage_bounds,
+    _period_compare,
     is_repeated_shopping_merchant,
     is_weak_recurring_commitment,
 )
@@ -20,6 +22,7 @@ from .leak_scoring import leak_confidence, severity_for_impact, support_ratio
 from .merchant_display import (
     debit_order_leak_title,
     duplicate_leak_title,
+    format_zar,
     is_reliable_merchant_display_name,
     merchant_display_name_for,
     recurring_leak_title,
@@ -57,12 +60,18 @@ def detect_leaks(
     findings = [
         *_bank_fee_leaks(snapshot, observations),
         *_recurring_leaks(snapshot, observations),
+        *_duplicate_streaming_leaks(snapshot, observations),
         *_inactive_recurring_leaks(snapshot),
         *_irregular_transaction_leaks(snapshot),
         *_spending_escalation_leaks(snapshot, observations),
         *_category_leaks(snapshot, observations),
+        *_coffee_spending_leaks(snapshot, observations),
+        *_convenience_store_leaks(snapshot, observations),
+        *_weekend_spending_leaks(snapshot, observations),
+        *_payday_spending_leaks(snapshot, observations),
         *_cash_leaks(snapshot, observations),
         *_duplicate_leaks(snapshot, observations),
+        *_duplicate_debit_order_leaks(snapshot, observations),
     ]
     deduplicated = {finding.fingerprint: finding for finding in findings}
     return _result(snapshot, sorted(deduplicated.values(), key=lambda item: (-item.confidence, item.leak_id)))
@@ -441,6 +450,26 @@ def _bank_fee_leaks(
     ]
 
 
+_APP_STORE_AGGREGATOR_KEYS = frozenset({"APPLE", "ITUNES", "GOOGLE", "GOOGLE PLAY", "APPLE COM"})
+
+
+def _is_app_store_billing_merchant(merchant_name: str) -> bool:
+    upper = (merchant_name or "").upper().strip()
+    if upper in _APP_STORE_AGGREGATOR_KEYS:
+        return True
+    return (
+        "APPLE.COM" in upper
+        or "APPLE COM BILL" in upper
+        or "GOOGLE *SERVICES" in upper
+    )
+
+
+def _is_monthly_billing_interval(interval: Decimal | None) -> bool:
+    if interval is None:
+        return False
+    return Decimal("26") <= interval <= Decimal("35")
+
+
 def _recurring_leaks(
     snapshot: FinancialFeatureSnapshot,
     observations: dict[str, list[BehaviourObservation]],
@@ -455,7 +484,16 @@ def _recurring_leaks(
         candidate.merchant_name
         for candidate in snapshot.duplicate_candidates
         if candidate.transaction_dates
-        and (max(candidate.transaction_dates) - min(candidate.transaction_dates)).days == 0
+        and (
+            (max(candidate.transaction_dates) - min(candidate.transaction_dates)).days == 0
+            or (
+                candidate.is_debit_order
+                and 0 <= candidate.billing_date_shift_days <= 5
+                and candidate.recurring_debit_order_months >= 2
+                and candidate.recurring_debit_order_count >= 3
+                and not candidate.nearby_reversal_or_refund
+            )
+        )
     }
     for merchant in snapshot.merchants:
         recurrence = merchant.recurrence
@@ -466,6 +504,10 @@ def _recurring_leaks(
             or not matches_plausible_recurring_interval(interval)
             or support_ratio(merchant.confidence_support) < Decimal("0.60")
             or merchant.merchant_name in duplicate_merchants
+        ):
+            continue
+        if _is_app_store_billing_merchant(merchant.merchant_name) and not _is_monthly_billing_interval(
+            interval
         ):
             continue
         impact = _recurring_monthly_impact(merchant)
@@ -1265,6 +1307,8 @@ def _duplicate_leaks(
     # remain stable across detector versions.
     selected_by_merchant: dict[str, object] = {}
     for candidate in snapshot.duplicate_candidates:
+        if candidate.is_debit_order:
+            continue
         dates = candidate.transaction_dates
         high_confidence_ratio = (
             Decimal(candidate.high_confidence_transaction_count) / Decimal(len(dates))
@@ -1386,6 +1430,867 @@ def _duplicate_leaks(
             )
         )
     return findings
+
+
+_VIDEO_STREAMING_PROVIDERS: dict[str, tuple[str, ...]] = {
+    "netflix": ("NETFLIX",),
+    "showmax": ("SHOWMAX",),
+    "dstv": ("DSTV", "MULTICHOICE"),
+    "disney_plus": ("DISNEY PLUS", "DISNEYPLUS", "DISNEY+", "DISNEY"),
+    "prime_video": ("PRIME VIDEO", "AMAZON PRIME"),
+    "apple_tv": ("APPLE TV", "APPLE TV+"),
+    "youtube_premium": ("YOUTUBE PREMIUM", "YOUTUBE"),
+    "hbo_max": ("HBO MAX", "HBO"),
+    "paramount_plus": ("PARAMOUNT PLUS", "PARAMOUNT+", "PARAMOUNT"),
+    "britbox": ("BRITBOX",),
+    "crunchyroll": ("CRUNCHYROLL",),
+}
+_MUSIC_STREAMING_PROVIDERS: dict[str, tuple[str, ...]] = {
+    "spotify": ("SPOTIFY",),
+    "apple_music": ("APPLE MUSIC",),
+    "youtube_music": ("YOUTUBE MUSIC",),
+    "deezer": ("DEEZER",),
+    "tidal": ("TIDAL",),
+}
+_NON_STREAMING_SAAS_MARKERS = (
+    "ICLOUD",
+    "GOOGLE ONE",
+    "GOOGLE STORAGE",
+    "MICROSOFT 365",
+    "OFFICE 365",
+    "DROPBOX",
+    "ONEDRIVE",
+    "ADOBE",
+    "CHATGPT",
+    "OPENAI",
+    "CANVA",
+    "GITHUB",
+)
+_RENTAL_OR_ONE_OFF_MARKERS = ("RENTAL", "RENT ", "MOVIE RENTAL", "PAY PER VIEW", "PPV")
+
+
+def _classify_streaming_provider(merchant_name: str) -> tuple[str, str] | None:
+    """Return (subcategory, canonical_provider_id) for known streaming merchants."""
+    upper = (merchant_name or "").upper().strip()
+    if not upper or any(marker in upper for marker in _NON_STREAMING_SAAS_MARKERS):
+        return None
+    if any(marker in upper for marker in _RENTAL_OR_ONE_OFF_MARKERS):
+        return None
+    compact = " ".join(upper.replace(".", " ").replace("-", " ").replace("_", " ").split())
+    for provider_id, aliases in _MUSIC_STREAMING_PROVIDERS.items():
+        if any(alias in compact or alias in upper for alias in aliases):
+            return ("music_streaming", provider_id)
+    for provider_id, aliases in _VIDEO_STREAMING_PROVIDERS.items():
+        if any(alias in compact or alias in upper for alias in aliases):
+            return ("video_streaming", provider_id)
+    return None
+
+
+def _duplicate_debit_order_leaks(
+    snapshot: FinancialFeatureSnapshot,
+    observations: dict[str, list[BehaviourObservation]],
+) -> list[LeakDetection]:
+    """Emit FI-024 findings for duplicate debit-order collections backed by recurring history."""
+    findings: list[LeakDetection] = []
+    observation_ids = _observation_ids(observations.get("duplicate_payment_pattern", []))
+    selected_by_merchant: dict[str, tuple[Decimal, object]] = {}
+    for candidate in snapshot.duplicate_candidates:
+        if not candidate.is_debit_order:
+            continue
+        dates = candidate.transaction_dates
+        high_confidence_ratio = (
+            Decimal(candidate.high_confidence_transaction_count) / Decimal(len(dates))
+            if dates
+            else Decimal("0")
+        )
+        if (
+            len(dates) < 2
+            or not (0 <= candidate.billing_date_shift_days <= 5)
+            or candidate.amount < Decimal("20")
+            or high_confidence_ratio < Decimal("0.60")
+            or candidate.nearby_reversal_or_refund
+            or candidate.recurring_debit_order_months < 2
+            or candidate.recurring_debit_order_count < 3
+            or len(candidate.match_basis) < 4
+        ):
+            continue
+        if (
+            candidate.distinct_description_count > 1
+            and not candidate.shared_reference_tokens
+            and candidate.billing_date_shift_days > 0
+        ):
+            continue
+        impact = candidate.amount * Decimal(len(dates) - 1) - candidate.amount_variance
+        if impact < MIN_IMPACT:
+            impact = candidate.amount * Decimal(len(dates) - 1)
+        current = selected_by_merchant.get(candidate.merchant_name)
+        if current is None or impact > current[0]:
+            selected_by_merchant[candidate.merchant_name] = (impact, candidate)
+
+    for impact, candidate in selected_by_merchant.values():  # type: ignore[misc]
+        dates = candidate.transaction_dates
+        support = ConfidenceSupport(
+            supporting_transaction_count=len(dates),
+            high_confidence_transaction_count=candidate.high_confidence_transaction_count,
+            low_confidence_transaction_count=(
+                len(dates) - candidate.high_confidence_transaction_count
+            ),
+        )
+        exact_same_day = (
+            candidate.billing_date_shift_days == 0
+            and candidate.amount_variance == Decimal("0")
+        )
+        pattern_strength = Decimal("0.62") if exact_same_day else Decimal("0.54")
+        if candidate.shared_reference_tokens:
+            pattern_strength = min(Decimal("0.68"), pattern_strength + Decimal("0.04"))
+        confidence = leak_confidence(
+            support=support,
+            observation_count=candidate.recurring_debit_order_count,
+            pattern_strength=pattern_strength,
+            ceiling=Decimal("0.72") if exact_same_day else Decimal("0.66"),
+        )
+        if confidence is None:
+            continue
+        display_merchant = (
+            merchant_display_name_for(candidate.merchant_name)
+            if is_reliable_merchant_display_name(candidate.merchant_name)
+            else None
+        )
+        title = (
+            f"Possible duplicate debit order at {display_merchant} ({format_zar(candidate.amount)})"
+            if display_merchant
+            else f"Possible duplicate debit order ({format_zar(candidate.amount)})"
+        )
+        group_total = candidate.amount * Decimal(len(dates)) - candidate.amount_variance
+        findings.append(
+            _leak(
+                snapshot=snapshot,
+                leak_type="duplicate_debit_order_leak",
+                subject=candidate.merchant_name,
+                title=title,
+                description=(
+                    "Multiple debit-order collections for the same merchant were observed within "
+                    "the same billing cycle alongside established recurring debit-order history. "
+                    "This requires manual verification against your mandate and statement; it does "
+                    "not confirm a billing error or recoverable amount."
+                ),
+                monthly_impact=impact,
+                annual_impact=None,
+                impact_kind="one_time",
+                confidence=confidence,
+                severity=severity_for_impact(impact, persistent=False, confidence=confidence),
+                evidence={
+                    "finding_focus": "duplicate_debit_order",
+                    "merchant_key": candidate.merchant_name,
+                    "candidate_amount": candidate.amount,
+                    "transaction_count_in_group": len(dates),
+                    "group_total": group_total,
+                    "observed_date": dates[0].isoformat(),
+                    "latest_observed_date": dates[-1].isoformat(),
+                    "date_span_days": candidate.billing_date_shift_days,
+                    "billing_date_shift_days": candidate.billing_date_shift_days,
+                    "amount_variance": candidate.amount_variance,
+                    "recurring_debit_order_count": candidate.recurring_debit_order_count,
+                    "recurring_debit_order_months": candidate.recurring_debit_order_months,
+                    "match_basis": list(candidate.match_basis),
+                    "distinct_description_count": candidate.distinct_description_count,
+                    "shared_reference_tokens": candidate.shared_reference_tokens,
+                    "nearby_reversal_or_refund": candidate.nearby_reversal_or_refund,
+                    "potential_not_confirmed_savings": True,
+                    "verification_required": True,
+                    "finding_kind": "verification_required",
+                    "uncertainty": (
+                        "Multiple debit-order collections in a billing window can reflect "
+                        "arrears catch-up, date shifts, or separate mandates. Manual "
+                        "verification is required before disputing the debit order."
+                    ),
+                },
+                behaviour_ids=observation_ids,
+                feature_refs=["duplicate_candidates", f"merchants[{candidate.merchant_name}]"],
+            )
+        )
+    return findings
+
+
+def _duplicate_streaming_leaks(
+    snapshot: FinancialFeatureSnapshot,
+    observations: dict[str, list[BehaviourObservation]],
+) -> list[LeakDetection]:
+    """Emit FI-017 findings when 2+ recurring streaming services in the same subcategory overlap."""
+    if snapshot.date_end is None:
+        return []
+    by_subcategory: dict[str, dict[str, MerchantFeature]] = {}
+    for merchant in snapshot.merchants:
+        classified = _classify_streaming_provider(merchant.merchant_name)
+        if classified is None:
+            continue
+        subcategory, provider_id = classified
+        interval = merchant.recurrence.average_interval_days or merchant.merchant_average_interval_days
+        if (
+            merchant.merchant_transaction_count < 2
+            or len(merchant.merchant_monthly_totals) < 2
+            or not matches_plausible_recurring_interval(interval)
+            or support_ratio(merchant.confidence_support) < Decimal("0.60")
+            or merchant.merchant_last_transaction_date is None
+            or (snapshot.date_end - merchant.merchant_last_transaction_date).days > 38
+        ):
+            continue
+        impact = _recurring_monthly_impact(merchant) or merchant.merchant_average_amount
+        if impact < Decimal("30"):
+            continue
+        group = by_subcategory.setdefault(subcategory, {})
+        existing = group.get(provider_id)
+        if existing is None or merchant.merchant_total_amount > existing.merchant_total_amount:
+            group[provider_id] = merchant
+
+    findings: list[LeakDetection] = []
+    recurring_obs_ids = _observation_ids(observations.get("recurring_payment_pattern", []))
+    for subcategory, provider_map in sorted(by_subcategory.items()):
+        if len(provider_map) < 2:
+            continue
+        merchants = sorted(
+            provider_map.values(),
+            key=lambda item: (-item.merchant_total_amount, item.merchant_name),
+        )
+        latest_months = {
+            max(m.merchant_monthly_totals.keys())
+            for m in merchants
+            if m.merchant_monthly_totals
+        }
+        target_latest_month = max(latest_months) if latest_months else None
+        if target_latest_month is None:
+            continue
+        concurrent = [
+            m for m in merchants if target_latest_month in m.merchant_monthly_totals
+        ]
+        if len(concurrent) < 2:
+            continue
+        month_counts: dict[str, int] = {}
+        for m in concurrent:
+            for month in m.merchant_monthly_totals:
+                month_counts[month] = month_counts.get(month, 0) + 1
+        overlapping_months = sorted(month for month, count in month_counts.items() if count >= 2)
+        if len(overlapping_months) < 2:
+            continue
+
+        monthly_amounts = [
+            (m.recurrence.average_amount or m.merchant_average_amount) for m in concurrent
+        ]
+        combined_monthly = sum(monthly_amounts, Decimal("0"))
+        if combined_monthly < MIN_IMPACT:
+            continue
+        total_spend = sum((m.merchant_total_amount for m in concurrent), Decimal("0"))
+        total_tx_count = sum(m.merchant_transaction_count for m in concurrent)
+        high_conf_tx_count = sum(
+            m.confidence_support.high_confidence_transaction_count for m in concurrent
+        )
+        support = ConfidenceSupport(
+            supporting_transaction_count=total_tx_count,
+            high_confidence_transaction_count=high_conf_tx_count,
+            low_confidence_transaction_count=max(0, total_tx_count - high_conf_tx_count),
+        )
+        confidence = leak_confidence(
+            support=support,
+            observation_count=total_tx_count,
+            pattern_strength=Decimal("0.72") if len(overlapping_months) >= 3 else Decimal("0.64"),
+            ceiling=Decimal("0.82"),
+        )
+        if confidence is None:
+            continue
+        service_names = [
+            merchant_display_name_for(m.merchant_name) or m.merchant_name
+            for m in concurrent
+        ]
+        merchant_keys = [m.merchant_name for m in concurrent]
+        subcategory_label = (
+            "video streaming" if subcategory == "video_streaming" else "music streaming"
+        )
+        findings.append(
+            _leak(
+                snapshot=snapshot,
+                leak_type="duplicate_streaming_leak",
+                subject=f"streaming-overlap-{subcategory}",
+                title=f"Overlapping active {subcategory_label} subscriptions ({', '.join(service_names[:3])})",
+                description=(
+                    f"Multiple recurring {subcategory_label} subscriptions ({', '.join(service_names)}) "
+                    f"were concurrently active across {len(overlapping_months)} billing months, "
+                    f"totalling {format_zar(combined_monthly)} per month. This highlights overlapping "
+                    "recurring media commitments for your review and does not assume any service is "
+                    "unwanted or redundant."
+                ),
+                monthly_impact=combined_monthly,
+                annual_impact=combined_monthly * Decimal("12"),
+                impact_kind="recurring",
+                confidence=confidence,
+                severity=severity_for_impact(
+                    combined_monthly, persistent=True, confidence=confidence
+                ),
+                evidence={
+                    "finding_focus": "duplicate_streaming_services",
+                    "streaming_subcategory": subcategory,
+                    "active_streaming_service_count": len(concurrent),
+                    "streaming_merchants": merchant_keys,
+                    "streaming_service_names": service_names,
+                    "combined_monthly_streaming_spend": combined_monthly,
+                    "total_streaming_spend": total_spend,
+                    "overlapping_months": overlapping_months,
+                    "overlapping_month_count": len(overlapping_months),
+                    "observation_count": total_tx_count,
+                    "verification_required": True,
+                    "no_redundancy_assumed": True,
+                    "finding_kind": "potential_leak",
+                },
+                behaviour_ids=recurring_obs_ids,
+                feature_refs=[f"merchants[{key}]" for key in merchant_keys],
+            )
+        )
+    return findings
+
+
+def _coffee_spending_leaks(
+    snapshot: FinancialFeatureSnapshot,
+    observations: dict[str, list[BehaviourObservation]],
+) -> list[LeakDetection]:
+    """Emit FI-028 findings when repeated small/medium coffee purchases form a material habit."""
+    coffee_merchants = [
+        merchant
+        for merchant in snapshot.merchants
+        if merchant.coffee_transaction_count > 0
+        and support_ratio(merchant.confidence_support) >= Decimal("0.60")
+        and is_reliable_merchant_display_name(merchant.merchant_name)
+        and merchant.merchant_average_amount <= Decimal("250")
+    ]
+    if not coffee_merchants:
+        return []
+    total_count = sum(m.coffee_transaction_count for m in coffee_merchants)
+    total_spend = sum(
+        (
+            m.coffee_total_amount
+            if m.coffee_total_amount > Decimal("0")
+            else m.merchant_total_amount
+            for m in coffee_merchants
+        ),
+        Decimal("0"),
+    )
+    monthly_totals: dict[str, Decimal] = {}
+    monthly_counts: dict[str, int] = {}
+    for merchant in coffee_merchants:
+        if merchant.coffee_transaction_count < merchant.merchant_transaction_count * 0.5:
+            continue
+        for month, amount in merchant.merchant_monthly_totals.items():
+            monthly_totals[month] = monthly_totals.get(month, Decimal("0")) + amount
+        for month, count in merchant.merchant_monthly_transaction_count.items():
+            monthly_counts[month] = monthly_counts.get(month, 0) + count
+
+    coverage_start, coverage_end = _coverage_bounds(snapshot)
+    compare = _period_compare(
+        [
+            (month, monthly_totals[month], monthly_counts.get(month, 0))
+            for month in sorted(monthly_totals)
+        ],
+        coverage_end,
+        coverage_start,
+        minimum_baseline=Decimal("60"),
+    )
+    has_escalation = (
+        compare is not None
+        and isinstance(compare.get("change_amount"), Decimal)
+        and compare["change_amount"] >= Decimal("60")
+        and isinstance(compare.get("change_percentage"), Decimal)
+        and compare["change_percentage"] >= Decimal("20")
+    )
+    if total_spend < Decimal("200") or (total_count < 5 and not (total_count >= 4 and has_escalation)):
+        return []
+
+    active_month_count = max(1, len(monthly_totals))
+    completed = completed_months(snapshot)
+    divisor_months = max(1, len(completed) if completed else active_month_count)
+    monthly_impact = total_spend / Decimal(divisor_months)
+    if monthly_impact < MIN_IMPACT:
+        return []
+    avg_ticket = total_spend / Decimal(total_count)
+    total_tx_support = sum(m.confidence_support.supporting_transaction_count for m in coffee_merchants)
+    high_tx_support = sum(m.confidence_support.high_confidence_transaction_count for m in coffee_merchants)
+    support = ConfidenceSupport(
+        supporting_transaction_count=total_tx_support,
+        high_confidence_transaction_count=high_tx_support,
+        low_confidence_transaction_count=max(0, total_tx_support - high_tx_support),
+    )
+    confidence = leak_confidence(
+        support=support,
+        observation_count=total_count,
+        pattern_strength=Decimal("0.68") if has_escalation or total_count >= 8 else Decimal("0.58"),
+        ceiling=Decimal("0.78"),
+    )
+    if confidence is None:
+        return []
+    top_merchant = max(
+        coffee_merchants,
+        key=lambda item: (item.coffee_transaction_count, item.merchant_total_amount),
+    )
+    single_merchant = len(coffee_merchants) == 1
+    display_name = merchant_display_name_for(top_merchant.merchant_name) or top_merchant.merchant_name
+    title = (
+        f"Recurring coffee spending pattern at {display_name}"
+        if single_merchant
+        else f"Recurring coffee spending pattern across {len(coffee_merchants)} cafes"
+    )
+    discretionary_total = (
+        snapshot.weekend.discretionary_weekend_total
+        + snapshot.weekend.discretionary_weekday_total
+    )
+    discretionary_share = (
+        total_spend / discretionary_total if discretionary_total > Decimal("0") else None
+    )
+    total_spending = snapshot.spending_profile.total_spending or Decimal("0")
+    spending_share = total_spend / total_spending if total_spending > Decimal("0") else None
+    habit_obs_ids = [
+        obs.observation_id
+        for obs in observations.get("spending_habit_pattern", [])
+        if obs.evidence.get("finding_focus") == "coffee_spending_habit"
+    ]
+    evidence: dict[str, object] = {
+        "finding_focus": "coffee_spending_habit",
+        "merchant_key": top_merchant.merchant_name if single_merchant else None,
+        "coffee_merchants": [m.merchant_name for m in coffee_merchants],
+        "coffee_transaction_count": total_count,
+        "coffee_total_amount": total_spend,
+        "average_transaction_amount": avg_ticket,
+        "monthly_coffee_spend": monthly_impact,
+        "active_month_count": active_month_count,
+        "discretionary_spend_share": discretionary_share,
+        "spending_share": spending_share,
+        "observation_count": total_count,
+        "finding_kind": "spending_pattern",
+    }
+    if compare is not None:
+        evidence.update(
+            {
+                "previous_period": compare["previous_period"],
+                "current_period": compare["current_period"],
+                "previous_amount": compare["previous_amount"],
+                "current_amount": compare["current_amount"],
+                "change_amount": compare["change_amount"],
+                "change_percentage": compare["change_percentage"],
+                "months_compared": compare["months_compared"],
+            }
+        )
+    return [
+        _leak(
+            snapshot=snapshot,
+            leak_type="coffee_spending_leak",
+            subject=top_merchant.merchant_name if single_merchant else "coffee-spending",
+            title=title,
+            description=(
+                f"Repeated small-to-medium coffee purchases ({total_count} transactions averaging "
+                f"{format_zar(avg_ticket)}) accumulated to {format_zar(total_spend)} over the "
+                "observed period. This quantifies the cumulative cost of the habit and does not "
+                "judge the purchases as unnecessary."
+            ),
+            monthly_impact=monthly_impact,
+            annual_impact=monthly_impact * Decimal("12"),
+            impact_kind="recurring" if active_month_count >= 2 else "estimated",
+            confidence=confidence,
+            severity=severity_for_impact(
+                monthly_impact, persistent=active_month_count >= 2, confidence=confidence
+            ),
+            evidence=evidence,
+            behaviour_ids=habit_obs_ids,
+            feature_refs=[f"merchants[{m.merchant_name}]" for m in coffee_merchants],
+        )
+    ]
+
+
+def _convenience_store_leaks(
+    snapshot: FinancialFeatureSnapshot,
+    observations: dict[str, list[BehaviourObservation]],
+) -> list[LeakDetection]:
+    """Emit FI-030 findings when frequent convenience-store visits form a material spend pattern."""
+    conv_merchants = [
+        merchant
+        for merchant in snapshot.merchants
+        if merchant.convenience_store_transaction_count > 0
+        and support_ratio(merchant.confidence_support) >= Decimal("0.60")
+        and is_reliable_merchant_display_name(merchant.merchant_name)
+        and merchant.merchant_average_amount <= Decimal("400")
+    ]
+    if not conv_merchants:
+        return []
+    total_count = sum(m.convenience_store_transaction_count for m in conv_merchants)
+    total_spend = sum(
+        (
+            m.convenience_store_total_amount
+            if m.convenience_store_total_amount > Decimal("0")
+            else m.merchant_total_amount
+            for m in conv_merchants
+        ),
+        Decimal("0"),
+    )
+    monthly_totals: dict[str, Decimal] = {}
+    monthly_counts: dict[str, int] = {}
+    for merchant in conv_merchants:
+        if merchant.convenience_store_transaction_count < merchant.merchant_transaction_count * 0.5:
+            continue
+        for month, amount in merchant.merchant_monthly_totals.items():
+            monthly_totals[month] = monthly_totals.get(month, Decimal("0")) + amount
+        for month, count in merchant.merchant_monthly_transaction_count.items():
+            monthly_counts[month] = monthly_counts.get(month, 0) + count
+
+    coverage_start, coverage_end = _coverage_bounds(snapshot)
+    compare = _period_compare(
+        [
+            (month, monthly_totals[month], monthly_counts.get(month, 0))
+            for month in sorted(monthly_totals)
+        ],
+        coverage_end,
+        coverage_start,
+        minimum_baseline=Decimal("80"),
+    )
+    has_escalation = (
+        compare is not None
+        and isinstance(compare.get("change_amount"), Decimal)
+        and compare["change_amount"] >= Decimal("80")
+        and isinstance(compare.get("change_percentage"), Decimal)
+        and compare["change_percentage"] >= Decimal("20")
+    )
+    if total_spend < Decimal("250") or (total_count < 5 and not (total_count >= 4 and has_escalation)):
+        return []
+
+    active_month_count = max(1, len(monthly_totals))
+    completed = completed_months(snapshot)
+    divisor_months = max(1, len(completed) if completed else active_month_count)
+    monthly_impact = total_spend / Decimal(divisor_months)
+    if monthly_impact < MIN_IMPACT:
+        return []
+    avg_ticket = total_spend / Decimal(total_count)
+    total_tx_support = sum(m.confidence_support.supporting_transaction_count for m in conv_merchants)
+    high_tx_support = sum(m.confidence_support.high_confidence_transaction_count for m in conv_merchants)
+    support = ConfidenceSupport(
+        supporting_transaction_count=total_tx_support,
+        high_confidence_transaction_count=high_tx_support,
+        low_confidence_transaction_count=max(0, total_tx_support - high_tx_support),
+    )
+    confidence = leak_confidence(
+        support=support,
+        observation_count=total_count,
+        pattern_strength=Decimal("0.70") if has_escalation or total_count >= 8 else Decimal("0.58"),
+        ceiling=Decimal("0.80"),
+    )
+    if confidence is None:
+        return []
+    top_merchant = max(
+        conv_merchants,
+        key=lambda item: (item.convenience_store_transaction_count, item.merchant_total_amount),
+    )
+    single_merchant = len(conv_merchants) == 1
+    display_name = merchant_display_name_for(top_merchant.merchant_name) or top_merchant.merchant_name
+    title = (
+        f"Repeated convenience-store spending at {display_name}"
+        if single_merchant
+        else f"Repeated convenience-store spending across {len(conv_merchants)} stores"
+    )
+    grocery_cat = next(
+        (cat for cat in snapshot.categories if cat.category_name == "Groceries"),
+        None,
+    )
+    grocery_share = (
+        total_spend / grocery_cat.category_total_amount
+        if grocery_cat and grocery_cat.category_total_amount > Decimal("0")
+        else None
+    )
+    total_spending = snapshot.spending_profile.total_spending or Decimal("0")
+    spending_share = total_spend / total_spending if total_spending > Decimal("0") else None
+    habit_obs_ids = [
+        obs.observation_id
+        for obs in observations.get("spending_habit_pattern", [])
+        if obs.evidence.get("finding_focus") == "convenience_store_spending"
+    ]
+    evidence: dict[str, object] = {
+        "finding_focus": "convenience_store_spending",
+        "merchant_key": top_merchant.merchant_name if single_merchant else None,
+        "convenience_store_merchants": [m.merchant_name for m in conv_merchants],
+        "convenience_store_transaction_count": total_count,
+        "convenience_store_total_amount": total_spend,
+        "average_transaction_amount": avg_ticket,
+        "monthly_convenience_spend": monthly_impact,
+        "active_month_count": active_month_count,
+        "grocery_spend_share": grocery_share,
+        "spending_share": spending_share,
+        "observation_count": total_count,
+        "finding_kind": "spending_pattern",
+    }
+    if compare is not None:
+        evidence.update(
+            {
+                "previous_period": compare["previous_period"],
+                "current_period": compare["current_period"],
+                "previous_amount": compare["previous_amount"],
+                "current_amount": compare["current_amount"],
+                "change_amount": compare["change_amount"],
+                "change_percentage": compare["change_percentage"],
+                "months_compared": compare["months_compared"],
+            }
+        )
+    return [
+        _leak(
+            snapshot=snapshot,
+            leak_type="convenience_store_leak",
+            subject=top_merchant.merchant_name if single_merchant else "convenience-store-spending",
+            title=title,
+            description=(
+                f"Frequent convenience-store and quick-stop purchases ({total_count} visits "
+                f"averaging {format_zar(avg_ticket)}) accumulated to {format_zar(total_spend)} "
+                "over the observed period. This quantifies the cumulative spend pattern and "
+                "does not mark the purchases as unnecessary."
+            ),
+            monthly_impact=monthly_impact,
+            annual_impact=monthly_impact * Decimal("12"),
+            impact_kind="recurring" if active_month_count >= 2 else "estimated",
+            confidence=confidence,
+            severity=severity_for_impact(
+                monthly_impact, persistent=active_month_count >= 2, confidence=confidence
+            ),
+            evidence=evidence,
+            behaviour_ids=habit_obs_ids,
+            feature_refs=[f"merchants[{m.merchant_name}]" for m in conv_merchants],
+        )
+    ]
+
+
+def _weekend_spending_leaks(
+    snapshot: FinancialFeatureSnapshot,
+    observations: dict[str, list[BehaviourObservation]],
+) -> list[LeakDetection]:
+    """Emit FI-032 findings when calendar-normalised discretionary weekend spend spikes."""
+    weekend = snapshot.weekend
+    disc_weekend_tx = weekend.discretionary_weekend_transaction_count
+    disc_weekday_tx = weekend.discretionary_weekday_transaction_count
+    disc_weekend_total = weekend.discretionary_weekend_total
+    disc_weekday_total = weekend.discretionary_weekday_total
+    disc_weekend_share = weekend.discretionary_weekend_share
+    disc_weekend_daily = weekend.discretionary_weekend_daily_average
+    disc_weekday_daily = weekend.discretionary_weekday_daily_average
+    weekday_tx_total = (
+        weekend.dated_spending_transaction_count - weekend.weekend_spending_transaction_count
+    )
+    if (
+        weekend.weekend_calendar_days < 4
+        or weekend.weekday_calendar_days < 10
+        or weekday_tx_total < 2
+        or weekend.active_weekend_count < 3
+        or disc_weekend_tx < 6
+        or disc_weekend_total < Decimal("800")
+        or disc_weekend_share is None
+        or disc_weekend_share < Decimal("0.45")
+        or disc_weekend_daily is None
+        or disc_weekend_daily < Decimal("40")
+    ):
+        return []
+    if disc_weekday_daily is not None and disc_weekday_daily > Decimal("0"):
+        if disc_weekend_daily < disc_weekday_daily * Decimal("1.60"):
+            return []
+
+    coverage_start, coverage_end = _coverage_bounds(snapshot)
+    compare = _period_compare(
+        [
+            (month, amount, 0)
+            for month, amount in sorted(weekend.discretionary_weekend_monthly_totals.items())
+        ],
+        coverage_end,
+        coverage_start,
+        minimum_baseline=Decimal("200"),
+    )
+    has_monthly_spike = (
+        compare is not None
+        and isinstance(compare.get("change_amount"), Decimal)
+        and compare["change_amount"] >= Decimal("150")
+        and isinstance(compare.get("change_percentage"), Decimal)
+        and compare["change_percentage"] >= Decimal("20")
+    )
+    has_sustained_high_density = (
+        weekend.active_weekend_count >= 4
+        and disc_weekend_tx >= 8
+        and disc_weekend_share >= Decimal("0.50")
+    )
+    if not (has_monthly_spike or has_sustained_high_density):
+        return []
+
+    excess_daily = max(
+        Decimal("0"),
+        disc_weekend_daily - (disc_weekday_daily or Decimal("0")),
+    )
+    excess_total = excess_daily * Decimal(weekend.weekend_calendar_days)
+    months_count = max(
+        1,
+        len(completed_months(snapshot)) or len(weekend.discretionary_weekend_monthly_totals),
+    )
+    monthly_impact = excess_total / Decimal(months_count)
+    if monthly_impact < MIN_IMPACT:
+        return []
+
+    support = ConfidenceSupport(
+        supporting_transaction_count=disc_weekend_tx + disc_weekday_tx,
+        high_confidence_transaction_count=disc_weekend_tx + disc_weekday_tx,
+        low_confidence_transaction_count=0,
+    )
+    confidence = leak_confidence(
+        support=support,
+        observation_count=disc_weekend_tx,
+        pattern_strength=Decimal("0.72") if has_monthly_spike else Decimal("0.64"),
+        ceiling=Decimal("0.80"),
+    )
+    if confidence is None:
+        return []
+    weekend_obs_ids = _observation_ids(observations.get("weekend_spending_pattern", []))
+    evidence: dict[str, object] = {
+        "finding_focus": "weekend_spending_spike",
+        "weekend_spending_total": weekend.weekend_spending_total,
+        "weekday_spending_total": weekend.weekday_spending_total,
+        "weekend_spending_share": weekend.weekend_spending_share,
+        "weekend_calendar_days": weekend.weekend_calendar_days,
+        "weekday_calendar_days": weekend.weekday_calendar_days,
+        "weekend_daily_average": weekend.weekend_daily_average,
+        "weekday_daily_average": weekend.weekday_daily_average,
+        "discretionary_weekend_total": disc_weekend_total,
+        "discretionary_weekday_total": disc_weekday_total,
+        "discretionary_weekend_share": disc_weekend_share,
+        "discretionary_weekend_daily_average": disc_weekend_daily,
+        "discretionary_weekday_daily_average": disc_weekday_daily,
+        "discretionary_weekend_transaction_count": disc_weekend_tx,
+        "active_weekend_count": weekend.active_weekend_count,
+        "top_weekend_categories": list(weekend.top_weekend_categories),
+        "top_weekend_merchants": list(weekend.top_weekend_merchants),
+        "finding_kind": "spending_pattern",
+    }
+    if compare is not None:
+        evidence.update(
+            {
+                "previous_period": compare["previous_period"],
+                "current_period": compare["current_period"],
+                "previous_amount": compare["previous_amount"],
+                "current_amount": compare["current_amount"],
+                "change_amount": compare["change_amount"],
+                "change_percentage": compare["change_percentage"],
+                "months_compared": compare["months_compared"],
+            }
+        )
+    return [
+        _leak(
+            snapshot=snapshot,
+            leak_type="weekend_spending_leak",
+            subject="weekend-spending-spike",
+            title="Discretionary weekend spending spike",
+            description=(
+                f"Discretionary weekend spending averaged {format_zar(disc_weekend_daily)} per "
+                f"weekend calendar day versus {format_zar(disc_weekday_daily or Decimal('0'))} "
+                f"per weekday across {weekend.active_weekend_count} active weekends "
+                f"({int((disc_weekend_share * Decimal('100')).quantize(Decimal('1')))}% of "
+                "discretionary spend). Fixed bills, debit orders, and essential groceries are "
+                "excluded from this comparison."
+            ),
+            monthly_impact=monthly_impact,
+            annual_impact=monthly_impact * Decimal("12"),
+            impact_kind="recurring" if months_count >= 2 else "estimated",
+            confidence=confidence,
+            severity=severity_for_impact(
+                monthly_impact, persistent=months_count >= 2, confidence=confidence
+            ),
+            evidence=evidence,
+            behaviour_ids=weekend_obs_ids,
+            feature_refs=["weekend"],
+        )
+    ]
+
+
+def _payday_spending_leaks(
+    snapshot: FinancialFeatureSnapshot,
+    observations: dict[str, list[BehaviourObservation]],
+) -> list[LeakDetection]:
+    """Emit FI-033 findings when discretionary spending clusters right after salary credits."""
+    payday = snapshot.payday
+    if (
+        payday.salary_event_count < 2
+        or payday.salary_cycles_with_discretionary_spike < 2
+        or payday.post_salary_discretionary_transaction_count < 4
+        or payday.post_salary_discretionary_total < Decimal("500")
+        or payday.post_salary_discretionary_share is None
+        or payday.post_salary_discretionary_share < Decimal("0.45")
+    ):
+        return []
+    salary_dates = sorted(payday.salary_event_dates)
+    if len(salary_dates) >= 2:
+        intervals = [
+            (later - earlier).days for earlier, later in zip(salary_dates, salary_dates[1:])
+        ]
+        if any(gap < 20 or gap > 40 for gap in intervals):
+            return []
+
+    monthly_impact = payday.post_salary_discretionary_total / Decimal(payday.salary_event_count)
+    if monthly_impact < MIN_IMPACT:
+        return []
+
+    support = ConfidenceSupport(
+        supporting_transaction_count=payday.post_salary_discretionary_transaction_count,
+        high_confidence_transaction_count=payday.post_salary_discretionary_transaction_count,
+        low_confidence_transaction_count=0,
+    )
+    confidence = leak_confidence(
+        support=support,
+        observation_count=payday.post_salary_discretionary_transaction_count,
+        pattern_strength=(
+            Decimal("0.74")
+            if payday.salary_cycles_with_discretionary_spike >= 3
+            else Decimal("0.64")
+        ),
+        ceiling=Decimal("0.82"),
+    )
+    if confidence is None:
+        return []
+    payday_obs_ids = _observation_ids(observations.get("payday_spending_pattern", []))
+    share_pct = int((payday.post_salary_discretionary_share * Decimal("100")).quantize(Decimal("1")))
+    return [
+        _leak(
+            snapshot=snapshot,
+            leak_type="payday_spending_leak",
+            subject="payday-discretionary-spike",
+            title="Post-payday discretionary spending concentration",
+            description=(
+                f"{share_pct}% of observed discretionary spending "
+                f"({format_zar(payday.post_salary_discretionary_total)} across "
+                f"{payday.salary_cycles_with_discretionary_spike} salary cycles) occurred within "
+                f"{payday.window_days} days of receiving salary, excluding rent, debit orders, "
+                "utilities, insurance, and essential grocery obligations."
+            ),
+            monthly_impact=monthly_impact,
+            annual_impact=monthly_impact * Decimal("12"),
+            impact_kind="recurring",
+            confidence=confidence,
+            severity=severity_for_impact(monthly_impact, persistent=True, confidence=confidence),
+            evidence={
+                "finding_focus": "payday_spending_pattern",
+                "window_days": payday.window_days,
+                "salary_event_count": payday.salary_event_count,
+                "salary_event_dates": [d.isoformat() for d in salary_dates],
+                "salary_cycles_with_discretionary_spike": payday.salary_cycles_with_discretionary_spike,
+                "post_salary_spending_total": payday.post_salary_spending_total,
+                "post_salary_discretionary_total": payday.post_salary_discretionary_total,
+                "post_salary_essential_total": payday.post_salary_essential_total,
+                "outside_salary_window_discretionary_total": payday.outside_salary_window_discretionary_total,
+                "post_salary_spending_share": payday.post_salary_spending_share,
+                "post_salary_discretionary_share": payday.post_salary_discretionary_share,
+                "post_salary_discretionary_transaction_count": payday.post_salary_discretionary_transaction_count,
+                "top_post_salary_discretionary_categories": list(
+                    payday.top_post_salary_discretionary_categories
+                ),
+                "top_post_salary_discretionary_merchants": list(
+                    payday.top_post_salary_discretionary_merchants
+                ),
+                "finding_kind": "spending_pattern",
+            },
+            behaviour_ids=payday_obs_ids,
+            feature_refs=["payday", "income.estimated_payday_interval"],
+        )
+    ]
 
 
 def _leak(

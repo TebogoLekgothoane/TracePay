@@ -25,6 +25,8 @@ _LONG_DIGITS = re.compile(r"\d{6,}")
 _SAFE_MERCHANT = re.compile(r"^[A-Za-z][A-Za-z0-9 &'.,-]{0,39}$")
 _LABELS = {
     "duplicate_payment_leak": "Potential duplicate payment",
+    "duplicate_debit_order_leak": "Potential duplicate debit order",
+    "duplicate_streaming_leak": "Overlapping streaming subscriptions",
     "subscription_leak": "Recurring subscription",
     "recurring_payment_leak": "Recurring payment",
     "unknown_recurring_payment": "Recurring payment",
@@ -36,6 +38,10 @@ _LABELS = {
     "airtime_data_leak": "Airtime and data spending",
     "food_spending_leak": "Food spending pattern",
     "transport_spending_leak": "Transport spending pattern",
+    "coffee_spending_leak": "Coffee spending pattern",
+    "convenience_store_leak": "Convenience-store spending",
+    "weekend_spending_leak": "Weekend spending spike",
+    "payday_spending_leak": "Payday spending pattern",
 }
 _NOT_SAVED = "This is not money already saved."
 
@@ -148,6 +154,8 @@ def _title(
     if merchant:
         if leak_type == "duplicate_payment_leak":
             label = f"Possible duplicate payment at {merchant}"
+        elif leak_type == "duplicate_debit_order_leak":
+            label = f"Possible duplicate debit order at {merchant}"
         elif leak_type in {
             "subscription_leak",
             "recurring_payment_leak",
@@ -184,6 +192,12 @@ def _body(
             f"Payments{who} match on merchant, amount, and date. "
             "This match still needs verification; matching details do not prove a "
             "duplicate or a recoverable amount."
+        )
+    elif leak_type == "duplicate_debit_order_leak":
+        who = f" at {merchant}" if merchant else ""
+        lead = (
+            f"Multiple debit-order collections{who} occurred within the same billing "
+            "window. This still needs verification against your mandate and statement."
         )
     elif merchant:
         lead = f"A repeated pattern involving {merchant} showed up in your latest statement."

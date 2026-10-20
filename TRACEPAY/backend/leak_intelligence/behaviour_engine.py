@@ -1029,7 +1029,25 @@ def _income_observations(snapshot: FinancialFeatureSnapshot) -> list[BehaviourOb
 def _duplicate_observations(snapshot: FinancialFeatureSnapshot) -> list[BehaviourObservation]:
     observations = []
     for candidate in snapshot.duplicate_candidates:
+        if candidate.is_debit_order and (
+            candidate.recurring_debit_order_months < 2
+            or candidate.recurring_debit_order_count < 3
+            or candidate.nearby_reversal_or_refund
+        ):
+            continue
         dates = candidate.transaction_dates
+        evidence: dict[str, Any] = {
+            "merchant_key": candidate.merchant_name,
+            "candidate_amount": candidate.amount,
+            "transaction_count_in_group": len(dates),
+            "date_span_days": (max(dates) - min(dates)).days if dates else 0,
+            "candidate_only": True,
+        }
+        if candidate.is_debit_order:
+            evidence["finding_focus"] = "duplicate_debit_order"
+            evidence["is_debit_order"] = True
+            evidence["recurring_debit_order_months"] = candidate.recurring_debit_order_months
+            evidence["recurring_debit_order_count"] = candidate.recurring_debit_order_count
         observations.append(
             _observation(
                 "duplicate_payment_pattern",
@@ -1037,13 +1055,7 @@ def _duplicate_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviou
                 "Multiple similar transactions were grouped as candidates based on amount and timing.",
                 "low",
                 _confidence(None, len(dates), Decimal("0.65")),
-                {
-                    "merchant_key": candidate.merchant_name,
-                    "candidate_amount": candidate.amount,
-                    "transaction_count_in_group": len(dates),
-                    "date_span_days": (max(dates) - min(dates)).days if dates else 0,
-                    "candidate_only": True,
-                },
+                evidence,
                 ["duplicate_candidates"],
                 min(dates) if dates else snapshot.date_start,
                 max(dates) if dates else snapshot.date_end,

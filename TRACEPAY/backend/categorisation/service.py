@@ -20,7 +20,11 @@ from categorisation.normalize import (
     normalize_description,
     normalize_for_matching,
 )
-from categorisation.resolve import ensure_complete_classification, resolve_category_name
+from categorisation.resolve import (
+    ensure_complete_classification,
+    reconcile_with_deterministic_evidence,
+    resolve_category_name,
+)
 from categorisation.source_identity import identify_source, trusted_merchant_for_memory
 
 logger = logging.getLogger("tracepay.categorisation")
@@ -269,6 +273,20 @@ def categorise_batch_with_metrics(
         source_by_id[item.transaction_id] = "fallback"
         fallback_classifications += 1
         _log_classification(item.transaction_id, fallback, "fallback")
+
+    for item in transactions:
+        current = results[item.transaction_id]
+        reconciled = reconcile_with_deterministic_evidence(
+            item.description,
+            item.transaction_type,
+            current,
+        )
+        if reconciled != current:
+            results[item.transaction_id] = ensure_complete_classification(
+                reconciled,
+                catalog,
+                merchant_name=reconciled.merchant_name,
+            )
 
     for transaction_id, result in list(results.items()):
         if result.rule == PURCHASE_REVERSAL_RULE:

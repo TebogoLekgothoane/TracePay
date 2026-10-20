@@ -26,6 +26,7 @@ _RECURRING = frozenset(
         "recurring_payment_leak",
         "unknown_recurring_payment",
         "inactive_recurring_payment_leak",
+        "duplicate_streaming_leak",
     }
 )
 _CATEGORY = frozenset(
@@ -40,6 +41,10 @@ _FEE_OR_SPENDING = frozenset(
         "bank_fee_leak",
         "spending_escalation_leak",
         "cash_usage_leak",
+        "coffee_spending_leak",
+        "convenience_store_leak",
+        "weekend_spending_leak",
+        "payday_spending_leak",
         *_CATEGORY,
     }
 )
@@ -199,7 +204,7 @@ def material_parts(leak: LeakDetection, finding: ReportFinding) -> dict[str, obj
         "impact_band": impact_band(finding.impact.detected_amount),
         "impact_kind": finding.impact.impact_kind,
     }
-    if leak.leak_type == "duplicate_payment_leak":
+    if leak.leak_type in {"duplicate_payment_leak", "duplicate_debit_order_leak"}:
         parts["duplicate_merchant"] = subject_for_leak(leak)
         parts["duplicate_amount"] = _money(evidence.get("candidate_amount"))
         parts["duplicate_observed_date"] = _day(evidence.get("observed_date"))
@@ -240,17 +245,26 @@ def subject_for_leak(leak: LeakDetection) -> str:
         category = leak.evidence.get("category_name") or leak.evidence.get("category")
         if isinstance(category, str) and category.strip():
             return subject_key(category)
-    if leak.leak_type in _RECURRING or leak.leak_type == "duplicate_payment_leak":
+    if leak.leak_type in _RECURRING or leak.leak_type in {
+        "duplicate_payment_leak",
+        "duplicate_debit_order_leak",
+        "coffee_spending_leak",
+        "convenience_store_leak",
+    }:
         merchant = leak.evidence.get("merchant_key")
         if isinstance(merchant, str) and merchant.strip():
             return subject_key(merchant)
+        if leak.leak_type == "duplicate_streaming_leak":
+            subcat = leak.evidence.get("streaming_subcategory")
+            if isinstance(subcat, str) and subcat.strip():
+                return f"streaming-overlap-{subject_key(subcat)}"
         for reference in leak.supporting_feature_references:
             if not isinstance(reference, str):
                 continue
             match = _MERCHANT_REF.search(reference)
             if match:
                 return subject_key(match.group(1))
-    if leak.leak_type == "duplicate_payment_leak":
+    if leak.leak_type in {"duplicate_payment_leak", "duplicate_debit_order_leak"}:
         # Fallback only when no merchant grouping key was available.
         return f"fingerprint-{leak.fingerprint}"
     focus = _focus(leak.evidence.get("finding_focus"))

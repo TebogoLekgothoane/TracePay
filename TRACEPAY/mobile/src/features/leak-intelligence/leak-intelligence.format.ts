@@ -45,6 +45,29 @@ const EVIDENCE_LABELS: Record<string, string> = {
   transaction_id: "Internal transaction reference",
   first_observed_date: "First observed",
   last_observed_date: "Last observed",
+  billing_date_shift_days: "Billing date shift",
+  amount_variance: "Amount variance",
+  recurring_debit_order_count: "Recurring debit-order collections",
+  recurring_debit_order_months: "Recurring debit-order months",
+  active_streaming_service_count: "Active streaming services",
+  combined_monthly_streaming_spend: "Combined monthly streaming spend",
+  overlapping_month_count: "Overlapping billing months",
+  coffee_transaction_count: "Coffee transactions",
+  coffee_total_amount: "Total coffee spend",
+  monthly_coffee_spend: "Average monthly coffee spend",
+  convenience_store_transaction_count: "Convenience-store visits",
+  convenience_store_total_amount: "Total convenience-store spend",
+  monthly_convenience_spend: "Average monthly convenience-store spend",
+  discretionary_weekend_total: "Discretionary weekend spend",
+  discretionary_weekday_total: "Discretionary weekday spend",
+  discretionary_weekend_daily_average: "Discretionary weekend daily average",
+  discretionary_weekday_daily_average: "Discretionary weekday daily average",
+  active_weekend_count: "Active weekends",
+  salary_event_count: "Salary events",
+  salary_cycles_with_discretionary_spike: "Pay cycles with post-payday spike",
+  post_salary_discretionary_total: "Post-payday discretionary spend",
+  post_salary_essential_total: "Post-payday essential obligations",
+  post_salary_discretionary_transaction_count: "Post-payday discretionary transactions",
 };
 
 const CURRENCY_KEYS = new Set([
@@ -60,6 +83,18 @@ const CURRENCY_KEYS = new Set([
   "transaction_amount",
   "category_median_amount",
   "difference_from_baseline",
+  "amount_variance",
+  "combined_monthly_streaming_spend",
+  "coffee_total_amount",
+  "monthly_coffee_spend",
+  "convenience_store_total_amount",
+  "monthly_convenience_spend",
+  "discretionary_weekend_total",
+  "discretionary_weekday_total",
+  "discretionary_weekend_daily_average",
+  "discretionary_weekday_daily_average",
+  "post_salary_discretionary_total",
+  "post_salary_essential_total",
 ]);
 
 const PERCENT_KEYS = new Set([
@@ -176,7 +211,11 @@ function formatEvidenceValue(key: string, value: unknown): string {
     }
     return formatPercentValue(value, key);
   }
-  if (key === "average_interval_days" || key === "date_span_days") {
+  if (
+    key === "average_interval_days" ||
+    key === "date_span_days" ||
+    key === "billing_date_shift_days"
+  ) {
     const numeric = finiteNumber(value);
     return numeric === null ? "Not available" : `${numeric.toFixed(0)} days`;
   }
@@ -257,7 +296,11 @@ export function formatFindingEvidence(
 ): EvidenceRow[] {
   const rows = formatEvidence(evidence);
   const merchant = merchantDisplayName(evidence);
-  if (leakType === "duplicate_payment_leak" || !merchant) {
+  if (
+    leakType === "duplicate_payment_leak" ||
+    leakType === "duplicate_debit_order_leak" ||
+    !merchant
+  ) {
     return rows;
   }
   return [{ label: "Merchant", value: merchant }, ...rows];

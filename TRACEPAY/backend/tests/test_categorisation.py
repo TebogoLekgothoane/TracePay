@@ -109,6 +109,12 @@ def test_unknown_and_amount_independence() -> None:
     assert classify_transaction("WOOLWORTHS", "debit").category_name == classify_transaction("WOOLWORTHS", "credit").category_name
 
 
+def test_chatgpt_pos_purchase_is_subscriptions() -> None:
+    result = classify_transaction("POS PURCHASE CHATGPT", "debit")
+    assert result.category_name == "Subscriptions"
+    assert result.merchant_name == "ChatGPT"
+
+
 def test_data_alone_is_not_airtime() -> None:
     assert classify_transaction("CUSTOMER DATA REPORT").category_name is None
 
@@ -136,7 +142,8 @@ def test_non_spending_transaction_classes(description: str, transaction_class: s
 def test_eft_and_generic_purchase_are_not_deterministic_categories() -> None:
     eft = classify_transaction("EFT for CAPITEC J MAPHOSA", "debit")
     purchase = classify_transaction("Purchase at BUCCANEERS", "debit")
-    assert eft.transaction_class == "unknown"
+    assert eft.transaction_class == "person_to_person"
+    assert eft.category_name == "Transfers"
     assert purchase.transaction_class == "unknown"
 
 
@@ -305,7 +312,12 @@ def test_duplicate_ai_pattern_is_applied_to_every_transaction(monkeypatch: pytes
     monkeypatch.setattr("categorisation.service.classify_batch", fake_classify_batch)
     # Use a description that is no longer deterministic so AI path is exercised.
     transactions = [
-        CategorisableTransaction(str(index), "EFT to T LEKGOTHOANE", Decimal("-50"), "debit")
+        CategorisableTransaction(
+            str(index),
+            "Local payment to T LEKGOTHOANE",
+            Decimal("-50"),
+            "debit",
+        )
         for index in range(3)
     ]
     results = categorise_batch(transactions, LIVE_CATEGORIES)
@@ -825,6 +837,32 @@ def test_interest_received_stays_income() -> None:
     assert result.category_name == "Other Income"
     assert result.transaction_class == "income"
     assert result.rule == "description:interest-received"
+
+
+def test_reconcile_fixes_spending_label_on_transfer_category(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", False)
+
+    def fake_classify_batch(_items: list[object], _category_names: list[str]) -> dict[str, CategorisationResult]:
+        return {}
+
+    monkeypatch.setattr("categorisation.service.classify_batch", fake_classify_batch)
+    run = categorise_batch_with_metrics(
+        [
+            CategorisableTransaction(
+                "0",
+                "Banking App Transfer to Tebogo",
+                Decimal("-5000"),
+                "debit",
+                statement_category="Transfer",
+                bank="Capitec",
+            )
+        ],
+        LIVE_CATEGORIES,
+    )
+    result = run.results["0"]
+    assert result.category_name == "Transfers"
+    assert result.transaction_class == "person_to_person"
+    assert result.merchant_name is None
 
 
 def test_weak_statement_category_does_not_override_deterministic_fee() -> None:

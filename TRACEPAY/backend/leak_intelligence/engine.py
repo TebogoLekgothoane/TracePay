@@ -12,7 +12,14 @@ from datetime import date, timedelta
 from decimal import Decimal
 from statistics import median, pvariance
 
-from .common import ZERO, amount_of, is_purchase_reversal, merchant_group_key, month_key
+from .common import (
+    ZERO,
+    amount_of,
+    is_purchase_reversal,
+    is_purchase_spending_candidate,
+    merchant_group_key,
+    month_key,
+)
 from .import_quality import StatementImportQuality, resolve_coverage_observation_bounds
 from .models import (
     AmountTrend,
@@ -49,6 +56,49 @@ _REFERENCE_TOKEN = re.compile(
     r"\b(?:REF|REFERENCE|AUTH|TRN|TXN)[\s:#-]*([A-Z0-9-]{4,})\b",
     re.IGNORECASE,
 )
+_MANDATE_TOKEN = re.compile(
+    r"\b(?:POL|POLICY|CONTRACT|MANDATE|ACC|ACCOUNT|LOAN|PLAN|MEM|MEMBER)[\s:#-]*([A-Z0-9-]{2,})\b",
+    re.IGNORECASE,
+)
+_DEBIT_ORDER_MARKERS = ("DEBIT ORDER", "NAEDO", "DEBICHECK", "MAGTAPE DEBIT")
+_OBLIGATORY_SPEND_MARKERS = (
+    "DEBIT ORDER",
+    "NAEDO",
+    "DEBICHECK",
+    "MAGTAPE DEBIT",
+    "RENT",
+    "MORTGAGE",
+    "HOME LOAN",
+    "BOND",
+    "MUNICIPAL",
+    "LOAN REPAYMENT",
+    "CREDIT CARD PAYMENT",
+    "SCHOOL FEES",
+    "TUITION",
+)
+_CONVENIENCE_STORE_PHRASES = (
+    "SPAR EXPRESS",
+    "KWIKSPAR",
+    "QUICKSPAR",
+    "FRESHSTOP",
+    "FRESH STOP",
+    "ON THE RUN",
+    "ENGEN QUICKSHOP",
+    "QUICKSHOP",
+    "BP EXPRESS",
+    "SHELL SELECT",
+    "SASOL DELIGHT",
+    "TOTAL BONJOUR",
+    "PNP EXPRESS",
+    "PICK N PAY EXPRESS",
+    "WOOLWORTHS FOODSTOP",
+    "FOODSTOP",
+    "OK EXPRESS",
+    "OK MINIMARK",
+)
+DEBIT_ORDER_DUPLICATE_MAX_SHIFT_DAYS = 5
+DEBIT_ORDER_MAX_AMOUNT_VARIANCE = Decimal("25.00")
+DEBIT_ORDER_MAX_VARIANCE_RATIO = Decimal("0.10")
 CASH_WITHDRAWAL_CATEGORIES = {"Cash Withdrawal", "Cash Withdrawals", "ATM Cash Withdrawal"}
 # These stay in their own income, transfer, savings, and fee totals.
 # They are not purchase spending and do not enter merchant-payment features.
@@ -444,9 +494,58 @@ def _food_delivery_total(transactions: list[FeatureTransaction]) -> Decimal:
     )
 
 
+def _is_debit_order_transaction(transaction: FeatureTransaction) -> bool:
+    description = (transaction.description or "").upper()
+    if any(marker in description for marker in _DEBIT_ORDER_MARKERS):
+        return True
+    return (transaction.categorisation.rule or "").lower() == "debit_order"
+
+
+def _is_obligatory_or_essential_spending(transaction: FeatureTransaction) -> bool:
+    if _is_debit_order_transaction(transaction):
+        return True
+    description = (transaction.description or "").upper()
+    if any(marker in description for marker in _OBLIGATORY_SPEND_MARKERS):
+        return True
+    if (
+        _is_convenience_store_transaction(transaction)
+        or _is_coffee_transaction(transaction)
+        or _is_food_delivery_transaction(transaction)
+        or _is_ride_hailing_transaction(transaction)
+    ):
+        return False
+    category = (transaction.categorisation.category_name or "").strip()
+    return category in ESSENTIAL_SPENDING_CATEGORIES or category == "Subscriptions"
+
+
+def _is_salary_income_transaction(transaction: FeatureTransaction) -> bool:
+    if transaction.categorisation.transaction_class != "income":
+        return False
+    if transaction.transaction_date is None or is_purchase_reversal(transaction):
+        return False
+    if transaction.categorisation.classification_confidence < 0.70:
+        return False
+    if amount_of(transaction) < Decimal("1000"):
+        return False
+    description = (transaction.description or "").upper()
+    if "SALARY ADVANCE" in description:
+        return False
+    category = (transaction.categorisation.category_name or "").strip()
+    rule = (transaction.categorisation.rule or "").strip().lower()
+    return (
+        category == "Salary"
+        or rule == "merchant:salary"
+        or "SALARY" in description
+        or "PAYROLL" in description
+    )
+
+
 def _is_coffee_transaction(transaction: FeatureTransaction) -> bool:
     text = f"{transaction.merchant_name or ''} {transaction.description}".upper().replace("-", " ")
-    return "COFFEE" in text.split()
+    tokens = set(text.split())
+    if tokens & {"COFFEE", "STARBUCKS", "BOOTLEGGER", "BARISTA", "ESPRESSO"}:
+        return True
+    return "VIDA E CAFFE" in text or "VIDA E" in text or "SEATTLE COFFEE" in text
 
 
 def _convenience_store_purchases(transactions: list[FeatureTransaction]) -> list[FeatureTransaction]:
@@ -481,7 +580,9 @@ def _convenience_store_total(transactions: list[FeatureTransaction]) -> Decimal:
 def _is_convenience_store_transaction(transaction: FeatureTransaction) -> bool:
     text = f"{transaction.merchant_name or ''} {transaction.description}".upper()
     compact = text.replace("-", " ").replace("'", "")
-    return "SPAR EXPRESS" in text or "7 ELEVEN" in compact or "SEVEN ELEVEN" in compact
+    if "7 ELEVEN" in compact or "SEVEN ELEVEN" in compact:
+        return True
+    return any(phrase in text for phrase in _CONVENIENCE_STORE_PHRASES)
 
 
 def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantFeature]:
@@ -501,17 +602,20 @@ def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantF
         for item in items:
             if category := item.categorisation.category_name:
                 category_counts[category] += 1
-            if "DEBIT ORDER" in item.description.upper():
+            if _is_debit_order_transaction(item):
                 debit_order_count += 1
             if _is_insurance_transaction(item):
                 insurance_count += 1
         coffee_count = _coffee_transaction_count(items)
+        coffee_total = _coffee_total(items)
         convenience_count = _convenience_store_transaction_count(items)
+        convenience_total = _convenience_store_total(items)
         airtime_count = _airtime_transaction_count(items)
         data_purchases = [item for item in items if _is_data_transaction(item)]
         ride_purchases = [item for item in items if _is_ride_hailing_transaction(item)]
         delivery_purchases = [item for item in items if _is_food_delivery_transaction(item)]
         dated = [item.transaction_date for item in items if item.transaction_date is not None]
+        recurrence_items = _without_duplicate_debit_order_echos(items)
         features.append(
             MerchantFeature(
                 merchant_name=merchant,
@@ -523,7 +627,7 @@ def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantF
                 merchant_amount_variance=_variance(amounts),
                 merchant_first_transaction_date=min(dated) if dated else None,
                 merchant_last_transaction_date=max(dated) if dated else None,
-                merchant_average_interval_days=_average(_intervals(items), minimum=1),
+                merchant_average_interval_days=_average(_intervals(recurrence_items), minimum=1),
                 merchant_transaction_frequency=_frequency(items),
                 merchant_monthly_totals=monthly_totals,
                 merchant_monthly_transaction_count=monthly_counts,
@@ -531,7 +635,9 @@ def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantF
                 debit_order_transaction_count=debit_order_count,
                 insurance_transaction_count=insurance_count,
                 coffee_transaction_count=coffee_count,
+                coffee_total_amount=coffee_total,
                 convenience_store_transaction_count=convenience_count,
+                convenience_store_total_amount=convenience_total,
                 airtime_transaction_count=airtime_count,
                 airtime_only=airtime_count > 0 and len([item for item in items if _is_airtime_transaction(item)]) == len(items),
                 data_transaction_count=_data_transaction_count(items),
@@ -542,7 +648,7 @@ def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantF
                 food_delivery_only=len(delivery_purchases) == len(items) and len(items) > 0,
                 merchant_amount_trend=_amount_trend(items),
                 merchant_frequency_trend=_monthly_frequency_trend(monthly_counts),
-                recurrence=_recurrence(items),
+                recurrence=_recurrence(recurrence_items),
                 confidence_support=_confidence_support(items),
             )
         )
@@ -672,7 +778,25 @@ def _excluded_from_purchase_spending(transaction: FeatureTransaction) -> bool:
     """Return whether a row must stay out of purchase-spending features."""
     if is_purchase_reversal(transaction):
         return True
-    return transaction.categorisation.transaction_class in _NON_PURCHASE_CLASSES
+    transaction_class = transaction.categorisation.transaction_class or "unknown"
+    if transaction_class in _NON_PURCHASE_CLASSES:
+        return True
+    if transaction_class in {"person_to_person", "transfer"}:
+        return True
+    category = (transaction.categorisation.category_name or "").strip()
+    if transaction_class == "spending" and category in {
+        "Transfers",
+        "Savings",
+        "Other Income",
+        "Salary",
+        "Income",
+        "Bank Fees",
+        "Cash Withdrawal",
+        "Cash Withdrawals",
+        "ATM Cash Withdrawal",
+    }:
+        return True
+    return False
 
 
 def _purchase_outflow(transaction: FeatureTransaction) -> bool:
@@ -849,15 +973,106 @@ def _weekend_features(transactions: list[FeatureTransaction]) -> WeekendSpending
     weekend = [item for item in spending if item.transaction_date.weekday() >= 5]
     spending_total = sum((amount_of(item) for item in spending), ZERO)
     weekend_total = sum((amount_of(item) for item in weekend), ZERO)
+    weekday_total = spending_total - weekend_total
+
+    weekend_calendar_days = 0
+    weekday_calendar_days = 0
+    if spending:
+        start_date = min(item.transaction_date for item in spending if item.transaction_date is not None)
+        end_date = max(item.transaction_date for item in spending if item.transaction_date is not None)
+        for offset in range((end_date - start_date).days + 1):
+            current_day = start_date + timedelta(days=offset)
+            if current_day.weekday() >= 5:
+                weekend_calendar_days += 1
+            else:
+                weekday_calendar_days += 1
+
+    weekend_daily_avg = (
+        weekend_total / Decimal(weekend_calendar_days)
+        if weekend_calendar_days > 0
+        else None
+    )
+    weekday_daily_avg = (
+        weekday_total / Decimal(weekday_calendar_days)
+        if weekday_calendar_days > 0
+        else None
+    )
+
+    discretionary = [
+        item
+        for item in spending
+        if not _is_obligatory_or_essential_spending(item)
+        and item.categorisation.classification_confidence >= 0.75
+    ]
+    disc_weekend = [item for item in discretionary if item.transaction_date.weekday() >= 5]
+    disc_weekday = [item for item in discretionary if item.transaction_date.weekday() < 5]
+    disc_weekend_total = sum((amount_of(item) for item in disc_weekend), ZERO)
+    disc_weekday_total = sum((amount_of(item) for item in disc_weekday), ZERO)
+    disc_total = disc_weekend_total + disc_weekday_total
+    disc_weekend_share = (
+        disc_weekend_total / disc_total if disc_total != ZERO else None
+    )
+    disc_weekend_daily_avg = (
+        disc_weekend_total / Decimal(weekend_calendar_days)
+        if weekend_calendar_days > 0
+        else None
+    )
+    disc_weekday_daily_avg = (
+        disc_weekday_total / Decimal(weekday_calendar_days)
+        if weekday_calendar_days > 0
+        else None
+    )
+    active_weekends = {
+        item.transaction_date.isocalendar()[:2]
+        for item in disc_weekend
+        if item.transaction_date is not None
+    }
+    weekend_monthly: defaultdict[str, Decimal] = defaultdict(lambda: ZERO)
+    for item in weekend:
+        if (m_key := month_key(item)) is not None:
+            weekend_monthly[m_key] += amount_of(item)
+    disc_weekend_monthly: defaultdict[str, Decimal] = defaultdict(lambda: ZERO)
+    cat_totals: defaultdict[str, Decimal] = defaultdict(lambda: ZERO)
+    merch_totals: defaultdict[str, Decimal] = defaultdict(lambda: ZERO)
+    for item in disc_weekend:
+        if (m_key := month_key(item)) is not None:
+            disc_weekend_monthly[m_key] += amount_of(item)
+        if cat := (item.categorisation.category_name or "").strip():
+            cat_totals[cat] += amount_of(item)
+        if merch := merchant_group_key(item):
+            merch_totals[merch] += amount_of(item)
+    top_categories = [
+        k for k, _ in sorted(cat_totals.items(), key=lambda pair: (-pair[1], pair[0]))[:3]
+    ]
+    top_merchants = [
+        k for k, _ in sorted(merch_totals.items(), key=lambda pair: (-pair[1], pair[0]))[:3]
+    ]
+
     return WeekendSpendingFeatures(
         dated_spending_transaction_count=len(spending),
         weekend_spending_transaction_count=len(weekend),
         dated_spending_total=spending_total,
         weekend_spending_total=weekend_total,
-        weekday_spending_total=spending_total - weekend_total,
+        weekday_spending_total=weekday_total,
         weekend_spending_share=(
             weekend_total / spending_total if spending_total != ZERO else None
         ),
+        weekend_calendar_days=weekend_calendar_days,
+        weekday_calendar_days=weekday_calendar_days,
+        weekend_daily_average=weekend_daily_avg,
+        weekday_daily_average=weekday_daily_avg,
+        discretionary_weekend_transaction_count=len(disc_weekend),
+        discretionary_weekday_transaction_count=len(disc_weekday),
+        discretionary_weekend_total=disc_weekend_total,
+        discretionary_weekday_total=disc_weekday_total,
+        discretionary_weekend_share=disc_weekend_share,
+        discretionary_weekend_daily_average=disc_weekend_daily_avg,
+        discretionary_weekday_daily_average=disc_weekday_daily_avg,
+        active_weekend_count=len(active_weekends),
+        weekend_monthly_totals=dict(weekend_monthly),
+        discretionary_weekend_monthly_totals=dict(disc_weekend_monthly),
+        top_weekend_categories=top_categories,
+        top_weekend_merchants=top_merchants,
     )
 
 
@@ -905,6 +1120,14 @@ def _payday_spending_features(
             and item.transaction_date is not None
         }
     )
+    salary_dates = sorted(
+        {
+            item.transaction_date
+            for item in transactions
+            if _is_salary_income_transaction(item)
+            and item.transaction_date is not None
+        }
+    )
     spending = _without_same_day_amount_duplicates(
         [
             item
@@ -932,6 +1155,80 @@ def _payday_spending_features(
     ]
     eligible_total = sum((amount_of(item) for item in eligible), ZERO)
     post_income_total = sum((amount_of(item) for item in post_income), ZERO)
+
+    salary_eligible = [
+        item
+        for item in spending
+        if any(salary_date <= item.transaction_date for salary_date in salary_dates)
+    ]
+    post_salary = [
+        item
+        for item in salary_eligible
+        if 0
+        <= min(
+            (item.transaction_date - salary_date).days
+            for salary_date in salary_dates
+            if salary_date <= item.transaction_date
+        )
+        <= window_days
+    ]
+    salary_eligible_total = sum((amount_of(item) for item in salary_eligible), ZERO)
+    post_salary_total = sum((amount_of(item) for item in post_salary), ZERO)
+    post_salary_essential_items = [
+        item for item in post_salary if _is_obligatory_or_essential_spending(item)
+    ]
+    post_salary_discretionary_items = [
+        item
+        for item in post_salary
+        if not _is_obligatory_or_essential_spending(item)
+        and item.categorisation.classification_confidence >= 0.75
+    ]
+    eligible_discretionary_items = [
+        item
+        for item in salary_eligible
+        if not _is_obligatory_or_essential_spending(item)
+        and item.categorisation.classification_confidence >= 0.75
+    ]
+    post_salary_essential_total = sum(
+        (amount_of(item) for item in post_salary_essential_items), ZERO
+    )
+    post_salary_discretionary_total = sum(
+        (amount_of(item) for item in post_salary_discretionary_items), ZERO
+    )
+    eligible_discretionary_total = sum(
+        (amount_of(item) for item in eligible_discretionary_items), ZERO
+    )
+    outside_discretionary_total = max(
+        ZERO, eligible_discretionary_total - post_salary_discretionary_total
+    )
+    post_salary_discretionary_share = (
+        post_salary_discretionary_total / eligible_discretionary_total
+        if eligible_discretionary_total != ZERO
+        else None
+    )
+    cycles_with_disc_spike = 0
+    for salary_date in salary_dates:
+        if any(
+            0 <= (item.transaction_date - salary_date).days <= window_days
+            for item in post_salary_discretionary_items
+            if item.transaction_date is not None
+        ):
+            cycles_with_disc_spike += 1
+
+    cat_totals: defaultdict[str, Decimal] = defaultdict(lambda: ZERO)
+    merch_totals: defaultdict[str, Decimal] = defaultdict(lambda: ZERO)
+    for item in post_salary_discretionary_items:
+        if cat := (item.categorisation.category_name or "").strip():
+            cat_totals[cat] += amount_of(item)
+        if merch := merchant_group_key(item):
+            merch_totals[merch] += amount_of(item)
+    top_categories = [
+        k for k, _ in sorted(cat_totals.items(), key=lambda pair: (-pair[1], pair[0]))[:3]
+    ]
+    top_merchants = [
+        k for k, _ in sorted(merch_totals.items(), key=lambda pair: (-pair[1], pair[0]))[:3]
+    ]
+
     return PaydaySpendingFeatures(
         window_days=window_days,
         eligible_income_event_count=len(income_dates),
@@ -943,6 +1240,22 @@ def _payday_spending_features(
             post_income_total / eligible_total if eligible_total != ZERO else None
         ),
         income_event_dates=list(income_dates),
+        salary_event_count=len(salary_dates),
+        salary_event_dates=list(salary_dates),
+        post_salary_spending_total=post_salary_total,
+        post_salary_discretionary_total=post_salary_discretionary_total,
+        post_salary_essential_total=post_salary_essential_total,
+        post_salary_spending_share=(
+            post_salary_total / salary_eligible_total
+            if salary_eligible_total != ZERO
+            else None
+        ),
+        post_salary_discretionary_transaction_count=len(post_salary_discretionary_items),
+        outside_salary_window_discretionary_total=outside_discretionary_total,
+        post_salary_discretionary_share=post_salary_discretionary_share,
+        salary_cycles_with_discretionary_spike=cycles_with_disc_spike,
+        top_post_salary_discretionary_categories=top_categories,
+        top_post_salary_discretionary_merchants=top_merchants,
     )
 
 
@@ -979,6 +1292,129 @@ def _income_features(transactions: list[FeatureTransaction]) -> IncomeFeatures:
     )
 
 
+def _mandate_tokens(description: str | None) -> set[str]:
+    if not description:
+        return set()
+    tokens = {match.group(1).upper() for match in _MANDATE_TOKEN.finditer(description)}
+    tokens.update(_reference_tokens(description))
+    return tokens
+
+
+def _debit_order_qualifier_words(description: str | None, merchant: str) -> set[str]:
+    if not description:
+        return set()
+    cleaned = re.sub(r"[^A-Z0-9\s]", " ", description.upper())
+    merchant_words = set(re.sub(r"[^A-Z0-9\s]", " ", merchant.upper()).split())
+    ignored = {
+        "DEBIT",
+        "ORDER",
+        "NAEDO",
+        "DEBICHECK",
+        "MAGTAPE",
+        "PAYMENT",
+        "COLLECTION",
+        "MONTHLY",
+        "SUBSCRIPTION",
+        "INSURANCE",
+        "PREMIUM",
+        "REF",
+        "REFERENCE",
+        "AUTH",
+        "TRN",
+        "TXN",
+        "POL",
+        "POLICY",
+        "CONTRACT",
+        "MANDATE",
+        "ACC",
+        "ACCOUNT",
+    } | merchant_words
+    return {
+        word
+        for word in cleaned.split()
+        if word.isalpha() and len(word) >= 3 and word not in ignored
+    }
+
+
+def _has_conflicting_debit_order_mandate(
+    transactions: list[FeatureTransaction], merchant: str
+) -> bool:
+    mandate_sets = [_mandate_tokens(item.description) for item in transactions]
+    non_empty_mandates = [tokens for tokens in mandate_sets if tokens]
+    if len(non_empty_mandates) >= 2 and not set.intersection(*non_empty_mandates):
+        return True
+    qualifier_sets = [
+        _debit_order_qualifier_words(item.description, merchant) for item in transactions
+    ]
+    non_empty_qualifiers = [words for words in qualifier_sets if words]
+    if len(non_empty_qualifiers) >= 2 and len({frozenset(words) for words in non_empty_qualifiers}) > 1:
+        return True
+    return False
+
+
+def _is_overlapping_statement_import_copy(
+    transactions: list[FeatureTransaction],
+) -> bool:
+    if len(transactions) < 2:
+        return False
+    statement_ids = [item.statement_id for item in transactions if item.statement_id]
+    if len(statement_ids) != len(transactions):
+        return False
+    if len(set(statement_ids)) != len(transactions):
+        return False
+    dates = {item.transaction_date for item in transactions}
+    amounts = {amount_of(item) for item in transactions}
+    descriptions = {(item.description or "").strip().upper() for item in transactions}
+    return len(dates) == 1 and len(amounts) == 1 and len(descriptions) <= 1
+
+
+def _debit_order_similar_amount(first: Decimal, second: Decimal) -> bool:
+    diff = abs(first - second)
+    if diff <= AMOUNT_TOLERANCE:
+        return True
+    lower = min(first, second)
+    upper = max(first, second)
+    if lower < Decimal("20"):
+        return False
+    return diff <= min(
+        DEBIT_ORDER_MAX_AMOUNT_VARIANCE,
+        upper * DEBIT_ORDER_MAX_VARIANCE_RATIO,
+    )
+
+
+def _without_duplicate_debit_order_echos(
+    transactions: list[FeatureTransaction],
+) -> list[FeatureTransaction]:
+    """Exclude within-cycle duplicate debit-order echo collections from interval calculation."""
+    debit_items = [
+        item
+        for item in transactions
+        if item.transaction_date is not None and _is_debit_order_transaction(item)
+    ]
+    if len(debit_items) < 3:
+        return transactions
+    merchant = merchant_group_key(debit_items[0]) or ""
+    debit_items.sort(key=lambda item: (item.transaction_date, item.transaction_id))
+    echo_ids: set[str] = set()
+    kept_last: FeatureTransaction | None = None
+    for item in debit_items:
+        if kept_last is None or kept_last.transaction_date is None or item.transaction_date is None:
+            kept_last = item
+            continue
+        days_apart = (item.transaction_date - kept_last.transaction_date).days
+        if (
+            0 <= days_apart <= DEBIT_ORDER_DUPLICATE_MAX_SHIFT_DAYS
+            and _debit_order_similar_amount(amount_of(kept_last), amount_of(item))
+            and not _has_conflicting_debit_order_mandate([kept_last, item], merchant)
+        ):
+            echo_ids.add(item.transaction_id)
+            continue
+        kept_last = item
+    if not echo_ids:
+        return transactions
+    return [item for item in transactions if item.transaction_id not in echo_ids]
+
+
 def _duplicate_candidates(
     transactions: list[FeatureTransaction],
 ) -> list[DuplicateCandidate]:
@@ -992,9 +1428,20 @@ def _duplicate_candidates(
             continue
         if item.transaction_date is not None and (merchant := merchant_group_key(item)) is not None:
             groups[merchant].append(item)
-    candidates = []
+    candidates: list[DuplicateCandidate] = []
     for merchant, items in groups.items():
         items.sort(key=lambda item: (item.transaction_date, item.transaction_id))
+        debit_items = [item for item in items if _is_debit_order_transaction(item)]
+        debit_months = {month_key(item) for item in debit_items if month_key(item) is not None}
+        debit_by_month: defaultdict[str, list[FeatureTransaction]] = defaultdict(list)
+        for d_item in debit_items:
+            if (m_key := month_key(d_item)) is not None:
+                debit_by_month[m_key].append(d_item)
+        months_with_multiple_debits = sum(
+            1 for m_items in debit_by_month.values() if len(m_items) >= 2
+        )
+
+        emitted_tx_ids: set[str] = set()
         current: list[FeatureTransaction] = []
         for item in items:
             if not current:
@@ -1007,10 +1454,68 @@ def _duplicate_candidates(
                 current.append(item)
                 continue
             if len(current) > 1:
-                candidates.append(_candidate(merchant, current, transactions))
+                cand = _maybe_build_candidate(
+                    merchant,
+                    current,
+                    transactions,
+                    debit_items=debit_items,
+                    debit_month_count=len(debit_months),
+                    months_with_multiple_debits=months_with_multiple_debits,
+                )
+                if cand is not None:
+                    candidates.append(cand)
+                    emitted_tx_ids.update(cand.transaction_ids)
             current = [item]
         if len(current) > 1:
-            candidates.append(_candidate(merchant, current, transactions))
+            cand = _maybe_build_candidate(
+                merchant,
+                current,
+                transactions,
+                debit_items=debit_items,
+                debit_month_count=len(debit_months),
+                months_with_multiple_debits=months_with_multiple_debits,
+            )
+            if cand is not None:
+                candidates.append(cand)
+                emitted_tx_ids.update(cand.transaction_ids)
+
+        if (
+            len(debit_months) >= 2
+            and len(debit_items) >= 3
+            and months_with_multiple_debits <= 1
+        ):
+            idx = 0
+            while idx < len(debit_items) - 1:
+                first = debit_items[idx]
+                second = debit_items[idx + 1]
+                if (
+                    first.transaction_id in emitted_tx_ids
+                    or second.transaction_id in emitted_tx_ids
+                    or first.transaction_date is None
+                    or second.transaction_date is None
+                ):
+                    idx += 1
+                    continue
+                shift_days = (second.transaction_date - first.transaction_date).days
+                if (
+                    0 <= shift_days <= DEBIT_ORDER_DUPLICATE_MAX_SHIFT_DAYS
+                    and _debit_order_similar_amount(amount_of(first), amount_of(second))
+                ):
+                    pair_group = [first, second]
+                    cand = _maybe_build_candidate(
+                        merchant,
+                        pair_group,
+                        transactions,
+                        debit_items=debit_items,
+                        debit_month_count=len(debit_months),
+                        months_with_multiple_debits=months_with_multiple_debits,
+                    )
+                    if cand is not None:
+                        candidates.append(cand)
+                        emitted_tx_ids.update(cand.transaction_ids)
+                        idx += 2
+                        continue
+                idx += 1
     return candidates
 
 
@@ -1023,8 +1528,7 @@ def _irregular_candidates(
         for item in transactions
         if item.transaction_date is not None
         and item.transaction_type != "credit"
-        and item.categorisation.transaction_class
-        not in _NON_PURCHASE_CLASSES | {"person_to_person", "transfer"}
+        and is_purchase_spending_candidate(item)
         and _has_reliable_irregular_category(item)
         and amount_of(item) > ZERO
     ]
@@ -1077,6 +1581,18 @@ def _has_reliable_irregular_category(item: FeatureTransaction) -> bool:
     category = (item.categorisation.category_name or "").strip()
     if not category or category.casefold() == "other":
         return False
+    if category in {
+        "Transfers",
+        "Savings",
+        "Other Income",
+        "Salary",
+        "Income",
+        "Bank Fees",
+        "Cash Withdrawal",
+        "Cash Withdrawals",
+        "ATM Cash Withdrawal",
+    }:
+        return False
     if (item.categorisation.rule or "").startswith("fallback"):
         return False
     return item.categorisation.category_confidence >= Decimal("0.70")
@@ -1088,36 +1604,71 @@ def _reference_tokens(description: str | None) -> set[str]:
     return {match.group(1).upper() for match in _REFERENCE_TOKEN.finditer(description)}
 
 
-def _candidate(
+def _maybe_build_candidate(
     merchant: str,
     transactions: list[FeatureTransaction],
     all_transactions: list[FeatureTransaction],
-) -> DuplicateCandidate:
+    *,
+    debit_items: list[FeatureTransaction],
+    debit_month_count: int,
+    months_with_multiple_debits: int,
+) -> DuplicateCandidate | None:
+    if _is_overlapping_statement_import_copy(transactions):
+        return None
+    is_debit_order = all(_is_debit_order_transaction(item) for item in transactions)
+    if is_debit_order:
+        if months_with_multiple_debits >= 2:
+            return None
+        if _has_conflicting_debit_order_mandate(transactions, merchant):
+            return None
     dates = [item.transaction_date for item in transactions if item.transaction_date is not None]
+    amounts = [amount_of(item) for item in transactions]
+    shift_days = (max(dates) - min(dates)).days if dates else 0
+    amount_variance = (max(amounts) - min(amounts)) if amounts else ZERO
     descriptions = {
         (item.description or "").strip().upper()
         for item in transactions
         if (item.description or "").strip()
     }
-    reference_sets = [_reference_tokens(item.description) for item in transactions]
+    reference_sets = [_mandate_tokens(item.description) for item in transactions]
     non_empty_refs = [refs for refs in reference_sets if refs]
     shared_refs = False
     if len(non_empty_refs) >= 2:
         shared_refs = bool(set.intersection(*non_empty_refs))
     observed = dates[0] if dates else None
+    latest_observed = dates[-1] if dates else None
     nearby_reversal = False
-    if observed is not None:
-        group_amount = amount_of(transactions[0])
+    if observed is not None and latest_observed is not None:
         group_ids = {item.transaction_id for item in transactions}
+        max_date_window = 7 if is_debit_order else 0
         for item in all_transactions:
-            if item.transaction_id in group_ids or item.transaction_date != observed:
+            if item.transaction_id in group_ids or item.transaction_date is None:
                 continue
-            if abs(amount_of(item) - group_amount) > AMOUNT_TOLERANCE:
+            if not (
+                observed <= item.transaction_date <= latest_observed + timedelta(days=max_date_window)
+            ):
                 continue
+            if is_debit_order:
+                if not any(_debit_order_similar_amount(amount_of(item), amt) for amt in amounts):
+                    continue
+                item_merchant = merchant_group_key(item)
+                if item_merchant is not None and item_merchant != merchant:
+                    continue
+            else:
+                if abs(amount_of(item) - amounts[0]) > AMOUNT_TOLERANCE:
+                    continue
             if is_purchase_reversal(item) or item.transaction_type == "credit":
                 nearby_reversal = True
                 break
-    match_basis = ["merchant", "amount", "calendar_day"]
+    match_basis = [
+        "merchant",
+        "amount" if amount_variance <= AMOUNT_TOLERANCE else "similar_amount",
+        "calendar_day" if shift_days == 0 else "billing_cycle_window",
+    ]
+    if is_debit_order:
+        match_basis.append("debit_order_channel")
+        if debit_month_count >= 2 and len(debit_items) >= 3:
+            match_basis.append("recurring_history")
     if shared_refs:
         match_basis.append("shared_reference")
     if nearby_reversal:
@@ -1125,10 +1676,11 @@ def _candidate(
     min_time_gap = _min_time_gap_minutes(transactions)
     if min_time_gap is not None and min_time_gap <= 15:
         match_basis.append("close_timestamp")
+    representative_amount = max(amounts) if amounts else ZERO
     return DuplicateCandidate(
-        group_key=f"{merchant}:{dates[0].isoformat()}:{amount_of(transactions[0])}",
+        group_key=f"{merchant}:{dates[0].isoformat()}:{representative_amount}",
         merchant_name=merchant,
-        amount=amount_of(transactions[0]),
+        amount=representative_amount,
         transaction_ids=[item.transaction_id for item in transactions],
         transaction_dates=dates,
         high_confidence_transaction_count=sum(
@@ -1140,6 +1692,11 @@ def _candidate(
         nearby_reversal_or_refund=nearby_reversal,
         min_time_gap_minutes=min_time_gap,
         match_basis=match_basis,
+        is_debit_order=is_debit_order,
+        recurring_debit_order_count=len(debit_items) if is_debit_order else 0,
+        recurring_debit_order_months=debit_month_count if is_debit_order else 0,
+        billing_date_shift_days=shift_days,
+        amount_variance=amount_variance,
     )
 
 

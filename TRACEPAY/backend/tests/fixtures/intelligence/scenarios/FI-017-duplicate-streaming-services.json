@@ -1,0 +1,110 @@
+[
+  {
+    "id": "fi017-netflix-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-05",
+    "description": "POS PURCHASE NETFLIX.COM",
+    "amount": "199.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "NETFLIX",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Subscriptions"
+    }
+  },
+  {
+    "id": "fi017-showmax-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-12",
+    "description": "POS PURCHASE SHOWMAX SUBSCRIPTION",
+    "amount": "99.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SHOWMAX",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Subscriptions"
+    }
+  },
+  {
+    "id": "fi017-netflix-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-05",
+    "description": "POS PURCHASE NETFLIX.COM",
+    "amount": "199.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "NETFLIX",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Subscriptions"
+    }
+  },
+  {
+    "id": "fi017-showmax-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-12",
+    "description": "POS PURCHASE SHOWMAX SUBSCRIPTION",
+    "amount": "99.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SHOWMAX",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Subscriptions"
+    }
+  },
+  {
+    "id": "fi017-netflix-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-05",
+    "description": "POS PURCHASE NETFLIX.COM",
+    "amount": "199.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "NETFLIX",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Subscriptions"
+    }
+  },
+  {
+    "id": "fi017-showmax-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-12",
+    "description": "POS PURCHASE SHOWMAX SUBSCRIPTION",
+    "amount": "99.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SHOWMAX",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Subscriptions"
+    }
+  }
+]

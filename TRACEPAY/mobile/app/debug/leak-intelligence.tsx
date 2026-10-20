@@ -255,7 +255,10 @@ function LeakCard({
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const duplicate =
-    leak.leak_type === "duplicate_payment_leak" ? formatDuplicateFinding(leak) : null;
+    leak.leak_type === "duplicate_payment_leak" ||
+    leak.leak_type === "duplicate_debit_order_leak"
+      ? formatDuplicateFinding(leak)
+      : null;
   const irregular = leak.leak_type === "irregular_transaction_leak";
   const evidence = duplicate
     ? duplicate.rows

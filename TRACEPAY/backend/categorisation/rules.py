@@ -67,6 +67,7 @@ _RECOGNISED_MERCHANT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("CapCut", ("CAPCUT", "CAP CUT", "CAPCUT VIDEO", "GOOGLE CAPCUT")),
     ("Google One", ("GOOGLE ONE",)),
     ("OpenArt", ("OPENART", "OPEN ART", "OPENART AI")),
+    ("ChatGPT", ("CHATGPT", "OPENAI CHATGPT", "OPENAI *CHATGPT")),
     ("Adobe", ("ADOBE", "CREATIVE CLOUD")),
     ("Microsoft", ("MICROSOFT", "OFFICE 365", "M365")),
     ("Discord", ("DISCORD",)),
@@ -264,6 +265,7 @@ RULES: tuple[Rule, ...] = (
             and any(token in description for token in ("MTN", "VODACOM", "CELL C", "TELKOM"))
         ),
     ),
+    Rule("merchant:chatgpt", "Subscriptions", 1.00, contains("CHATGPT", "OPENAI CHATGPT")),
     Rule(
         "merchant:subscriptions",
         "Subscriptions",
@@ -289,6 +291,65 @@ RULES: tuple[Rule, ...] = (
         "Cash Withdrawal",
         0.95,
         contains("CASH WITHDRAWAL", "ATM WITHDRAWAL", "CASH OUT"),
+    ),
+    Rule(
+        "description:banking-app-internal-transfer",
+        "Transfers",
+        0.90,
+        lambda description, kind: (
+            "BANKING APP" in description
+            and "TRANSFER" in description
+            and any(
+                token in description
+                for token in (
+                    "MAIN ACCOUNT",
+                    "PRIMARY ACCOUNT",
+                    "OWN ACCOUNT",
+                    "GOALSAVE",
+                    "LIVE BETTER",
+                    "SAVINGS ACCOUNT",
+                    "TO SAVINGS",
+                    "FROM SAVINGS",
+                )
+            )
+        ),
+        transaction_class="internal_transfer",
+    ),
+    Rule(
+        "description:banking-app-savings-transfer",
+        "Transfers",
+        0.92,
+        lambda description, _kind: (
+            "BANKING APP" in description
+            and "TRANSFER" in description
+            and "SAVINGS" in description
+        ),
+        transaction_class="internal_transfer",
+    ),
+    Rule(
+        "description:banking-app-transfer",
+        "Transfers",
+        0.88,
+        lambda description, _kind: (
+            "BANKING APP" in description
+            and "TRANSFER" in description
+            and "PAYSHAP" not in description
+            and "PAYMENT" not in description
+            and "SAVINGS" not in description
+        ),
+        transaction_class="person_to_person",
+    ),
+    Rule(
+        "description:eft-outgoing",
+        "Transfers",
+        0.88,
+        lambda description, kind: (
+            kind == "debit"
+            and "EFT" in description
+            and "FEE" not in description
+            and "PURCHASE" not in description
+        ),
+        transaction_class="person_to_person",
     ),
     Rule(
         "description:goalsave",

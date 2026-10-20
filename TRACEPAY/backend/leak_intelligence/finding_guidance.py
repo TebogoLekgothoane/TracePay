@@ -51,6 +51,7 @@ _RECURRING = frozenset(
         "recurring_payment_leak",
         "unknown_recurring_payment",
         "inactive_recurring_payment_leak",
+        "duplicate_streaming_leak",
     }
 )
 _SPENDING = frozenset(
@@ -60,10 +61,16 @@ _SPENDING = frozenset(
         "airtime_data_leak",
         "food_spending_leak",
         "transport_spending_leak",
+        "coffee_spending_leak",
+        "convenience_store_leak",
+        "weekend_spending_leak",
+        "payday_spending_leak",
     }
 )
 _LABELS = {
     "duplicate_payment_leak": "Potential duplicate payment",
+    "duplicate_debit_order_leak": "Potential duplicate debit order",
+    "duplicate_streaming_leak": "Overlapping streaming subscriptions",
     "subscription_leak": "Recurring subscription",
     "recurring_payment_leak": "Recurring payment",
     "unknown_recurring_payment": "Recurring payment",
@@ -75,6 +82,10 @@ _LABELS = {
     "airtime_data_leak": "Airtime and data spending",
     "food_spending_leak": "Food spending pattern",
     "transport_spending_leak": "Transport spending pattern",
+    "coffee_spending_leak": "Coffee spending pattern",
+    "convenience_store_leak": "Convenience-store spending",
+    "weekend_spending_leak": "Weekend spending spike",
+    "payday_spending_leak": "Payday spending pattern",
 }
 _STATUS_LABELS = {
     "open": "Open",
@@ -105,6 +116,12 @@ _SPENDING_FOCUS = {
     "subscription_review": "Subscriptions",
     "debit_order_review": "Debit orders",
     "repeated_payments_detected": "Repeated payments",
+    "duplicate_debit_order": "Duplicate debit order",
+    "duplicate_streaming_services": "Streaming subscriptions",
+    "coffee_spending_habit": "Coffee purchases",
+    "convenience_store_spending": "Convenience-store visits",
+    "weekend_spending_spike": "Weekend discretionary spending",
+    "payday_spending_pattern": "Post-payday discretionary spending",
 }
 _ANALYSIS = {
     "supported": (
@@ -289,7 +306,10 @@ def _kind(finding: RegistryRow) -> str:
         or finding.root_cause_type in {"insufficient_evidence", "unknown"}
     ):
         return "insufficient"
-    if finding.leak_type == "duplicate_payment_leak" or finding.root_cause_type == "potential_duplicate":
+    if (
+        finding.leak_type in {"duplicate_payment_leak", "duplicate_debit_order_leak"}
+        or finding.root_cause_type == "potential_duplicate"
+    ):
         return "duplicate"
     if finding.leak_type == "irregular_transaction_leak" or finding.finding_focus == "unusual_transaction":
         return "irregular"

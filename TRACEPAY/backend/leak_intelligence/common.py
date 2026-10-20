@@ -8,6 +8,7 @@ from categorisation.normalize import (
     is_bank_boilerplate_label,
     merchant_key,
 )
+from categorisation.constants import NON_SPENDING_CATEGORY_NAMES
 from categorisation.rules import PURCHASE_REVERSAL_RULE, is_purchase_reversal_description
 from categorisation.source_identity import identify_source
 
@@ -38,6 +39,20 @@ _NON_MERCHANT_SOURCE_TYPES = frozenset(
 def amount_of(transaction: FeatureTransaction) -> Decimal:
     """Return a transaction magnitude without assuming source sign conventions."""
     return abs(Decimal(transaction.amount))
+
+
+def is_purchase_spending_candidate(transaction: FeatureTransaction) -> bool:
+    """True when a row may represent discretionary merchant spending."""
+    if is_purchase_reversal(transaction):
+        return False
+    result = transaction.categorisation
+    transaction_class = result.transaction_class or "unknown"
+    if transaction_class != "spending":
+        return False
+    category = (result.category_name or "").strip()
+    if not category or category in NON_SPENDING_CATEGORY_NAMES:
+        return False
+    return True
 
 
 def is_purchase_reversal(transaction: FeatureTransaction) -> bool:

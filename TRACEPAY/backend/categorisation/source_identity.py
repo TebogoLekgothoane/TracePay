@@ -156,6 +156,22 @@ def identify_source(description: str | None) -> SourceIdentity:
             identification_method="deterministic:catalogue",
         )
 
+    if _looks_like_transfer_mechanism(matching):
+        hint = (
+            "internal_transfer"
+            if _looks_like_internal_transfer(matching)
+            else "person_to_person"
+        )
+        return SourceIdentity(
+            source_type="bank",
+            merchant_name=None,
+            payment_mechanism=mechanism or "Transfer",
+            transaction_type_hint=hint,
+            supporting_text=sanitised[:120] or None,
+            uncertainty="identified",
+            identification_method="deterministic:transfer_mechanism",
+        )
+
     extracted = extract_merchant_name(description)
     remainder = strip_bank_extraction_prefixes(matching)
     stripped_template = remainder != matching
@@ -378,7 +394,29 @@ def _is_mechanism_only_label(value: str | None) -> bool:
 
 def _looks_like_bank(extracted: str) -> bool:
     upper = extracted.upper()
-    return upper in _BANK_TOKENS or any(upper.startswith(item) for item in _BANK_TOKENS)
+    if upper in _BANK_TOKENS:
+        return True
+    for token in _BANK_TOKENS:
+        if not upper.startswith(f"{token} "):
+            continue
+        remainder = upper[len(token) + 1 :].strip()
+        if not remainder:
+            return True
+        if _PERSON_NAME.fullmatch(remainder.title()):
+            return False
+        if len(remainder.split()) <= 3 and remainder.replace(" ", "").isalpha():
+            return False
+        return True
+    return False
+
+
+def _looks_like_transfer_mechanism(matching: str) -> bool:
+    upper = matching.upper()
+    if "BANKING APP" in upper and "TRANSFER" in upper and "PURCHASE" not in upper:
+        return True
+    if upper.startswith("EFT ") or " EFT " in upper:
+        return "FEE" not in upper and "PURCHASE" not in upper
+    return False
 
 
 def _supported_by_description(
