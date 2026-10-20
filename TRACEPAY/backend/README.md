@@ -43,7 +43,7 @@ Transactions → Categorisation → Financial Feature Engine → Behaviour Analy
 → Leak Detection → Financial Reasoning → Financial Recommendations
 ```
 
-AI PDF extraction and AI categorisation are separate flags. Both default to off. When PDF AI is enabled it can receive the statement PDF. Categorisation AI receives sanitized descriptions only. Neither flag chooses a leak.
+AI PDF extraction and AI categorisation are separate flags. Both default to off. When PDF AI is enabled it can receive the statement PDF. Categorisation AI sends only sanitized transaction descriptions, amounts, and types to the configured OpenRouter model, with direct OpenAI and xAI fallback providers. Gemini is not used for categorisation. Neither flag chooses a leak.
 
 | Method | Path | Purpose |
 |---|---|---|

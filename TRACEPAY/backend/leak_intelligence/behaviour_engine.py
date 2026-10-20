@@ -516,7 +516,7 @@ def _subscription_recurring_merchant(feature: MerchantFeature) -> bool:
         and is_reliable_merchant_display_name(feature.merchant_name)
     ):
         return False
-    recurrence = feature.recurrence
+    recurrence = feature.subscription_recurrence or feature.recurrence
     return (
         recurrence.recurrence_strength in {"medium", "high"}
         and recurrence.observation_count >= 3
@@ -562,7 +562,12 @@ def _recurring_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviou
     observations = []
     recurring_count_by_month: dict[str, int] = {}
     for feature in snapshot.merchants:
-        recurrence = feature.recurrence
+        recurrence = (
+            feature.subscription_recurrence
+            if _subscription_category_majority(feature)
+            and feature.subscription_recurrence is not None
+            else feature.recurrence
+        )
         if recurrence.recurrence_strength not in {"medium", "high"}:
             continue
         if not matches_plausible_recurring_interval(recurrence.average_interval_days):

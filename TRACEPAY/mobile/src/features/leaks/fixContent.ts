@@ -201,13 +201,7 @@ const DEBIT_ACTIONS: FixSection[] = [
         Icon: Calendar,
         hasDetailFlow: true,
       },
-      {
-        id: "cancel-debit",
-        title: "Cancel a debit order at your bank",
-        potentialSaving: "R320.75 /month",
-        Icon: CreditCard,
-        hasDetailFlow: true,
-      },
+   
     ],
   },
   {

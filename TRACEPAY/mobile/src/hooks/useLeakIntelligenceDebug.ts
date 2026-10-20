@@ -5,12 +5,15 @@ import {
   fetchLeakDetections,
   LeakIntelligenceApiError,
 } from "../api/leak-intelligence.api";
+import { fetchAnthropicAnalysis } from "../api/anthropic-analysis.api";
+import type { AnthropicAnalysis } from "../api/anthropic-analysis.api";
 import type { LeakDetectionResult } from "../features/leak-intelligence/leak-intelligence.types";
 
 export function useLeakIntelligenceDebug(enabled = true) {
   const [result, setResult] = useState<LeakDetectionResult | null>(null);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
+  const [aiAnalysis, setAiAnalysis] = useState<AnthropicAnalysis | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
 
@@ -24,12 +27,16 @@ export function useLeakIntelligenceDebug(enabled = true) {
     const requestId = ++requestIdRef.current;
     setLoading(true);
 
-    void fetchLeakDetections(controller.signal)
-      .then((next) => {
+    void Promise.all([
+      fetchLeakDetections(controller.signal),
+      fetchAnthropicAnalysis(controller.signal).catch(() => null),
+    ])
+      .then(([next, ai]) => {
         if (requestId !== requestIdRef.current) {
           return;
         }
         setResult(next);
+        setAiAnalysis(ai);
         setError(null);
       })
       .catch((caught: unknown) => {
@@ -70,5 +77,5 @@ export function useLeakIntelligenceDebug(enabled = true) {
     [],
   );
 
-  return { result, loading, error, refresh: load };
+  return { result, aiAnalysis, loading, error, refresh: load };
 }

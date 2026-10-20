@@ -5,6 +5,7 @@ import {
   fetchDetectedSubscriptions,
   SubscriptionsDebugApiError,
 } from "../api/financial-features.api";
+import { fetchAnthropicAnalysis } from "../api/anthropic-analysis.api";
 import type { SubscriptionsDebugResult } from "../features/subscriptions-debug/subscriptions.types";
 
 export function useSubscriptionsDebug(enabled = true) {
@@ -24,12 +25,15 @@ export function useSubscriptionsDebug(enabled = true) {
     const requestId = ++requestIdRef.current;
     setLoading(true);
 
-    void fetchDetectedSubscriptions(controller.signal)
-      .then((next) => {
+    void Promise.all([
+      fetchDetectedSubscriptions(controller.signal),
+      fetchAnthropicAnalysis(controller.signal).catch(() => null),
+    ])
+      .then(([next, aiAnalysis]) => {
         if (requestId !== requestIdRef.current) {
           return;
         }
-        setResult(next);
+        setResult({ ...next, aiAnalysis });
         setError(null);
       })
       .catch((caught: unknown) => {

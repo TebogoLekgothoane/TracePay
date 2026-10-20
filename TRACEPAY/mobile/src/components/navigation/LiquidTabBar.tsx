@@ -7,7 +7,7 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Droplets, Home, List, User } from "lucide-react-native";
+import { Droplets, Home, Lightbulb, User } from "lucide-react-native";
 
 import { useTabBarScroll } from "../../context/TabBarScrollContext";
 import { COLORS } from "../../theme/colors";
@@ -24,7 +24,7 @@ type LiquidTabBarProps = {
 const TAB_ITEMS = [
   { key: "index", label: "Home", Icon: Home },
   { key: "leaks", label: "Leaks", Icon: Droplets },
-  { key: "transactions", label: "Transactions", Icon: List },
+  { key: "budget", label: "Insights", Icon: Lightbulb },
   { key: "settings", label: "Profile", Icon: User },
 ] as const;
 

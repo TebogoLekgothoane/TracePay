@@ -12,11 +12,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AccountsCard } from "../../src/components/dashboard/AccountsCard";
 import { BalanceCard } from "../../src/components/dashboard/BalanceCard";
-import { InsightCard } from "../../src/components/dashboard/InsightCard";
 import {
   LeakSummary,
   type LeakPreview,
 } from "../../src/components/dashboard/LeakSummary";
+import { InsightsForYouSection } from "../../src/components/insights/InsightsForYouSection";
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
 import {
   ADD_ACCOUNT_HREF,
@@ -152,7 +152,7 @@ export default function HomeScreen() {
               void toggleHideBalances();
             }}
             onImportStatement={() => router.push(ADD_ACCOUNT_HREF)}
-            onViewInsights={() => router.push("/(tabs)/budget")}
+            onViewTransactions={() => router.push("/(tabs)/transactions")}
           />
 
           <View className="mb-3 mt-7 flex-row items-center justify-between">
@@ -202,7 +202,7 @@ export default function HomeScreen() {
           </View>
 
           <View className="mt-7">
-            <InsightCard onViewAll={() => router.push("/insights")} />
+            <InsightsForYouSection onViewAll={() => router.push("/insights")} />
           </View>
         </View>
       </TabScrollView>

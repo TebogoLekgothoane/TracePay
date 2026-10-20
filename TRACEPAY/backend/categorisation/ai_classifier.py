@@ -366,6 +366,74 @@ def _openai_response_text(payload: dict) -> str:
     return _chat_response_text(payload, "openai")
 
 
+def _request_openrouter(instructions: str, schema: dict, transactions_count: int) -> dict | None:
+    """Categorise through OpenRouter's OpenAI-compatible chat-completions API."""
+    api_key = settings.openrouter_api_key.strip()
+    if not api_key:
+        logger.info(
+            "[AI] provider=openrouter skipped reason=missing_api_key expected_env=OPENROUTER_API_KEY"
+        )
+        return None
+    model = settings.openrouter_model.strip() or "openai/gpt-4o-mini"
+    request_url = f"{settings.openrouter_base_url.rstrip('/')}/chat/completions"
+    body = json.dumps(
+        {
+            "model": model,
+            "temperature": 0,
+            "messages": [{"role": "user", "content": instructions}],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "transaction_categories",
+                    "schema": schema,
+                    "strict": True,
+                },
+            },
+        }
+    ).encode()
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    if settings.openrouter_http_referer.strip():
+        headers["HTTP-Referer"] = settings.openrouter_http_referer.strip()
+    if settings.openrouter_title.strip():
+        headers["X-Title"] = settings.openrouter_title.strip()
+    request = Request(request_url, data=body, headers=headers, method="POST")
+    logger.info(
+        "[AI] request_started provider=openrouter model=%s candidates=%s",
+        model,
+        transactions_count,
+    )
+    started = time.perf_counter()
+    try:
+        with urlopen(request, timeout=max(1, settings.openrouter_timeout_seconds)) as response:
+            output = json.loads(response.read().decode("utf-8"))
+        logger.info("[AI] request_success provider=openrouter model=%s", model)
+        return output
+    except HTTPError as error:
+        logger.error(
+            "[AI] request_failed provider=openrouter status=%s reason=%s response_body=%s",
+            error.code,
+            error.reason,
+            _safe_http_error_body(error),
+        )
+    except TimeoutError as error:
+        duration_ms = round((time.perf_counter() - started) * 1000, 1)
+        logger.error(
+            "[AI] request_timeout provider=openrouter timeout_seconds=%s error_type=%s duration_ms=%s",
+            settings.openrouter_timeout_seconds,
+            type(error).__name__,
+            duration_ms,
+        )
+    except (URLError, ValueError, json.JSONDecodeError) as error:
+        logger.exception(
+            "[AI] request_failed provider=openrouter error_type=%s",
+            type(error).__name__,
+        )
+    return None
+
+
 def _gemini_model_candidates() -> list[str]:
     primary = settings.gemini_model.strip()
     extras = [
@@ -599,10 +667,10 @@ def classify_batch(
 ) -> dict[str, CategorisationResult]:
     expected_ids = {item.transaction_id for item in transactions}
     descriptions_by_id = {item.transaction_id: item.description for item in transactions}
-    gemini_loaded, openai_loaded, xai_loaded = settings.categorisation_provider_keys()
+    openrouter_loaded, openai_loaded, xai_loaded = settings.categorisation_provider_keys()
     logger.info(
-        "[AI] providers=gemini,openai,xai gemini_key_loaded=%s openai_key_loaded=%s xai_key_loaded=%s category_count=%s candidates=%s",
-        gemini_loaded,
+        "[AI] providers=openrouter,openai,xai openrouter_key_loaded=%s openai_key_loaded=%s xai_key_loaded=%s category_count=%s candidates=%s",
+        openrouter_loaded,
         openai_loaded,
         xai_loaded,
         len(category_names),
@@ -614,9 +682,9 @@ def classify_batch(
     if not category_names:
         logger.warning("[AI] skipped reason=empty_live_category_catalog")
         return {}
-    if not (gemini_loaded or openai_loaded or xai_loaded):
+    if not (openrouter_loaded or openai_loaded or xai_loaded):
         logger.warning(
-            "[AI] skipped reason=missing_api_keys expected_env=GEMINI_API_KEY|OPENAI_API_KEY|XAI_API_KEY"
+            "[AI] skipped reason=missing_api_keys expected_env=OPENROUTER_API_KEY|OPENAI_API_KEY|XAI_API_KEY"
         )
         return {}
 
@@ -624,10 +692,10 @@ def classify_batch(
     instructions = _build_instructions(transactions, allowed)
     schema = _category_schema()
 
-    # Prefer Gemini (Google AI Studio), then OpenAI, then optional Grok (xAI).
+    # Prefer OpenRouter, then direct OpenAI, then optional Grok (xAI).
     providers: list[tuple[str, object]] = []
-    if gemini_loaded:
-        providers.append(("gemini", _request_gemini))
+    if openrouter_loaded:
+        providers.append(("openrouter", _request_openrouter))
     if openai_loaded:
         providers.append(("openai", _request_openai))
     if xai_loaded:
@@ -646,10 +714,7 @@ def classify_batch(
         if output is None:
             continue
         try:
-            if provider_name == "gemini":
-                text = _gemini_response_text(output)
-            else:
-                text = _chat_response_text(output, provider_name)
+            text = _chat_response_text(output, provider_name)
             results, rejected = _validate_results(
                 json.loads(text),
                 set(allowed),

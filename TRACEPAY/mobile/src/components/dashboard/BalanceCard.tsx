@@ -1,5 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { BarChart3, Eye, EyeOff, Upload } from "lucide-react-native";
+import { Eye, EyeOff, List, Upload } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
 
 import { TRACEPAY } from "../../theme/colors";
@@ -11,7 +11,7 @@ type Props = {
   hidden?: boolean;
   onToggleVisibility?: () => void;
   onImportStatement?: () => void;
-  onViewInsights?: () => void;
+  onViewTransactions?: () => void;
 };
 
 function BalanceAmount({ balance, hidden }: { balance: string; hidden: boolean }) {
@@ -46,7 +46,7 @@ export function BalanceCard({
   hidden = false,
   onToggleVisibility,
   onImportStatement,
-  onViewInsights,
+  onViewTransactions,
 }: Props) {
   return (
     <LinearGradient
@@ -97,12 +97,12 @@ export function BalanceCard({
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="View insights"
+          accessibilityLabel="View transactions"
           className="h-12 flex-1 flex-row items-center justify-center gap-2 rounded-full border border-white/20 bg-white/12 active:opacity-80"
-          onPress={onViewInsights}
+          onPress={onViewTransactions}
         >
-          <BarChart3 color="#FFFFFF" size={17} strokeWidth={2.2} />
-          <Text className="text-[14px] font-semibold text-white">Insights</Text>
+          <List color="#FFFFFF" size={17} strokeWidth={2.2} />
+          <Text className="text-[14px] font-semibold text-white">Transactions</Text>
         </Pressable>
       </View>
     </LinearGradient>

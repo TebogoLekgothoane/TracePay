@@ -130,17 +130,52 @@ function stepIndex(stage: StatementImportStage, extractElapsedMs: number): numbe
 
 function progressPercent(stage: StatementImportStage, extractElapsedMs: number): number {
   const current = stepIndex(stage, extractElapsedMs);
+  if (stage === "extracting" && extractElapsedMs >= 40_000) {
+    // The processor returns one response after extraction, categorisation, and
+    // intelligence checks. Keep the indicator alive without pretending that
+    // the client knows the exact backend percentage.
+    const longRunningSteps = Math.floor((extractElapsedMs - 40_000) / 15_000);
+    return Math.min(88, 77 + longRunningSteps);
+  }
   const within =
     stage === "extracting" ? Math.min(extractElapsedMs / 40_000, 0.85) : 0.35;
   return Math.min(96, Math.max(8, Math.round(((current + within) / STEPS.length) * 100)));
 }
 
-function formatRemainingCompact(remainingMs: number): string {
+function formatRemainingCompact(remainingMs: number, elapsedMs: number): string {
+  if (elapsedMs >= 240_000 || remainingMs <= 0) return "Still working";
   const seconds = Math.max(0, Math.ceil(remainingMs / 1000));
   if (seconds <= 15) return "Almost done";
   if (seconds < 60) return `~${seconds}s remaining`;
   const minutes = Math.ceil(seconds / 60);
   return `~${minutes}m remaining`;
+}
+
+function extractingCopy(bankName: string | null, elapsedMs: number) {
+  if (elapsedMs < 40_000) {
+    return {
+      headline: "Extracting transactions",
+      detail: bankName
+        ? `Reading every line on your ${bankName} statement.`
+        : "Reading every line on your statement.",
+    };
+  }
+  if (elapsedMs < 120_000) {
+    return {
+      headline: "Matching your transactions",
+      detail: "The statement is large, so TracePay is sorting merchants and categories.",
+    };
+  }
+  if (elapsedMs < 240_000) {
+    return {
+      headline: "Finishing the analysis",
+      detail: "TracePay is checking recurring charges, fees, and transfers. Your import is still running.",
+    };
+  }
+  return {
+    headline: "Still working on your statement",
+    detail: "This statement is taking longer than usual. Keep this screen open while TracePay finishes safely.",
+  };
 }
 
 function Header({
@@ -300,6 +335,10 @@ export function StatementProcessingScreen({
   const percent = progressPercent(stage, extractElapsedMs);
   const remainingMs = Math.max(estimateExtractionMs(fileSizeBytes) - extractElapsedMs, 0);
   const step = STEPS[current];
+  const copy =
+    stage === "extracting"
+      ? extractingCopy(bankName ?? null, extractElapsedMs)
+      : { headline: step.headline, detail: step.detail(bankName ?? null) };
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
@@ -314,10 +353,10 @@ export function StatementProcessingScreen({
               {percent}%
             </Text>
             <Text className="mt-2 text-[24px] font-bold tracking-[-0.4px] text-foreground">
-              {step.headline}
+              {copy.headline}
             </Text>
             <Text className="mt-2 max-w-[300px] text-center text-[14px] leading-5 text-muted-foreground">
-              {step.detail(bankName ?? null)}
+              {copy.detail}
             </Text>
 
             <View className="mt-4 flex-row items-center justify-center gap-2">
@@ -330,7 +369,7 @@ export function StatementProcessingScreen({
               <View className="flex-row items-center gap-1.5 rounded-full bg-muted px-3 py-1.5">
                 <Hourglass color={palette.mutedForeground} size={13} strokeWidth={2.2} />
                 <Text className="text-[12px] font-medium text-muted-foreground">
-                  {formatRemainingCompact(remainingMs)}
+                  {formatRemainingCompact(remainingMs, extractElapsedMs)}
                 </Text>
               </View>
             </View>

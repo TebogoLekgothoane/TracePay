@@ -84,7 +84,7 @@ def _inactive_recurring_leaks(snapshot: FinancialFeatureSnapshot) -> list[LeakDe
     findings: list[LeakDetection] = []
     for merchant in snapshot.merchants:
         recurrence = merchant.recurrence
-        interval = recurrence.average_interval_days
+        interval = recurrence.median_interval_days or recurrence.average_interval_days
         amount = recurrence.average_amount
         last_date = merchant.merchant_last_transaction_date
         if (
@@ -496,11 +496,30 @@ def _recurring_leaks(
         )
     }
     for merchant in snapshot.merchants:
-        recurrence = merchant.recurrence
-        interval = recurrence.average_interval_days
+        categories = merchant.merchant_category_transaction_count
+        subscription_tx = categories.get("Subscriptions", 0)
+        total_tx = merchant.merchant_transaction_count
+        is_subscription = (
+            subscription_tx >= 2
+            and subscription_tx * 2 >= total_tx
+            and is_reliable_merchant_display_name(merchant.merchant_name)
+        )
+        # Mixed merchant activity must not change the subscription cadence or
+        # amount used for a leak finding.
+        recurrence = (
+            merchant.subscription_recurrence
+            if is_subscription and merchant.subscription_recurrence is not None
+            else merchant.recurrence
+        )
+        interval = recurrence.median_interval_days or recurrence.average_interval_days
         if (
             recurrence.recurrence_strength not in {"medium", "high"}
-            or recurrence.observation_count < 3
+            # Two card/subscription charges can be a low-history candidate.
+            # Two debit orders remain below the stronger debit-order evidence
+            # threshold because a mandate may have been imported only once.
+            or recurrence.observation_count < (
+                2 if is_subscription and merchant.debit_order_transaction_count < 2 else 3
+            )
             or not matches_plausible_recurring_interval(interval)
             or support_ratio(merchant.confidence_support) < Decimal("0.60")
             or merchant.merchant_name in duplicate_merchants
@@ -510,19 +529,11 @@ def _recurring_leaks(
             interval
         ):
             continue
-        impact = _recurring_monthly_impact(merchant)
+        impact = _recurring_monthly_impact(merchant, recurrence=recurrence)
         if impact is None or impact < MIN_IMPACT:
             continue
-        categories = merchant.merchant_category_transaction_count
-        subscription_tx = categories.get("Subscriptions", 0)
-        total_tx = merchant.merchant_transaction_count
         if total_tx > 0 and categories.get("Bank Fees", 0) == total_tx:
             continue
-        is_subscription = (
-            subscription_tx >= 2
-            and subscription_tx * 2 >= total_tx
-            and is_reliable_merchant_display_name(merchant.merchant_name)
-        )
         debit_order_review = (
             not is_subscription
             and merchant.debit_order_transaction_count >= 2
@@ -539,7 +550,7 @@ def _recurring_leaks(
             continue
         is_unknown = not categories or set(categories).issubset({"Other"})
         reliable_merchant = is_reliable_merchant_display_name(merchant.merchant_name)
-        average_amount = recurrence.average_amount
+        average_amount = recurrence.typical_amount or recurrence.average_amount
         weak_commitment = (
             not is_subscription
             and not debit_order_review
@@ -654,7 +665,13 @@ def _recurring_leaks(
                     else None,
                     "observation_count": recurrence.observation_count,
                     "average_interval_days": recurrence.average_interval_days,
+                    "median_interval_days": recurrence.median_interval_days,
                     "average_amount": recurrence.average_amount,
+                    "typical_amount": recurrence.typical_amount,
+                    "latest_amount": recurrence.latest_amount,
+                    "observed_amounts": recurrence.observed_amounts,
+                    "failed_payment_attempt_count": merchant.failed_payment_attempt_count,
+                    "failed_payment_attempt_amounts": merchant.failed_payment_attempt_amounts,
                     "amount_variance": recurrence.amount_variance,
                     "interval_variance": recurrence.interval_variance,
                     "recurrence_strength": recurrence.recurrence_strength,
@@ -1635,7 +1652,13 @@ def _duplicate_streaming_leaks(
             or (snapshot.date_end - merchant.merchant_last_transaction_date).days > 38
         ):
             continue
-        impact = _recurring_monthly_impact(merchant) or merchant.merchant_average_amount
+        impact = (
+            _recurring_monthly_impact(
+                merchant,
+                recurrence=merchant.subscription_recurrence or merchant.recurrence,
+            )
+            or merchant.merchant_average_amount
+        )
         if impact < Decimal("30"):
             continue
         group = by_subcategory.setdefault(subcategory, {})
@@ -1674,7 +1697,11 @@ def _duplicate_streaming_leaks(
             continue
 
         monthly_amounts = [
-            (m.recurrence.average_amount or m.merchant_average_amount) for m in concurrent
+            (
+                (m.subscription_recurrence or m.recurrence).average_amount
+                or m.merchant_average_amount
+            )
+            for m in concurrent
         ]
         combined_monthly = sum(monthly_amounts, Decimal("0"))
         if combined_monthly < MIN_IMPACT:
@@ -2397,9 +2424,14 @@ def _completed_month_average(snapshot: FinancialFeatureSnapshot, selector):
     return sum((selector(month) for month in months), Decimal("0")) / Decimal(len(months))
 
 
-def _recurring_monthly_impact(merchant: MerchantFeature) -> Decimal | None:
-    interval = merchant.recurrence.average_interval_days
-    amount = merchant.recurrence.average_amount
+def _recurring_monthly_impact(
+    merchant: MerchantFeature,
+    *,
+    recurrence=None,
+) -> Decimal | None:
+    recurrence = recurrence or merchant.recurrence
+    interval = recurrence.median_interval_days or recurrence.average_interval_days
+    amount = recurrence.typical_amount or recurrence.average_amount
     if interval in (None, Decimal("0")) or amount is None:
         return None
     return amount * Decimal("30") / interval

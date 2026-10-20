@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     ai_extraction_timeout_seconds: int = 180
     ai_extraction_max_pages: int = 20
     gemini_fallback_models: str = "gemini-3.8-flash,gemini-2.5-flash"
+    openrouter_api_key: str = ""
+    openrouter_model: str = "openai/gpt-4o-mini"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_timeout_seconds: int = 60
+    openrouter_http_referer: str = ""
+    openrouter_title: str = "TracePay"
     tracepay_env: str = "production"
     synthetic_intelligence_debug: bool = False
 
@@ -85,9 +91,9 @@ class Settings(BaseSettings):
         return cleaned
 
     def categorisation_provider_keys(self) -> tuple[bool, bool, bool]:
-        """Return (gemini, openai, xai) key presence for categorisation."""
+        """Return (openrouter, openai, xai) key presence for categorisation."""
         return (
-            bool(self.gemini_api_key.strip()),
+            bool(self.openrouter_api_key.strip()),
             bool(self.openai_api_key.strip()),
             bool(self.xai_api_key.strip()),
         )

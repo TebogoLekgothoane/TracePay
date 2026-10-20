@@ -38,11 +38,17 @@ export function parseFinancialFeaturesSubscriptions(
   }
 
   const merchants = Array.isArray(payload.merchants) ? payload.merchants : [];
-  const subscriptions = merchants
-    .flatMap((merchant) => {
-      const item = subscriptionFromMerchant(merchant);
-      return item ? [item] : [];
-    })
+  const backendSubscriptions = Array.isArray(payload.subscriptions)
+    ? payload.subscriptions
+        .map(subscriptionFromBackendSubscription)
+        .filter((item): item is DetectedSubscription => item !== null)
+    : [];
+  const subscriptions = (Array.isArray(payload.subscriptions)
+    ? backendSubscriptions
+    : merchants.flatMap((merchant) => {
+        const item = subscriptionFromMerchant(merchant);
+        return item ? [item] : [];
+      }))
     .sort(compareSubscriptions);
 
   return {
@@ -51,6 +57,70 @@ export function parseFinancialFeaturesSubscriptions(
     periodEnd: optionalDate(payload.date_end),
     subscriptions,
     monthlyTotal: sumMonthly(subscriptions),
+  };
+}
+
+function subscriptionFromBackendSubscription(
+  value: unknown,
+): DetectedSubscription | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const merchantKey = stringValue(value.merchant_key) ?? stringValue(value.merchant_name);
+  const displayName = stringValue(value.merchant_name);
+  if (!merchantKey || !displayName) {
+    return null;
+  }
+  const amounts = numberArray(value.amount_history);
+  const observations = Array.isArray(value.observations) ? value.observations : [];
+  const dates = observations
+    .map((item) => (isRecord(item) ? optionalDate(item.transaction_date) : null))
+    .filter((item): item is string => item !== null)
+    .sort();
+  const cadence = stringValue(value.cadence);
+  const confidence = stringValue(value.confidence);
+  const cadenceDays = finiteNumber(value.cadence_days);
+  const parsedObservations = observations
+    .filter(isRecord)
+    .map((item) => ({
+      transactionId: stringValue(item.transaction_id) ?? "",
+      date: optionalDate(item.transaction_date),
+      amount: finiteNumber(item.amount) ?? 0,
+      outcome: (stringValue(item.outcome) ?? "successful") as "successful" | "failed" | "fee" | "reversal",
+      feeAmount: finiteNumber(item.fee_amount),
+      referencedAmount: finiteNumber(item.referenced_amount),
+    }));
+  return {
+    merchantKey,
+    productKey: stringValue(value.product_key) ?? merchantKey,
+    displayName,
+    category: "Subscriptions",
+    observationCount: finiteInt(value.successful_transaction_ids instanceof Array
+      ? value.successful_transaction_ids.length
+      : 0) ?? 0,
+    averageAmount: amounts.length > 0 ? amounts.reduce((sum, item) => sum + item, 0) / amounts.length : finiteNumber(value.current_amount),
+    typicalAmount: finiteNumber(value.current_amount),
+    latestAmount: finiteNumber(value.current_amount),
+    observedAmounts: amounts,
+    failedPaymentAttemptCount: value.failed_transaction_ids instanceof Array ? value.failed_transaction_ids.length : 0,
+    failedPaymentAttemptAmounts: [],
+    status: (stringValue(value.status) ?? "active") as DetectedSubscription["status"],
+    currentAmount: finiteNumber(value.current_amount),
+    amountHistory: amounts,
+    expectedDayOfMonth: finiteInt(value.expected_day_of_month),
+    lastSuccessfulCharge: optionalDate(value.last_successful_charge),
+    nextExpectedDate: optionalDate(value.next_expected_date),
+    totalFailureFees: finiteNumber(value.total_failure_fees) ?? 0,
+    observations: parsedObservations,
+    averageIntervalDays: cadenceDays,
+    medianIntervalDays: cadenceDays,
+    recurrenceStrength: confidence === "high" ? "high" : confidence === "medium" ? "medium" : "low",
+    firstObservedDate: dates[0] ?? null,
+    lastObservedDate: dates[dates.length - 1] ?? null,
+    monthlyEstimate: finiteNumber(value.estimated_monthly_cost),
+    debitOrderCount: 0,
+    transactionCount: observations.length,
+    source: "subscription_category",
   };
 }
 
@@ -89,12 +159,18 @@ function subscriptionFromMerchant(value: unknown): DetectedSubscription | null {
   const transactionCount = finiteInt(value.merchant_transaction_count) ?? 0;
   const subscriptionTx = categories.Subscriptions ?? 0;
   const debitOrderCount = finiteInt(value.debit_order_transaction_count) ?? 0;
-  const recurrence = isRecord(value.recurrence) ? value.recurrence : {};
+  const merchantRecurrence = isRecord(value.recurrence) ? value.recurrence : {};
+  const recurrence = isRecord(value.subscription_recurrence)
+    ? value.subscription_recurrence
+    : merchantRecurrence;
   const strength = recurrenceStrength(recurrence.recurrence_strength);
   const observationCount = finiteInt(recurrence.observation_count) ?? 0;
-  const averageAmount = finiteNumber(recurrence.average_amount)
+  const averageAmount = finiteNumber(recurrence.typical_amount)
+    ?? finiteNumber(recurrence.average_amount)
     ?? finiteNumber(value.merchant_average_amount);
-  const averageIntervalDays = finiteNumber(recurrence.average_interval_days);
+  const latestAmount = finiteNumber(recurrence.latest_amount) ?? averageAmount;
+  const averageIntervalDays = finiteNumber(recurrence.median_interval_days)
+    ?? finiteNumber(recurrence.average_interval_days);
   const dominantCategory = dominantCategoryName(categories);
 
   const isSubscriptionCategory =
@@ -142,10 +218,12 @@ function subscriptionFromMerchant(value: unknown): DetectedSubscription | null {
     return null;
   }
 
+  // Aggregator labels can combine several app subscriptions, so only keep a
+  // clearly monthly cadence. This still allows a two-observation monthly
+  // subscription to appear while rejecting frequent Apple/Google charges.
   if (isAppStoreBillingAggregator(merchantKey)) {
     if (
-      observationCount < 3 ||
-      (strength !== "medium" && strength !== "high") ||
+      observationCount < 2 ||
       averageIntervalDays === null ||
       averageIntervalDays < 26 ||
       averageIntervalDays > 35
@@ -154,7 +232,12 @@ function subscriptionFromMerchant(value: unknown): DetectedSubscription | null {
     }
   }
 
-  if (isSubscriptionCategory && strength === "none") {
+  // Two monthly, subscription-categorised observations are enough for this
+  // debug inventory to show a service. The backend leak detector remains
+  // stricter before creating a user-facing finding, but the debug page should
+  // not hide a valid subscription simply because recurrence confidence is not
+  // yet high.
+  if (isSubscriptionCategory && strength === "none" && observationCount < 2) {
     return null;
   }
 
@@ -168,11 +251,18 @@ function subscriptionFromMerchant(value: unknown): DetectedSubscription | null {
 
   return {
     merchantKey,
+    productKey: merchantKey,
     displayName: titleCaseMerchant(merchantKey),
     category: dominantCategory,
     observationCount,
     averageAmount,
+    typicalAmount: finiteNumber(recurrence.typical_amount) ?? averageAmount,
+    latestAmount,
+    observedAmounts: numberArray(recurrence.observed_amounts),
+    failedPaymentAttemptCount: finiteInt(value.failed_payment_attempt_count) ?? 0,
+    failedPaymentAttemptAmounts: numberArray(value.failed_payment_attempt_amounts),
     averageIntervalDays,
+    medianIntervalDays: finiteNumber(recurrence.median_interval_days),
     recurrenceStrength: strength,
     firstObservedDate: optionalDate(value.merchant_first_transaction_date),
     lastObservedDate: optionalDate(value.merchant_last_transaction_date),
@@ -210,18 +300,28 @@ function subscriptionFromLeak(
     : title.replace(/\s+subscription.*$/i, "").trim() || "Unidentified subscription";
 
   const averageAmount =
+    finiteNumber(evidence.typical_amount) ??
     finiteNumber(evidence.average_amount) ??
     finiteNumber(evidence.average_payment) ??
     finiteNumber(evidence.combined_monthly_streaming_spend);
-  const averageIntervalDays = finiteNumber(evidence.average_interval_days);
+  const latestAmount = finiteNumber(evidence.latest_amount) ?? averageAmount;
+  const averageIntervalDays = finiteNumber(evidence.median_interval_days)
+    ?? finiteNumber(evidence.average_interval_days);
 
   return {
     merchantKey: merchantKey || displayName,
+    productKey: merchantKey || displayName,
     displayName,
     category: "Subscriptions",
     observationCount: finiteInt(evidence.observation_count) ?? 0,
     averageAmount,
+    typicalAmount: finiteNumber(evidence.typical_amount) ?? averageAmount,
+    latestAmount,
+    observedAmounts: numberArray(evidence.observed_amounts),
+    failedPaymentAttemptCount: finiteInt(evidence.failed_payment_attempt_count) ?? 0,
+    failedPaymentAttemptAmounts: numberArray(evidence.failed_payment_attempt_amounts),
     averageIntervalDays,
+    medianIntervalDays: finiteNumber(evidence.median_interval_days),
     recurrenceStrength: recurrenceStrength(evidence.recurrence_strength),
     firstObservedDate: optionalDate(evidence.first_observed_date),
     lastObservedDate: optionalDate(evidence.last_observed_date),
@@ -347,6 +447,19 @@ function finiteInt(value: unknown): number | null {
     return null;
   }
   return parsed;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function numberArray(value: unknown): number[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => finiteNumber(item))
+    .filter((item): item is number => item !== null);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

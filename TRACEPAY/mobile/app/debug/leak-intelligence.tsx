@@ -25,6 +25,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { IconButton } from "../../src/components/ui/IconButton";
 import { Button } from "../../src/components/ui/Button";
+import { AnthropicAnalysisCard } from "../../src/components/ui/AnthropicAnalysisCard";
 import { SyntheticSourceNote } from "../../src/features/synthetic-intelligence/SyntheticSourceNote";
 import { scenarioLabel } from "../../src/features/synthetic-intelligence/synthetic-intelligence.parse";
 import {
@@ -134,7 +135,7 @@ function LeakIntelligenceDebugScreen() {
 
           {loading && !result ? <LoadingState /> : null}
           {error ? <ErrorState message={error} onRetry={refresh} /> : null}
-          {result && !loading ? <ResultContent result={result} /> : null}
+          {result && !loading ? <ResultContent result={result} aiAnalysis={live.aiAnalysis} /> : null}
           {result && loading ? (
             <Text className="mt-3 text-center text-[13px] text-muted-foreground">
               Updating analysis…
@@ -184,6 +185,7 @@ function ErrorState({
 
 function ResultContent({
   result,
+  aiAnalysis,
 }: {
   result: {
     transaction_count: number;
@@ -192,6 +194,7 @@ function ResultContent({
     detector_version: string;
     leaks: LeakDetection[];
   };
+  aiAnalysis?: import("../../src/api/anthropic-analysis.api").AnthropicAnalysis | null;
 }) {
   const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
   return (
@@ -204,6 +207,7 @@ function ResultContent({
         Period: {formatPeriod(result.period_start, result.period_end)} · Detector{" "}
         {result.detector_version}
       </Text>
+      <AnthropicAnalysisCard analysis={aiAnalysis ?? null} mode="leaks" />
 
       {result.leaks.length === 0 ? <EmptyState /> : null}
       <View className="mt-5 gap-4">

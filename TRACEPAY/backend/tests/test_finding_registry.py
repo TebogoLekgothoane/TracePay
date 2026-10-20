@@ -570,6 +570,24 @@ def test_migration_enables_owner_only_rls() -> None:
     assert "'resolved'" not in sql
 
 
+def test_forward_migration_allows_every_detector_leak_type() -> None:
+    migration = (
+        Path(__file__).resolve().parents[2]
+        / "supabase"
+        / "migrations"
+        / "202610200001_expand_finding_registry_leak_types.sql"
+    )
+    sql = migration.read_text(encoding="utf-8").lower()
+    for leak_type in (
+        "duplicate_debit_order_leak",
+        "duplicate_streaming_leak",
+        "irregular_transaction_leak",
+        "inactive_recurring_payment_leak",
+        "subscription_leak",
+    ):
+        assert f"'{leak_type}'" in sql
+
+
 def test_existing_report_contract_and_savings_semantics_stay_unchanged() -> None:
     version_one = leak_fingerprint(
         user_id=USER,

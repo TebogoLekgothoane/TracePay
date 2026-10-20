@@ -29,7 +29,7 @@ import { PeriodTabs } from "../../src/components/insights/PeriodTabs";
 import { BrandLogo } from "../../src/components/ui/BrandLogo";
 import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
-import { InfoSheet, SelectionSheet } from "../../src/components/ui/Modal";
+import { InfoSheet, Modal, SelectionSheet } from "../../src/components/ui/Modal";
 import { SimpleBrandLogo } from "../../src/components/ui/SimpleBrandLogo";
 import type { ActionType } from "../../src/features/guidance/finding-guidance.model";
 import { useForYouCards } from "../../src/features/for-you/for-you.preferences";
@@ -54,6 +54,10 @@ import {
   type Period,
 } from "../../src/features/insights/period";
 import {
+  listUpcomingSubscriptions,
+  type UpcomingSubscription,
+} from "../../src/features/leaks/subscriptions.catalog";
+import {
   COLORS,
   type ImpactTone,
   getImpactToneStyles,
@@ -73,6 +77,12 @@ const LEAK_CALC_COPY: Record<string, string> = {
     "We total cash withdrawals and paid balance enquiries, especially at other banks’ ATMs where fees are highest.",
 };
 
+function daysUntilLabel(days: number): string {
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  return `In ${days} days`;
+}
+
 type BreakdownItem = {
   id: string;
   title: string;
@@ -80,6 +90,13 @@ type BreakdownItem = {
   amount: string;
   percent: string;
   Icon: LucideIcon;
+};
+
+type FeeTransaction = {
+  id: string;
+  date: string;
+  description: string;
+  amount: string;
 };
 
 type SubscriptionItem = {
@@ -414,6 +431,62 @@ const BREAKDOWN_FIX_ACTION: Record<string, Record<string, string>> = {
   },
 };
 
+const FEE_TRANSACTIONS: Record<string, FeeTransaction[]> = {
+  monthly: [
+    { id: "account-1", date: "20 May", description: "Monthly account fee", amount: "165.00" },
+  ],
+  service: [
+    { id: "service-1", date: "04 May", description: "Immediate payment fee", amount: "25.00" },
+    { id: "service-2", date: "11 May", description: "Cash deposit fee", amount: "48.40" },
+    { id: "service-3", date: "27 May", description: "Payment service fee", amount: "175.00" },
+  ],
+  atm: [
+    { id: "atm-1", date: "06 May", description: "Other-bank ATM fee", amount: "85.00" },
+    { id: "atm-2", date: "19 May", description: "Other-bank ATM fee", amount: "69.50" },
+  ],
+  sms: [
+    { id: "sms-1", date: "03 May", description: "SMS notification fee", amount: "24.00" },
+    { id: "sms-2", date: "14 May", description: "SMS notification fee", amount: "24.00" },
+    { id: "sms-3", date: "25 May", description: "SMS notification fee", amount: "24.00" },
+  ],
+  other: [
+    { id: "other-1", date: "09 May", description: "Balance enquiry fee", amount: "30.00" },
+    { id: "other-2", date: "22 May", description: "Card replacement fee", amount: "42.60" },
+  ],
+  data: [
+    { id: "data-1", date: "05 May", description: "Mobile data bundle", amount: "99.00" },
+    { id: "data-2", date: "18 May", description: "Mobile data top-up", amount: "75.00" },
+  ],
+  airtime: [
+    { id: "airtime-1", date: "07 May", description: "Airtime top-up", amount: "35.00" },
+    { id: "airtime-2", date: "16 May", description: "Airtime top-up", amount: "32.15" },
+  ],
+  "out-of-bundle": [
+    { id: "oob-1", date: "28 May", description: "Out-of-bundle data charge", amount: "40.00" },
+  ],
+  "other-bank": [
+    { id: "other-atm-1", date: "06 May", description: "Other-bank ATM withdrawal fee", amount: "85.00" },
+  ],
+  retail: [
+    { id: "retail-1", date: "13 May", description: "Retail cash-back fee", amount: "35.00" },
+  ],
+  balance: [
+    { id: "balance-1", date: "22 May", description: "Paid balance enquiry", amount: "30.00" },
+  ],
+  dstv: [
+    { id: "dstv-1", date: "01 May", description: "DSTV Premium debit order", amount: "899.00" },
+    { id: "dstv-2", date: "01 Apr", description: "DSTV Premium debit order", amount: "899.00" },
+  ],
+  gym: [
+    { id: "gym-1", date: "03 May", description: "Gym membership debit order", amount: "450.00" },
+    { id: "gym-2", date: "03 Apr", description: "Gym membership debit order", amount: "450.00" },
+  ],
+  insurance: [
+    { id: "insurance-1", date: "15 May", description: "Insurance premium debit order", amount: "320.75" },
+    { id: "insurance-2", date: "15 Apr", description: "Insurance premium debit order", amount: "320.75" },
+  ],
+};
+
 export default function LeakDetailScreen() {
   const params = useLocalSearchParams<{ id: string; view?: string }>();
   const leakId = Array.isArray(params.id) ? params.id[0] : params.id;
@@ -421,6 +494,13 @@ export default function LeakDetailScreen() {
   const [customRange, setCustomRange] = useState<CustomRange>("Last 14 days");
   const [showCustomSheet, setShowCustomSheet] = useState(false);
   const [showCalc, setShowCalc] = useState(false);
+  const [selectedEvidence, setSelectedEvidence] = useState<{
+    title: string;
+    amount: string;
+    transactions: FeeTransaction[];
+    mitigation: string;
+    route: string | null;
+  } | null>(null);
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === "dark" ? "dark" : "light";
@@ -428,6 +508,7 @@ export default function LeakDetailScreen() {
 
   const detail = leakId ? LEAK_DETAILS[leakId] : undefined;
   const potential = leakId ? getPotentialLeak(leakId) : null;
+  const upcomingSubscriptions = useMemo(() => listUpcomingSubscriptions(), []);
   const fixContent = leakId ? getFixContent(leakId) : null;
   const tone = getImpactToneStyles(scheme, detail?.impact ?? "high");
   const factor = periodFactor(period, customRange);
@@ -578,6 +659,30 @@ export default function LeakDetailScreen() {
     router.push(getFixRoute(leakId, actionId) as never);
   };
 
+  const openTransactionEvidence = (itemId: string, title: string, amount: string) => {
+    const transactions = FEE_TRANSACTIONS[itemId] ?? [];
+    if (transactions.length === 0) {
+      openBreakdownFix(itemId);
+      return;
+    }
+    const actionId = BREAKDOWN_FIX_ACTION[leakId]?.[itemId];
+    const route = actionId
+      ? getFixRoute(leakId, actionId)
+      : leakId === "debit"
+        ? getFixRoute(leakId, `pause-${itemId}`)
+        : null;
+    setSelectedEvidence({
+      title,
+      amount,
+      transactions,
+      mitigation:
+        leakId === "debit"
+          ? "Confirm whether this debit order is still needed, then pause or cancel it with the provider if appropriate."
+          : "Review the entries, then open the relevant guide to reduce or avoid similar charges.",
+      route,
+    });
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <ScrollView
@@ -665,7 +770,9 @@ export default function LeakDetailScreen() {
                 {scaledDetail.breakdown.map((item) => (
                   <Pressable
                     key={item.id}
-                    onPress={() => openBreakdownFix(item.id)}
+                    onPress={() =>
+                      openTransactionEvidence(item.id, item.title, item.amount)
+                    }
                     className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-75"
                   >
                     <View className="h-10 w-10 items-center justify-center">
@@ -722,7 +829,7 @@ export default function LeakDetailScreen() {
                         return;
                       }
                       if (leakId === "debit") {
-                        router.push(getFixRoute(leakId, `pause-${item.id}`) as never);
+                        openTransactionEvidence(item.id, item.name, item.amount);
                       }
                     }}
                     className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-75"
@@ -779,6 +886,12 @@ export default function LeakDetailScreen() {
                   </Pressable>
                 ))}
               </View>
+              {leakId === "subs" ? (
+                <UpcomingSubscriptionsSection
+                  items={upcomingSubscriptions}
+                  palette={palette}
+                />
+              ) : null}
             </>
           ) : null}
 
@@ -815,6 +928,23 @@ export default function LeakDetailScreen() {
         }
         onClose={() => setShowCalc(false)}
       />
+      <Modal
+        visible={selectedEvidence !== null}
+        onClose={() => setSelectedEvidence(null)}
+      >
+        {selectedEvidence ? (
+          <TransactionEvidenceContent
+            evidence={selectedEvidence}
+            factor={factor}
+            onClose={() => setSelectedEvidence(null)}
+            onMitigate={() => {
+              const route = selectedEvidence.route;
+              setSelectedEvidence(null);
+              if (route) router.push(route as never);
+            }}
+          />
+        ) : null}
+      </Modal>
       <SelectionSheet
         visible={showCustomSheet}
         title="Custom range"
@@ -827,5 +957,149 @@ export default function LeakDetailScreen() {
         }))}
       />
     </SafeAreaView>
+  );
+}
+
+function UpcomingSubscriptionsSection({
+  items,
+  palette,
+}: {
+  items: UpcomingSubscription[];
+  palette: typeof COLORS.light | typeof COLORS.dark;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <View className="mt-7">
+      <View className="mb-3 flex-row items-end justify-between">
+        <View>
+          <Text className="text-[17px] font-bold text-foreground">Upcoming charges</Text>
+          <Text className="mt-1 text-[12px] text-muted-foreground">
+            Your next subscription payments
+          </Text>
+        </View>
+        <Calendar color={palette.primary} size={18} strokeWidth={2.2} />
+      </View>
+      <View className="gap-2">
+        {items.map((item) => {
+          const markColor = resolveMarkColor(palette, item.markColor);
+          return (
+            <Pressable
+              key={item.id}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.name}, next charge ${item.nextChargeLabel}`}
+              className="flex-row items-center gap-3 rounded-2xl border border-border/70 bg-card px-4 py-3.5 active:opacity-80"
+              onPress={() => router.push(`/leak/subscription/${item.id}`)}
+            >
+              {item.logoDomain ? (
+                <BrandLogo
+                  name={item.name}
+                  logoDomain={item.logoDomain}
+                  size={38}
+                  fallbackColor={markColor}
+                  shape="squircle"
+                />
+              ) : item.brandId ? (
+                <SimpleBrandLogo
+                  name={item.name}
+                  brandId={item.brandId}
+                  size={38}
+                  fallbackColor={markColor}
+                  shape="squircle"
+                />
+              ) : (
+                <View className="h-[38px] w-[38px] items-center justify-center rounded-xl bg-muted">
+                  <Text className="text-[14px] font-bold" style={{ color: markColor }}>
+                    {item.mark}
+                  </Text>
+                </View>
+              )}
+              <View className="min-w-0 flex-1">
+                <Text className="text-[14px] font-semibold text-foreground" numberOfLines={1}>
+                  {item.name}
+                </Text>
+                <Text className="mt-0.5 text-[12px] text-muted-foreground">
+                  {item.nextChargeLabel} · {daysUntilLabel(item.daysUntil)}
+                </Text>
+              </View>
+              <View className="items-end">
+                <Text className="text-[14px] font-bold text-foreground">{item.amount}</Text>
+                <Text className="mt-0.5 text-[11px] font-semibold text-primary">Upcoming</Text>
+              </View>
+              <ChevronRight color={palette.placeholder} size={16} strokeWidth={2} />
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function TransactionEvidenceContent({
+  evidence,
+  factor,
+  onClose,
+  onMitigate,
+}: {
+  evidence: {
+    title: string;
+    amount: string;
+    transactions: FeeTransaction[];
+    mitigation: string;
+    route: string | null;
+  };
+  factor: number;
+  onClose: () => void;
+  onMitigate: () => void;
+}) {
+  return (
+    <View>
+      <View className="flex-row items-start justify-between gap-3">
+        <View className="min-w-0 flex-1">
+          <Text className="text-[19px] font-bold text-foreground">{evidence.title}</Text>
+          <Text className="mt-1 text-[13px] leading-5 text-muted-foreground">
+            Transactions included in this period
+          </Text>
+        </View>
+        <Text className="text-[16px] font-bold text-foreground">
+          {scaleRandAmount(evidence.amount, factor)}
+        </Text>
+      </View>
+      <View className="mt-4 gap-2">
+        {evidence.transactions.map((transaction) => (
+          <View
+            key={transaction.id}
+            className="flex-row items-center justify-between rounded-2xl border border-border/70 bg-background px-3.5 py-3"
+          >
+            <View className="min-w-0 flex-1 pr-3">
+              <Text className="text-[13px] font-medium text-foreground">
+                {transaction.description}
+              </Text>
+              <Text className="mt-0.5 text-[11px] text-muted-foreground">
+                {transaction.date}
+              </Text>
+            </View>
+            <Text className="text-[13px] font-semibold text-foreground">
+              {scaleRandAmount(transaction.amount, factor)}
+            </Text>
+          </View>
+        ))}
+      </View>
+      <View className="mt-4 rounded-2xl bg-muted px-3.5 py-3">
+        <Text className="text-[12px] font-semibold text-foreground">How to mitigate</Text>
+        <Text className="mt-1 text-[12px] leading-5 text-muted-foreground">
+          {evidence.mitigation}
+        </Text>
+      </View>
+      <View className="mt-4 flex-row gap-2">
+        <Button className="flex-1" size="md" variant="outline" onPress={onClose}>
+          Close
+        </Button>
+        {evidence.route ? (
+          <Button className="flex-1" size="md" onPress={onMitigate}>
+            See ways to mitigate
+          </Button>
+        ) : null}
+      </View>
+    </View>
   );
 }

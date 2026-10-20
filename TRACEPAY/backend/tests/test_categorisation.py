@@ -558,18 +558,18 @@ def test_verified_ai_merchant_can_be_reused_by_memory(monkeypatch: pytest.Monkey
     assert second.merchant_name == "Mystery Mart"
 
 
-def test_gemini_success_returns_validated_results(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "gemini-test-key")
+def test_openrouter_success_returns_validated_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
     monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "")
     monkeypatch.setattr(ai_classifier.settings, "xai_api_key", "")
-    monkeypatch.setattr(ai_classifier, "_request_gemini", lambda *_args: {
-        "candidates": [{"content": {"parts": [{"text": '{"transactions":[{"transaction_id":"0","transaction_class":"spending","classification_confidence":0.91,"category_name":"Groceries","category_confidence":0.88,"reason":"Merchant purchase","merchant_name":"Example"}]}'}]}}],
+    monkeypatch.setattr(ai_classifier, "_request_openrouter", lambda *_args: {
+        "choices": [{"message": {"content": '{"transactions":[{"transaction_id":"0","transaction_class":"spending","classification_confidence":0.91,"category_name":"Groceries","category_confidence":0.88,"reason":"Merchant purchase","merchant_name":"Example"}]}'} }],
     })
     result = ai_classifier.classify_batch(
         [ai_classifier.AiTransaction("0", "Purchase at Example", "-10", "debit")],
         ["Groceries"],
     )["0"]
-    assert result.rule == "ai:gemini"
+    assert result.rule == "ai:openrouter"
     assert result.category_name == "Groceries"
 
 
@@ -677,57 +677,51 @@ def test_openai_timeout_fails_cleanly(monkeypatch: pytest.MonkeyPatch, caplog: p
     assert "timeout_seconds=45" in message
 
 
-def test_gemini_is_preferred_over_openai_and_xai(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "gemini-test-key")
+def test_openrouter_is_preferred_over_openai_and_xai(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
     monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "openai-test-key")
     monkeypatch.setattr(ai_classifier.settings, "xai_api_key", "xai-test-key")
     called: list[str] = []
 
-    def gemini(*_args: object, **_kwargs: object) -> dict:
-        called.append("gemini")
+    def openrouter(*_args: object, **_kwargs: object) -> dict:
+        called.append("openrouter")
         return {
-            "candidates": [{
-                "content": {
-                    "parts": [{
-                        "text": (
-                            '{"transactions":[{"transaction_id":"0","transaction_class":"spending",'
-                            '"classification_confidence":0.9,"category_name":"Groceries",'
-                            '"category_confidence":0.9,"reason":"ok","merchant_name":"Example",'
-                            '"source_type":"merchant","payment_mechanism":"","supporting_text":"",'
-                            '"uncertainty":"identified"}]}'
-                        )
-                    }]
-                }
-            }]
+            "choices": [{"message": {"content": (
+                '{"transactions":[{"transaction_id":"0","transaction_class":"spending",'
+                '"classification_confidence":0.9,"category_name":"Groceries",'
+                '"category_confidence":0.9,"reason":"ok","merchant_name":"Example",'
+                '"source_type":"merchant","payment_mechanism":"","supporting_text":"",'
+                '"uncertainty":"identified"}]}'
+            )}}]
         }
 
     def forbidden(name: str):
         def _inner(*_args: object, **_kwargs: object) -> None:
-            raise AssertionError(f"{name} should not run when Gemini succeeds")
+            raise AssertionError(f"{name} should not run when OpenRouter succeeds")
 
         return _inner
 
-    monkeypatch.setattr(ai_classifier, "_request_gemini", gemini)
+    monkeypatch.setattr(ai_classifier, "_request_openrouter", openrouter)
     monkeypatch.setattr(ai_classifier, "_request_openai", forbidden("openai"))
     monkeypatch.setattr(ai_classifier, "_request_xai", forbidden("xai"))
     result = ai_classifier.classify_batch(
         [ai_classifier.AiTransaction("0", "Purchase at Example", "-10", "debit")],
         ["Groceries"],
     )["0"]
-    assert called == ["gemini"]
-    assert result.rule == "ai:gemini"
+    assert called == ["openrouter"]
+    assert result.rule == "ai:openrouter"
 
 
 def test_google_ai_studio_key_is_not_treated_as_xai() -> None:
     from app.config import Settings
 
     configured = Settings(
-        gemini_api_key="AQ.studio-key",
+        openrouter_api_key="openrouter-key",
         xai_api_key="AQ.should-not-be-xai",
         openai_api_key="",
     )
-    gemini_loaded, openai_loaded, xai_loaded = configured.categorisation_provider_keys()
-    assert gemini_loaded is True
+    openrouter_loaded, openai_loaded, xai_loaded = configured.categorisation_provider_keys()
+    assert openrouter_loaded is True
     assert openai_loaded is False
     assert xai_loaded is False
     assert configured.xai_api_key == ""

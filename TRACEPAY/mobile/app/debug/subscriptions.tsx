@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Button } from "../../src/components/ui/Button";
+import { AnthropicAnalysisCard } from "../../src/components/ui/AnthropicAnalysisCard";
 import { IconButton } from "../../src/components/ui/IconButton";
 import { SimpleBrandLogo } from "../../src/components/ui/SimpleBrandLogo";
 import { resolveBrandIcon } from "../../src/features/brands/simple-brand-icons";
@@ -186,6 +187,7 @@ function ResultContent({
     periodEnd: string | null;
     subscriptions: DetectedSubscription[];
     monthlyTotal: number;
+    aiAnalysis?: import("../../src/api/anthropic-analysis.api").AnthropicAnalysis | null;
   };
 }) {
   return (
@@ -207,12 +209,13 @@ function ResultContent({
         Period: {formatPeriod(result.periodStart, result.periodEnd)} ·{" "}
         {result.transactionCount} transactions analysed
       </Text>
+      <AnthropicAnalysisCard analysis={result.aiAnalysis ?? null} mode="subscriptions" />
 
       {result.subscriptions.length === 0 ? <EmptyState /> : null}
       <View className="mt-5 gap-4">
         {result.subscriptions.map((subscription) => (
           <SubscriptionCard
-            key={`${subscription.merchantKey}:${subscription.source}`}
+            key={`${subscription.productKey ?? subscription.merchantKey}:${subscription.source}`}
             subscription={subscription}
           />
         ))}
@@ -281,14 +284,32 @@ function SubscriptionCard({ subscription }: { subscription: DetectedSubscription
 
       {expanded ? (
         <View className="mt-4 gap-2 border-t border-border/60 pt-4">
+          {subscription.status ? (
+            <DetailRow label="Status" value={subscription.status.replaceAll("_", " ")} />
+          ) : null}
+          {subscription.currentAmount != null ? (
+            <DetailRow label="Latest successful charge" value={formatMoney(subscription.currentAmount)} />
+          ) : null}
+          {subscription.expectedDayOfMonth ? (
+            <DetailRow label="Usual payment day" value={`Around the ${subscription.expectedDayOfMonth}${ordinal(subscription.expectedDayOfMonth)} of the month`} />
+          ) : null}
+          {subscription.lastSuccessfulCharge ? (
+            <DetailRow label="Last successful payment" value={subscription.lastSuccessfulCharge} />
+          ) : null}
+          {subscription.nextExpectedDate ? (
+            <DetailRow label="Next expected" value={subscription.nextExpectedDate} />
+          ) : null}
           <DetailRow
             label="Observations"
             value={String(subscription.observationCount)}
           />
           <DetailRow
-            label="Average amount"
-            value={formatMonthlyEstimate(subscription.averageAmount)}
+            label="Successful amount history"
+            value={(subscription.amountHistory?.length ? subscription.amountHistory : subscription.observedAmounts).map(formatMoney).join(" · ") || "Not available"}
           />
+          {subscription.failedPaymentAttemptCount > 0 ? (
+            <DetailRow label="Failed attempts / fees" value={`${subscription.failedPaymentAttemptCount} · ${formatMoney(subscription.totalFailureFees ?? 0)}`} />
+          ) : null}
           <DetailRow
             label="Observed range"
             value={formatObservedRange(
@@ -298,6 +319,18 @@ function SubscriptionCard({ subscription }: { subscription: DetectedSubscription
           />
           {subscription.category ? (
             <DetailRow label="Category" value={subscription.category} />
+          ) : null}
+          {subscription.observations?.length ? (
+            <View className="mt-2 gap-2">
+              <Text className="text-[13px] font-semibold text-foreground">Payment observations</Text>
+              {subscription.observations.map((observation) => (
+                <DetailRow
+                  key={observation.transactionId}
+                  label={`${observation.date ?? "Date unavailable"} · ${observation.outcome === "failed" ? "Failed attempt" : "Successful"}`}
+                  value={formatMoney(observation.outcome === "failed" ? observation.feeAmount ?? observation.amount : observation.amount)}
+                />
+              ))}
+            </View>
           ) : null}
           {subscription.debitOrderCount > 0 ? (
             <DetailRow
@@ -379,4 +412,13 @@ function MerchantMark({ displayName }: { displayName: string }) {
 
 function formatPeriod(start: string | null, end: string | null): string {
   return start && end ? `${start} to ${end}` : "Not available";
+}
+
+function formatMoney(value: number): string {
+  return new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR" }).format(value);
+}
+
+function ordinal(day: number): string {
+  if (day % 100 >= 11 && day % 100 <= 13) return "th";
+  return ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[day % 10] ?? "th";
 }

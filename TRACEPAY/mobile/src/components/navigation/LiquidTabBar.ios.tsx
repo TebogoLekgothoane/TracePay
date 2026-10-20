@@ -37,9 +37,9 @@ const TAB_ITEMS = [
   { key: "index", label: "Home", systemImage: "house.fill" as const },
   { key: "leaks", label: "Leaks", systemImage: "drop.fill" as const },
   {
-    key: "transactions",
-    label: "Transactions",
-    systemImage: "list.bullet" as const,
+    key: "budget",
+    label: "Insights",
+    systemImage: "lightbulb.fill" as const,
   },
   { key: "settings", label: "Profile", systemImage: "person.fill" as const },
 ] as const;

@@ -86,7 +86,7 @@ test("extracts subscription merchants from financial features", () => {
   assert(result.periodStart === "2026-07-01", "period start");
 });
 
-test("rejects implausible app-store intervals and unknown apple charges", () => {
+test("rejects implausible app-store intervals but keeps a monthly subscription", () => {
   const result = parseFinancialFeaturesSubscriptions({
     transaction_count: 10,
     merchants: [
@@ -118,7 +118,12 @@ test("rejects implausible app-store intervals and unknown apple charges", () => 
       },
     ],
   });
-  assert(result.subscriptions.length === 0, "app store aggregators need monthly cadence");
+  assert(result.subscriptions.length === 1, "monthly app store subscription is retained");
+  assert(result.subscriptions[0]?.displayName === "Apple.com/bill", "monthly merchant");
+  assert(
+    Math.abs((result.subscriptions[0]?.averageAmount ?? 0) - 99) < 0.01,
+    "subscription amount",
+  );
 });
 
 test("detects monthly ChatGPT when categorised and cadence is billing-like", () => {
@@ -148,4 +153,64 @@ test("detects monthly ChatGPT when categorised and cadence is billing-like", () 
     (result.subscriptions[0]?.monthlyEstimate ?? 0) > 150,
     "monthly estimate from cadence",
   );
+});
+
+test("prefers backend per-product subscriptions over merchant aggregates", () => {
+  const result = parseFinancialFeaturesSubscriptions({
+    transaction_count: 6,
+    merchants: [],
+    subscriptions: [
+      {
+        merchant_name: "Apple",
+        merchant_key: "APPLE",
+        product_key: "APPLE:14.99",
+        cadence: "monthly",
+        cadence_days: "30",
+        current_amount: "14.99",
+        amount_history: ["14.99", "14.99"],
+        estimated_monthly_cost: "14.99",
+        confidence: "high",
+        successful_transaction_ids: ["a1", "a2"],
+        failed_transaction_ids: [],
+        observations: [],
+      },
+      {
+        merchant_name: "Apple",
+        merchant_key: "APPLE",
+        product_key: "APPLE:179.99",
+        cadence: "monthly",
+        cadence_days: "30",
+        current_amount: "179.99",
+        amount_history: ["179.99", "179.99"],
+        estimated_monthly_cost: "179.99",
+        confidence: "high",
+        successful_transaction_ids: ["b1", "b2"],
+        failed_transaction_ids: [],
+        observations: [],
+      },
+    ],
+  });
+  assert(result.subscriptions.length === 2, "keeps both Apple products");
+  assert(Math.abs(result.monthlyTotal - 194.98) < 0.01, "uses backend monthly estimates");
+});
+
+test("does not resurrect merchant heuristics when backend subscriptions are empty", () => {
+  const result = parseFinancialFeaturesSubscriptions({
+    transaction_count: 4,
+    merchants: [
+      {
+        merchant_name: "UBER",
+        merchant_transaction_count: 2,
+        merchant_category_transaction_count: { Subscriptions: 2 },
+        recurrence: {
+          observation_count: 2,
+          average_interval_days: "30",
+          average_amount: "99",
+          recurrence_strength: "high",
+        },
+      },
+    ],
+    subscriptions: [],
+  });
+  assert(result.subscriptions.length === 0, "backend empty list is authoritative");
 });

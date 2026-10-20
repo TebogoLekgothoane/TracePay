@@ -192,8 +192,8 @@ def categorise_batch_with_metrics(
     ai_requests = 0
     invalid_ai_results = 0
     ai_enabled = settings.ai_categorisation_enabled
-    gemini_loaded, openai_loaded, xai_loaded = settings.categorisation_provider_keys()
-    has_provider_key = gemini_loaded or openai_loaded or xai_loaded
+    openrouter_loaded, openai_loaded, xai_loaded = settings.categorisation_provider_keys()
+    has_provider_key = openrouter_loaded or openai_loaded or xai_loaded
 
     if not ai_enabled:
         logger.info("[AI] skipped reason=disabled config=AI_CATEGORISATION_ENABLED")

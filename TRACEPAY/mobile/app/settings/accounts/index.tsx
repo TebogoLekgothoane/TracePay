@@ -244,7 +244,7 @@ export default function LinkedAccountsScreen() {
               onPress={() => router.back()}
             >
               <ChevronLeft color={palette.foreground} size={18} strokeWidth={2.4} />
-              <Text className="text-[15px] font-semibold text-foreground">Settings</Text>
+              <Text className="text-[15px] font-semibold text-foreground">Back</Text>
             </Pressable>
             <Text className="flex-1 text-[22px] font-bold text-foreground" numberOfLines={1}>
               My accounts
@@ -283,48 +283,6 @@ export default function LinkedAccountsScreen() {
 
               return (
                 <View key={group.key} className={groupBusy ? "opacity-60" : ""}>
-                  <View className="flex-row items-center gap-3">
-                    <InstitutionLogo
-                      name={group.label}
-                      logoDomain={group.logoDomain}
-                      color={group.color}
-                      shape="rounded"
-                      size={40}
-                    />
-                    <View className="min-w-0 flex-1">
-                      <Text className="text-[17px] font-bold text-foreground">
-                        {group.label}
-                      </Text>
-                      <Text className="mt-0.5 text-[13px] text-muted-foreground">
-                        {formatAccountsCount(group.accounts.length)}
-                      </Text>
-                    </View>
-                    <Pressable
-                      accessibilityLabel={`Remove ${group.label} accounts`}
-                      accessibilityRole="button"
-                      disabled={busy}
-                      hitSlop={10}
-                      className="h-10 w-10 items-center justify-center active:opacity-70"
-                      onPress={() =>
-                        removeAccounts(
-                          group.accounts,
-                          group.accounts.length === 1
-                            ? "Remove account"
-                            : "Remove bank accounts",
-                          group.accounts.length === 1
-                            ? `Remove ${formatAccountCardTitle(group.accounts[0]!)} from TracePay? Its statements, transactions, and uploaded files will also be permanently deleted.`
-                            : `Remove all ${group.accounts.length} ${group.label} accounts from TracePay? Their statements, transactions, and uploaded files will also be permanently deleted.`,
-                        )
-                      }
-                    >
-                      <Trash2 color={palette.destructive} size={20} strokeWidth={2} />
-                    </Pressable>
-                  </View>
-
-                  <Text className="mt-3 text-[13px] leading-5 text-muted-foreground">
-                    Tap an account to rename it or remove its imported data.
-                  </Text>
-
                   <View className="mt-3 gap-2">
                     {group.accounts.map((account) => {
                       const accountStats = stats[account.id];
@@ -343,11 +301,13 @@ export default function LinkedAccountsScreen() {
                             }
                           >
                             <View className="h-10 w-10 items-center justify-center rounded-[12px] bg-muted">
-                              <Wallet
-                                color={palette.foreground}
-                                size={18}
-                                strokeWidth={2}
-                              />
+                            <InstitutionLogo
+                      name={group.label}
+                      logoDomain={group.logoDomain}
+                      color={group.color}
+                      shape="rounded"
+                      size={40}
+                    />
                             </View>
                             <View className="min-w-0 flex-1">
                               <Text

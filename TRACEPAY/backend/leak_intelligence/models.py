@@ -87,8 +87,12 @@ class AmountTrend(BaseModel):
 class RecurrenceFeature(BaseModel):
     observation_count: int = 0
     average_interval_days: Decimal | None = None
+    median_interval_days: Decimal | None = None
     interval_variance: Decimal | None = None
     average_amount: Decimal | None = None
+    typical_amount: Decimal | None = None
+    latest_amount: Decimal | None = None
+    observed_amounts: list[Decimal] = Field(default_factory=list)
     amount_variance: Decimal | None = None
     recurrence_strength: Literal["none", "low", "medium", "high"] = "none"
     baseline_interval_days: Decimal | None = None
@@ -113,6 +117,13 @@ class MerchantFeature(BaseModel):
     merchant_monthly_totals: dict[str, Decimal] = Field(default_factory=dict)
     merchant_monthly_transaction_count: dict[str, int] = Field(default_factory=dict)
     merchant_category_transaction_count: dict[str, int] = Field(default_factory=dict)
+    # Subscription rows are kept separate from other activity at the same
+    # merchant. A merchant can legitimately contain both a recurring service
+    # charge and unrelated purchases, so merchant-wide recurrence is not a
+    # safe proxy for the subscription amount or cadence.
+    subscription_recurrence: RecurrenceFeature | None = None
+    failed_payment_attempt_count: int = 0
+    failed_payment_attempt_amounts: list[Decimal] = Field(default_factory=list)
     debit_order_transaction_count: int = 0
     insurance_transaction_count: int = 0
     coffee_transaction_count: int = 0
@@ -306,6 +317,46 @@ class IrregularCandidate(BaseModel):
     reason: str
 
 
+class SubscriptionObservation(BaseModel):
+    transaction_id: str
+    transaction_date: date | None = None
+    amount: Decimal
+    outcome: Literal["successful", "failed", "fee", "reversal"]
+    fee_amount: Decimal | None = None
+    referenced_amount: Decimal | None = None
+
+
+class SubscriptionGroup(BaseModel):
+    """A deterministic merchant/product subscription candidate.
+
+    This is deliberately separate from MerchantFeature: one merchant can bill
+    multiple products at different prices and can also have unrelated spend.
+    """
+
+    merchant_name: str
+    merchant_key: str
+    product_key: str
+    classification: Literal["fixed", "variable", "one_off"]
+    cadence: Literal["weekly", "fortnightly", "monthly", "quarterly", "annual", "irregular"]
+    status: Literal["active", "late", "failed_recently", "ended"] = "active"
+    cadence_days: Decimal | None = None
+    expected_day_of_month: int | None = None
+    last_successful_charge: date | None = None
+    next_expected_date: date | None = None
+    late_payment_count: int = 0
+    failed_payment_attempt_count: int = 0
+    total_failure_fees: Decimal = Decimal("0")
+    current_amount: Decimal | None = None
+    amount_history: list[Decimal] = Field(default_factory=list)
+    price_history: list[dict[str, object]] = Field(default_factory=list)
+    estimated_monthly_cost: Decimal | None = None
+    confidence: Literal["low", "medium", "high"] = "low"
+    matched_transaction_ids: list[str] = Field(default_factory=list)
+    successful_transaction_ids: list[str] = Field(default_factory=list)
+    failed_transaction_ids: list[str] = Field(default_factory=list)
+    observations: list[SubscriptionObservation] = Field(default_factory=list)
+
+
 class FinancialFeatureSnapshot(BaseModel):
     """A user-scoped collection of financial observations, never leak findings."""
 
@@ -318,6 +369,7 @@ class FinancialFeatureSnapshot(BaseModel):
     coverage_observation_end: date | None = None
     spending_profile: SpendingProfile
     merchants: list[MerchantFeature] = Field(default_factory=list)
+    subscriptions: list[SubscriptionGroup] = Field(default_factory=list)
     categories: list[CategoryFeature] = Field(default_factory=list)
     months: list[MonthlyFeature] = Field(default_factory=list)
     fees: FeeFeatures

@@ -76,6 +76,29 @@ def test_merchant_aggregation_matches_expected_amounts() -> None:
     assert merchant.merchant_average_amount.quantize(Decimal("0.01")) == Decimal("205.67")
 
 
+def test_subscription_recurrence_excludes_unrelated_same_merchant_activity() -> None:
+    snapshot = build_financial_features(
+        "user-a",
+        [
+            _transaction("1", "199", date(2026, 7, 1), merchant="APPLE.COM/BILL"),
+            _transaction("2", "199", date(2026, 8, 1), merchant="APPLE.COM/BILL"),
+            _transaction("3", "199", date(2026, 9, 1), merchant="APPLE.COM/BILL"),
+            _transaction(
+                "4",
+                "899",
+                date(2026, 9, 15),
+                merchant="APPLE.COM/BILL",
+                category="Shopping",
+            ),
+        ],
+    )
+    merchant = snapshot.merchants[0]
+    assert merchant.subscription_recurrence is not None
+    assert merchant.subscription_recurrence.observation_count == 3
+    assert merchant.subscription_recurrence.average_amount == Decimal("199")
+    assert merchant.subscription_recurrence.average_interval_days == Decimal("31")
+
+
 def test_monthly_category_and_fee_aggregation() -> None:
     snapshot = build_financial_features(
         "user-a",

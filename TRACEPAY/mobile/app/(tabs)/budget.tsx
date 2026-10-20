@@ -5,10 +5,8 @@ import {
   ChevronDown,
   ChevronRight,
   Film,
-  Lightbulb,
   Receipt,
   ShoppingBag,
-  SlidersHorizontal,
   TrendingUp,
   UtensilsCrossed,
   Zap,
@@ -21,8 +19,8 @@ import Svg, { Circle, G, Line, Path, Rect } from "react-native-svg";
 
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
 import { PeriodTabs } from "../../src/components/insights/PeriodTabs";
+import { SpendingPatternsSection } from "../../src/components/insights/SpendingPatternsSection";
 import { Button } from "../../src/components/ui/Button";
-import { IconButton } from "../../src/components/ui/IconButton";
 import { SelectionSheet } from "../../src/components/ui/Modal";
 import {
   CUSTOM_RANGES,
@@ -38,7 +36,6 @@ import { COLORS, TRACEPAY, withAlpha } from "../../src/theme/colors";
 
 type MetricMode = "Spending" | "Income";
 type TrendGrain = "By week" | "By month" | "By day";
-type InsightFilter = "All" | "Spending" | "Fees" | "Savings";
 
 const BASE_CATEGORIES = [
   { name: "Transport", amount: "R1,816.74", percent: "31%", colorKey: "primary" as const, Icon: Car },
@@ -55,39 +52,6 @@ const INCOME_CATEGORIES = [
   { name: "Transfers in", amount: "R1,850.00", percent: "5%", colorKey: "blue" as const, Icon: Receipt },
   { name: "Refunds", amount: "R920.00", percent: "3%", colorKey: "accent" as const, Icon: ShoppingBag },
   { name: "Other", amount: "R430.00", percent: "1%", colorKey: "warning" as const, Icon: Film },
-];
-
-const INSIGHT_ITEMS = [
-  {
-    id: "transport",
-    text: "You spent ",
-    highlight: "14% more",
-    rest: " on transport than last month.",
-    link: "View transport insights",
-    Icon: TrendingUp,
-    tone: "primary" as const,
-    filter: "Spending" as const,
-  },
-  {
-    id: "fees",
-    text: "Bank fees are ",
-    highlight: "18% higher",
-    rest: " than your monthly average.",
-    link: "Review bank fees",
-    Icon: Receipt,
-    tone: "accent" as const,
-    filter: "Fees" as const,
-  },
-  {
-    id: "subs",
-    text: "You could save ",
-    highlight: "R430.00",
-    rest: " by reviewing subscriptions.",
-    link: "View subscriptions",
-    Icon: Lightbulb,
-    tone: "warning" as const,
-    filter: "Savings" as const,
-  },
 ];
 
 const WEEKLY_TRENDS = [
@@ -127,7 +91,7 @@ function toneColor(
     blue: string;
     destructive: string;
   },
-  key: (typeof BASE_CATEGORIES)[number]["colorKey"] | (typeof INSIGHT_ITEMS)[number]["tone"],
+  key: (typeof BASE_CATEGORIES)[number]["colorKey"] | "accent" | "warning",
 ) {
   if (key === "primary") return palette.primary;
   if (key === "accent") return palette.accent;
@@ -207,46 +171,6 @@ function DonutChart({
   );
 }
 
-function InsightMiniCard({
-  item,
-  palette,
-}: {
-  item: (typeof INSIGHT_ITEMS)[number];
-  palette: {
-    primary: string;
-    accent: string;
-    warning: string;
-    success: string;
-    blue: string;
-    destructive: string;
-    placeholder: string;
-  };
-}) {
-  const color = toneColor(palette, item.tone);
-
-  return (
-    <View className="mr-3 w-[248px] rounded-3xl border border-border bg-card p-4">
-      <View
-        className="mb-3 h-10 w-10 items-center justify-center rounded-full"
-        style={{ backgroundColor: withAlpha(color, 0.14) }}
-      >
-        <item.Icon color={color} size={18} strokeWidth={2.2} />
-      </View>
-      <Text className="text-[14px] leading-5 text-foreground">
-        {item.text}
-        <Text style={{ color }} className="font-bold">
-          {item.highlight}
-        </Text>
-        {item.rest}
-      </Text>
-      <Pressable className="mt-3 flex-row items-center gap-1 active:opacity-75">
-        <Text className="text-[12px] font-semibold text-primary">{item.link}</Text>
-        <ChevronRight color={palette.primary} size={14} strokeWidth={2.2} />
-      </Pressable>
-    </View>
-  );
-}
-
 function TrendsChart({
   currentColor,
   previousColor,
@@ -319,10 +243,8 @@ export default function InsightsScreen() {
   const [customRange, setCustomRange] = useState<CustomRange>("Last 14 days");
   const [metricMode, setMetricMode] = useState<MetricMode>("Spending");
   const [trendGrain, setTrendGrain] = useState<TrendGrain>("By week");
-  const [insightFilter, setInsightFilter] = useState<InsightFilter>("All");
   const [showMetricSheet, setShowMetricSheet] = useState(false);
   const [showTrendSheet, setShowTrendSheet] = useState(false);
-  const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [showCustomSheet, setShowCustomSheet] = useState(false);
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
@@ -368,21 +290,6 @@ export default function InsightsScreen() {
     }
     return metricMode === "Income" ? "25 May • R28,500.00" : "18 May • R620.00";
   }, [customRange, metricMode, period]);
-
-  const visibleInsights = useMemo(() => {
-    const filtered =
-      insightFilter === "All"
-        ? INSIGHT_ITEMS
-        : INSIGHT_ITEMS.filter((item) => item.filter === insightFilter);
-
-    return filtered.map((item) => {
-      if (!item.highlight.startsWith("R")) return item;
-      return {
-        ...item,
-        highlight: scaleRandAmount(item.highlight, factor),
-      };
-    });
-  }, [factor, insightFilter]);
 
   const trendPoints = useMemo(() => {
     const source =
@@ -443,13 +350,7 @@ export default function InsightsScreen() {
                 Understand your money story
               </Text>
             </View>
-            <IconButton
-              accessibilityLabel="Filter insights"
-              variant="outline"
-              onPress={() => setShowFilterSheet(true)}
-            >
-              <SlidersHorizontal color={palette.primary} size={18} strokeWidth={2} />
-            </IconButton>
+            <View className="h-10 w-10" />
           </View>
 
           <View className="mt-5">
@@ -605,36 +506,7 @@ export default function InsightsScreen() {
             </View>
           </View>
 
-          <View className="mb-3 mt-7 flex-row items-center justify-between">
-            <Text className="text-[17px] font-bold text-foreground">
-              Insights for you
-            </Text>
-            <Button
-              onPress={() => router.push("/insights")}
-              size="sm"
-              variant="ghost"
-              className="px-0"
-            >
-              View all
-            </Button>
-          </View>
-          {visibleInsights.length === 0 ? (
-            <View className="rounded-3xl border border-border bg-card px-4 py-6">
-              <Text className="text-[14px] text-muted-foreground">
-                No insights match this filter.
-              </Text>
-            </View>
-          ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingRight: 8 }}
-            >
-              {visibleInsights.map((item) => (
-                <InsightMiniCard key={item.id} item={item} palette={palette} />
-              ))}
-            </ScrollView>
-          )}
+          <SpendingPatternsSection />
 
           <View className="mb-3 mt-7 flex-row items-center justify-between">
             <Text className="text-[17px] font-bold text-foreground">
@@ -727,19 +599,6 @@ export default function InsightsScreen() {
           { value: "By week", label: "By week" },
           { value: "By month", label: "By month" },
           { value: "By day", label: "By day" },
-        ]}
-      />
-      <SelectionSheet
-        visible={showFilterSheet}
-        title="Filter insights"
-        selected={insightFilter}
-        onSelect={setInsightFilter}
-        onClose={() => setShowFilterSheet(false)}
-        options={[
-          { value: "All", label: "All insights" },
-          { value: "Spending", label: "Spending" },
-          { value: "Fees", label: "Fees" },
-          { value: "Savings", label: "Savings" },
         ]}
       />
       <SelectionSheet

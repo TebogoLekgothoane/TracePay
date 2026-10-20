@@ -38,6 +38,7 @@ from .models import (
     RecurrenceFeature,
     WeekendSpendingFeatures,
 )
+from .subscription_detection import detect_subscriptions
 from .recurrence_rules import (
     matches_plausible_recurring_interval,
     recurrence_strength_cap_for_interval,
@@ -142,6 +143,7 @@ def build_financial_features(
         coverage_observation_end=coverage_end,
         spending_profile=build_spending_profile(active),
         merchants=_merchant_features(active),
+        subscriptions=detect_subscriptions(active),
         categories=_category_features(active),
         months=_monthly_features(active),
         fees=_fee_features(active),
@@ -258,16 +260,29 @@ def _monthly_frequency_trend(monthly_counts: dict[str, int]) -> Decimal | None:
 
 
 def _recurrence(transactions: list[FeatureTransaction]) -> RecurrenceFeature:
-    amounts = [amount_of(item) for item in transactions]
-    intervals = _intervals(transactions)
+    dated_transactions = sorted(
+        (
+            item
+            for item in transactions
+            if item.transaction_date is not None and not is_purchase_reversal(item)
+        ),
+        key=lambda item: item.transaction_date,
+    )
+    amounts = [amount_of(item) for item in dated_transactions]
+    intervals = _intervals(dated_transactions)
+    observed_amounts = sorted(set(amounts))
     feature = RecurrenceFeature(
-        observation_count=len(transactions),
+        observation_count=len(dated_transactions),
         average_interval_days=_average(intervals, minimum=1),
+        median_interval_days=Decimal(str(median(intervals))) if intervals else None,
         interval_variance=_variance(intervals),
         average_amount=_average(amounts),
+        typical_amount=Decimal(str(median(amounts))) if amounts else None,
+        latest_amount=amounts[-1] if amounts else None,
+        observed_amounts=observed_amounts,
         amount_variance=_variance(amounts),
     )
-    if len(transactions) < RECURRENCE_MIN_OBSERVATIONS or len(intervals) < 2:
+    if len(dated_transactions) < 2 or len(intervals) < 1:
         return feature
     shift = _billing_interval_shift(intervals)
     if shift is not None:
@@ -282,6 +297,14 @@ def _recurrence(transactions: list[FeatureTransaction]) -> RecurrenceFeature:
         return feature
     interval_cv = (feature.interval_variance or ZERO).sqrt() / average_interval
     amount_cv = (feature.amount_variance or ZERO).sqrt() / average_amount
+    if len(dated_transactions) == 2:
+        if (
+            matches_plausible_recurring_interval(feature.median_interval_days)
+            and interval_cv <= Decimal("0.35")
+            and amount_cv <= Decimal("0.25")
+        ):
+            feature.recurrence_strength = "medium"
+        return feature
     if average_interval <= Decimal("400") and interval_cv <= INTERVAL_STABILITY_CV and amount_cv <= Decimal("0.10"):
         feature.recurrence_strength = recurrence_strength_cap_for_interval(
             average_interval, "high"
@@ -587,7 +610,12 @@ def _is_convenience_store_transaction(transaction: FeatureTransaction) -> bool:
 
 def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantFeature]:
     groups: defaultdict[str, list[FeatureTransaction]] = defaultdict(list)
+    failed_attempts: defaultdict[str, list[FeatureTransaction]] = defaultdict(list)
     for item in transactions:
+        if _is_failed_purchase_or_fee(item):
+            if (failed_key := merchant_group_key(item)) is not None:
+                failed_attempts[failed_key].append(item)
+            continue
         if _excluded_from_purchase_spending(item):
             continue
         if (key := merchant_group_key(item)) is not None:
@@ -616,6 +644,14 @@ def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantF
         delivery_purchases = [item for item in items if _is_food_delivery_transaction(item)]
         dated = [item.transaction_date for item in items if item.transaction_date is not None]
         recurrence_items = _without_duplicate_debit_order_echos(items)
+        subscription_items = [
+            item
+            for item in items
+            if _is_subscription_payment_candidate(item)
+        ]
+        subscription_recurrence_items = _without_duplicate_debit_order_echos(
+            subscription_items
+        )
         features.append(
             MerchantFeature(
                 merchant_name=merchant,
@@ -632,6 +668,15 @@ def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantF
                 merchant_monthly_totals=monthly_totals,
                 merchant_monthly_transaction_count=monthly_counts,
                 merchant_category_transaction_count=dict(category_counts),
+                subscription_recurrence=(
+                    _recurrence(subscription_recurrence_items)
+                    if subscription_recurrence_items
+                    else None
+                ),
+                failed_payment_attempt_count=len(failed_attempts.get(merchant, [])),
+                failed_payment_attempt_amounts=sorted(
+                    {amount_of(item) for item in failed_attempts.get(merchant, [])}
+                ),
                 debit_order_transaction_count=debit_order_count,
                 insurance_transaction_count=insurance_count,
                 coffee_transaction_count=coffee_count,
@@ -797,6 +842,69 @@ def _excluded_from_purchase_spending(transaction: FeatureTransaction) -> bool:
     }:
         return True
     return False
+
+
+def _is_failed_purchase_or_fee(transaction: FeatureTransaction) -> bool:
+    """Keep failed-payment fees out of subscription recurrence evidence.
+
+    A statement can contain a bank fee for an unsuccessful purchase whose
+    description also names the attempted merchant. That row is a real debit,
+    but it is not a subscription charge for the named merchant.
+    """
+    description = (transaction.description or "").upper()
+    rule = (transaction.categorisation.rule or "").lower()
+    return (
+        rule == "description:service-fee"
+        or "INSUFFICIENT FUNDS" in description
+        or "UNSUCCESSFUL" in description
+        or "FAILED PURCHASE" in description
+        or "FAILED PAYMENT" in description
+        or " FEE" in description
+    )
+
+
+def _is_subscription_payment_candidate(transaction: FeatureTransaction) -> bool:
+    """Return true only for successful merchant debits eligible for recurrence."""
+    if is_purchase_reversal(transaction):
+        return False
+    if transaction.transaction_type not in {"debit", None}:
+        return False
+    if (transaction.categorisation.transaction_class or "unknown") != "spending":
+        return False
+    if _is_failed_purchase_or_fee(transaction):
+        return False
+    if _is_airtime_transaction(transaction) or _is_data_transaction(transaction):
+        return False
+    if (
+        _is_ride_hailing_transaction(transaction)
+        or _is_food_delivery_transaction(transaction)
+    ):
+        return False
+    category = (transaction.categorisation.category_name or "").strip()
+    if category != "Subscriptions":
+        return False
+    if category in {
+        "Airtime & Data",
+        "Transfers",
+        "Savings",
+        "Bank Fees",
+        "Cash Withdrawal",
+        "Cash Withdrawals",
+        "ATM Cash Withdrawal",
+    }:
+        return False
+    description = (transaction.description or "").upper()
+    own_account_markers = (
+        "OWN ACCOUNT",
+        "MAIN ACCOUNT",
+        "PRIMARY ACCOUNT",
+        "TO SAVINGS",
+        "FROM SAVINGS",
+        "INTERNAL TRANSFER",
+        "GOALSAVE",
+        "GOAL SAVE",
+    )
+    return not any(marker in description for marker in own_account_markers)
 
 
 def _purchase_outflow(transaction: FeatureTransaction) -> bool:
