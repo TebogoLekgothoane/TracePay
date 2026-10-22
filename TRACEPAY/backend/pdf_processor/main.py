@@ -7,6 +7,7 @@ from .ai_extract import (
     extract_transactions_with_ai,
 )
 from .extract import ExtractionError, extract_layers
+from .gotyme_text import gotyme_transactions
 from .models import ProcessingResult, StatementBalance, Transaction, ValidationResult
 from .normalise import normalize_row, parse_text_rows
 from .statement_schema import resolve_extracted_statement
@@ -49,7 +50,12 @@ def process_pdf(
     rows_rejected = 0
     ai_statement = None
 
-    if raw.extraction_method != "unknown":
+    chain_transactions = gotyme_transactions(text) if raw.extraction_method == "text" else None
+    if chain_transactions is not None:
+        transactions = chain_transactions
+        raw = raw.model_copy(update={"rows_found": len(transactions)})
+        logger.info("pdf_gotyme_text_chain_used transactions=%s", len(transactions))
+    elif raw.extraction_method != "unknown":
         table_rows_detected = 0
         if tables:
             for table_index, table in enumerate(tables, start=1):
@@ -253,6 +259,9 @@ def _needs_ai_fallback(
         return False
     if extraction_method == "unknown" or not transactions:
         return True
+    # A broken balance chain means rows were dropped or misread, however many converted.
+    if validation.balance_reconciliation == "mismatch":
+        return True
     detected = validation.rows_detected or len(transactions)
     if extraction_method in {"table", "text"} and detected > 0 and len(transactions) / detected >= 0.8:
         logger.info(
@@ -263,8 +272,6 @@ def _needs_ai_fallback(
         )
         return False
     if validation.confidence < 0.65:
-        return True
-    if validation.balance_reconciliation == "mismatch":
         return True
     if validation.rows_detected > 0 and validation.rows_rejected / validation.rows_detected >= 0.2:
         return True

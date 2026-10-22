@@ -100,7 +100,10 @@ _INSTRUCTIONS = (
     "Fill bank, account_number_last4, account_type, statement_start_date, statement_end_date, "
     "opening_balance and closing_balance when they appear. Dates must be YYYY-MM-DD. "
     "Each transaction needs date, description, signed amount (debits negative, credits positive), "
-    "direction (debit or credit), transaction_time when printed, balance_after when shown, and reference when shown."
+    "direction (debit or credit), transaction_time when printed, balance_after when shown, and reference when shown. "
+    "Failed or declined payments (e.g. 'Fee: Unsuccessful ... - insufficient funds') are fee rows: the amount is the "
+    "fee actually charged, never the intended payment amount quoted in the text, and the description must be copied "
+    "in full, keeping the 'Fee: Unsuccessful' and 'insufficient funds' wording."
 )
 
 

@@ -1,0 +1,113 @@
+15 May 2026
+Int Recurring Payment from CURSOR, AI POWERED IDE
++18314259504 US for ZAR351.15. Amount R351.15 Ref
+613513225269
+*
+
+* 351.15 13.89
+15 May 2026 PayShap - Pay by Account, Appimate (pty)ltd - 3,750 - 3,763.89
+15 May 2026 Money transferred in for GoalSave 50470680472 - - 2,000 1,763.89
+15 May 2026 Money transferred in for GoalSave 50234959125 - - 1,500 263.89
+15 May 2026 VAS - Mobile Purchase for 0634994013 Airtime - - 50 213.89
+15 May 2026 Fee: VAS - Mobile Purchase for 0634994013 Airtime 0.50 - - 213.39
+15 May 2026
+Fee Reversal - VAS - Mobile Purchase Reversal for Airtime
+0634994013
+
+* 0.50 - 213.89
+15 May 2026
+Reversal - VAS - Mobile Purchase Reversal for Airtime
+0634994013
+* 50 - 263.89
+15 May 2026 VAS - Mobile Purchase for 0634994013 Airtime - - 50 213.89
+GoTyme Bank
+e-Stamp
+20 Oct 2026
+15 May 2026 Fee: VAS - Mobile Purchase for 0634994013 Airtime 0.50 - - 213.39
+Fee Reversal - VAS - Mobile Purchase Reversal for Airtime
+0634994013
+Branch: 678910
+15 May 2026
+* 0.50 - 213.89
+15 May 2026
+Reversal - VAS - Mobile Purchase Reversal for Airtime
+0634994013
+* 50 - 263.89
+15 May 2026 VAS - Mobile Purchase for 0634994013 Airtime - - 50 213.89
+15 May 2026 Fee: VAS - Mobile Purchase for 0634994013 Airtime 0.50 - - 213.39
+15 May 2026
+Fee Reversal - VAS - Mobile Purchase Reversal for Airtime
+0634994013
+* 0.50 - 213.89
+15 May 2026
+Reversal - VAS - Mobile Purchase Reversal for Airtime
+0634994013
+* 50 - 263.89
+15 May 2026 VAS - Mobile Purchase for 0634994013 Airtime - - 50 213.89
+15 May 2026 Fee: VAS - Mobile Purchase for 0634994013 Airtime 0.50 - - 213.39
+All bank fees are inclusive of VAT at 15%. All figures are in ZAR.
+Page 7 of 57
+You can contact our Customer Success Team through any of these
+channels:
+Hotline:
+0860 999 119
+Document ID:
+PCA1Y2YHDO2LQ
+Email:
+service@gotyme.co.za
+Date requested:
+20 Oct 2026
+GoTyme Bank is an Authorised Financial Services (FSP 49140) and Registered
+Credit Provider (NCRCP 10774).
+GoTyme Bank Limited Reg. No.: 2015/231510/06
+GoTyme Bank VAT Reg. No.: 4540272079
+30 Jellicoe Avenue, Rosebank 2196
+[www.gotyme.co.za](https://www.gotyme.co.za)
+0860 999 119
+Bank Statement
+Date Details Fees(-) Credits (+) Debits (-) Running Balance
+15 May 2026 VAS - Mobile Purchase for 0634994013 Airtime - - 20 193.39
+15 May 2026 Fee: VAS - Mobile Purchase for 0634994013 Airtime 0.50 - - 192.89
+15 May 2026
+Fee Reversal - VAS - Mobile Purchase Reversal for Airtime
+0634994013
+* 0.50 - 193.39
+15 May 2026
+Reversal - VAS - Mobile Purchase Reversal for Airtime
+0634994013
+* 20 - 213.39
+15 May 2026 VAS - Mobile Purchase for 0634994013 Airtime - - 20 193.39
+15 May 2026 Fee: VAS - Mobile Purchase for 0634994013 Airtime 0.50 - - 192.89
+15 May 2026
+Fee Reversal - VAS - Mobile Purchase Reversal for Airtime
+0634994013
+* 0.50 - 193.39
+15 May 2026
+Reversal - VAS - Mobile Purchase Reversal for Airtime
+0634994013
+* 20 - 213.39
+15 May 2026 VAS - Mobile Purchase for 0634994013 Airtime - - 20 193.39
+GoTyme Bank
+e-Stamp
+20 Oct 2026
+15 May 2026 Fee: VAS - Mobile Purchase for 0634994013 Airtime 0.50 - - 192.89
+Fee Reversal - VAS - Mobile Purchase Reversal for Airtime
+0634994013
+Branch: 678910
+15 May 2026
+* 0.50 - 193.39
+15 May 2026
+Reversal - VAS - Mobile Purchase Reversal for Airtime
+0634994013
+* 20 - 213.39
+15 May 2026 Recurring Payment from DL Bolt CPT ZA 613517090744 - - 30 183.39
+15 May 2026
+Reversal - Online Purchase from DL Bolt CPT ZA
+613517090744
+* 30 - 213.39
+15 May 2026 Recurring Payment from DL Bolt CPT ZA 613517095792 - - 30 183.39
+15 May 2026 Money transferred out from GoalSave 50234959125 - 100 - 283.39
+15 May 2026 PayShap - Pay by Account, alcahol - - 200 83.39
+15 May 2026 PayShap - Pay by Account, spar - - 80 3.39
+All bank fees are inclusive of VAT at 15%. All figures are in ZAR.
+Page 8 of 57
