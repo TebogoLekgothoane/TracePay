@@ -33,6 +33,17 @@ LeakStatus = Literal["active", "monitoring", "resolved", "dismissed"]
 ImpactKind = Literal["recurring", "one_time", "estimated"]
 
 
+class SupportingTransaction(BaseModel):
+    """A redacted statement row that supports a leak finding."""
+
+    transaction_id: str
+    date: date
+    description: str
+    amount: Decimal = Field(ge=0)
+    direction: str
+    role: Literal["payment", "fee", "other_fee", "failed_attempt_fee", "reversal"]
+
+
 class LeakDetection(BaseModel):
     """A deterministic, evidence-backed potential financial leak."""
 
@@ -50,6 +61,8 @@ class LeakDetection(BaseModel):
     evidence: dict[str, Any] = Field(default_factory=dict)
     supporting_behavior_ids: list[str] = Field(default_factory=list)
     supporting_feature_references: list[str] = Field(default_factory=list)
+    supporting_transactions: list[SupportingTransaction] = Field(default_factory=list)
+    supporting_transaction_count: int = 0
     detector_version: str = Field(min_length=1, max_length=32)
     detected_at: datetime
     period_start: date | None = None

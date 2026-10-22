@@ -46,5 +46,4 @@ export type SubscriptionsDebugResult = {
   periodEnd: string | null;
   subscriptions: DetectedSubscription[];
   monthlyTotal: number;
-  aiAnalysis?: import("../../api/anthropic-analysis.api").AnthropicAnalysis | null;
 };

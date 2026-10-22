@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Button } from "../../src/components/ui/Button";
-import { AnthropicAnalysisCard } from "../../src/components/ui/AnthropicAnalysisCard";
+import { AnthropicAnalysisSection } from "../../src/components/ui/AnthropicAnalysisCard";
 import { IconButton } from "../../src/components/ui/IconButton";
 import { SimpleBrandLogo } from "../../src/components/ui/SimpleBrandLogo";
 import { resolveBrandIcon } from "../../src/features/brands/simple-brand-icons";
@@ -33,6 +33,7 @@ import {
   catalogLogoUrl,
   resolveCatalogLogo,
 } from "../../src/features/transactions/merchant-logos";
+import { useAnthropicAnalysisOnDemand } from "../../src/hooks/useAnthropicAnalysisOnDemand";
 import { useStoredSyntheticAnalysis } from "../../src/hooks/useStoredSyntheticAnalysis";
 import { useSubscriptionsDebug } from "../../src/hooks/useSubscriptionsDebug";
 import { COLORS } from "../../src/theme/colors";
@@ -49,6 +50,7 @@ function SubscriptionsDebugScreen() {
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const synthetic = useStoredSyntheticAnalysis();
   const live = useSubscriptionsDebug(!synthetic.active);
+  const ai = useAnthropicAnalysisOnDemand();
   const result = useMemo(() => {
     if (synthetic.active) {
       return synthetic.analysis?.leaks
@@ -128,6 +130,16 @@ function SubscriptionsDebugScreen() {
             </View>
           )}
 
+          {synthetic.active ? null : (
+            <AnthropicAnalysisSection
+              mode="subscriptions"
+              analysis={ai.analysis}
+              loading={ai.loading}
+              error={ai.error}
+              onRun={ai.run}
+            />
+          )}
+
           {loading && !result ? <LoadingState /> : null}
           {error ? <ErrorState message={error} onRetry={refresh} /> : null}
           {result && !loading ? <ResultContent result={result} /> : null}
@@ -187,7 +199,6 @@ function ResultContent({
     periodEnd: string | null;
     subscriptions: DetectedSubscription[];
     monthlyTotal: number;
-    aiAnalysis?: import("../../src/api/anthropic-analysis.api").AnthropicAnalysis | null;
   };
 }) {
   return (
@@ -209,7 +220,6 @@ function ResultContent({
         Period: {formatPeriod(result.periodStart, result.periodEnd)} ·{" "}
         {result.transactionCount} transactions analysed
       </Text>
-      <AnthropicAnalysisCard analysis={result.aiAnalysis ?? null} mode="subscriptions" />
 
       {result.subscriptions.length === 0 ? <EmptyState /> : null}
       <View className="mt-5 gap-4">

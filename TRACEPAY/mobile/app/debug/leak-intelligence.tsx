@@ -25,7 +25,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { IconButton } from "../../src/components/ui/IconButton";
 import { Button } from "../../src/components/ui/Button";
-import { AnthropicAnalysisCard } from "../../src/components/ui/AnthropicAnalysisCard";
+import { AnthropicAnalysisSection } from "../../src/components/ui/AnthropicAnalysisCard";
 import { SyntheticSourceNote } from "../../src/features/synthetic-intelligence/SyntheticSourceNote";
 import { scenarioLabel } from "../../src/features/synthetic-intelligence/synthetic-intelligence.parse";
 import {
@@ -39,7 +39,10 @@ import {
   merchantDisplayName,
   recognisedCategoryKey,
 } from "../../src/features/leak-intelligence/leak-intelligence.format";
-import type { LeakDetection } from "../../src/features/leak-intelligence/leak-intelligence.types";
+import type {
+  LeakDetection,
+  SupportingTransaction,
+} from "../../src/features/leak-intelligence/leak-intelligence.types";
 import { resolveBrandIcon } from "../../src/features/brands/simple-brand-icons";
 import {
   catalogLogoUrl,
@@ -47,6 +50,7 @@ import {
 } from "../../src/features/transactions/merchant-logos";
 import { SimpleBrandLogo } from "../../src/components/ui/SimpleBrandLogo";
 import { useLeakIntelligenceDebug } from "../../src/hooks/useLeakIntelligenceDebug";
+import { useAnthropicAnalysisOnDemand } from "../../src/hooks/useAnthropicAnalysisOnDemand";
 import { useStoredSyntheticAnalysis } from "../../src/hooks/useStoredSyntheticAnalysis";
 import { COLORS } from "../../src/theme/colors";
 
@@ -62,6 +66,7 @@ function LeakIntelligenceDebugScreen() {
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const synthetic = useStoredSyntheticAnalysis();
   const live = useLeakIntelligenceDebug(!synthetic.active);
+  const ai = useAnthropicAnalysisOnDemand();
   const result = synthetic.active ? synthetic.analysis?.leaks ?? null : live.result;
   const loading = synthetic.active ? false : live.loading;
   const error = synthetic.active
@@ -133,9 +138,19 @@ function LeakIntelligenceDebugScreen() {
             </View>
           )}
 
+          {synthetic.active ? null : (
+            <AnthropicAnalysisSection
+              mode="leaks"
+              analysis={ai.analysis}
+              loading={ai.loading}
+              error={ai.error}
+              onRun={ai.run}
+            />
+          )}
+
           {loading && !result ? <LoadingState /> : null}
           {error ? <ErrorState message={error} onRetry={refresh} /> : null}
-          {result && !loading ? <ResultContent result={result} aiAnalysis={live.aiAnalysis} /> : null}
+          {result && !loading ? <ResultContent result={result} /> : null}
           {result && loading ? (
             <Text className="mt-3 text-center text-[13px] text-muted-foreground">
               Updating analysis…
@@ -185,7 +200,6 @@ function ErrorState({
 
 function ResultContent({
   result,
-  aiAnalysis,
 }: {
   result: {
     transaction_count: number;
@@ -194,7 +208,6 @@ function ResultContent({
     detector_version: string;
     leaks: LeakDetection[];
   };
-  aiAnalysis?: import("../../src/api/anthropic-analysis.api").AnthropicAnalysis | null;
 }) {
   const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
   return (
@@ -207,7 +220,6 @@ function ResultContent({
         Period: {formatPeriod(result.period_start, result.period_end)} · Detector{" "}
         {result.detector_version}
       </Text>
-      <AnthropicAnalysisCard analysis={aiAnalysis ?? null} mode="leaks" />
 
       {result.leaks.length === 0 ? <EmptyState /> : null}
       <View className="mt-5 gap-4">
@@ -367,10 +379,81 @@ function LeakCard({
           </Text>
         </View>
       ) : null}
+      <SupportingTransactions
+        rows={leak.supporting_transactions}
+        total={leak.supporting_transaction_count}
+      />
       <Text className="mt-4 text-[12px] text-muted-foreground">
         Status: {humanize(leak.status)} · Analysis period:{" "}
         {formatPeriod(leak.period_start, leak.period_end)}
       </Text>
+    </View>
+  );
+}
+
+const ROLE_LABELS: Record<SupportingTransaction["role"], string> = {
+  payment: "Payment",
+  fee: "Fee",
+  other_fee: "Other fee",
+  failed_attempt_fee: "Failed attempt fee",
+  reversal: "Reversal",
+};
+
+function SupportingTransactions({
+  rows,
+  total,
+}: {
+  rows: SupportingTransaction[];
+  total: number;
+}) {
+  const [open, setOpen] = useState(false);
+  if (total === 0) {
+    return (
+      <Text className="mt-4 text-[12px] text-muted-foreground">
+        No individual transactions are attached to this pattern (aggregate evidence only).
+      </Text>
+    );
+  }
+  return (
+    <View className="mt-4">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        className="flex-row items-center justify-between rounded-2xl bg-muted/40 px-4 py-3 active:opacity-75"
+        onPress={() => setOpen((current) => !current)}
+      >
+        <Text className="text-[13px] font-semibold text-foreground">
+          {open ? "Hide" : "Show"} supporting transactions ({total})
+        </Text>
+        <ChevronDown color="#8B5CF6" size={18} strokeWidth={2} />
+      </Pressable>
+      {open ? (
+        <View className="mt-2 gap-2">
+          {rows.map((row) => (
+            <View
+              key={row.transaction_id}
+              className="rounded-xl bg-muted/40 px-3 py-2.5"
+            >
+              <View className="flex-row items-start justify-between gap-3">
+                <Text className="text-[12px] text-muted-foreground">
+                  {row.date} · {ROLE_LABELS[row.role]}
+                </Text>
+                <Text className="text-[13px] font-semibold text-foreground">
+                  {formatCurrency(row.amount)}
+                </Text>
+              </View>
+              <Text selectable className="mt-1 text-[12px] text-foreground">
+                {row.description}
+              </Text>
+            </View>
+          ))}
+          {total > rows.length ? (
+            <Text className="text-[12px] text-muted-foreground">
+              Showing the first {rows.length} of {total}.
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }

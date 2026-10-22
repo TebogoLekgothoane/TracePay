@@ -16,7 +16,7 @@ from app.config import settings
 from leak_intelligence.adapters import FeatureRowValidationError, feature_transaction_from_row
 from leak_intelligence.engine import build_financial_features
 from leak_intelligence.import_quality import StatementImportQuality, parse_import_quality_row
-from leak_intelligence.models import FinancialFeatureSnapshot
+from leak_intelligence.models import FeatureTransaction, FinancialFeatureSnapshot
 
 logger = logging.getLogger("tracepay.financial_features")
 PAGE_SIZE = 1_000
@@ -47,6 +47,14 @@ async def build_user_feature_snapshot(
     user_id: str, access_token: str
 ) -> FinancialFeatureSnapshot:
     """Fetch only the authenticated user's canonical rows and derive features."""
+    _, snapshot = await build_user_feature_inputs(user_id, access_token)
+    return snapshot
+
+
+async def build_user_feature_inputs(
+    user_id: str, access_token: str
+) -> tuple[list[FeatureTransaction], FinancialFeatureSnapshot]:
+    """Like ``build_user_feature_snapshot`` but also returns the validated rows."""
     rows = await asyncio.to_thread(_fetch_transaction_rows, user_id, access_token)
     try:
         transactions = [
@@ -69,7 +77,7 @@ async def build_user_feature_snapshot(
     import_quality = await asyncio.to_thread(
         _fetch_statement_import_quality, user_id, access_token, statement_ids
     )
-    return build_financial_features(
+    return transactions, build_financial_features(
         user_id,
         transactions,
         statement_import_quality=import_quality,

@@ -1,21 +1,6 @@
 import { Redirect, router, useLocalSearchParams } from "expo-router";
+import { Calendar, ChevronLeft, ChevronRight, HelpCircle } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
-import {
-  Banknote,
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
-  CreditCard,
-  FileText,
-  HelpCircle,
-  Landmark,
-  Layers,
-  MessageSquare,
-  RefreshCw,
-  Smartphone,
-  Store,
-  Wifi,
-} from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
@@ -29,7 +14,7 @@ import { PeriodTabs } from "../../src/components/insights/PeriodTabs";
 import { BrandLogo } from "../../src/components/ui/BrandLogo";
 import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
-import { InfoSheet, Modal, SelectionSheet } from "../../src/components/ui/Modal";
+import { InfoSheet, SelectionSheet } from "../../src/components/ui/Modal";
 import { SimpleBrandLogo } from "../../src/components/ui/SimpleBrandLogo";
 import type { ActionType } from "../../src/features/guidance/finding-guidance.model";
 import { useForYouCards } from "../../src/features/for-you/for-you.preferences";
@@ -41,6 +26,14 @@ import {
 } from "../../src/features/leaks/leak-response.store";
 import { useLeakEntitlement } from "../../src/features/leaks/leak-entitlement.store";
 import { isLeakLocked } from "../../src/features/leaks/leak-paywall";
+import {
+  LEAK_DETAILS,
+  filterFixSections,
+  hasTransactionList,
+  listLeakTransactions,
+  listTransactionFilters,
+  type TransactionFilter,
+} from "../../src/features/leaks/leak-details";
 import { getPotentialLeak, listPotentialLeaks } from "../../src/features/leaks/potential-leaks";
 import {
   getFixContent,
@@ -49,6 +42,8 @@ import {
 } from "../../src/features/leaks/fixContent";
 import {
   CUSTOM_RANGES,
+  formatRandAmount,
+  parseRandAmount,
   periodChangeLabel,
   periodFactor,
   scaleRandAmount,
@@ -61,7 +56,6 @@ import {
 } from "../../src/features/leaks/subscriptions.catalog";
 import {
   COLORS,
-  type ImpactTone,
   getImpactToneStyles,
   withAlpha,
 } from "../../src/theme/colors";
@@ -85,410 +79,6 @@ function daysUntilLabel(days: number): string {
   return `In ${days} days`;
 }
 
-type BreakdownItem = {
-  id: string;
-  title: string;
-  description: string;
-  amount: string;
-  percent: string;
-  Icon: LucideIcon;
-};
-
-type FeeTransaction = {
-  id: string;
-  date: string;
-  description: string;
-  amount: string;
-};
-
-type SubscriptionItem = {
-  id: string;
-  name: string;
-  category: string;
-  billing: string;
-  amount: string;
-  status: "Active" | "Inactive";
-  /** Simple Icons brand id and/or Hunter domain for logo lookup. */
-  brandId?: string;
-  logoDomain?: string;
-  mark: string;
-  markColor: string;
-};
-
-type LeakDetail = {
-  title: string;
-  subtitle: string;
-  HeaderIcon: LucideIcon;
-  impact: ImpactTone;
-  amount: string;
-  onLabel: string;
-  changeLabel: string;
-  percentOfLeaks: string;
-  variant: "breakdown" | "subscriptions";
-  listSectionTitle?: string;
-  breakdown?: BreakdownItem[];
-  didYouKnow?: string;
-  subscriptions?: SubscriptionItem[];
-  ctaTitle: string;
-  ctaSubtitle: string;
-  ctaButton: string;
-};
-
-const LEAK_DETAILS: Record<string, LeakDetail> = {
-  fees: {
-    title: "Bank fees",
-    subtitle: "Unnecessary bank charges",
-    HeaderIcon: FileText,
-    impact: "high",
-    amount: "R712.50",
-    onLabel: "on bank fees",
-    changeLabel: "↑ 18% vs last month",
-    percentOfLeaks: "39%",
-    variant: "breakdown",
-    breakdown: [
-      {
-        id: "monthly",
-        title: "Monthly account fee",
-        description: "Recurring monthly charge",
-        amount: "R165.00",
-        percent: "23%",
-        Icon: Calendar,
-      },
-      {
-        id: "service",
-        title: "Service fees",
-        description: "General account charges",
-        amount: "R248.40",
-        percent: "35%",
-        Icon: CreditCard,
-      },
-      {
-        id: "atm",
-        title: "ATM fees",
-        description: "Cash withdrawals",
-        amount: "R154.50",
-        percent: "22%",
-        Icon: Landmark,
-      },
-      {
-        id: "sms",
-        title: "SMS notifications",
-        description: "Transaction alerts",
-        amount: "R72.00",
-        percent: "10%",
-        Icon: MessageSquare,
-      },
-      {
-        id: "other",
-        title: "Other fees",
-        description: "Miscellaneous charges",
-        amount: "R72.60",
-        percent: "10%",
-        Icon: Layers,
-      },
-    ],
-    didYouKnow:
-      "You could save up to R712.50 this month by cutting unnecessary bank charges.",
-    ctaTitle: "Stop these bank fees",
-    ctaSubtitle: "Open the first step-by-step guide",
-    ctaButton: "Start fixing",
-  },
-  subs: {
-    title: "Subscriptions",
-    subtitle: "Unused or forgotten subscriptions",
-    HeaderIcon: RefreshCw,
-    impact: "mediumWarm",
-    amount: "R430.00",
-    onLabel: "on subscriptions",
-    changeLabel: "↓ 8% vs last month",
-    percentOfLeaks: "24%",
-    variant: "subscriptions",
-    subscriptions: [
-      {
-        id: "netflix",
-        name: "Netflix",
-        category: "Entertainment",
-        billing: "Billed monthly",
-        amount: "R159.00",
-        status: "Active",
-        brandId: "netflix",
-        logoDomain: "netflix.com",
-        mark: "N",
-        markColor: "destructive",
-      },
-      {
-        id: "showmax",
-        name: "Showmax",
-        category: "Entertainment",
-        billing: "Billed monthly",
-        amount: "R99.00",
-        status: "Active",
-        logoDomain: "showmax.com",
-        mark: "S",
-        markColor: "primary",
-      },
-      {
-        id: "spotify",
-        name: "Spotify Premium",
-        category: "Music",
-        billing: "Billed monthly",
-        amount: "R69.00",
-        status: "Active",
-        brandId: "spotify",
-        logoDomain: "spotify.com",
-        mark: "♪",
-        markColor: "success",
-      },
-      {
-        id: "youtube",
-        name: "YouTube Premium",
-        category: "Music",
-        billing: "Billed monthly",
-        amount: "R72.00",
-        status: "Active",
-        brandId: "youtube",
-        logoDomain: "youtube.com",
-        mark: "▶",
-        markColor: "destructive",
-      },
-      {
-        id: "adobe",
-        name: "Adobe Acrobat",
-        category: "Productivity",
-        billing: "Billed yearly",
-        amount: "R519.00",
-        status: "Inactive",
-        logoDomain: "adobe.com",
-        mark: "A",
-        markColor: "destructive",
-      },
-      {
-        id: "canva",
-        name: "Canva Pro",
-        category: "Design",
-        billing: "Billed yearly",
-        amount: "R599.00",
-        status: "Inactive",
-        logoDomain: "canva.com",
-        mark: "C",
-        markColor: "secondary",
-      },
-    ],
-    ctaTitle: "Cancel what you don't use",
-    ctaSubtitle: "Open step-by-step cancel guides",
-    ctaButton: "Start cancelling",
-  },
-  debit: {
-    title: "Debit orders",
-    subtitle: "Could be paused or cancelled",
-    HeaderIcon: Calendar,
-    impact: "mediumCool",
-    amount: "R320.75",
-    onLabel: "on debit orders",
-    changeLabel: "↑ 5% vs last month",
-    percentOfLeaks: "18%",
-    variant: "subscriptions",
-    listSectionTitle: "Your debit orders",
-    subscriptions: [
-      {
-        id: "dstv",
-        name: "DSTV Premium",
-        category: "Entertainment",
-        billing: "Billed monthly",
-        amount: "R899.00",
-        status: "Active",
-        logoDomain: "dstv.com",
-        mark: "D",
-        markColor: "primary",
-      },
-      {
-        id: "gym",
-        name: "Gym membership",
-        category: "Health",
-        billing: "Billed monthly",
-        amount: "R450.00",
-        status: "Active",
-        mark: "G",
-        markColor: "success",
-      },
-      {
-        id: "insurance",
-        name: "Insurance premium",
-        category: "Insurance",
-        billing: "Billed monthly",
-        amount: "R320.75",
-        status: "Active",
-        mark: "I",
-        markColor: "secondary",
-      },
-    ],
-    ctaTitle: "Stop unused debit orders",
-    ctaSubtitle: "Open step-by-step pause guides",
-    ctaButton: "Start pausing",
-  },
-  airtime: {
-    title: "Airtime & data",
-    subtitle: "Higher than usual spending",
-    HeaderIcon: Banknote,
-    impact: "lowTeal",
-    amount: "R206.15",
-    onLabel: "on airtime & data",
-    changeLabel: "↑ 12% vs last month",
-    percentOfLeaks: "11%",
-    variant: "breakdown",
-    breakdown: [
-      {
-        id: "data",
-        title: "Mobile data",
-        description: "Monthly bundles & top-ups",
-        amount: "R99.00",
-        percent: "48%",
-        Icon: Wifi,
-      },
-      {
-        id: "airtime",
-        title: "Airtime purchases",
-        description: "Prepaid top-ups",
-        amount: "R67.15",
-        percent: "33%",
-        Icon: Smartphone,
-      },
-      {
-        id: "out-of-bundle",
-        title: "Out-of-bundle",
-        description: "Extra data usage charges",
-        amount: "R40.00",
-        percent: "19%",
-        Icon: Layers,
-      },
-    ],
-    didYouKnow:
-      "You could save up to R206.15 by matching your bundle to real usage and avoiding out-of-bundle charges.",
-    ctaTitle: "Cut airtime & data costs",
-    ctaSubtitle: "Open the first step-by-step guide",
-    ctaButton: "Start fixing",
-  },
-  atm: {
-    title: "Cash withdrawals",
-    subtitle: "High ATM fees",
-    HeaderIcon: Landmark,
-    impact: "lowBlue",
-    amount: "R150.00",
-    onLabel: "on cash withdrawals",
-    changeLabel: "↑ 22% vs last month",
-    percentOfLeaks: "8%",
-    variant: "breakdown",
-    breakdown: [
-      {
-        id: "other-bank",
-        title: "Other bank ATMs",
-        description: "Withdrawals at non-home ATMs",
-        amount: "R85.00",
-        percent: "57%",
-        Icon: Landmark,
-      },
-      {
-        id: "retail",
-        title: "Retail cash backs",
-        description: "Cash at till points",
-        amount: "R35.00",
-        percent: "23%",
-        Icon: Store,
-      },
-      {
-        id: "balance",
-        title: "Balance enquiries",
-        description: "Paid balance checks",
-        amount: "R30.00",
-        percent: "20%",
-        Icon: HelpCircle,
-      },
-    ],
-    didYouKnow:
-      "You could save up to R150.00 by using your bank's ATMs and skipping paid balance enquiries.",
-    ctaTitle: "Reduce withdrawal fees",
-    ctaSubtitle: "Open the first step-by-step guide",
-    ctaButton: "Start fixing",
-  },
-};
-
-/** Map a breakdown line item to that leak's fix action (never cross-leak). */
-const BREAKDOWN_FIX_ACTION: Record<string, Record<string, string>> = {
-  fees: {
-    monthly: "account",
-    service: "services",
-    atm: "atm",
-    sms: "sms",
-    other: "services",
-  },
-  airtime: {
-    data: "bundle",
-    airtime: "topups",
-    "out-of-bundle": "data-alerts",
-  },
-  atm: {
-    "other-bank": "home-atm",
-    retail: "cashback",
-    balance: "balance",
-  },
-};
-
-const FEE_TRANSACTIONS: Record<string, FeeTransaction[]> = {
-  monthly: [
-    { id: "account-1", date: "20 May", description: "Monthly account fee", amount: "165.00" },
-  ],
-  service: [
-    { id: "service-1", date: "04 May", description: "Immediate payment fee", amount: "25.00" },
-    { id: "service-2", date: "11 May", description: "Cash deposit fee", amount: "48.40" },
-    { id: "service-3", date: "27 May", description: "Payment service fee", amount: "175.00" },
-  ],
-  atm: [
-    { id: "atm-1", date: "06 May", description: "Other-bank ATM fee", amount: "85.00" },
-    { id: "atm-2", date: "19 May", description: "Other-bank ATM fee", amount: "69.50" },
-  ],
-  sms: [
-    { id: "sms-1", date: "03 May", description: "SMS notification fee", amount: "24.00" },
-    { id: "sms-2", date: "14 May", description: "SMS notification fee", amount: "24.00" },
-    { id: "sms-3", date: "25 May", description: "SMS notification fee", amount: "24.00" },
-  ],
-  other: [
-    { id: "other-1", date: "09 May", description: "Balance enquiry fee", amount: "30.00" },
-    { id: "other-2", date: "22 May", description: "Card replacement fee", amount: "42.60" },
-  ],
-  data: [
-    { id: "data-1", date: "05 May", description: "Mobile data bundle", amount: "99.00" },
-    { id: "data-2", date: "18 May", description: "Mobile data top-up", amount: "75.00" },
-  ],
-  airtime: [
-    { id: "airtime-1", date: "07 May", description: "Airtime top-up", amount: "35.00" },
-    { id: "airtime-2", date: "16 May", description: "Airtime top-up", amount: "32.15" },
-  ],
-  "out-of-bundle": [
-    { id: "oob-1", date: "28 May", description: "Out-of-bundle data charge", amount: "40.00" },
-  ],
-  "other-bank": [
-    { id: "other-atm-1", date: "06 May", description: "Other-bank ATM withdrawal fee", amount: "85.00" },
-  ],
-  retail: [
-    { id: "retail-1", date: "13 May", description: "Retail cash-back fee", amount: "35.00" },
-  ],
-  balance: [
-    { id: "balance-1", date: "22 May", description: "Paid balance enquiry", amount: "30.00" },
-  ],
-  dstv: [
-    { id: "dstv-1", date: "01 May", description: "DSTV Premium debit order", amount: "899.00" },
-    { id: "dstv-2", date: "01 Apr", description: "DSTV Premium debit order", amount: "899.00" },
-  ],
-  gym: [
-    { id: "gym-1", date: "03 May", description: "Gym membership debit order", amount: "450.00" },
-    { id: "gym-2", date: "03 Apr", description: "Gym membership debit order", amount: "450.00" },
-  ],
-  insurance: [
-    { id: "insurance-1", date: "15 May", description: "Insurance premium debit order", amount: "320.75" },
-    { id: "insurance-2", date: "15 Apr", description: "Insurance premium debit order", amount: "320.75" },
-  ],
-};
-
 export default function LeakDetailScreen() {
   const params = useLocalSearchParams<{ id: string; view?: string }>();
   const leakId = Array.isArray(params.id) ? params.id[0] : params.id;
@@ -502,19 +92,17 @@ export default function LeakDetailScreen() {
 }
 
 function LeakDetailContent() {
-  const params = useLocalSearchParams<{ id: string; view?: string }>();
+  const params = useLocalSearchParams<{ id: string; view?: string; filter?: string }>();
   const leakId = Array.isArray(params.id) ? params.id[0] : params.id;
+  const filterParam = Array.isArray(params.filter) ? params.filter[0] : params.filter;
+  const filters = useMemo(() => (leakId ? listTransactionFilters(leakId) : []), [leakId]);
+  const [txFilter, setTxFilter] = useState<string>(
+    filters.some((filter) => filter.id === filterParam) ? (filterParam as string) : "all",
+  );
   const [period, setPeriod] = useState<Period>("This month");
   const [customRange, setCustomRange] = useState<CustomRange>("Last 14 days");
   const [showCustomSheet, setShowCustomSheet] = useState(false);
   const [showCalc, setShowCalc] = useState(false);
-  const [selectedEvidence, setSelectedEvidence] = useState<{
-    title: string;
-    amount: string;
-    transactions: FeeTransaction[];
-    mitigation: string;
-    route: string | null;
-  } | null>(null);
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === "dark" ? "dark" : "light";
@@ -663,38 +251,19 @@ function LeakDetailContent() {
     );
   }
 
+  const isTransactionList = hasTransactionList(leakId);
+  const fixSections = isTransactionList
+    ? filterFixSections(leakId, txFilter, fixContent.sections)
+    : fixContent.sections;
+  const txFilterLabel = filters.find((filter) => filter.id === txFilter)?.label;
+
   const listTitle =
     detail.listSectionTitle ??
     (leakId === "debit" ? "Your debit orders" : "Your subscriptions");
 
-  const openBreakdownFix = (itemId: string) => {
-    const actionId = BREAKDOWN_FIX_ACTION[leakId]?.[itemId];
-    if (!actionId) return;
-    router.push(getFixRoute(leakId, actionId) as never);
-  };
-
-  const openTransactionEvidence = (itemId: string, title: string, amount: string) => {
-    const transactions = FEE_TRANSACTIONS[itemId] ?? [];
-    if (transactions.length === 0) {
-      openBreakdownFix(itemId);
-      return;
-    }
-    const actionId = BREAKDOWN_FIX_ACTION[leakId]?.[itemId];
-    const route = actionId
-      ? getFixRoute(leakId, actionId)
-      : leakId === "debit"
-        ? getFixRoute(leakId, `pause-${itemId}`)
-        : null;
-    setSelectedEvidence({
-      title,
-      amount,
-      transactions,
-      mitigation:
-        leakId === "debit"
-          ? "Confirm whether this debit order is still needed, then pause or cancel it with the provider if appropriate."
-          : "Review the entries, then open the relevant guide to reduce or avoid similar charges.",
-      route,
-    });
+  const openLineItem = (itemId: string) => {
+    const query = `period=${encodeURIComponent(period)}&range=${encodeURIComponent(customRange)}`;
+    router.push(`/leak/${leakId}/item/${itemId}?${query}` as never);
   };
 
   return (
@@ -775,7 +344,19 @@ function LeakDetailContent() {
             </View>
           </View>
 
-          {scaledDetail.variant === "breakdown" && scaledDetail.breakdown ? (
+          {isTransactionList ? (
+            <LeakTransactionsSection
+              leakId={leakId}
+              filters={filters}
+              filter={txFilter}
+              onFilterChange={setTxFilter}
+              factor={factor}
+              toneColor={tone.color}
+              palette={palette}
+            />
+          ) : null}
+
+          {!isTransactionList && scaledDetail.variant === "breakdown" && scaledDetail.breakdown ? (
             <>
               <Text className="mb-3 mt-7 text-[17px] font-bold text-foreground">
                 Where it comes from
@@ -784,9 +365,7 @@ function LeakDetailContent() {
                 {scaledDetail.breakdown.map((item) => (
                   <Pressable
                     key={item.id}
-                    onPress={() =>
-                      openTransactionEvidence(item.id, item.title, item.amount)
-                    }
+                    onPress={() => openLineItem(item.id)}
                     className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-75"
                   >
                     <View className="h-10 w-10 items-center justify-center">
@@ -828,7 +407,7 @@ function LeakDetailContent() {
             </>
           ) : null}
 
-          {scaledDetail.variant === "subscriptions" && scaledDetail.subscriptions ? (
+          {!isTransactionList && scaledDetail.variant === "subscriptions" && scaledDetail.subscriptions ? (
             <>
               <Text className="mb-3 mt-7 text-[17px] font-bold text-foreground">
                 {listTitle}
@@ -843,7 +422,7 @@ function LeakDetailContent() {
                         return;
                       }
                       if (leakId === "debit") {
-                        openTransactionEvidence(item.id, item.name, item.amount);
+                        openLineItem(item.id);
                       }
                     }}
                     className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-75"
@@ -923,11 +502,13 @@ function LeakDetailContent() {
             How to stop this
           </Text>
           <Text className="mb-4 text-[13px] leading-5 text-muted-foreground">
-            Follow the steps for this leak only. Tap an action to see exactly what to do.
+            {isTransactionList && txFilter !== "all"
+              ? `Ways to cut ${leakId === "debit" ? txFilterLabel : `your ${txFilterLabel?.toLowerCase()}`}. Tap an action to see exactly what to do.`
+              : "Follow the steps for this leak only. Tap an action to see exactly what to do."}
           </Text>
           <FixActionsList
             leakId={leakId}
-            sections={fixContent.sections}
+            sections={fixSections}
             impact={fixContent.impact}
           />
         </View>
@@ -942,23 +523,6 @@ function LeakDetailContent() {
         }
         onClose={() => setShowCalc(false)}
       />
-      <Modal
-        visible={selectedEvidence !== null}
-        onClose={() => setSelectedEvidence(null)}
-      >
-        {selectedEvidence ? (
-          <TransactionEvidenceContent
-            evidence={selectedEvidence}
-            factor={factor}
-            onClose={() => setSelectedEvidence(null)}
-            onMitigate={() => {
-              const route = selectedEvidence.route;
-              setSelectedEvidence(null);
-              if (route) router.push(route as never);
-            }}
-          />
-        ) : null}
-      </Modal>
       <SelectionSheet
         visible={showCustomSheet}
         title="Custom range"
@@ -971,6 +535,125 @@ function LeakDetailContent() {
         }))}
       />
     </SafeAreaView>
+  );
+}
+
+function LeakTransactionsSection({
+  leakId,
+  filters,
+  filter,
+  onFilterChange,
+  factor,
+  toneColor,
+  palette,
+}: {
+  leakId: string;
+  filters: TransactionFilter[];
+  filter: string;
+  onFilterChange: (filter: string) => void;
+  factor: number;
+  toneColor: string;
+  palette: typeof COLORS.light | typeof COLORS.dark;
+}) {
+  const transactions = useMemo(
+    () => listLeakTransactions(leakId, filter),
+    [leakId, filter],
+  );
+  const total = transactions.reduce(
+    (sum, transaction) => sum + parseRandAmount(transaction.amount),
+    0,
+  );
+
+  return (
+    <>
+      <Text className="mb-3 mt-7 text-[17px] font-bold text-foreground">Transactions</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        className="-mx-5"
+        contentContainerStyle={{ gap: 8, paddingHorizontal: 20 }}
+      >
+        {filters.map((option) => {
+          const selected = option.id === filter;
+          return (
+            <Pressable
+              key={option.id}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              onPress={() => onFilterChange(option.id)}
+              className="rounded-full px-3.5 py-2 active:opacity-75"
+              style={{
+                backgroundColor: selected ? toneColor : palette.surfaceSoft,
+              }}
+            >
+              <Text
+                className={`text-[12px] ${selected ? "font-semibold" : "font-medium text-foreground"}`}
+                style={selected ? { color: "#FFFFFF" } : undefined}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      <View className="mb-2 mt-4 flex-row items-center justify-between">
+        <Text className="text-[13px] text-muted-foreground">
+          {transactions.length} {transactions.length === 1 ? "charge" : "charges"}
+        </Text>
+        <Text className="text-[13px] font-semibold text-foreground">
+          {formatRandAmount(total * factor)}
+        </Text>
+      </View>
+
+      {transactions.length > 0 ? (
+        <View className="gap-2">
+          {transactions.map((transaction) => (
+            <TransactionRow
+              key={transaction.id}
+              Icon={transaction.Icon}
+              title={transaction.description}
+              subtitle={`${transaction.date} · ${transaction.categoryTitle}`}
+              amount={`-${scaleRandAmount(transaction.amount, factor)}`}
+              toneColor={toneColor}
+            />
+          ))}
+        </View>
+      ) : (
+        <View className="rounded-2xl bg-card px-4 py-5">
+          <Text className="text-center text-[13px] text-muted-foreground">
+            No transactions found for this period.
+          </Text>
+        </View>
+      )}
+    </>
+  );
+}
+
+function TransactionRow({
+  Icon,
+  title,
+  subtitle,
+  amount,
+  toneColor,
+}: {
+  Icon: LucideIcon;
+  title: string;
+  subtitle: string;
+  amount: string;
+  toneColor: string;
+}) {
+  return (
+    <View className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5">
+      <View className="h-10 w-10 items-center justify-center">
+        <Icon color={toneColor} size={18} strokeWidth={2.2} />
+      </View>
+      <View className="min-w-0 flex-1">
+        <Text className="text-[14px] font-semibold text-foreground">{title}</Text>
+        <Text className="mt-0.5 text-[12px] text-muted-foreground">{subtitle}</Text>
+      </View>
+      <Text className="text-[14px] font-bold text-foreground">{amount}</Text>
+    </View>
   );
 }
 
@@ -1043,76 +726,6 @@ function UpcomingSubscriptionsSection({
             </Pressable>
           );
         })}
-      </View>
-    </View>
-  );
-}
-
-function TransactionEvidenceContent({
-  evidence,
-  factor,
-  onClose,
-  onMitigate,
-}: {
-  evidence: {
-    title: string;
-    amount: string;
-    transactions: FeeTransaction[];
-    mitigation: string;
-    route: string | null;
-  };
-  factor: number;
-  onClose: () => void;
-  onMitigate: () => void;
-}) {
-  return (
-    <View>
-      <View className="flex-row items-start justify-between gap-3">
-        <View className="min-w-0 flex-1">
-          <Text className="text-[19px] font-bold text-foreground">{evidence.title}</Text>
-          <Text className="mt-1 text-[13px] leading-5 text-muted-foreground">
-            Transactions included in this period
-          </Text>
-        </View>
-        <Text className="text-[16px] font-bold text-foreground">
-          {scaleRandAmount(evidence.amount, factor)}
-        </Text>
-      </View>
-      <View className="mt-4 gap-2">
-        {evidence.transactions.map((transaction) => (
-          <View
-            key={transaction.id}
-            className="flex-row items-center justify-between rounded-2xl border border-border/70 bg-background px-3.5 py-3"
-          >
-            <View className="min-w-0 flex-1 pr-3">
-              <Text className="text-[13px] font-medium text-foreground">
-                {transaction.description}
-              </Text>
-              <Text className="mt-0.5 text-[11px] text-muted-foreground">
-                {transaction.date}
-              </Text>
-            </View>
-            <Text className="text-[13px] font-semibold text-foreground">
-              {scaleRandAmount(transaction.amount, factor)}
-            </Text>
-          </View>
-        ))}
-      </View>
-      <View className="mt-4 rounded-2xl bg-muted px-3.5 py-3">
-        <Text className="text-[12px] font-semibold text-foreground">How to mitigate</Text>
-        <Text className="mt-1 text-[12px] leading-5 text-muted-foreground">
-          {evidence.mitigation}
-        </Text>
-      </View>
-      <View className="mt-4 flex-row gap-2">
-        <Button className="flex-1" size="md" variant="outline" onPress={onClose}>
-          Close
-        </Button>
-        {evidence.route ? (
-          <Button className="flex-1" size="md" onPress={onMitigate}>
-            See ways to mitigate
-          </Button>
-        ) : null}
       </View>
     </View>
   );

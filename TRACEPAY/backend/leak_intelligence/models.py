@@ -208,6 +208,11 @@ class FeeFeatures(BaseModel):
     insufficient_funds_fee_total: Decimal | None = None
     insufficient_funds_fee_count: int = 0
     insufficient_funds_fee_high_confidence_count: int = 0
+    insufficient_funds_fee_copies_removed: int = 0
+    vas_fee_total: Decimal | None = None
+    vas_fee_count: int = 0
+    card_replacement_fee_total: Decimal | None = None
+    card_replacement_fee_count: int = 0
 
 
 class CashFeatures(BaseModel):

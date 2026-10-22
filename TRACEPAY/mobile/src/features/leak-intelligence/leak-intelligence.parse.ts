@@ -4,6 +4,8 @@ import type {
   LeakImpactKind,
   LeakSeverity,
   LeakStatus,
+  SupportingTransaction,
+  SupportingTransactionRole,
 } from "./leak-intelligence.types";
 
 export class LeakIntelligenceApiError extends Error {
@@ -90,11 +92,52 @@ function parseLeakDetection(value: unknown): LeakDetection {
     evidence: value.evidence,
     supporting_behavior_ids: value.supporting_behavior_ids,
     supporting_feature_references: value.supporting_feature_references,
+    supporting_transactions: parseSupportingTransactions(value.supporting_transactions),
+    supporting_transaction_count: isFiniteNumber(value.supporting_transaction_count)
+      ? value.supporting_transaction_count
+      : 0,
     detector_version: text.detector_version,
     detected_at: text.detected_at,
     period_start: optionalDate(value.period_start),
     period_end: optionalDate(value.period_end),
   };
+}
+
+const SUPPORTING_ROLES: readonly SupportingTransactionRole[] = [
+  "payment",
+  "fee",
+  "other_fee",
+  "failed_attempt_fee",
+  "reversal",
+];
+
+function parseSupportingTransactions(value: unknown): SupportingTransaction[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item): SupportingTransaction[] => {
+    if (
+      !isRecord(item) ||
+      typeof item.transaction_id !== "string" ||
+      typeof item.date !== "string" ||
+      typeof item.description !== "string" ||
+      !isMoney(item.amount) ||
+      typeof item.direction !== "string" ||
+      !SUPPORTING_ROLES.includes(item.role as SupportingTransactionRole)
+    ) {
+      return [];
+    }
+    return [
+      {
+        transaction_id: item.transaction_id,
+        date: item.date,
+        description: item.description,
+        amount: item.amount,
+        direction: item.direction,
+        role: item.role as SupportingTransactionRole,
+      },
+    ];
+  });
 }
 
 function optionalDate(value: unknown): string | null {

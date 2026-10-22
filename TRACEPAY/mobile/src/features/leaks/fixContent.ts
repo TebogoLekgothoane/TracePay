@@ -67,6 +67,8 @@ export type ActionDetailContent = {
   accounts?: AccountOption[];
   compareRows?: ComparisonRow[];
   topPick?: { name: string; description: string };
+  /** Show the side-by-side South African bank account fee table. */
+  bankComparison?: boolean;
   guideTitle: string;
   guideSubtitle: string;
   steps: GuideStep[];
@@ -757,45 +759,8 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
     savingsLabel: "Potential saving",
     whyThisHelps:
       "Many people stay on legacy accounts with monthly fees they no longer need. A low-fee or zero-fee account can cut recurring charges without changing how you bank day to day.",
-    recommendedTitle: "Recommended accounts",
-    accounts: [
-      {
-        id: "nedbank",
-        name: "Nedbank Savvy Plus",
-        mark: "N",
-        markColor: "success",
-        monthlyFee: "R0.00",
-        tags: ["Free card", "Low fees"],
-        featured: true,
-      },
-      {
-        id: "capitec",
-        name: "Capitec Global One",
-        mark: "C",
-        markColor: "primary",
-        monthlyFee: "R0.00",
-        tags: ["Simple pricing", "No monthly fee"],
-      },
-      {
-        id: "tyme",
-        name: "TymeBank EveryDay",
-        mark: "T",
-        markColor: "warning",
-        monthlyFee: "R0.00",
-        tags: ["Digital first", "Free card"],
-      },
-    ],
-    compareRows: [
-      { label: "Monthly fee", values: ["R0.00", "R0.00", "R0.00"] },
-      { label: "Card", values: ["Free", "Free", "Free"] },
-      { label: "ATM withdrawals", values: ["Free at Nedbank", "Low cost", "Free at TymeBank"] },
-      { label: "Online banking", values: ["Included", "Included", "Included"] },
-      { label: "Debit orders", values: ["Free", "Free", "Free"] },
-    ],
-    topPick: {
-      name: "Nedbank Savvy Plus",
-      description: "Best match for your spending pattern and lowest overall fees.",
-    },
+    recommendedTitle: "Compare accounts",
+    bankComparison: true,
     guideTitle: "How to switch accounts",
     guideSubtitle: "Follow these steps so nothing important gets left behind.",
     helpTitle: "Need help switching safely?",
@@ -839,7 +804,7 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
       "Track your progress in the app",
       "See savings add up on your dashboard",
     ],
-    primaryCta: "Compare accounts",
+    primaryCta: "Compare SA bank accounts",
     compareCta: "See switch steps",
     guideCta: "I've started switching",
     doneCta: "Done",
@@ -1698,7 +1663,7 @@ export function getActionDetail(actionId: string): ActionDetailContent | null {
 }
 
 export function hasCompareFlow(detail: ActionDetailContent): boolean {
-  return Boolean(detail.compareRows?.length);
+  return Boolean(detail.bankComparison || detail.compareRows?.length);
 }
 
 /** Prefer the step-by-step guide unless the action needs a comparison first. */

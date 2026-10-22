@@ -5,7 +5,7 @@ import { requireAccountForImport } from "../accounts/account.service";
 import type { FinancialAccount } from "../accounts/account.types";
 import { getPdfProcessorBaseUrl } from "../../constants/config";
 import { getSupabase } from "../../lib/supabase";
-import { buildTransactionDedupeKey } from "../transactions/transaction.dedupe";
+import { buildOccurrenceDedupeKeys } from "../transactions/transaction.dedupe";
 import { hashStatementContent, readPdfBytes } from "../transactions/statement-file";
 import {
   assertExtractedBankMatchesSelected,
@@ -17,6 +17,7 @@ import {
 import {
   isExpectedImportNotice,
   isNoTransactionsImportMessage,
+  NO_ACTIVITY_IN_PERIOD_MESSAGE,
   NO_TRANSACTIONS_FOUND_MESSAGE,
 } from "./statement-import.messages";
 import {
@@ -165,6 +166,7 @@ type ProcessorPreviewPayload = {
     rows_detected?: number;
     rows_rejected?: number;
     balance_reconciliation?: "verified" | "not_available" | "mismatch";
+    no_activity?: boolean;
   };
   statement_balance?: {
     amount?: number | string | null;
@@ -663,8 +665,9 @@ async function persistPreview(
 
   let duplicateCount = 0;
   const batchKeys = new Map(canonicalKeys);
-  const rows = preview.transactions.map((transaction) => {
-    const dedupeKey = buildTransactionDedupeKey(account.id, transaction);
+  const dedupeKeys = buildOccurrenceDedupeKeys(account.id, preview.transactions);
+  const rows = preview.transactions.map((transaction, index) => {
+    const dedupeKey = dedupeKeys[index];
     const duplicateOf = batchKeys.get(dedupeKey) ?? null;
     const isDuplicate = Boolean(duplicateOf);
     const rowId = Crypto.randomUUID();
@@ -1056,6 +1059,12 @@ export async function preparePdfStatement(
         })
         .eq("id", id);
       throw passwordChallenge;
+    }
+
+    if (httpStatus >= 200 && httpStatus < 300 && validation?.no_activity) {
+      // Nothing to save; keeping the import would also block a later
+      // statement for the same period as a duplicate.
+      return await failAndCleanup(id, filePath, NO_ACTIVITY_IN_PERIOD_MESSAGE);
     }
 
     if (

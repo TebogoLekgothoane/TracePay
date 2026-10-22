@@ -921,6 +921,14 @@ def _fee_subtype(transaction: FeatureTransaction) -> str | None:
     if transaction.categorisation.transaction_class != "bank_fee":
         return None
     description = transaction.description.upper()
+    # Failed-payment fees name the merchant that was attempted; the charge is
+    # the bank's, so it is typed by the failure, not the merchant.
+    if "UNSUCCESSFUL" in description and "INSUFFICIENT FUNDS" in description:
+        return "insufficient_funds"
+    if "CARD REPLACEMENT" in description or "REPLACEMENT CARD" in description:
+        return "card_replacement"
+    if "VAS" in description.split() and "FEE" in description:
+        return "vas"
     if "BALANCE ENQUIRY" in description or "BALANCE INQUIRY" in description:
         return "balance_enquiry"
     if "ATM FEE" in description or (
@@ -988,9 +996,10 @@ def _fee_features(transactions: list[FeatureTransaction]) -> FeeFeatures:
     overdraft_fees = _without_same_day_amount_duplicates(
         [item for item in fees if _fee_subtype(item) == "overdraft"]
     )
-    insufficient_funds_fees = _without_same_day_amount_duplicates(
-        [item for item in fees if _fee_subtype(item) == "insufficient_funds"]
-    )
+    raw_insufficient_funds_fees = [
+        item for item in fees if _fee_subtype(item) == "insufficient_funds"
+    ]
+    insufficient_funds_fees = _without_same_day_amount_duplicates(raw_insufficient_funds_fees)
     card_total = sum((amount_of(item) for item in card_fees), ZERO)
     foreign_total = sum((amount_of(item) for item in foreign_fees), ZERO)
     interest_total = sum((amount_of(item) for item in interest_charges), ZERO)
@@ -1030,8 +1039,13 @@ def _fee_features(transactions: list[FeatureTransaction]) -> FeeFeatures:
             item.categorisation.classification_confidence >= HIGH_CONFIDENCE
             for item in overdraft_fees
         ),
+        vas_fee_total=totals["vas"] or None,
+        vas_fee_count=sum(1 for item in fees if _fee_subtype(item) == "vas"),
+        card_replacement_fee_total=totals["card_replacement"] or None,
+        card_replacement_fee_count=sum(1 for item in fees if _fee_subtype(item) == "card_replacement"),
         insufficient_funds_fee_total=insufficient_funds_total or None,
         insufficient_funds_fee_count=len(insufficient_funds_fees),
+        insufficient_funds_fee_copies_removed=len(raw_insufficient_funds_fees) - len(insufficient_funds_fees),
         insufficient_funds_fee_high_confidence_count=sum(
             item.categorisation.classification_confidence >= HIGH_CONFIDENCE
             for item in insufficient_funds_fees

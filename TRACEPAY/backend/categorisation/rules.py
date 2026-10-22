@@ -34,8 +34,8 @@ def _bounded_phrase(phrase: str) -> re.Pattern[str]:
 # display form. Card-purchase recovery uses this list; it is not a new
 # category catalogue.
 _RECOGNISED_MERCHANT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Mr D", ("MR D FOOD", "MRD FOOD", "MR D")),
-    ("Uber Eats", ("UBER EATS", "UBEREATS")),
+    ("Mr D", ("MR D FOOD", "MRD FOOD", "MR D", "MRD")),
+    ("Uber Eats", ("UBER EATS", "UBEREATS", "DLUBER EATS", "DLUBEREATS")),
     ("Pick n Pay", ("PICK N PAY", "PICKNPAY")),
     ("Woolworths", ("WOOLWORTHS",)),
     ("Checkers", ("CHECKERS",)),
@@ -53,15 +53,15 @@ _RECOGNISED_MERCHANT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Steers", ("STEERS",)),
     ("Wimpy", ("WIMPY",)),
     ("Roman's Pizza", ("ROMAN'S PIZZA", "ROMANS")),
-    ("Uber", ("UBER",)),
-    ("Bolt", ("BOLT",)),
+    ("Uber", ("UBER", "DLUBER")),
+    ("Bolt", ("BOLT", "DLBOLT")),
     ("Shell", ("SHELL",)),
     ("Engen", ("ENGEN",)),
     ("Bp", ("BP",)),
     ("Totalenergies", ("TOTALENERGIES",)),
     ("Sasol", ("SASOL",)),
     ("Netflix", ("NETFLIX",)),
-    ("Spotify", ("SPOTIFY",)),
+    ("Spotify", ("SPOTIFY", "SPOTIFYZA")),
     ("Dstv", ("DSTV",)),
     ("Showmax", ("SHOWMAX",)),
     ("CapCut", ("CAPCUT", "CAP CUT", "CAPCUT VIDEO", "GOOGLE CAPCUT")),
@@ -134,6 +134,26 @@ def contains_fragment(*fragments: str) -> Callable[[str, str], bool]:
     )
 
 
+def any_of(*matchers: Callable[[str, str], bool]) -> Callable[[str, str], bool]:
+    return lambda description, kind: any(matcher(description, kind) for matcher in matchers)
+
+
+_FEE_ROW = re.compile(r"^FEE(?![A-Z0-9])")
+
+
+def _is_fee_row(description: str, _kind: str) -> bool:
+    """GoTyme fee rows: ``Fee: ...``, ``Fee - ...``, failed-payment and replacement fees.
+
+    The fee column carries the bank's charge, never the merchant payment, so
+    the merchant named in the text must not turn the row into spending.
+    """
+    if _FEE_ROW.match(description.strip()):
+        return True
+    return "UNSUCCESSFUL" in description and "INSUFFICIENT FUNDS" in description or any(
+        phrase in description for phrase in ("CARD REPLACEMENT FEE", "REPLACEMENT CARD FEE")
+    )
+
+
 _PURCHASE_REVERSAL = contains(
     "REFUND",
     "REVERSAL",
@@ -170,6 +190,7 @@ RULES: tuple[Rule, ...] = (
         incoming_contains("SALARY ADVANCE"),
         transaction_class="income",
     ),
+    Rule("description:fee-row", "Bank Fees", 0.97, _is_fee_row, transaction_class="bank_fee"),
     # Fees before merchant tokens so "Insufficient Funds Fee: Uber" stays a bank fee.
     Rule(
         "description:service-fee",
@@ -234,10 +255,13 @@ RULES: tuple[Rule, ...] = (
         "merchant:food-delivery",
         "Fast Food",
         0.95,
-        contains("UBER EATS", "MR D FOOD", "MRD FOOD", "MR D ", "UBEREATS"),
+        any_of(
+            contains("UBER EATS", "MR D FOOD", "MRD FOOD", "MR D ", "MRD", "UBEREATS"),
+            contains_fragment("DLUBER EATS", "DLUBEREATS"),
+        ),
     ),
-    Rule("merchant:uber", "Ride Hailing", 1.00, contains("UBER")),
-    Rule("merchant:bolt", "Ride Hailing", 1.00, contains("BOLT")),
+    Rule("merchant:uber", "Ride Hailing", 1.00, any_of(contains("UBER"), contains_fragment("DLUBER"))),
+    Rule("merchant:bolt", "Ride Hailing", 1.00, any_of(contains("BOLT"), contains_fragment("DLBOLT"))),
     Rule("merchant:shell", "Fuel", 1.00, contains("SHELL")),
     Rule("merchant:engen", "Fuel", 1.00, contains("ENGEN")),
     Rule("merchant:bp", "Fuel", 1.00, contains("BP")),
@@ -286,6 +310,7 @@ RULES: tuple[Rule, ...] = (
         "merchant:subscriptions",
         "Subscriptions",
         1.00,
+        any_of(
         contains(
             "NETFLIX",
             "SPOTIFY",
@@ -316,8 +341,16 @@ RULES: tuple[Rule, ...] = (
             "AT EPOS AT OPENAI",
             "RECURRING PAYMENT FROM OPENAI",
         ),
+            contains_fragment("SPOTIFYZA"),
+        ),
     ),
     Rule("description:data-bundle", "Airtime & Data", 0.95, contains("DATA BUNDLE")),
+    Rule(
+        "description:vas-mobile-purchase",
+        "Airtime & Data",
+        0.92,
+        any_of(contains("VAS PURCHASE", "VAS MOBILE PURCHASE", "MTN MOBILE")),
+    ),
     Rule(
         "description:mobile-purchase-phone",
         "Airtime & Data",
@@ -381,6 +414,17 @@ RULES: tuple[Rule, ...] = (
             and "PAYSHAP" not in description
             and "PAYMENT" not in description
             and "SAVINGS" not in description
+        ),
+        transaction_class="person_to_person",
+    ),
+    Rule(
+        "description:payment-to-beneficiary",
+        "Transfers",
+        0.90,
+        lambda description, kind: (
+            kind == "debit"
+            and description.startswith("PAYMENT TO ")
+            and any(token in description for token in ("MOBILE NO", "ACCOUNT NO"))
         ),
         transaction_class="person_to_person",
     ),

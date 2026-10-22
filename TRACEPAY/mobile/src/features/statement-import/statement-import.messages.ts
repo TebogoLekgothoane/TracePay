@@ -5,6 +5,10 @@ import { isBankMismatchError } from "./statement-bank";
 export const NO_TRANSACTIONS_FOUND_MESSAGE =
   "We opened this statement, but it doesn't include any transactions TracePay can use. Upload a statement with your transaction history to continue.";
 
+/** The statement's own summary shows no money in or out for its period. */
+export const NO_ACTIVITY_IN_PERIOD_MESSAGE =
+  "This statement has no transactions in this period, so there's nothing to import. Upload a statement for a period with account activity.";
+
 export type ImportNoticeTone = "info" | "error";
 
 export function isNoTransactionsImportMessage(message: string): boolean {
@@ -19,7 +23,9 @@ export function isNoTransactionsImportMessage(message: string): boolean {
 
 export function isExpectedImportNotice(message: string): boolean {
   return (
-    isNoTransactionsImportMessage(message) || isBankMismatchError(message)
+    isNoTransactionsImportMessage(message) ||
+    message.trim() === NO_ACTIVITY_IN_PERIOD_MESSAGE ||
+    isBankMismatchError(message)
   );
 }
 

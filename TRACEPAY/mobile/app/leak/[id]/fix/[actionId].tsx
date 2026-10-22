@@ -5,6 +5,7 @@ import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 
+import { BankComparisonTable } from "../../../../src/components/leaks/BankComparisonTable";
 import {
   LeakFlowShell,
   resolveMarkColor,
@@ -44,7 +45,9 @@ export default function FixActionDetailScreen() {
     return null;
   }
 
-  const nextRoute = hasCompareFlow(detail)
+  const nextRoute = detail.bankComparison
+    ? `/leak/${leakId}/fix/${actionId}/guide`
+    : hasCompareFlow(detail)
     ? `/leak/${leakId}/fix/${actionId}/compare`
     : `/leak/${leakId}/fix/${actionId}/guide`;
 
@@ -131,12 +134,28 @@ export default function FixActionDetailScreen() {
           </>
         ) : null}
 
+        {detail.bankComparison ? (
+          <>
+            <Text className="mb-1 mt-7 text-[17px] font-bold text-foreground">
+              Compare South African bank accounts
+            </Text>
+            <Text className="text-[13px] leading-5 text-muted-foreground">
+              Monthly fees for entry-level accounts. Scroll sideways for more columns.
+            </Text>
+            <BankComparisonTable />
+          </>
+        ) : null}
+
         <Button
           className="mt-6"
           size="md"
           onPress={() => router.push(nextRoute as never)}
         >
-          {hasCompareFlow(detail) ? detail.primaryCta : "Show step-by-step guide"}
+          {detail.bankComparison
+            ? detail.compareCta
+            : hasCompareFlow(detail)
+              ? detail.primaryCta
+              : "Show step-by-step guide"}
         </Button>
       </ScrollView>
     </LeakFlowShell>

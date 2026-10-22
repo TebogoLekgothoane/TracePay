@@ -5,6 +5,7 @@ import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { LeakFlowShell } from "../../../../../src/components/leaks/LeakFlowShell";
+import { BankComparisonTable } from "../../../../../src/components/leaks/BankComparisonTable";
 import { Button } from "../../../../../src/components/ui/Button";
 import { getActionDetail } from "../../../../../src/features/leaks/fixContent";
 import { COLORS, TRACEPAY, withAlpha } from "../../../../../src/theme/colors";
@@ -22,6 +23,30 @@ export default function FixCompareScreen() {
 
   if (!detail) {
     return null;
+  }
+
+  if (detail.bankComparison) {
+    return (
+      <LeakFlowShell
+        title="Compare bank accounts"
+        subtitle="Monthly fees for entry-level accounts at South African banks."
+      >
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 140 }}
+        >
+          <BankComparisonTable />
+
+          <Button
+            className="mt-6"
+            size="md"
+            onPress={() => router.push(`/leak/${leakId}/fix/${actionId}/guide`)}
+          >
+            {detail.compareCta}
+          </Button>
+        </ScrollView>
+      </LeakFlowShell>
+    );
   }
 
   const columnHeaders =

@@ -9,6 +9,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
+    "test:dedupe": "npx tsx src/features/transactions/transaction.dedupe.test.ts",
     "test:validation": "npx tsx src/features/statement-import/statement-import.validation.test.ts",
     "test:statement-bank": "npx tsx src/features/statement-import/statement-bank.test.ts"
   },

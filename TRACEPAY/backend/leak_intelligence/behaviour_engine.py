@@ -30,6 +30,9 @@ MIN_HIGH_CONFIDENCE_RATIO = Decimal("0.60")
 MIN_OBSERVATION_CONFIDENCE = 0.55
 MIN_WEEKEND_SPENDING_TRANSACTIONS = 10
 MIN_PAYDAY_SPENDING_TRANSACTIONS = 10
+# A typed fee that makes up at least this share of all fees is a pattern of its
+# own even when other fee types are present on the same statement.
+DOMINANT_FEE_SHARE = Decimal("0.4")
 MIN_FEE_BURDEN_TOTAL = Decimal("10")
 
 
@@ -845,7 +848,9 @@ def _cash_and_fee_observations(snapshot: FinancialFeatureSnapshot) -> list[Behav
         ):
             observations.append(_typed_fee_repetition_observation(snapshot))
         elif _typed_bank_fee_repetition_eligible(
-            snapshot, snapshot.fees.insufficient_funds_fee_total or ZERO
+            snapshot,
+            snapshot.fees.insufficient_funds_fee_total or ZERO,
+            allow_dominant_share=True,
         ):
             observations.append(_typed_fee_repetition_observation(snapshot))
     return observations
@@ -861,12 +866,22 @@ def _eligible_fee_totals(snapshot: FinancialFeatureSnapshot) -> set[Decimal]:
 
 
 def _typed_bank_fee_repetition_eligible(
-    snapshot: FinancialFeatureSnapshot, typed_total: Decimal
+    snapshot: FinancialFeatureSnapshot,
+    typed_total: Decimal,
+    *,
+    allow_dominant_share: bool = False,
 ) -> bool:
     fees = snapshot.fees
     if (
         typed_total < MIN_FEE_BURDEN_TOTAL
-        or typed_total not in _eligible_fee_totals(snapshot)
+        or not (
+            typed_total in _eligible_fee_totals(snapshot)
+            or (
+                allow_dominant_share
+                and not fees.insufficient_funds_fee_copies_removed
+                and typed_total >= fees.bank_fee_total * DOMINANT_FEE_SHARE
+            )
+        )
         or fees.bank_fee_transaction_count < 2
     ):
         return False

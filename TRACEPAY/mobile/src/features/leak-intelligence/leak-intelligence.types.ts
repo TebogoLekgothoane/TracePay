@@ -2,6 +2,22 @@ export type LeakImpactKind = "recurring" | "one_time" | "estimated";
 export type LeakSeverity = "low" | "medium" | "high";
 export type LeakStatus = "active" | "monitoring" | "resolved" | "dismissed";
 
+export type SupportingTransactionRole =
+  | "payment"
+  | "fee"
+  | "other_fee"
+  | "failed_attempt_fee"
+  | "reversal";
+
+export type SupportingTransaction = {
+  transaction_id: string;
+  date: string;
+  description: string;
+  amount: number | string;
+  direction: string;
+  role: SupportingTransactionRole;
+};
+
 export type LeakDetection = {
   leak_id: string;
   fingerprint: string;
@@ -17,6 +33,8 @@ export type LeakDetection = {
   evidence: Record<string, unknown>;
   supporting_behavior_ids: string[];
   supporting_feature_references: string[];
+  supporting_transactions: SupportingTransaction[];
+  supporting_transaction_count: number;
   detector_version: string;
   detected_at: string;
   period_start: string | null;

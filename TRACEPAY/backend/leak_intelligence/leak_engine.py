@@ -7,6 +7,7 @@ from decimal import Decimal
 import re
 
 from .behaviour_engine import (
+    DOMINANT_FEE_SHARE,
     MIN_FEE_BURDEN_TOTAL,
     MIN_RELATIVE_CHANGE_PERCENT,
     MIN_TREND_MONTHS,
@@ -64,7 +65,8 @@ def detect_leaks(
         *_inactive_recurring_leaks(snapshot),
         *_irregular_transaction_leaks(snapshot),
         *_spending_escalation_leaks(snapshot, observations),
-        *_category_leaks(snapshot, observations),
+        *(category_findings := _category_leaks(snapshot, observations)),
+        *_sustained_habit_leaks(snapshot, category_findings),
         *_coffee_spending_leaks(snapshot, observations),
         *_convenience_store_leaks(snapshot, observations),
         *_weekend_spending_leaks(snapshot, observations),
@@ -1112,6 +1114,116 @@ def _category_spend_pattern_evidence(
         "cause_identified": bool(supporting),
         "supporting_pattern_summary": " ".join(summary_parts) if summary_parts else None,
     }
+
+
+# Steady habits that escalation-only detection never sees. Each entry:
+# (leak type, title, description, minimum monthly average in rand).
+_HABIT_CATEGORIES: dict[str, tuple[LeakType, str, str, Decimal]] = {
+    "Airtime & Data": (
+        "airtime_data_leak",
+        "Potential frequent airtime and data top-ups",
+        "Airtime and data were bought many times each month. Several small top-ups, "
+        "each with its own fee, can cost more than fewer larger purchases or a bundle.",
+        Decimal("100"),
+    ),
+    "Fast Food": (
+        "food_spending_leak",
+        "Potential recurring food delivery and fast food spending",
+        "Food delivery and fast food purchases repeated every month at a material amount.",
+        Decimal("150"),
+    ),
+    "Ride Hailing": (
+        "transport_spending_leak",
+        "Potential recurring ride-hailing spending",
+        "Ride-hailing trips repeated every month at a material amount.",
+        Decimal("150"),
+    ),
+}
+HABIT_MIN_MONTHS = 2
+HABIT_MIN_MONTHLY_TRANSACTIONS = Decimal("3")
+HABIT_MIN_TRANSACTIONS = 8
+
+
+def _sustained_habit_leaks(
+    snapshot: FinancialFeatureSnapshot,
+    category_findings: list[LeakDetection],
+) -> list[LeakDetection]:
+    """Flag spending that repeats at a material level every completed month.
+
+    Escalation detectors need a month-on-month rise, so a flat but heavy habit
+    never reaches them. This detector uses only completed months, requires the
+    same category in every one of them, and skips categories that already have
+    an escalation finding so one habit is reported once.
+    """
+    months = {month.month for month in completed_months(snapshot)}
+    if len(months) < HABIT_MIN_MONTHS:
+        return []
+    already = {
+        item.evidence.get("category_name") for item in category_findings
+    }
+    findings: list[LeakDetection] = []
+    for feature in snapshot.categories:
+        definition = _HABIT_CATEGORIES.get(feature.category_name)
+        if definition is None or feature.category_name in already:
+            continue
+        leak_type, title, description, minimum_monthly = definition
+        totals = {m: feature.category_monthly_total.get(m, Decimal("0")) for m in months}
+        counts = {m: feature.category_monthly_transaction_count.get(m, 0) for m in months}
+        if any(total <= 0 for total in totals.values()):
+            continue
+        month_count = Decimal(len(months))
+        total_amount = sum(totals.values(), Decimal("0"))
+        total_count = sum(counts.values())
+        monthly_average = (total_amount / month_count).quantize(Decimal("0.01"))
+        if (
+            total_count < HABIT_MIN_TRANSACTIONS
+            or Decimal(total_count) / month_count < HABIT_MIN_MONTHLY_TRANSACTIONS
+            or monthly_average < minimum_monthly
+            or support_ratio(feature.confidence_support) < Decimal("0.60")
+        ):
+            continue
+        confidence = leak_confidence(
+            support=feature.confidence_support,
+            observation_count=total_count,
+            pattern_strength=Decimal("0.70"),
+            ceiling=Decimal("0.72"),
+        )
+        if confidence is None:
+            continue
+        evidence: dict[str, object] = {
+            "category_name": feature.category_name,
+            "finding_focus": "sustained_habit",
+            "completed_month_count": len(months),
+            "category_transaction_count": total_count,
+            "category_total_amount": total_amount,
+            "monthly_average_spend": monthly_average,
+            "monthly_average_transactions": (Decimal(total_count) / month_count).quantize(Decimal("0.1")),
+            "average_transaction_amount": (total_amount / Decimal(total_count)).quantize(Decimal("0.01")),
+            "monthly_totals": {m: totals[m] for m in sorted(totals)},
+            "classification_support_ratio": support_ratio(feature.confidence_support),
+            "finding_kind": "potential_leak",
+        }
+        if leak_type == "airtime_data_leak" and snapshot.fees.vas_fee_total:
+            evidence["vas_fee_total"] = snapshot.fees.vas_fee_total
+            evidence["vas_fee_count"] = snapshot.fees.vas_fee_count
+        findings.append(
+            _leak(
+                snapshot=snapshot,
+                leak_type=leak_type,
+                subject=f"habit:{feature.category_name}",
+                title=title,
+                description=description,
+                monthly_impact=monthly_average,
+                annual_impact=monthly_average * Decimal("12"),
+                impact_kind="recurring",
+                confidence=confidence,
+                severity=severity_for_impact(monthly_average, persistent=True, confidence=confidence),
+                evidence=evidence,
+                behaviour_ids=[],
+                feature_refs=[f"categories[{feature.category_name}].category_monthly_total"],
+            )
+        )
+    return findings
 
 
 def _category_leak_definition(
@@ -2434,7 +2546,11 @@ def _recurring_monthly_impact(
     amount = recurrence.typical_amount or recurrence.average_amount
     if interval in (None, Decimal("0")) or amount is None:
         return None
-    return amount * Decimal("30") / interval
+    # A bill that lands once per calendar month costs its amount per month; the
+    # 28-31 day spread is a calendar effect, not a cheaper rate.
+    if _is_monthly_billing_interval(interval):
+        return amount.quantize(Decimal("0.01"))
+    return (amount * Decimal("30") / interval).quantize(Decimal("0.01"))
 
 
 def _foreign_transaction_fee_burden(
@@ -2520,6 +2636,7 @@ def _insufficient_funds_fee_burden(
         fees.insufficient_funds_fee_high_confidence_count,
         fees,
         fee_observations,
+        allow_dominant_share=True,
     )
 
 
@@ -2544,12 +2661,21 @@ def _specific_fee_burden(
     high_confidence_count: int,
     fees: FeeFeatures,
     fee_observations: list[BehaviourObservation],
+    *,
+    allow_dominant_share: bool = False,
 ) -> bool:
     if (
         not fee_observations
         or count < 2
         or total < MIN_IMPACT
-        or total not in _eligible_non_account_fee_pool(fees, fee_observations)
+        or not (
+            total in _eligible_non_account_fee_pool(fees, fee_observations)
+            or (
+                allow_dominant_share
+                and not fees.insufficient_funds_fee_copies_removed
+                and total >= fees.bank_fee_total * DOMINANT_FEE_SHARE
+            )
+        )
     ):
         return False
     return Decimal(high_confidence_count) / Decimal(count) >= Decimal("0.60")
@@ -2730,6 +2856,8 @@ def _fee_type_breakdown(fees: FeeFeatures) -> dict[str, object]:
         "interest_charges": fees.interest_charge_total or Decimal("0"),
         "overdraft_fees": fees.overdraft_fee_total or Decimal("0"),
         "insufficient_funds_fees": fees.insufficient_funds_fee_total or Decimal("0"),
+        "vas_fees": fees.vas_fee_total or Decimal("0"),
+        "card_replacement_fees": fees.card_replacement_fee_total or Decimal("0"),
     }
     recurring_total = (
         typed["service_charges"]
@@ -2744,6 +2872,8 @@ def _fee_type_breakdown(fees: FeeFeatures) -> dict[str, object]:
         + typed["interest_charges"]
         + typed["overdraft_fees"]
         + typed["insufficient_funds_fees"]
+        + typed["vas_fees"]
+        + typed["card_replacement_fees"]
     )
     classified = recurring_total + one_off_total
     return {

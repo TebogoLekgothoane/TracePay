@@ -1,5 +1,7 @@
 import { Text, View } from "react-native";
 
+import { Button } from "./Button";
+
 import type { AnthropicAnalysis } from "../../api/anthropic-analysis.api";
 import type { AnthropicEvidenceTransaction } from "../../api/anthropic-analysis.api";
 
@@ -40,6 +42,39 @@ export function AnthropicAnalysisCard({ analysis, mode }: { analysis: AnthropicA
               ))}
         </View>
       ) : null}
+    </View>
+  );
+}
+
+/** Button-triggered AI analysis: nothing is requested until the user taps Run. */
+export function AnthropicAnalysisSection({
+  mode,
+  analysis,
+  loading,
+  error,
+  onRun,
+}: {
+  mode: "leaks" | "subscriptions";
+  analysis: AnthropicAnalysis | null;
+  loading: boolean;
+  error: string | null;
+  onRun: () => void;
+}) {
+  return (
+    <View className="mt-4">
+      <Button
+        accessibilityLabel={analysis ? "Run AI analysis again" : "Run AI analysis"}
+        loading={loading}
+        size="md"
+        variant="outline"
+        onPress={onRun}
+      >
+        {analysis ? "Run AI analysis again" : "Run AI analysis"}
+      </Button>
+      {error ? (
+        <Text className="mt-2 text-[13px] text-destructive">{error}</Text>
+      ) : null}
+      <AnthropicAnalysisCard analysis={analysis} mode={mode} />
     </View>
   );
 }
