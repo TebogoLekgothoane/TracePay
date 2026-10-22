@@ -39,6 +39,7 @@ from .models import (
     WeekendSpendingFeatures,
 )
 from .subscription_detection import detect_subscriptions
+from .subscription_llm import label_subscription_groups, merchant_resolver
 from .recurrence_rules import (
     matches_plausible_recurring_interval,
     recurrence_strength_cap_for_interval,
@@ -143,7 +144,9 @@ def build_financial_features(
         coverage_observation_end=coverage_end,
         spending_profile=build_spending_profile(active),
         merchants=_merchant_features(active),
-        subscriptions=detect_subscriptions(active),
+        subscriptions=label_subscription_groups(
+            detect_subscriptions(active, merchant_resolver=merchant_resolver())
+        ),
         categories=_category_features(active),
         months=_monthly_features(active),
         fees=_fee_features(active),

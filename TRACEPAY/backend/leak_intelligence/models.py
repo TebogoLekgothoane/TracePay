@@ -25,6 +25,7 @@ class FeatureTransaction:
     transaction_type: Literal["debit", "credit"] | None = None
     is_duplicate: bool = False
     statement_id: str | None = None
+    balance: Decimal | None = None
 
 
 class SpendingProfile(BaseModel):
@@ -337,7 +338,7 @@ class SubscriptionGroup(BaseModel):
     merchant_key: str
     product_key: str
     classification: Literal["fixed", "variable", "one_off"]
-    cadence: Literal["weekly", "fortnightly", "monthly", "quarterly", "annual", "irregular"]
+    cadence: Literal["weekly", "fortnightly", "monthly", "bimonthly", "quarterly", "biannual", "annual", "irregular"]
     status: Literal["active", "late", "failed_recently", "ended"] = "active"
     cadence_days: Decimal | None = None
     expected_day_of_month: int | None = None
@@ -355,6 +356,15 @@ class SubscriptionGroup(BaseModel):
     successful_transaction_ids: list[str] = Field(default_factory=list)
     failed_transaction_ids: list[str] = Field(default_factory=list)
     observations: list[SubscriptionObservation] = Field(default_factory=list)
+    # Added fields; everything above keeps its original meaning.
+    canonical_name: str = ""
+    successful_payment_count: int = 0
+    price_changes: list[dict[str, object]] = Field(default_factory=list)
+    late_payment_dates: list[date] = Field(default_factory=list)
+    # Optional LLM label. It never changes amounts, dates, cadence or classes.
+    ai_reason: str | None = None
+    ai_model: str | None = None
+    ai_prompt_version: str | None = None
 
 
 class FinancialFeatureSnapshot(BaseModel):

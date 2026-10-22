@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     openrouter_timeout_seconds: int = 60
     openrouter_http_referer: str = ""
     openrouter_title: str = "TracePay"
+    # Optional LLM labels for subscription detection (OpenRouter). Off by default;
+    # the model must be pinned explicitly or the feature stays off.
+    subscription_llm_enabled: bool = False
+    subscription_llm_model: str = ""
+    subscription_llm_timeout_seconds: int = 10
     tracepay_env: str = "production"
     synthetic_intelligence_debug: bool = False
 

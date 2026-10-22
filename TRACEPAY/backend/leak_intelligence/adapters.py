@@ -68,6 +68,7 @@ def feature_transaction_from_row(row: Mapping[str, Any], *, expected_user_id: st
         transaction_type=transaction_type,
         is_duplicate=bool(row.get("is_duplicate", False)),
         statement_id=_optional_text(row, "statement_id"),
+        balance=_decimal(row["balance"]) if row.get("balance") not in (None, "") else None,
     )
 
 
