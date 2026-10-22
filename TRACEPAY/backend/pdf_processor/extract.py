@@ -3,11 +3,11 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from .gotyme_text import gotyme_transactions
 from .models import RawExtraction
 from .normalise import has_usable_structured_text
 from .ocr import ocr_page_images
 from .tables import extract_camelot_tables
+from .text_chain import text_chain_transactions
 
 logger = logging.getLogger("tracepay.pdf.extract")
 
@@ -52,11 +52,11 @@ def extract_layers(content: bytes, password: str | None = None) -> tuple[RawExtr
     method = "unknown"
     confidence = 0.0
 
-    if gotyme_transactions(text) is not None:
-        # Balance-chain-verified text rows; Camelot misplaces GoTyme's wrapped rows.
+    if text_chain_transactions(text) is not None:
+        # Balance-chain-verified text rows; table readers drop or repeat rows.
         method = "text"
         confidence = 1.0
-        logger.info("pdf_gotyme_text_chain pages=%s useful_chars=%s", pymupdf.pages, useful_text)
+        logger.info("pdf_text_chain pages=%s useful_chars=%s", pymupdf.pages, useful_text)
     elif has_usable_structured_text(text):
         method = "text"
         confidence = _TEXT_METHOD_CONFIDENCE

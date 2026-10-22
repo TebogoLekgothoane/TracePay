@@ -100,7 +100,19 @@ def _normalize_amount_body(cleaned: str) -> str | None:
     return None
 
 
-def normalize_row(row: list[str], headers: list[str], row_number: int) -> Transaction | None:
+def normalize_row(
+    row: list[str],
+    headers: list[str],
+    row_number: int,
+    *,
+    unsigned_is_credit: bool = False,
+) -> Transaction | None:
+    """Build one transaction from a table row.
+
+    ``unsigned_is_credit``: the table's amount column marks debits with a sign
+    (ABSA "-R115.00" vs "R8 000.00"), so an unsigned amount is a credit.
+    Without that evidence an unsigned single amount is rejected, not guessed.
+    """
     values = {header: row[index].strip() if index < len(row) else "" for index, header in enumerate(headers)}
     date_value = next(
         (values[name] for name in values if name in {"date", "transaction date", "value date", "trans date"}),
@@ -112,6 +124,7 @@ def normalize_row(row: list[str], headers: list[str], row_number: int) -> Transa
             for name in values
             if name in {"description", "details", "narration", "narrative", "merchant"}
             or name.startswith("description")
+            or name.endswith(" description")
         ),
         "",
     )
@@ -175,7 +188,11 @@ def normalize_row(row: list[str], headers: list[str], row_number: int) -> Transa
         )
         if re.search(r"\b(debit|debited|dr|withdrawal|out)\b", direction) or amount_value.strip().startswith(("-", "(")):
             signed_amount, transaction_type = -abs(amount), "debit"
-        elif re.search(r"\b(credit|credited|cr|deposit|in)\b", direction) or amount_value.strip().startswith("+"):
+        elif (
+            re.search(r"\b(credit|credited|cr|deposit|in)\b", direction)
+            or amount_value.strip().startswith("+")
+            or (unsigned_is_credit and not direction)
+        ):
             signed_amount, transaction_type = abs(amount), "credit"
         else:
             return None
@@ -322,3 +339,17 @@ def split_same_row_fee(
         category_rule="statement:same-row-fee",
     )
     return payment, fee_row
+
+
+_SINGLE_AMOUNT_HEADERS = {"amount", "transaction amount", "value"}
+
+
+def table_marks_debits_with_sign(rows: list[list[str]], headers: list[str]) -> bool:
+    """True when the single amount column prints debits as negative ("-R115.00")."""
+    columns = [index for index, header in enumerate(headers) if header in _SINGLE_AMOUNT_HEADERS]
+    return any(
+        row[index].strip().startswith(("-", "("))
+        for row in rows
+        for index in columns
+        if index < len(row) and parse_amount(row[index]) not in (None, Decimal("0"))
+    )

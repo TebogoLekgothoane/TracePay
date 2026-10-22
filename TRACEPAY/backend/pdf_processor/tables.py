@@ -39,7 +39,8 @@ def normalize_table(table: Any) -> list[list[str]]:
 
 
 def is_description_header(header: str) -> bool:
-    return header in _DESCRIPTION_HEADERS or header.startswith("description")
+    # "transaction description" (ABSA) as well as "description*" variants.
+    return header in _DESCRIPTION_HEADERS or header.startswith("description") or header.endswith(" description")
 
 
 def is_transaction_table(headers: list[str]) -> bool:
@@ -61,7 +62,12 @@ def table_headers(rows: list[list[str]]) -> tuple[int, list[str]]:
 def canonical_header(value: str) -> str:
     header = re.sub(r"\([^)]*\)|\[[^]]*\]", "", value.casefold())
     header = " ".join(header.replace("_", " ").replace("/", " ").split())
-    return header.rstrip("*").strip()
+    header = header.rstrip("*").strip()
+    # Camelot sometimes breaks a short header word ("D\nate").
+    compact = header.replace(" ", "")
+    if compact != header and compact in _DATE_HEADERS | _AMOUNT_HEADERS | {"balance", "description", "details"}:
+        return compact
+    return header
 
 
 def align_row_to_headers(row: list[str], headers: list[str]) -> tuple[list[str], list[str]]:

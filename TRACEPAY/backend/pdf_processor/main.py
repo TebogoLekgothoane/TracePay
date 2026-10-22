@@ -7,11 +7,11 @@ from .ai_extract import (
     extract_transactions_with_ai,
 )
 from .extract import ExtractionError, extract_layers
-from .gotyme_text import gotyme_transactions
 from .models import ProcessingResult, StatementBalance, Transaction, ValidationResult
-from .normalise import normalize_row, parse_text_rows, split_same_row_fee
+from .normalise import normalize_row, parse_text_rows, split_same_row_fee, table_marks_debits_with_sign
 from .statement_schema import resolve_extracted_statement, statement_has_no_activity
 from .tables import align_row_to_headers, is_transaction_table, merge_continuation_rows, table_headers
+from .text_chain import text_chain_transactions
 from .validate import validate_transactions
 from categorisation.service import CategorisableTransaction, categorise_batch
 
@@ -52,11 +52,11 @@ def process_pdf(
     rows_rejected = 0
     ai_statement = None
 
-    chain_transactions = gotyme_transactions(text) if raw.extraction_method == "text" else None
+    chain_transactions = text_chain_transactions(text) if raw.extraction_method == "text" else None
     if chain_transactions is not None:
         transactions = chain_transactions
         raw = raw.model_copy(update={"rows_found": len(transactions)})
-        logger.info("pdf_gotyme_text_chain_used transactions=%s", len(transactions))
+        logger.info("pdf_text_chain_used transactions=%s", len(transactions))
     elif raw.extraction_method != "unknown":
         table_rows_detected = 0
         if tables:
@@ -85,8 +85,14 @@ def process_pdf(
                     len(merged_rows),
                 )
                 table_rows_detected += len(merged_rows)
+                unsigned_is_credit = table_marks_debits_with_sign(merged_rows, aligned_headers)
                 for row in merged_rows:
-                    transaction = normalize_row(row, aligned_headers, len(transactions) + 1)
+                    transaction = normalize_row(
+                        row,
+                        aligned_headers,
+                        len(transactions) + 1,
+                        unsigned_is_credit=unsigned_is_credit,
+                    )
                     if transaction:
                         previous_balance = next(
                             (item.balance for item in reversed(transactions) if item.balance is not None),
