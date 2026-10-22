@@ -23,8 +23,8 @@ Mobile environment (`TRACEPAY/mobile/env.example`):
 - `EXPO_PUBLIC_API_URL` (auth server, default `http://localhost:4001`)
 - `EXPO_PUBLIC_PDF_PROCESSOR_URL` (extraction API, default `http://localhost:8000`)
 
-Backend environment: copy `TRACEPAY/backend/.env.example`.
+Backend environment: copy `TRACEPAY/backend/.env.example`. Optional transaction categorisation uses `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` (default `openai/gpt-4o-mini`) when `AI_CATEGORISATION_ENABLED=true`. Gemini settings remain for optional PDF extraction only.
 
 ## Milestone notes
 
-Categorisation runs on the extraction API (rules, optional Gemini/OpenRouter). Leak detection against live transactions is **not** wired yet; leak screens still use static product copy. `leak_intelligence` is a feature-engineering library for a later leak pipeline, not a third runtime.
+Categorisation runs on the extraction API (deterministic rules first, then optional OpenRouter for eligible unknown transactions, with configured OpenAI/xAI compatibility fallbacks). Gemini remains available only for optional PDF extraction. Leak detection against live transactions is **not** wired yet; leak screens still use static product copy. `leak_intelligence` is a feature-engineering library for a later leak pipeline, not a third runtime.

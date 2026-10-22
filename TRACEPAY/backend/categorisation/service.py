@@ -201,7 +201,7 @@ def categorise_batch_with_metrics(
         logger.info("[AI] requests=0 reason=no_candidates")
     elif not has_provider_key:
         logger.warning(
-            "[AI] requests=0 reason=missing_api_keys expected_env=GEMINI_API_KEY|OPENAI_API_KEY|XAI_API_KEY"
+            "[AI] requests=0 reason=missing_api_keys expected_env=OPENROUTER_API_KEY|OPENAI_API_KEY|XAI_API_KEY"
         )
     elif not catalog:
         logger.warning("[AI] requests=0 reason=empty_live_category_catalog")

@@ -43,7 +43,9 @@ Transactions → Categorisation → Financial Feature Engine → Behaviour Analy
 → Leak Detection → Financial Reasoning → Financial Recommendations
 ```
 
-AI PDF extraction and AI categorisation are separate flags. Both default to off. When PDF AI is enabled it can receive the statement PDF. Categorisation AI sends only sanitized transaction descriptions, amounts, and types to the configured OpenRouter model, with direct OpenAI and xAI fallback providers. Gemini is not used for categorisation. Neither flag chooses a leak.
+AI PDF extraction and AI categorisation are separate flags and default to off. When PDF AI is enabled it can receive the statement PDF. Categorisation AI runs only for transactions left unknown after deterministic rules, merchant memory, and statement-category mapping. It sends sanitized descriptions, amounts, and transaction types in batches of 50 to OpenRouter first, then uses configured direct OpenAI and xAI providers if needed. Responses are constrained to the live category schema and validated before use; provider failures leave the transaction on the normal unknown/`Other` fallback path. Gemini remains configured for PDF extraction only and is not a categorisation provider.
+
+To enable categorisation, set `AI_CATEGORISATION_ENABLED=true`, `OPENROUTER_API_KEY`, and optionally `OPENROUTER_MODEL` (default `openai/gpt-4o-mini`). `OPENROUTER_TIMEOUT_SECONDS` controls request timeout. The OpenRouter key is optional at runtime: if it is missing, unavailable, or returns unusable output, the configured OpenAI/xAI compatibility providers are tried; if none return a valid classification, deterministic fallback behavior is used. Remove any categorisation-specific reliance on `GEMINI_API_KEY`; keep that key only if optional AI PDF extraction still uses Gemini. No migration or production secret change is required by this code update.
 
 | Method | Path | Purpose |
 |---|---|---|
