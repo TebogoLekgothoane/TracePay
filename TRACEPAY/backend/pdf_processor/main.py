@@ -9,7 +9,7 @@ from .ai_extract import (
 from .extract import ExtractionError, extract_layers
 from .gotyme_text import gotyme_transactions
 from .models import ProcessingResult, StatementBalance, Transaction, ValidationResult
-from .normalise import normalize_row, parse_text_rows
+from .normalise import normalize_row, parse_text_rows, split_same_row_fee
 from .statement_schema import resolve_extracted_statement, statement_has_no_activity
 from .tables import align_row_to_headers, is_transaction_table, merge_continuation_rows, table_headers
 from .validate import validate_transactions
@@ -88,7 +88,14 @@ def process_pdf(
                 for row in merged_rows:
                     transaction = normalize_row(row, aligned_headers, len(transactions) + 1)
                     if transaction:
-                        transactions.append(transaction)
+                        previous_balance = next(
+                            (item.balance for item in reversed(transactions) if item.balance is not None),
+                            None,
+                        )
+                        split = split_same_row_fee(transaction, row, aligned_headers, previous_balance)
+                        transactions.extend(split or [transaction])
+                        if split:
+                            table_rows_detected += 1
             raw = raw.model_copy(update={"rows_found": table_rows_detected})
         rows_rejected = max(raw.rows_found - len(transactions), 0)
         if not transactions:

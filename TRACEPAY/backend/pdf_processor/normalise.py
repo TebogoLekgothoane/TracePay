@@ -261,3 +261,64 @@ def has_usable_structured_text(text: str) -> bool:
     """True when PyMuPDF text already yields reliable signed transaction rows."""
     rows, detected = parse_text_rows(text)
     return detected >= 2 and len(rows) / detected >= 0.8
+
+
+_FEE_HEADERS = {"fee", "fees", "bank fee"}
+_MOVEMENT_HEADERS = {"debit", "debits", "withdrawal", "money out", "credit", "credits", "deposit", "money in"}
+
+
+def split_same_row_fee(
+    transaction: Transaction,
+    row: list[str],
+    headers: list[str],
+    previous_balance: Decimal | None,
+) -> tuple[Transaction, Transaction] | None:
+    """Split a fee printed beside a payment into its own row when the balance proves it.
+
+    ``normalize_row`` keeps only the payment when a row has both. Some banks
+    (Capitec) deduct both on that row, others print the fee again as its own
+    row, so the fee is split out only when previous + amount - fee == balance.
+    A positive fee next to a correction is a refunded fee and becomes a credit.
+    Returns (payment with its balance before the fee, fee row) or None.
+    """
+    if previous_balance is None or transaction.balance is None:
+        return None
+    values = {header: row[index].strip() if index < len(row) else "" for index, header in enumerate(headers)}
+    printed_fee = next(
+        (parsed for name in values if name in _FEE_HEADERS and values[name]
+         for parsed in [parse_amount(values[name])] if parsed not in (None, Decimal("0"))),
+        None,
+    )
+    has_movement = any(
+        parse_amount(values[name]) not in (None, Decimal("0"))
+        for name in values if name in _MOVEMENT_HEADERS and values[name]
+    )
+    if printed_fee is None or not has_movement:
+        return None
+    # Signed as printed first (Capitec: "-6.00" charge, "0.50" refund); unsigned means a charge.
+    fee = next(
+        (
+            candidate
+            for candidate in (printed_fee, -abs(printed_fee))
+            if abs(previous_balance + transaction.amount + candidate - transaction.balance) <= Decimal("0.01")
+        ),
+        None,
+    )
+    if fee is None:
+        return None
+    payment = transaction.model_copy(update={"balance": transaction.balance - fee})
+    fee_row = Transaction(
+        date=transaction.date,
+        transaction_time=transaction.transaction_time,
+        description=f"{'Fee' if fee < 0 else 'Fee refund'}: {transaction.description}"[:500],
+        amount=fee,
+        type="debit" if fee < 0 else "credit",
+        balance=transaction.balance,
+        source_row=transaction.source_row + 1,
+        confidence=transaction.confidence,
+        reference=transaction.reference,
+        category_name="Bank Fees",
+        category_confidence=0.85,
+        category_rule="statement:same-row-fee",
+    )
+    return payment, fee_row

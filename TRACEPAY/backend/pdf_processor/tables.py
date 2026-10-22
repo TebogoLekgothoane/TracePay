@@ -10,6 +10,10 @@ logger = logging.getLogger("tracepay.pdf.tables")
 
 _DATE_HEADERS = {"date", "transaction date", "value date", "trans date"}
 _DESCRIPTION_HEADERS = {"description", "details", "narration", "narrative", "merchant"}
+# A money cell holds only an amount ("-3 000.00", "R1,250.00 Cr", "-20.00 *"),
+# never prose like "* Includes VAT at 15%".
+_MONEY_CELL = re.compile(r"[\s*R()+\-]*\d[\d\s,.]*[\s*()\-]*(?:cr|dr)?\s*\**", re.IGNORECASE)
+_TEXT_HEADERS = {"category", "reference", "ref", "type", "transaction type"}
 _AMOUNT_HEADERS = {
     "amount",
     "debit",
@@ -99,12 +103,19 @@ def merge_continuation_rows(rows: list[list[str]], headers: list[str]) -> list[l
             continue
         if not merged:
             continue
+        # Only money columns count: a wrapped reference number in the
+        # description ("2715149863") is text, not an amount.
         has_amount = any(
-            parse_amount(cell) not in (None, Decimal("0")) for cell in row if cell.strip()
+            _MONEY_CELL.fullmatch(cell.strip()) and parse_amount(cell) not in (None, Decimal("0"))
+            for index, cell in enumerate(row)
+            if cell.strip() and index != desc_index and (index >= len(headers) or headers[index] not in _TEXT_HEADERS)
         )
         extra = row[desc_index].strip() if desc_index is not None and desc_index < len(row) else ""
-        if has_amount or not extra or desc_index is None:
+        if has_amount or desc_index is None:
             merged.append(list(row))
+            continue
+        if not extra:
+            # Undated, amountless, no description: a wrapped category or page footer.
             continue
         current = list(merged[-1])
         if desc_index >= len(current):

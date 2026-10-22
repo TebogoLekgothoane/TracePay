@@ -579,3 +579,74 @@ def test_statement_with_activity_or_no_summary_still_fails_when_no_rows_extract(
     result = process_pdf(b"%PDF", "statement.pdf", "user-id-12345678")
     assert result.validation.status == "failed"
     assert result.validation.no_activity is False
+
+
+_CAPITEC_HEADERS = ["date", "description", "category", "money in", "money out", "fee", "balance"]
+
+
+def _capitec_split(row: list[str], previous_balance: str):
+    from pdf_processor.normalise import split_same_row_fee
+
+    transaction = normalize_row(row, _CAPITEC_HEADERS, 5)
+    assert transaction is not None
+    return transaction, split_same_row_fee(transaction, row, _CAPITEC_HEADERS, Decimal(previous_balance))
+
+
+def test_capitec_same_row_fee_becomes_its_own_debit_when_the_balance_deducts_it() -> None:
+    transaction, split = _capitec_split(
+        ["01/10/2025", "Banking App External PayShap Payment: Example", "Transfer", "", "-3 000.00", "-6.00", "228.00"],
+        "3234.00",
+    )
+    assert split is not None
+    payment, fee = split
+    assert (payment.amount, payment.balance) == (Decimal("-3000.00"), Decimal("234.00"))
+    assert (fee.amount, fee.type, fee.balance, fee.source_row) == (Decimal("-6.00"), "debit", Decimal("228.00"), 6)
+    assert fee.description == "Fee: Banking App External PayShap Payment: Example"
+    assert reconcile_balances_from([Decimal("3234.00")], [payment, fee]) == "verified"
+
+
+def test_same_row_fee_is_not_split_when_the_balance_does_not_deduct_it() -> None:
+    # The fee is charged on a separate row, so splitting would double-count it.
+    _transaction, split = _capitec_split(
+        ["16/09/2026", "PayShap Payment", "Transfers", "", "25.00", "15.00", "24.80"],
+        "49.80",
+    )
+    assert split is None
+
+
+def test_refunded_fee_on_a_correction_becomes_a_credit() -> None:
+    transaction, split = _capitec_split(
+        ["04/12/2025", "Banking App Correction: Prepaid Purchase", "Cellphone", "25.00", "", "0.50", "91.54"],
+        "66.04",
+    )
+    assert split is not None
+    payment, refund = split
+    assert payment.amount == Decimal("25.00")
+    assert (refund.amount, refund.type) == (Decimal("0.50"), "credit")
+    assert refund.description.startswith("Fee refund: ")
+
+
+def reconcile_balances_from(opening: list[Decimal], rows: list[Transaction]) -> str:
+    previous = opening[0]
+    for row in rows:
+        if abs(previous + row.amount - (row.balance or Decimal("0"))) > Decimal("0.01"):
+            return "mismatch"
+        previous = row.balance or Decimal("0")
+    return "verified"
+
+
+def test_wrapped_reference_numbers_join_the_description_and_layout_noise_is_dropped() -> None:
+    merged = merge_continuation_rows(
+        [
+            ["01/10/2025", "Banking App External PayShap Payment: Example", "Children &", "", "-3 000.00", "-6.00", "228.00"],
+            ["", "", "Dependants", "", "", "", ""],
+            ["", "2715149863", "", "", "", "", ""],
+            ["", "", "", "", "", "* Includes VAT at 15%", ""],
+            ["02/10/2025", "Payment Received: Example", "Other Income", "500.00", "", "", "728.00"],
+        ],
+        _CAPITEC_HEADERS,
+    )
+    assert [row[1] for row in merged] == [
+        "Banking App External PayShap Payment: Example 2715149863",
+        "Payment Received: Example",
+    ]
