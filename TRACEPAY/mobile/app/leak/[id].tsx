@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from "expo-router";
+import { Redirect, router, useLocalSearchParams } from "expo-router";
 import type { LucideIcon } from "lucide-react-native";
 import {
   Banknote,
@@ -39,7 +39,9 @@ import {
   saveLeakResponse,
   type StoredLeakResponse,
 } from "../../src/features/leaks/leak-response.store";
-import { getPotentialLeak } from "../../src/features/leaks/potential-leaks";
+import { useLeakEntitlement } from "../../src/features/leaks/leak-entitlement.store";
+import { isLeakLocked } from "../../src/features/leaks/leak-paywall";
+import { getPotentialLeak, listPotentialLeaks } from "../../src/features/leaks/potential-leaks";
 import {
   getFixContent,
   getFixRoute,
@@ -488,6 +490,18 @@ const FEE_TRANSACTIONS: Record<string, FeeTransaction[]> = {
 };
 
 export default function LeakDetailScreen() {
+  const params = useLocalSearchParams<{ id: string; view?: string }>();
+  const leakId = Array.isArray(params.id) ? params.id[0] : params.id;
+  const { unlocked, hydrated } = useLeakEntitlement();
+
+  if (!hydrated) return null;
+  if (leakId && isLeakLocked(listPotentialLeaks(), leakId, unlocked)) {
+    return <Redirect href="/upgrade" />;
+  }
+  return <LeakDetailContent />;
+}
+
+function LeakDetailContent() {
   const params = useLocalSearchParams<{ id: string; view?: string }>();
   const leakId = Array.isArray(params.id) ? params.id[0] : params.id;
   const [period, setPeriod] = useState<Period>("This month");

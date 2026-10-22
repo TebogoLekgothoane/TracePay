@@ -6,11 +6,16 @@ import { TRACEPAY, withAlpha } from "../../theme/colors";
 import { LeaksPipeIllustration } from "./LeaksPipeIllustration";
 
 type Props = {
+  label?: string;
   total: string;
   changeLabel: string;
 };
 
-export function LeaksSummaryCard({ total, changeLabel }: Props) {
+export function LeaksSummaryCard({
+  label = "Total leaked this month",
+  total,
+  changeLabel,
+}: Props) {
   const { colorScheme } = useColorScheme();
   const trace = TRACEPAY[colorScheme === "dark" ? "dark" : "light"];
 
@@ -30,7 +35,7 @@ export function LeaksSummaryCard({ total, changeLabel }: Props) {
       <View className="flex-row items-center">
         <View className="flex-1 pr-2">
           <Text style={{ color: trace.heroMuted }} className="text-[13px]">
-            Total leaked this month
+            {label}
           </Text>
 
           <Text
