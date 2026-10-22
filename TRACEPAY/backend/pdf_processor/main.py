@@ -10,7 +10,7 @@ from .extract import ExtractionError, extract_layers
 from .gotyme_text import gotyme_transactions
 from .models import ProcessingResult, StatementBalance, Transaction, ValidationResult
 from .normalise import normalize_row, parse_text_rows
-from .statement_schema import resolve_extracted_statement
+from .statement_schema import resolve_extracted_statement, statement_has_no_activity
 from .tables import align_row_to_headers, is_transaction_table, merge_continuation_rows, table_headers
 from .validate import validate_transactions
 from categorisation.service import CategorisableTransaction, categorise_batch
@@ -21,6 +21,8 @@ class PdfProcessingError(ValueError):
 
 
 logger = logging.getLogger("tracepay.pdf")
+
+NO_ACTIVITY_MESSAGE = "No transactions in this period."
 
 
 def process_pdf(
@@ -101,7 +103,12 @@ def process_pdf(
         rows_rejected,
     )
 
-    if _needs_ai_fallback(raw.extraction_method, classical_validation, transactions):
+    # A genuinely empty period: nothing for the AI to find, so don't ask it.
+    no_activity = not transactions and statement_has_no_activity(text)
+    if no_activity:
+        logger.info("pdf_statement_no_activity method=%s", raw.extraction_method)
+
+    if not no_activity and _needs_ai_fallback(raw.extraction_method, classical_validation, transactions):
         logger.info(
             "[AI_EXTRACT] fallback_triggered method=%s confidence=%s transactions=%s rejected=%s reconciliation=%s",
             raw.extraction_method,
@@ -180,12 +187,21 @@ def process_pdf(
         _with_category(transaction, classifications[str(index)], catalog)
         for index, transaction in enumerate(transactions)
     ]
-    validation = validate_transactions(
-        transactions,
-        raw.extraction_method,
-        raw.rows_found or len(transactions),
-        rows_rejected,
-    )
+    if no_activity:
+        validation = ValidationResult(
+            status="valid",
+            confidence=1.0,
+            warnings=[NO_ACTIVITY_MESSAGE],
+            transaction_count=0,
+            no_activity=True,
+        )
+    else:
+        validation = validate_transactions(
+            transactions,
+            raw.extraction_method,
+            raw.rows_found or len(transactions),
+            rows_rejected,
+        )
     statement = resolve_extracted_statement(
         text,
         transactions,

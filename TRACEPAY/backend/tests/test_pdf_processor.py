@@ -495,3 +495,87 @@ def test_process_pdf_keeps_extraction_confidence_and_canonical_rows(
     assert result.raw_extraction.extraction_confidence == 0.75
     assert [item.amount for item in result.transactions] == [Decimal("-450.00"), Decimal("900.00")]
     assert all(item.source == "pdf" for item in result.transactions)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Account number: 10 28 300 663 1\n", "6631"),
+        ("Account Number: 51105557586\n", "7586"),
+        ("A/C No. XXXX 9876\n", "9876"),
+        # "ACC" inside a product name must not pick up the postal code below it.
+        ("Account holder:\nMR A EXAMPLE\nProduct name:\nMYMOACC\nEAST LONDON\nQUIGNEY\n5201\n", None),
+    ],
+)
+def test_account_last4_handles_spaced_unmasked_and_embedded_labels(text: str, expected: str | None) -> None:
+    from pdf_processor.statement_schema import _last4_from_text
+
+    assert _last4_from_text(text) == expected
+
+
+def test_standard_bank_from_to_period_with_two_digit_years() -> None:
+    from pdf_processor.statement_schema import _period_from_text
+
+    assert _period_from_text("6 month statement\nFrom: 15 Apr 26\nTo: 12 Oct 26\n") == (date(2026, 4, 15), date(2026, 10, 12))
+
+
+_EMPTY_SB_TEXT = (
+    "6 month statement\nFrom: 15 Apr 26\nTo: 12 Oct 26\nTransaction details\n"
+    "Date\nDescription\nPayments\nDeposits\nBalance\nSTATEMENT OPENING BALANCE\n0.00\n"
+    "Statement Summary\nPayments\nR0.00\nDeposits\nR0.00\n"
+)
+
+
+def _table_layers(text: str):
+    from pdf_processor.models import RawExtraction
+
+    raw = RawExtraction(
+        pages=1,
+        extraction_method="table",
+        extraction_confidence=0.96,
+        raw_text_available=True,
+        useful_text_characters=len(text),
+        tables_found=1,
+        rows_found=0,
+    )
+    return lambda *_args, **_kwargs: (raw, text, [])
+
+
+def test_zero_activity_statement_is_a_valid_empty_result_without_ai(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pdf_processor.main import NO_ACTIVITY_MESSAGE, process_pdf
+
+    def no_ai(*_args, **_kwargs):
+        raise AssertionError("AI fallback must not run for an empty statement")
+
+    monkeypatch.setattr("pdf_processor.main.ai_extraction_available", lambda: True)
+    monkeypatch.setattr("pdf_processor.main.extract_transactions_with_ai", no_ai)
+    monkeypatch.setattr("pdf_processor.main.extract_layers", _table_layers(_EMPTY_SB_TEXT))
+
+    result = process_pdf(b"%PDF", "statement.pdf", "user-id-12345678")
+    assert result.transactions == []
+    assert result.validation.status == "valid"
+    assert result.validation.no_activity is True
+    assert result.validation.errors == []
+    assert result.validation.warnings == [NO_ACTIVITY_MESSAGE]
+    assert (result.statement.statement_start_date, result.statement.statement_end_date) == (date(2026, 4, 15), date(2026, 10, 12))
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        _EMPTY_SB_TEXT.replace("Deposits\nR0.00", "Deposits\nR1,250.00"),
+        # Totals not printed: unreadable, not empty.
+        "Date\nDescription\nPayments\nDeposits\nBalance\n",
+    ],
+)
+def test_statement_with_activity_or_no_summary_still_fails_when_no_rows_extract(
+    monkeypatch: pytest.MonkeyPatch, text: str
+) -> None:
+    from pdf_processor.main import process_pdf
+
+    monkeypatch.setattr("pdf_processor.main.ai_extraction_available", lambda: False)
+    monkeypatch.setattr("pdf_processor.main.extract_layers", _table_layers(text))
+
+    result = process_pdf(b"%PDF", "statement.pdf", "user-id-12345678")
+    assert result.validation.status == "failed"
+    assert result.validation.no_activity is False

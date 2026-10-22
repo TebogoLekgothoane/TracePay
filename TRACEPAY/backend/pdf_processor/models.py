@@ -59,6 +59,8 @@ class ValidationResult(BaseModel):
     rows_rejected: int = 0
     duplicate_count: int = 0
     balance_reconciliation: Literal["verified", "not_available", "mismatch"] = "not_available"
+    # The statement's own summary shows no money in or out for the period.
+    no_activity: bool = False
 
 
 class StatementBalance(BaseModel):
