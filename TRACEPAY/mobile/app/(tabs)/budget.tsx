@@ -13,74 +13,54 @@ import {
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, G, Line, Path, Rect } from "react-native-svg";
 
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
 import { PeriodTabs } from "../../src/components/insights/PeriodTabs";
+import { useInsightsReport } from "../../src/hooks/useInsightsReport";
+import {
+  comparisonCopy,
+  formatChange,
+  formatPeakDay,
+  type TrendGrain,
+} from "../../src/features/insights/insights-report";
+import { formatPercent } from "../../src/features/insights/category-breakdown";
 import { SpendingPatternsSection } from "../../src/components/insights/SpendingPatternsSection";
 import { Button } from "../../src/components/ui/Button";
 import { SelectionSheet } from "../../src/components/ui/Modal";
 import {
   CUSTOM_RANGES,
   formatRandAmount,
-  periodChangeLabel,
-  periodComparisonCopy,
-  periodFactor,
-  scaleRandAmount,
   type CustomRange,
   type Period,
 } from "../../src/features/insights/period";
 import { COLORS, TRACEPAY, withAlpha } from "../../src/theme/colors";
 
 type MetricMode = "Spending" | "Income";
-type TrendGrain = "By week" | "By month" | "By day";
 
-const BASE_CATEGORIES = [
-  { name: "Transport", amount: "R1,816.74", percent: "31%", colorKey: "primary" as const, Icon: Car },
-  { name: "Food & Dining", amount: "R1,406.51", percent: "24%", colorKey: "accent" as const, Icon: UtensilsCrossed },
-  { name: "Shopping", amount: "R879.07", percent: "15%", colorKey: "warning" as const, Icon: ShoppingBag },
-  { name: "Bills & utilities", amount: "R761.86", percent: "13%", colorKey: "success" as const, Icon: Zap },
-  { name: "Entertainment", amount: "R644.65", percent: "11%", colorKey: "blue" as const, Icon: Film },
-  { name: "Other", amount: "R351.62", percent: "6%", colorKey: "destructive" as const, Icon: Receipt },
+type ToneKey = "primary" | "accent" | "warning" | "success" | "blue" | "destructive";
+
+const TONE_ORDER: ToneKey[] = ["primary", "accent", "warning", "success", "blue", "destructive"];
+
+const CATEGORY_ICONS: Array<{ match: RegExp; Icon: typeof Car }> = [
+  { match: /transport|ride|taxi|fuel|petrol|parking/i, Icon: Car },
+  { match: /food|grocer|restaurant|dining|coffee|takeaway|fast/i, Icon: UtensilsCrossed },
+  { match: /shop|cloth|retail|online|electronics/i, Icon: ShoppingBag },
+  { match: /bill|utilit|airtime|data|insurance|telecom|rent|fee|bank/i, Icon: Zap },
+  { match: /entertain|subscription|stream|gaming|alcohol|leisure/i, Icon: Film },
+  { match: /salary|income|interest|wage/i, Icon: TrendingUp },
 ];
 
-const INCOME_CATEGORIES = [
-  { name: "Salary", amount: "R28,500.00", percent: "82%", colorKey: "success" as const, Icon: Zap },
-  { name: "Side income", amount: "R3,200.00", percent: "9%", colorKey: "primary" as const, Icon: TrendingUp },
-  { name: "Transfers in", amount: "R1,850.00", percent: "5%", colorKey: "blue" as const, Icon: Receipt },
-  { name: "Refunds", amount: "R920.00", percent: "3%", colorKey: "accent" as const, Icon: ShoppingBag },
-  { name: "Other", amount: "R430.00", percent: "1%", colorKey: "warning" as const, Icon: Film },
-];
-
-const WEEKLY_TRENDS = [
-  { current: 920, previous: 780 },
-  { current: 1040, previous: 890 },
-  { current: 1180, previous: 960 },
-  { current: 620, previous: 540 },
-  { current: 1100, previous: 980 },
-];
-
-const MONTHLY_TRENDS = [
-  { current: 4200, previous: 3900 },
-  { current: 5100, previous: 4700 },
-  { current: 5860, previous: 5140 },
-];
-
-const DAILY_TRENDS = [
-  { current: 180, previous: 150 },
-  { current: 220, previous: 190 },
-  { current: 310, previous: 240 },
-  { current: 160, previous: 170 },
-  { current: 290, previous: 210 },
-  { current: 140, previous: 130 },
-  { current: 250, previous: 200 },
-];
-
-const BASE_SPENDING = 5860.45;
-const BASE_INCOME = 34900;
-const BASE_DAILY = 195.35;
+/** Icon by what the category is called; colour by position so neighbours differ. */
+function categoryVisual(name: string, index: number): { colorKey: ToneKey; Icon: typeof Car } {
+  const match = CATEGORY_ICONS.find((entry) => entry.match.test(name));
+  return {
+    colorKey: TONE_ORDER[index % TONE_ORDER.length],
+    Icon: match?.Icon ?? Receipt,
+  };
+}
 
 function toneColor(
   palette: {
@@ -91,7 +71,7 @@ function toneColor(
     blue: string;
     destructive: string;
   },
-  key: (typeof BASE_CATEGORIES)[number]["colorKey"] | "accent" | "warning",
+  key: ToneKey,
 ) {
   if (key === "primary") return palette.primary;
   if (key === "accent") return palette.accent;
@@ -102,34 +82,61 @@ function toneColor(
 }
 
 function HeroSpendingChart({
+  values,
   line,
-  accent,
   peak,
 }: {
+  values: number[];
   line: string;
-  accent: string;
   peak: string;
 }) {
+  const width = 320;
+  const height = 96;
+  const padX = 8;
+  const top = 14;
+  const bottom = 82;
+  const max = Math.max(...values, 0);
+
+  if (values.length < 2 || max === 0) {
+    return (
+      <Svg width="100%" height={96} viewBox="0 0 320 96">
+        <Line
+          x1={padX}
+          y1={bottom}
+          x2={width - padX}
+          y2={bottom}
+          stroke={withAlpha(line, 0.35)}
+          strokeWidth={2}
+          strokeDasharray="4 4"
+        />
+      </Svg>
+    );
+  }
+
+  const step = (width - padX * 2) / (values.length - 1);
+  const points = values.map((value, index) => ({
+    x: padX + index * step,
+    y: bottom - (value / max) * (bottom - top),
+  }));
+  const path = points
+    .map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
+    .join(" ");
+  const peakIndex = values.indexOf(max);
+  const peakPoint = points[peakIndex];
+
   return (
     <Svg width="100%" height={96} viewBox="0 0 320 96">
       <Path
-        d="M8 72 C40 58 58 82 92 54 C118 34 142 68 176 42 C204 22 232 58 268 36 C286 26 302 30 312 24"
+        d={path}
         stroke={line}
         strokeWidth={3}
+        strokeLinejoin="round"
+        strokeLinecap="round"
         fill="none"
         opacity={0.9}
       />
-      <Line
-        x1={176}
-        y1={18}
-        x2={176}
-        y2={82}
-        stroke={withAlpha(accent, 0.45)}
-        strokeWidth={1.5}
-        strokeDasharray="4 4"
-      />
-      <Circle cx={176} cy={42} r={5} fill={peak} />
-      <Circle cx={176} cy={42} r={9} fill={withAlpha(peak, 0.25)} />
+      <Circle cx={peakPoint.x} cy={peakPoint.y} r={5} fill={peak} />
+      <Circle cx={peakPoint.x} cy={peakPoint.y} r={9} fill={withAlpha(peak, 0.25)} />
     </Svg>
   );
 }
@@ -250,80 +257,53 @@ export default function InsightsScreen() {
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const trace = TRACEPAY[colorScheme === "dark" ? "dark" : "light"];
 
-  const factor = periodFactor(period, customRange);
-
   const handlePeriodChange = (next: Period) => {
     setPeriod(next);
     if (next === "Custom") setShowCustomSheet(true);
   };
 
-  const categories = useMemo(() => {
-    const source = metricMode === "Spending" ? BASE_CATEGORIES : INCOME_CATEGORIES;
-    return source.map((item) => ({
-      ...item,
-      amount: scaleRandAmount(item.amount, factor),
-    }));
-  }, [factor, metricMode]);
+  const {
+    data: categoryData,
+    breakdown,
+    loading: categoriesLoading,
+    error: categoriesError,
+    retry: retryCategories,
+    report,
+  } = useInsightsReport(period, customRange, metricMode, trendGrain);
 
-  const heroTotal = useMemo(
+  const categories = useMemo(
     () =>
-      formatRandAmount(
-        (metricMode === "Spending" ? BASE_SPENDING : BASE_INCOME) * factor,
-      ),
-    [factor, metricMode],
+      (breakdown?.slices ?? []).map((slice, index) => ({
+        name: slice.name,
+        amount: formatRandAmount(slice.amount),
+        percent: formatPercent(slice.percent),
+        share: slice.percent,
+        ...categoryVisual(slice.name, index),
+      })),
+    [breakdown],
   );
 
-  const dailyAverage = useMemo(() => {
-    if (metricMode === "Income") {
-      return formatRandAmount((BASE_INCOME / 30) * factor);
-    }
-    return formatRandAmount(BASE_DAILY * factor);
-  }, [factor, metricMode]);
-
-  const peakDay = useMemo(() => {
-    if (period === "Last month") return "12 Apr • R540.00";
-    if (period === "3 months") return "3 Mar • R890.00";
-    if (period === "Custom") {
-      if (customRange === "Last 7 days") return "Yesterday • R310.00";
-      if (customRange === "Year to date") return "18 May • R1,120.00";
-      return "2 days ago • R420.00";
-    }
-    return metricMode === "Income" ? "25 May • R28,500.00" : "18 May • R620.00";
-  }, [customRange, metricMode, period]);
-
-  const trendPoints = useMemo(() => {
-    const source =
-      trendGrain === "By month"
-        ? MONTHLY_TRENDS
-        : trendGrain === "By day"
-          ? DAILY_TRENDS
-          : WEEKLY_TRENDS;
-
-    return source.map((point) => ({
-      current: Math.round(point.current * factor),
-      previous: Math.round(point.previous * factor),
-    }));
-  }, [factor, trendGrain]);
-
-  const trendLabels = useMemo(() => {
-    if (trendGrain === "By month") return ["Mar", "Apr", "May"];
-    if (trendGrain === "By day") {
-      return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-    }
-    return ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5"];
-  }, [trendGrain]);
+  const heroTotal = report ? formatRandAmount(report.total) : "—";
+  const dailyAverage = report ? formatRandAmount(report.dailyAverage) : "—";
+  const peakDay = report ? formatPeakDay(report.peakDay, formatRandAmount) : "—";
+  const changeLabel = report ? formatChange(report) : "Loading…";
+  const trendPoints = useMemo(
+    () =>
+      (report?.trend ?? []).map((point) => ({
+        current: Math.round(point.current),
+        previous: Math.round(point.previous),
+      })),
+    [report],
+  );
+  const trendLabels = useMemo(() => (report?.trend ?? []).map((point) => point.label), [report]);
 
   const donutSegments = useMemo(() => {
-    const total = categories.reduce(
-      (sum, item) => sum + Number(item.percent.replace("%", "")),
-      0,
-    );
+    const total = categories.reduce((sum, item) => sum + item.share, 0) || 1;
     const circumference = 2 * Math.PI * 46;
     let offset = 0;
 
     return categories.map((item) => {
-      const share = Number(item.percent.replace("%", "")) / total;
-      const length = circumference * share;
+      const length = circumference * (item.share / total);
       const segment = { color: toneColor(palette, item.colorKey), offset, length };
       offset += length;
       return segment;
@@ -367,6 +347,19 @@ export default function InsightsScreen() {
             </Pressable>
           ) : null}
 
+          {categoryData && categoryData.range && (!categoryData.isCurrent || categoryData.truncated) ? (
+            <View className="mt-3 rounded-2xl bg-muted px-3 py-2">
+              <Text className="text-[12px] leading-[18px] text-muted-foreground">
+                {!categoryData.isCurrent && categoryData.referenceDate
+                  ? `Your latest statement activity is from ${categoryData.referenceDate.toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" })}, so periods are counted back from then. Add a newer statement to see this month. `
+                  : ""}
+                {categoryData.truncated
+                  ? "This period has more transactions than could be loaded, so figures may be slightly low. "
+                  : ""}
+              </Text>
+            </View>
+          ) : null}
+
           <LinearGradient
             colors={[...trace.summaryGradient]}
             start={{ x: 0, y: 0 }}
@@ -397,7 +390,7 @@ export default function InsightsScreen() {
                     className="text-[12px] font-semibold"
                     style={{ color: trace.splashAccentPink }}
                   >
-                    {periodChangeLabel(period)}
+                    {changeLabel}
                   </Text>
                 </View>
               </View>
@@ -421,8 +414,8 @@ export default function InsightsScreen() {
 
             <View className="mt-2">
               <HeroSpendingChart
+                values={report?.sparkline ?? []}
                 line={trace.splashPayStart}
-                accent={trace.splashAccentPink}
                 peak={trace.splashAccentPink}
               />
             </View>
@@ -473,8 +466,57 @@ export default function InsightsScreen() {
             </Button>
           </View>
           <View className="rounded-3xl border border-border bg-card p-4">
+            {categoriesLoading && !categoryData ? (
+              <View className="items-center py-6">
+                <ActivityIndicator color={palette.primary} />
+                <Text className="mt-3 text-[13px] text-muted-foreground">
+                  Reading your transactions…
+                </Text>
+              </View>
+            ) : categoriesError && !categoryData ? (
+              <View>
+                <Text className="text-[14px] font-semibold text-foreground">
+                  Categories unavailable
+                </Text>
+                <Text className="mt-1 text-[13px] leading-5 text-muted-foreground">
+                  {categoriesError}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  className="mt-3 self-start active:opacity-70"
+                  onPress={retryCategories}
+                >
+                  <Text className="text-[13px] font-semibold text-primary">Try again</Text>
+                </Pressable>
+              </View>
+            ) : categories.length === 0 ? (
+              <View>
+                <Text className="text-[14px] font-semibold text-foreground">
+                  {categoryData?.range
+                    ? `No ${metricMode.toLowerCase()} in this period`
+                    : "No transactions yet"}
+                </Text>
+                <Text className="mt-1 text-[13px] leading-5 text-muted-foreground">
+                  {categoryData?.range
+                    ? "Nothing in your uploaded statements falls in this period. Try another period, or add the statement that covers it."
+                    : "Add a bank statement to see where your money goes. Categories can only come from the statements you add."}
+                </Text>
+                {!categoryData?.range ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    className="mt-3 self-start active:opacity-70"
+                    onPress={() => router.push("/statements/coverage")}
+                  >
+                    <Text className="text-[13px] font-semibold text-primary">
+                      Add a statement
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : (
+              <>
             <View className="flex-row items-center gap-3">
-              <DonutChart segments={donutSegments} total={heroTotal} />
+              <DonutChart segments={donutSegments} total={formatRandAmount(breakdown?.total ?? 0)} />
               <View className="min-w-0 flex-1 gap-3">
                 {categories.map((item) => {
                   const color = toneColor(palette, item.colorKey);
@@ -504,6 +546,8 @@ export default function InsightsScreen() {
                 })}
               </View>
             </View>
+              </>
+            )}
           </View>
 
           <SpendingPatternsSection />
@@ -525,7 +569,7 @@ export default function InsightsScreen() {
             <View className="mb-4 flex-row items-start justify-between gap-3">
               <View className="flex-1">
                 <Text className="text-[13px] text-muted-foreground">
-                  {periodComparisonCopy(period)}
+                  {report ? comparisonCopy(report) : "Comparing with the period before"}
                 </Text>
                 <View className="mt-2 flex-row flex-wrap gap-3">
                   <View className="flex-row items-center gap-1.5">
@@ -561,19 +605,29 @@ export default function InsightsScreen() {
               </Pressable>
             </View>
 
-            <TrendsChart
-              currentColor={palette.primary}
-              previousColor={withAlpha(palette.primary, 0.22)}
-              points={trendPoints}
-            />
+            {trendPoints.length === 0 || trendPoints.every((point) => point.current === 0 && point.previous === 0) ? (
+              <Text className="py-6 text-center text-[13px] leading-5 text-muted-foreground">
+                {categoriesLoading && !categoryData
+                  ? "Reading your transactions…"
+                  : "No activity in these periods yet. Trends appear once your statements cover them."}
+              </Text>
+            ) : (
+              <>
+                <TrendsChart
+                  currentColor={palette.primary}
+                  previousColor={withAlpha(palette.primary, 0.22)}
+                  points={trendPoints}
+                />
 
-            <View className="mt-1 flex-row justify-between px-2">
-              {trendLabels.map((label) => (
-                <Text key={label} className="text-[10px] text-muted-foreground">
-                  {label}
-                </Text>
-              ))}
-            </View>
+                <View className="mt-1 flex-row justify-between px-2">
+                  {trendLabels.map((label, index) => (
+                    <Text key={`${label}-${index}`} className="text-[10px] text-muted-foreground">
+                      {label}
+                    </Text>
+                  ))}
+                </View>
+              </>
+            )}
           </View>
         </View>
       </TabScrollView>

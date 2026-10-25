@@ -6,27 +6,38 @@ import {
   CreditCard,
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { AccountsCard } from "../../src/components/dashboard/AccountsCard";
 import { BalanceCard } from "../../src/components/dashboard/BalanceCard";
+import { HomeHeader } from "../../src/components/dashboard/HomeHeader";
+import { HomeInsights } from "../../src/components/dashboard/HomeInsights";
+import { SpendingRhythmCard } from "../../src/components/dashboard/SpendingRhythmCard";
+import { UpcomingPayments } from "../../src/components/dashboard/UpcomingPayments";
 import {
   LeakSummary,
   type LeakPreview,
 } from "../../src/components/dashboard/LeakSummary";
-import { InsightsForYouSection } from "../../src/components/insights/InsightsForYouSection";
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
 import {
   ADD_ACCOUNT_HREF,
   LINKED_ACCOUNTS_HREF,
 } from "../../src/features/accounts/account.navigation";
+import type { RhythmSpan } from "../../src/features/dashboard/spending-rhythm";
+import { buildSpendingPatterns } from "../../src/features/insights/spending-patterns";
 import { formatBalanceAmountLabel } from "../../src/features/accounts/account-balance";
-import { firstNameFromFullName } from "../../src/features/auth/auth.validation";
+import {
+  firstNameFromFullName,
+  initialsFromName,
+} from "../../src/features/auth/auth.validation";
 import { usePrivacyPreferences } from "../../src/features/privacy/privacy.preferences";
 import { useAccounts } from "../../src/hooks/useAccounts";
+import { useFindingNotifications } from "../../src/hooks/useFindingNotifications";
 import { useProfile } from "../../src/hooks/useProfile";
+import { useSpendingPatternData } from "../../src/hooks/useSpendingPatternData";
+import { useSpendingRhythm } from "../../src/hooks/useSpendingRhythm";
+import { useUpcomingPayments } from "../../src/hooks/useUpcomingPayments";
 import { COLORS } from "../../src/theme/colors";
 
 export default function HomeScreen() {
@@ -36,11 +47,26 @@ export default function HomeScreen() {
   const { profile } = useProfile();
   const { previews, balanceTotals, loading: accountsLoading } = useAccounts();
 
+  const [rhythmSpan, setRhythmSpan] = useState<RhythmSpan>("6 months");
+  const rhythm = useSpendingRhythm(rhythmSpan);
+  const upcoming = useUpcomingPayments();
+  const patternData = useSpendingPatternData();
+  const { notifications } = useFindingNotifications();
+  const hasUnreadNotifications = notifications.some(
+    (notification) => notification.deliveryStatus !== "read",
+  );
+  const insights = useMemo(
+    () =>
+      patternData.data?.referenceDate
+        ? buildSpendingPatterns(patternData.data.rows, patternData.data.referenceDate).insights
+        : [],
+    [patternData.data],
+  );
+
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const firstName = profile ? firstNameFromFullName(profile.fullName) : "";
-  const greetingLabel = firstName ? `${greeting}, ${firstName}` : greeting;
 
   const leaks = useMemo<LeakPreview[]>(
     () => [
@@ -128,31 +154,25 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View className="px-5 pt-2">
-          <View className="mb-5 flex-row items-center justify-between">
-            <View className="flex-row items-center gap-3">
-              <View>
-                <Text
-                  className="h-[18px] text-[13px] leading-[18px] text-muted-foreground"
-                  numberOfLines={1}
-                >
-                  {greetingLabel}
-                </Text>
-                <Text className="text-[20px] font-bold tracking-[-0.4px] text-foreground">
-                  Welcome back 
-                </Text>
-              </View>
-            </View>
-          </View>
+          <HomeHeader
+            greeting={firstName ? `${greeting},` : greeting}
+            name={firstName}
+            initials={initialsFromName(profile?.fullName ?? "")}
+            hasUnreadNotifications={hasUnreadNotifications}
+            onNotificationsPress={() => router.push("/settings/notifications")}
+            onProfilePress={() => router.push("/(tabs)/settings")}
+          />
 
           <BalanceCard
             balance={balanceLabel}
             metaLabel={metaLabel}
+            accounts={previews}
             hidden={hideBalances}
             onToggleVisibility={() => {
               void toggleHideBalances();
             }}
             onImportStatement={() => router.push(ADD_ACCOUNT_HREF)}
-            onViewTransactions={() => router.push("/(tabs)/transactions")}
+            onViewAccounts={() => router.push(LINKED_ACCOUNTS_HREF)}
           />
 
           <View className="mb-3 mt-7 flex-row items-center justify-between">
@@ -189,20 +209,35 @@ export default function HomeScreen() {
           />
 
           <View className="mt-7">
-            <AccountsCard
-              accounts={previews}
-              hideBalances={hideBalances}
-              loading={accountsLoading}
-              onAddAccount={() => router.push(ADD_ACCOUNT_HREF)}
-              onSeeDetails={() => router.push(LINKED_ACCOUNTS_HREF)}
-              onAccountPress={(account) =>
-                router.push(`/settings/accounts/${account.id}` as never)
-              }
+            <SpendingRhythmCard
+              span={rhythmSpan}
+              onSpanChange={setRhythmSpan}
+              rhythm={rhythm.rhythm}
+              loading={rhythm.loading}
+              error={rhythm.error}
+              onRetry={rhythm.retry}
+              isCurrent={rhythm.data?.isCurrent ?? true}
+              referenceDate={rhythm.data?.referenceDate ?? null}
             />
           </View>
 
           <View className="mt-7">
-            <InsightsForYouSection onViewAll={() => router.push("/insights")} />
+            <UpcomingPayments
+              payments={upcoming.payments}
+              loading={upcoming.loading}
+              error={upcoming.error}
+              onSeeAll={() => router.push("/(tabs)/leaks")}
+            />
+          </View>
+
+          <View className="mt-7">
+            <HomeInsights
+              insights={insights}
+              loading={patternData.loading && !patternData.data}
+              noData={!patternData.loading && !patternData.data?.referenceDate}
+              onPress={() => router.push("/insights")}
+              onSeeAll={() => router.push("/(tabs)/budget")}
+            />
           </View>
         </View>
       </TabScrollView>

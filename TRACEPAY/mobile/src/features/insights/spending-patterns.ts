@@ -210,14 +210,50 @@ function sumNumbers(values: readonly number[]): number {
   return values.reduce((total, value) => total + value, 0);
 }
 
-function localDateKey(date: Date): string {
+/** Days of history the patterns need: the recent week plus the 30-day baseline before it. */
+export const SPENDING_WINDOW_DAYS = BASELINE_WINDOW_DAYS + 7;
+
+/** If the newest transaction is older than this, "today" is not what the data shows. */
+const CURRENT_DATA_MAX_AGE_DAYS = 7;
+
+export type SpendingReference = {
+  /** The day the patterns are computed for. */
+  referenceDate: Date;
+  /** True when the data reaches (nearly) today, so "today" is meaningful. */
+  isCurrent: boolean;
+};
+
+/**
+ * Choose the day to analyse from real data. Recent data is analysed as of today.
+ * Older data is analysed as of its newest transaction day and is labelled that
+ * way, rather than presenting stale activity as today's. No transactions: null.
+ */
+export function resolveSpendingReference(
+  latestTransactionDate: string | null,
+  now = new Date(),
+): SpendingReference | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(latestTransactionDate ?? "");
+  if (!match) return null;
+  const latest = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  if (Number.isNaN(latest.getTime())) return null;
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (latest >= startOfToday) {
+    return { referenceDate: now, isCurrent: true };
+  }
+  const ageDays = Math.round((startOfToday.getTime() - latest.getTime()) / 86_400_000);
+  return ageDays <= CURRENT_DATA_MAX_AGE_DAYS
+    ? { referenceDate: now, isCurrent: true }
+    : { referenceDate: latest, isCurrent: false };
+}
+
+export function localDateKey(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
-function shiftDate(date: Date, days: number): Date {
+export function shiftDate(date: Date, days: number): Date {
   const shifted = new Date(date);
   shifted.setDate(shifted.getDate() + days);
   return shifted;
