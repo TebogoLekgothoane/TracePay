@@ -18,7 +18,7 @@ type LiquidTabBarProps = {
     index: number;
     routes: { key: string; name: string }[];
   };
-  navigation: { navigate: (name: string) => void };
+  navigateToTab: (routeKey: string) => void;
 };
 
 const TAB_ITEMS = [
@@ -38,7 +38,7 @@ const BLOB = 44;
 const GRADIENT_LIGHT = ["#F651C2", "#8B5CF6", "#327DFC"] as const;
 const GRADIENT_DARK = ["#F651C2", "#9A6CFF", "#327DFC"] as const;
 
-export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
+export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -143,7 +143,10 @@ export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
                   accessibilityLabel={item.label}
                   accessibilityRole="button"
                   accessibilityState={focused ? { selected: true } : {}}
-                  onPress={() => navigation.navigate(item.key)}
+                  onPress={() => {
+                    const route = state.routes.find((candidate) => candidate.name === item.key);
+                    if (route) navigateToTab(route.key);
+                  }}
                   style={{
                     width: BLOB,
                     height: BLOB,

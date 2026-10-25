@@ -30,7 +30,7 @@ type LiquidTabBarProps = {
     index: number;
     routes: { key: string; name: string }[];
   };
-  navigation: { navigate: (name: string) => void };
+  navigateToTab: (routeKey: string) => void;
 };
 
 const TAB_ITEMS = [
@@ -50,7 +50,7 @@ const BAR_HORIZONTAL_PADDING = 8;
 const TAB_BUTTON_HEIGHT = 44;
 const SLOT = (BAR_WIDTH - BAR_HORIZONTAL_PADDING * 2) / TAB_ITEMS.length;
 
-export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
+export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
   const insets = useSafeAreaInsets();
   const namespaceId = useId();
   const { colorScheme } = useColorScheme();
@@ -116,7 +116,10 @@ export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
                 return (
                   <Button
                     key={item.key}
-                    onPress={() => navigation.navigate(item.key)}
+                    onPress={() => {
+                    const route = state.routes.find((candidate) => candidate.name === item.key);
+                    if (route) navigateToTab(route.key);
+                  }}
                     modifiers={[
                       frame({ width: SLOT, height: TAB_BUTTON_HEIGHT }),
                       buttonStyle("plain"),

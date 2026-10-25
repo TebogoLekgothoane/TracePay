@@ -1,7 +1,8 @@
-import MaskedView from "@react-native-masked-view/masked-view";
 import { LinearGradient } from "expo-linear-gradient";
 import type { LucideIcon } from "lucide-react-native";
 import { View } from "react-native";
+
+import { MaskedView } from "../ui/MaskedView";
 
 type GradientTabIconProps = {
   Icon: LucideIcon;

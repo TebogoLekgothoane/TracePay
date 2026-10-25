@@ -1,3 +1,4 @@
+import type { ComponentRef } from "react";
 import { useColorScheme } from "nativewind";
 import { useImperativeHandle, useRef, type Ref } from "react";
 import {
@@ -83,7 +84,7 @@ export function BridgedTextField({
 }: BridgedTextFieldProps) {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
-  const nativeRef = useRef<RNTextInput>(null);
+  const nativeRef = useRef<ComponentRef<typeof RNTextInput>>(null);
 
   useImperativeHandle(
     inputRef,

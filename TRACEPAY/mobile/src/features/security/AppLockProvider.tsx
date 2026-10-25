@@ -87,7 +87,7 @@ export function AppLockProvider({ children }: PropsWithChildren): ReactElement {
   const biometricInFlightRef = useRef<Promise<BiometricUnlockResult> | null>(
     null,
   );
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const appStateRef = useRef<AppStateStatus>((AppState.currentState ?? "active") as AppStateStatus);
   const backgroundedAtRef = useRef<number | null>(null);
 
   const applyPinRecord = useCallback((record: PinRecord | null) => {

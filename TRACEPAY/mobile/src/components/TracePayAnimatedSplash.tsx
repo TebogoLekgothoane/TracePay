@@ -1,6 +1,6 @@
 import { useEffect, useRef, type FunctionComponent } from "react";
 import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import MaskedView from "@react-native-masked-view/masked-view";
+import { MaskedView } from "./ui/MaskedView";
 import { LinearGradient } from "expo-linear-gradient";
 import { useColorScheme } from "nativewind";
 import Animated, {

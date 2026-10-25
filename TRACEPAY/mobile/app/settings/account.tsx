@@ -1,5 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { router, useNavigation } from "expo-router";
+import { router, useNavigation, usePreventRemove } from "expo-router";
 import { ChevronLeft, Lock } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useEffect, useRef, useState } from "react";
@@ -75,7 +75,7 @@ export default function PersonalDetailsScreen() {
   const [nameError, setNameError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const mountedRef = useRef(true);
-  const allowLeaveRef = useRef(false);
+  const [allowLeave, setAllowLeave] = useState(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -115,32 +115,25 @@ export default function PersonalDetailsScreen() {
     !saving &&
     !loading;
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener("beforeRemove", (event) => {
-      if (allowLeaveRef.current || !hasChanges || saving) {
-        return;
-      }
-
-      event.preventDefault();
-      Alert.alert(
-        "Discard changes?",
-        "You have unsaved changes to your personal details.",
-        [
-          { text: "Keep editing", style: "cancel" },
-          {
-            text: "Discard",
-            style: "destructive",
-            onPress: () => {
-              allowLeaveRef.current = true;
-              navigation.dispatch(event.data.action);
-            },
+  // Leaving with unsaved edits asks first. `usePreventRemove` replaces the old
+  // `beforeRemove` listener; saving or discarding lets the removal through.
+  usePreventRemove(hasChanges && !saving && !allowLeave, ({ data }) => {
+    Alert.alert(
+      "Discard changes?",
+      "You have unsaved changes to your personal details.",
+      [
+        { text: "Keep editing", style: "cancel" },
+        {
+          text: "Discard",
+          style: "destructive",
+          onPress: () => {
+            setAllowLeave(true);
+            navigation.dispatch(data.action);
           },
-        ],
-      );
-    });
-
-    return unsubscribe;
-  }, [hasChanges, navigation, saving]);
+        },
+      ],
+    );
+  });
 
   const handleBack = () => {
     router.back();
@@ -165,7 +158,7 @@ export default function PersonalDetailsScreen() {
         if (!mountedRef.current) {
           return;
         }
-        allowLeaveRef.current = true;
+        setAllowLeave(true);
         Alert.alert("Details updated", "Your name has been saved.", [
           { text: "OK", onPress: () => router.back() },
         ]);
