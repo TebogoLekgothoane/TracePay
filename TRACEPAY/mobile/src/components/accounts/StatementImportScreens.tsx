@@ -1,6 +1,8 @@
 import {
+  AlertCircle,
   Check,
   ChevronLeft,
+  Circle,
   Clock3,
   FileText,
   Hourglass,
@@ -32,6 +34,16 @@ import {
   formatElapsed,
   type StatementImportStage,
 } from "../../features/statement-import/statement-import.progress";
+import {
+  ADD_ANOTHER_STATEMENT_LABEL,
+  COVERAGE_NOTES,
+  DONE_LABEL,
+  queueStatusLabel,
+  queueSummaryHeadline,
+  queueSummaryLines,
+  type QueueItemStatus,
+  type QueueSummary,
+} from "../../features/statement-import/statement-import.messages";
 import { COLORS } from "../../theme/colors";
 import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
@@ -316,7 +328,81 @@ function ConnectedStepper({ current }: { current: number }) {
   );
 }
 
+export type QueueStatusRow = {
+  id: string;
+  name: string;
+  status: QueueItemStatus;
+  detail?: string | null;
+};
+
+function statusIcon(status: QueueItemStatus, palette: ReturnType<typeof usePalette>) {
+  switch (status) {
+    case "saved":
+    case "already_imported":
+      return <Check color={palette.primary} size={16} strokeWidth={2.6} />;
+    case "reading":
+      return <RefreshCw color={palette.primary} size={15} strokeWidth={2.2} />;
+    case "password":
+      return <Lock color={palette.mutedForeground} size={15} strokeWidth={2.2} />;
+    case "problem":
+    case "empty":
+      return <AlertCircle color={palette.destructive} size={16} strokeWidth={2.2} />;
+    default:
+      return <Circle color={palette.mutedForeground} size={14} strokeWidth={2} />;
+  }
+}
+
+export function QueueStatusList({ rows }: { rows: ReadonlyArray<QueueStatusRow> }) {
+  const palette = usePalette();
+  return (
+    <View className="w-full rounded-3xl border border-border bg-card">
+      {rows.map((row, index) => (
+        <View key={row.id}>
+          {index > 0 ? <View className="mx-4 h-px bg-border" /> : null}
+          <View className="flex-row items-start gap-3 px-4 py-3">
+            <View className="mt-0.5 w-5 items-center">{statusIcon(row.status, palette)}</View>
+            <View className="min-w-0 flex-1">
+              <Text className="text-[14px] font-semibold text-foreground" numberOfLines={1}>
+                {row.name}
+              </Text>
+              <Text
+                className={`mt-0.5 text-[12px] leading-4 ${
+                  row.status === "problem" ? "text-destructive" : "text-muted-foreground"
+                }`}
+              >
+                {row.detail
+                  ? `${queueStatusLabel(row.status)} · ${row.detail}`
+                  : queueStatusLabel(row.status)}
+              </Text>
+            </View>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** Plain explanation of what more statements do, and what TracePay cannot see. */
+export function CoverageNotes() {
+  const palette = usePalette();
+  return (
+    <View className="flex-row items-start gap-3 rounded-3xl bg-primary/10 px-4 py-3.5">
+      <Info color={palette.primary} size={16} strokeWidth={2.2} style={{ marginTop: 2 }} />
+      <View className="min-w-0 flex-1 gap-1.5">
+        {COVERAGE_NOTES.map((note) => (
+          <Text key={note} className="text-[13px] leading-5 text-foreground">
+            {note}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 type ProcessingProps = {
+  /** Shown above the progress when several statements are queued. */
+  queueLabel?: string | null;
+  queueRows?: ReadonlyArray<QueueStatusRow>;
   stage: StatementImportStage;
   fileSizeBytes?: number | null;
   bankName?: string | null;
@@ -324,6 +410,8 @@ type ProcessingProps = {
 };
 
 export function StatementProcessingScreen({
+  queueLabel,
+  queueRows,
   stage,
   fileSizeBytes,
   bankName,
@@ -349,6 +437,14 @@ export function StatementProcessingScreen({
           <View className="items-center pt-2">
             <DocumentCard bankName={bankName} percent={percent} />
 
+            {queueLabel ? (
+              <Text
+                className="mt-5 max-w-[320px] text-center text-[13px] font-semibold text-primary"
+                numberOfLines={2}
+              >
+                {queueLabel}
+              </Text>
+            ) : null}
             <Text className="mt-6 text-[30px] font-bold tracking-[-0.7px] text-foreground">
               {percent}%
             </Text>
@@ -393,6 +489,12 @@ export function StatementProcessingScreen({
             </View>
           </View>
 
+          {queueRows && queueRows.length > 1 ? (
+            <View className="mt-4">
+              <QueueStatusList rows={queueRows} />
+            </View>
+          ) : null}
+
           <View className="mt-4 flex-row items-start gap-3 rounded-3xl bg-primary/10 px-4 py-3.5">
             <Info
               color={palette.primary}
@@ -432,6 +534,10 @@ type PasswordProps = {
   onClose: () => void;
   /** Opens the system file picker so the user can swap the PDF. */
   onChangeFile: () => void;
+  /** Leaves this file out and carries on with the others. */
+  onSkip?: () => void;
+  /** Extra line such as "Statement 2 of 3". */
+  queueLabel?: string | null;
 };
 
 export function StatementPasswordScreen({
@@ -445,6 +551,8 @@ export function StatementPasswordScreen({
   onUnlock,
   onClose,
   onChangeFile,
+  onSkip,
+  queueLabel,
 }: PasswordProps) {
   const palette = usePalette();
   const canUnlock = password.trim().length > 0 && !busy;
@@ -473,6 +581,12 @@ export function StatementPasswordScreen({
                   ? `Enter the password for your ${bankName} statement PDF.`
                   : "Enter the password for this statement PDF."}
               </Text>
+
+              {queueLabel ? (
+                <Text className="mt-2 text-center text-[12px] font-semibold text-primary">
+                  {queueLabel}
+                </Text>
+              ) : null}
 
               <Pressable
                 accessibilityHint="Opens the file picker to choose a different PDF"
@@ -516,10 +630,15 @@ export function StatementPasswordScreen({
           </View>
         </ScrollView>
 
-        <View className="px-5 pb-2">
+        <View className="gap-2 px-5 pb-2">
           <Button disabled={!canUnlock} loading={busy} onPress={onUnlock}>
             Unlock and continue
           </Button>
+          {onSkip ? (
+            <Button disabled={busy} variant="ghost" onPress={onSkip}>
+              Skip this statement
+            </Button>
+          ) : null}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -527,73 +646,112 @@ export function StatementPasswordScreen({
 }
 
 type CompleteProps = {
-  transactionCount: number;
-  newFindings: number;
-  updatedFindings: number;
+  summary: QueueSummary;
+  rows: ReadonlyArray<QueueStatusRow>;
+  /** Statements saved but insights still need to finish. */
+  insightsNotice?: string | null;
+  insightsBusy?: boolean;
+  /** Plain help for an account mismatch, shown with the problem list. */
+  mismatchHint?: string | null;
+  onRetryInsights?: () => void;
+  /** Leave the flow. Only offered when something was saved. */
+  onDone: () => void;
+  onAddAnother: () => void;
   onClose: () => void;
-  onViewInsights: () => void;
-  onImportAnother: () => void;
 };
 
 export function StatementImportComplete({
-  transactionCount,
-  newFindings,
-  updatedFindings,
+  summary,
+  rows,
+  insightsNotice,
+  insightsBusy,
+  mismatchHint,
+  onRetryInsights,
+  onDone,
+  onAddAnother,
   onClose,
-  onViewInsights,
-  onImportAnother,
 }: CompleteProps) {
   const palette = usePalette();
-  const countLabel = transactionCount.toLocaleString("en-ZA");
-
-  const rows = [
-    { Icon: FileText, label: "New transactions", value: countLabel },
-    {
-      Icon: Sparkles,
-      label: "New findings",
-      value: newFindings.toLocaleString("en-ZA"),
-    },
-    {
-      Icon: RefreshCw,
-      label: "Updated findings",
-      value: updatedFindings.toLocaleString("en-ZA"),
-    },
-  ] as const;
+  const savedAny = summary.saved > 0;
+  const lines = queueSummaryLines(summary);
 
   return (
-    <SafeAreaView className="flex-1 bg-background px-5" edges={["top", "bottom"]}>
-      <View className="flex-row justify-end pt-1">
+    <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
+      <View className="flex-row justify-end px-5 pt-1">
         <IconButton accessibilityLabel="Close" variant="ghost" onPress={onClose}>
           <X color={palette.foreground} size={22} strokeWidth={2} />
         </IconButton>
       </View>
-      <View className="flex-1 items-center justify-center">
-        <View className="h-20 w-20 items-center justify-center rounded-full bg-primary/15">
-          <Check color={palette.primary} size={36} strokeWidth={2.6} />
+      <ScrollView
+        className="flex-1 px-5"
+        contentContainerStyle={{ paddingBottom: 16 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View className="items-center pt-4">
+          <View
+            className={`h-20 w-20 items-center justify-center rounded-full ${
+              savedAny ? "bg-primary/15" : "bg-destructive/10"
+            }`}
+          >
+            {savedAny ? (
+              <Check color={palette.primary} size={36} strokeWidth={2.6} />
+            ) : (
+              <AlertCircle color={palette.destructive} size={36} strokeWidth={2.2} />
+            )}
+          </View>
+          <Text className="mt-6 text-center text-[26px] font-bold text-foreground">
+            {queueSummaryHeadline(summary)}
+          </Text>
+          <View className="mt-2 gap-1">
+            {lines.map((line) => (
+              <Text
+                key={line}
+                className="text-center text-[14px] leading-5 text-muted-foreground"
+              >
+                {line}
+              </Text>
+            ))}
+          </View>
         </View>
-        <Text className="mt-6 text-[28px] font-bold text-foreground">Import complete</Text>
-        <Text className="mt-2 text-center text-[15px] leading-6 text-muted-foreground">
-          We&apos;ve added {countLabel} transaction{transactionCount === 1 ? "" : "s"} from your
-          statement.
-        </Text>
-        <View className="mt-6 w-full rounded-3xl border border-border bg-card">
-          {rows.map((row, index) => (
-            <View key={row.label}>
-              {index > 0 ? <View className="mx-4 h-px bg-border" /> : null}
-              <View className="flex-row items-center gap-3 px-4 py-4">
-                <row.Icon color={palette.primary} size={18} strokeWidth={2} />
-                <Text className="flex-1 text-[15px] text-foreground">{row.label}</Text>
-                <Text className="text-[16px] font-bold text-foreground">{row.value}</Text>
-              </View>
-            </View>
-          ))}
+
+        {rows.length > 0 ? (
+          <View className="mt-5">
+            <QueueStatusList rows={rows} />
+          </View>
+        ) : null}
+
+        {mismatchHint ? (
+          <View className="mt-4 rounded-2xl bg-destructive/10 px-4 py-3">
+            <Text className="text-[13px] leading-5 text-destructive">{mismatchHint}</Text>
+          </View>
+        ) : null}
+
+        {insightsNotice ? (
+          <View className="mt-4 rounded-2xl bg-primary/10 px-4 py-3">
+            <Text className="text-center text-[13px] leading-5 text-foreground">
+              {insightsNotice}
+            </Text>
+            {onRetryInsights ? (
+              <Button className="mt-3" loading={insightsBusy} onPress={onRetryInsights}>
+                Try again
+              </Button>
+            ) : null}
+          </View>
+        ) : null}
+
+        <View className="mt-5">
+          <CoverageNotes />
         </View>
-      </View>
-      <View className="gap-3 pb-2">
-        <Button onPress={onViewInsights}>View your insights</Button>
-        <Button variant="outline" onPress={onImportAnother}>
-          Import another statement
+      </ScrollView>
+      <View className="gap-3 px-5 pb-2 pt-3">
+        <Button onPress={onAddAnother}>
+          {savedAny ? ADD_ANOTHER_STATEMENT_LABEL : "Try another statement"}
         </Button>
+        {savedAny ? (
+          <Button variant="outline" onPress={onDone}>
+            {DONE_LABEL}
+          </Button>
+        ) : null}
       </View>
     </SafeAreaView>
   );

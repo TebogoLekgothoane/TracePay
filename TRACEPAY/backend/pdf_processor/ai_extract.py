@@ -12,6 +12,7 @@ from categorisation.sanitizer import sanitize_for_ai
 
 from .extract import decrypt_pdf_content
 from .models import ExtractedStatement, Transaction
+from .dates import parse_statement_date
 from .normalise import parse_date, parse_time
 from .statement_schema import resolve_extracted_statement
 
@@ -494,7 +495,10 @@ def _parse_transactions(parsed: dict) -> list[Transaction]:
     for index, item in enumerate(rows, start=1):
         if not isinstance(item, dict):
             continue
-        date_value = parse_date(str(item.get("date", "")).strip())
+        # The model may only relay a date it read; an unparseable or year-less
+        # date drops the row rather than being completed by guesswork.
+        parsed_date = parse_statement_date(str(item.get("date", "")).strip())
+        date_value = parsed_date.value
         description = sanitize_for_ai(str(item.get("description", ""))).strip()[:500]
         amount = _to_decimal(item.get("amount"))
         raw_type = str(item.get("direction") or item.get("type") or "").strip().lower()
@@ -520,6 +524,9 @@ def _parse_transactions(parsed: dict) -> list[Transaction]:
                     source_row=index,
                     confidence="medium",
                     reference=reference_text or None,
+                    date_text=parsed_date.text[:40] or None,
+                    date_confidence="high" if parsed_date.confidence == "high" else "medium",
+                    date_warnings=list(parsed_date.warnings),
                 )
             )
         except (TypeError, ValueError):

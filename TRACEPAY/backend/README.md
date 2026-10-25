@@ -54,9 +54,13 @@ To enable categorisation, set `AI_CATEGORISATION_ENABLED=true`, `OPENROUTER_API_
 | POST | `/categorisation/reprocess` | Reclassify stored transactions |
 | GET | `/financial-features` | Completed-period financial features |
 | GET | `/behaviour-analysis` | Behaviour observations |
-| GET | `/leak-detections` | Deterministic leak findings |
+| GET | `/leak-detections` | Deterministic leak findings, with an `analysis` block per finding (accounts, date range, amount status, coverage limits) |
+| GET | `/statement-coverage` | Which accounts and periods the uploaded statements cover; gaps, overlaps, problems |
+| POST | `/consolidation/reconcile` | Link own-account transfers and refunds from evidence; idempotent |
 | GET | `/financial-reasoning` | Evidence-backed explanations of those findings |
 | GET | `/financial-recommendations` | Review actions derived from reasoning |
+
+Statements from every bank and account are consolidated into one chronological history; see [docs/multi-account-consolidation.md](docs/multi-account-consolidation.md) for the data model, date handling, deduplication, transfer rules, coverage and limitations. Apply `supabase/migrations/202610250001_multi_statement_consolidation.sql` before deploying this version; run `npm run test:db` to exercise the migrations against a real PostgreSQL.
 
 Deferred catalogue items stay deferred because the current data model lacks the evidence they need. FI-031 Impulse Spending Pattern is deferred: a shopping increase does not prove impulse intent. FI-054 Duplicate Charges is covered by FI-040 duplicate merchant payments. The canonical FI catalogue file is not in this repository, so untitled ids are not reconstructed. See `tests/fixtures/intelligence/coverage_gaps.json`.
 

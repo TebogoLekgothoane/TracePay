@@ -1,19 +1,31 @@
 import type { DocumentPickerAsset } from "expo-document-picker";
 import * as Crypto from "expo-crypto";
 
-import { requireAccountForImport } from "../accounts/account.service";
+import { listAccounts, requireAccountForImport } from "../accounts/account.service";
 import type { FinancialAccount } from "../accounts/account.types";
 import { getPdfProcessorBaseUrl } from "../../constants/config";
+import { requestTransferReconciliation } from "../../api/statement-coverage.api";
 import { getSupabase } from "../../lib/supabase";
-import { buildOccurrenceDedupeKeys } from "../transactions/transaction.dedupe";
 import { hashStatementContent, readPdfBytes } from "../transactions/statement-file";
 import {
   assertExtractedBankMatchesSelected,
   assertKnownStatementBankKey,
-  BANK_ALREADY_UPLOADED_MESSAGE,
-  bankSlotUniqueViolationMessage,
   normalizeStatementBankKey,
 } from "./statement-bank";
+import {
+  accountMismatchMessage,
+  ACCOUNT_UNCONFIRMED_NOTE,
+  assessStatementAccount,
+  belongsToOtherAccountMessage,
+} from "./statement-account";
+import {
+  buildImportRpcRows,
+  buildImportRpcStatement,
+  describeImportFailure,
+  summariseImportResult,
+  type ImportRpcResult,
+  type StatementImportSummary,
+} from "./statement-import.persist";
 import {
   isExpectedImportNotice,
   isNoTransactionsImportMessage,
@@ -53,6 +65,13 @@ export type ExtractedTransaction = {
   classification_reason?: string | null;
   merchant_name?: string | null;
   reference?: string | null;
+  /** The date exactly as the statement printed it, and how sure the parse is. */
+  date_text?: string | null;
+  date_confidence?: "high" | "medium" | "low" | null;
+  date_warnings?: string[];
+  booking_date?: string | null;
+  value_date?: string | null;
+  source_row?: number | null;
 };
 
 export type PdfStatementPreview = {
@@ -77,6 +96,8 @@ export type PdfStatementPreview = {
     newFindings: number;
     updatedFindings: number;
   };
+  /** What the import did to the consolidated history; set once saved. */
+  importSummary?: StatementImportSummary;
   statement: {
     bank: string | null;
     accountNumberLast4: string | null;
@@ -85,6 +106,10 @@ export type PdfStatementPreview = {
     statementEndDate: string | null;
     openingBalance: number | null;
     closingBalance: number | null;
+    /** `declared`: printed on the statement. `inferred`: taken from the first and last transaction. */
+    periodSource: "declared" | "inferred" | "unknown" | null;
+    openingClosingReconciliation: "verified" | "not_available" | "mismatch" | null;
+    reconciliationDifference: number | null;
   };
 };
 
@@ -166,6 +191,8 @@ type ProcessorPreviewPayload = {
     rows_detected?: number;
     rows_rejected?: number;
     balance_reconciliation?: "verified" | "not_available" | "mismatch";
+    opening_closing_reconciliation?: "verified" | "not_available" | "mismatch";
+    reconciliation_difference?: number | string | null;
     no_activity?: boolean;
   };
   statement_balance?: {
@@ -182,6 +209,7 @@ type ProcessorPreviewPayload = {
     opening_balance?: number | string | null;
     closing_balance?: number | string | null;
     balance_source?: "closing_balance" | "running_balance" | "unavailable";
+    period_source?: "declared" | "inferred" | "unknown";
   };
   transactions?: ExtractedTransaction[];
 };
@@ -279,6 +307,19 @@ function readExtractedStatement(
       readOptionalDate(raw?.statement_end_date) ?? statementBalance.asOfDate,
     openingBalance: readOptionalNumber(raw?.opening_balance),
     closingBalance: closing,
+    periodSource:
+      raw?.period_source === "declared" ||
+      raw?.period_source === "inferred" ||
+      raw?.period_source === "unknown"
+        ? raw.period_source
+        : null,
+    openingClosingReconciliation:
+      payload.validation?.opening_closing_reconciliation === "verified" ||
+      payload.validation?.opening_closing_reconciliation === "mismatch" ||
+      payload.validation?.opening_closing_reconciliation === "not_available"
+        ? payload.validation.opening_closing_reconciliation
+        : null,
+    reconciliationDifference: readOptionalNumber(payload.validation?.reconciliation_difference),
   };
 }
 
@@ -444,140 +485,41 @@ async function failAndCleanup(
   throw new Error(userMessage);
 }
 
-/** Banks that already hold an active statement slot for the signed-in user. */
-export async function listOccupiedStatementBankKeys(): Promise<string[]> {
+/**
+ * Releases only abandoned attempts for this account. It must not touch other
+ * in-flight imports: several statements can be processed in one session.
+ */
+async function releaseStaleAttempts(accountId: string, keepId: string | null): Promise<void> {
   const supabase = getSupabase();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError || !userData.user) {
-    return [];
-  }
-  const { data, error } = await supabase
-    .from("statement_imports")
-    .select("bank_key")
-    .eq("user_id", userData.user.id)
-    .eq("bank_slot_active", true)
-    .not("bank_key", "is", null);
-  if (error) {
-    console.warn("[TracePay][statement] occupied_banks_lookup_failed", {
-      message: error.message,
-    });
-    return [];
-  }
-  const keys = new Set<string>();
-  for (const row of data ?? []) {
-    if (typeof row.bank_key === "string" && row.bank_key) {
-      keys.add(row.bank_key);
-    }
-  }
-  return [...keys];
-}
-
-export function isStatementBankOccupied(
-  institution: string | null | undefined,
-  occupiedKeys: ReadonlyArray<string>,
-): boolean {
-  const key = normalizeStatementBankKey(institution);
-  if (!key) return false;
-  return occupiedKeys.includes(key);
-}
-
-async function releaseStaleBankSlots(
-  bankKey: string,
-  keepId: string | null,
-): Promise<void> {
-  const supabase = getSupabase();
-  const { error } = await supabase.rpc("release_stale_statement_bank_slots", {
-    p_bank_key: bankKey,
+  const { error } = await supabase.rpc("release_stale_statement_attempts", {
+    p_account_id: accountId,
     p_keep_id: keepId,
   });
   if (error) {
-    console.warn("[TracePay][statement] release_stale_bank_slots_failed", {
+    console.warn("[TracePay][statement] release_stale_attempts_failed", {
       message: error.message,
-      bankKey,
     });
   }
 }
 
-async function assertBankSlotAvailable(
-  userId: string,
-  bankKey: string,
-  excludeStatementId: string | null,
-): Promise<void> {
-  const supabase = getSupabase();
-  let query = supabase
-    .from("statement_imports")
-    .select("id, status, file_name")
-    .eq("user_id", userId)
-    .eq("bank_key", bankKey)
-    .eq("bank_slot_active", true);
-  if (excludeStatementId) {
-    query = query.neq("id", excludeStatementId);
-  }
-  const { data, error } = await query.maybeSingle();
-  if (error) {
-    throw new Error("Existing statements could not be checked for this bank.");
-  }
-  if (data) {
-    throw new Error(BANK_ALREADY_UPLOADED_MESSAGE);
-  }
-}
-
-async function assertStatementPeriodNotDuplicate(
-  accountId: string,
-  statementId: string,
-  startDate: string | null,
-  endDate: string | null,
-): Promise<void> {
-  if (!startDate || !endDate) {
-    return;
-  }
-  const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from("statement_imports")
-    .select("id, file_name, statement_start_date, statement_end_date")
-    .eq("account_id", accountId)
-    .eq("status", "processed")
-    .eq("statement_start_date", startDate)
-    .eq("statement_end_date", endDate)
-    .neq("id", statementId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error("Existing statements could not be checked for duplicates.");
-  }
-  if (data) {
-    throw new Error(
-      `A statement for ${startDate} to ${endDate} is already imported${
-        typeof data.file_name === "string" ? ` as "${data.file_name}"` : ""
-      }. Overlapping statements are allowed; this exact period is already saved.`,
-    );
-  }
-}
-
-async function loadCanonicalDedupeMap(
-  userId: string,
-  accountId: string,
-): Promise<Map<string, string>> {
-  const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from("transactions")
-    .select("id, dedupe_key")
-    .eq("user_id", userId)
-    .eq("account_id", accountId)
-    .eq("is_duplicate", false)
-    .not("dedupe_key", "is", null);
-
-  if (error) {
-    throw new Error("Existing transactions could not be checked for duplicates.");
-  }
-
-  const map = new Map<string, string>();
-  for (const row of data ?? []) {
-    if (typeof row.dedupe_key === "string" && typeof row.id === "string") {
-      map.set(row.dedupe_key, row.id);
+async function loadCategoryIds(names: string[]): Promise<Map<string, string>> {
+  const categoryIds = new Map<string, string>();
+  if (names.length === 0) return categoryIds;
+  const { data: categories, error: categoryError } = await getSupabase()
+    .from("categories")
+    .select("id,name")
+    .in("name", names);
+  if (categoryError) throw new Error("Categories could not be loaded.");
+  for (const category of categories ?? []) {
+    if (typeof category.id === "string" && typeof category.name === "string") {
+      categoryIds.set(category.name, category.id);
     }
   }
-  return map;
+  const missing = names.filter((name) => !categoryIds.has(name));
+  if (missing.length > 0) {
+    throw new Error(`The categories could not be resolved: ${missing.join(", ")}.`);
+  }
+  return categoryIds;
 }
 
 const FINDING_REGISTRY_TIMEOUT_MS = 60_000;
@@ -602,10 +544,57 @@ export async function retryFindingReconciliation(
   });
 }
 
+type PersistResult = {
+  /** New transactions added to the consolidated history. */
+  inserted: number;
+  /** Rows already imported from another statement or an earlier run. */
+  duplicates: number;
+  summary: StatementImportSummary;
+  accountNote: string | null;
+  newFindings: number;
+  updatedFindings: number;
+};
+
+/**
+ * Compare the statement's own account identity with the account the user
+ * chose. A disagreement stops the import: saving someone's transactions under
+ * the wrong account would corrupt both accounts' coverage and totals.
+ */
+async function confirmStatementAccount(
+  account: FinancialAccount,
+  preview: PdfStatementPreview,
+): Promise<{ adoptLastFour: string | null; note: string | null }> {
+  const accounts = await listAccounts();
+  const verdict = assessStatementAccount(
+    account,
+    accounts,
+    preview.statement.accountNumberLast4,
+  );
+  switch (verdict.status) {
+    case "mismatch":
+      throw new Error(
+        accountMismatchMessage(verdict.accountLastFour, verdict.statementLastFour),
+      );
+    case "belongs_to_other_account":
+      throw new Error(
+        belongsToOtherAccountMessage(
+          preview.statement.accountNumberLast4 ?? "",
+          verdict.accountName,
+        ),
+      );
+    case "adopt_last4":
+      return { adoptLastFour: verdict.lastFour, note: null };
+    case "unconfirmed":
+      return { adoptLastFour: null, note: ACCOUNT_UNCONFIRMED_NOTE };
+    default:
+      return { adoptLastFour: null, note: null };
+  }
+}
+
 async function persistPreview(
   preview: PdfStatementPreview,
   account: FinancialAccount,
-): Promise<{ inserted: number; duplicates: number; newFindings: number; updatedFindings: number }> {
+): Promise<PersistResult> {
   console.info("[TracePay][statement] persist_started", {
     statementId: preview.statementId,
     transactionCount: preview.transactions.length,
@@ -616,230 +605,84 @@ async function persistPreview(
   if (userError || !userData.user) {
     throw new Error("Sign in before saving transactions.");
   }
-  console.info("[TracePay][statement] connected_account_ready", {
-    accountId: account.id,
-    accountName: account.name,
-  });
 
-  assertExtractedBankMatchesSelected(
-    account.institution,
-    preview.statement.bank,
-  );
+  assertExtractedBankMatchesSelected(account.institution, preview.statement.bank);
+  const accountCheck = await confirmStatementAccount(account, preview);
 
-  await assertStatementPeriodNotDuplicate(
-    account.id,
-    preview.statementId,
-    preview.statement.statementStartDate,
-    preview.statement.statementEndDate,
-  );
-
-  const canonicalKeys = await loadCanonicalDedupeMap(userData.user.id, account.id);
-  const categoryNames = [
+  const categoryIds = await loadCategoryIds([
     ...new Set(
       preview.transactions
         .map((transaction) => transaction.category_name)
         .filter((name): name is string => Boolean(name)),
     ),
-  ];
-  const categoryIds = new Map<string, string>();
-  if (categoryNames.length > 0) {
-    const { data: categories, error: categoryError } = await supabase
-      .from("categories")
-      .select("id,name")
-      .in("name", categoryNames);
-    if (categoryError) throw new Error("Categories could not be loaded.");
-    for (const category of categories ?? []) {
-      if (typeof category.id === "string" && typeof category.name === "string") {
-        categoryIds.set(category.name, category.id);
-      }
-    }
-    const missingCategories = categoryNames.filter(
-      (name) => !categoryIds.has(name),
-    );
-    if (missingCategories.length > 0) {
-      throw new Error(
-        `The categories could not be resolved: ${missingCategories.join(", ")}.`,
-      );
-    }
-  }
+  ]);
 
-  let duplicateCount = 0;
-  const batchKeys = new Map(canonicalKeys);
-  const dedupeKeys = buildOccurrenceDedupeKeys(account.id, preview.transactions);
-  const rows = preview.transactions.map((transaction, index) => {
-    const dedupeKey = dedupeKeys[index];
-    const duplicateOf = batchKeys.get(dedupeKey) ?? null;
-    const isDuplicate = Boolean(duplicateOf);
-    const rowId = Crypto.randomUUID();
-    if (isDuplicate) {
-      duplicateCount += 1;
-    } else {
-      batchKeys.set(dedupeKey, rowId);
-    }
-    return {
-      id: rowId,
-      user_id: userData.user.id,
-      account_id: account.id,
-      statement_id: preview.statementId,
-      date: transaction.date,
-      transaction_time: transaction.transaction_time ?? null,
-      description: transaction.description,
-      amount: transaction.amount,
-      type: transaction.type,
-      balance: transaction.balance ?? null,
-      currency: transaction.currency ?? null,
-      source: "statement",
-      dedupe_key: dedupeKey,
-      is_duplicate: isDuplicate,
-      duplicate_of: duplicateOf,
-      category_id: transaction.category_name
-        ? (categoryIds.get(transaction.category_name) ?? null)
-        : null,
-      category_source: "automatic",
-      category_confidence: transaction.category_confidence ?? 0,
-      category_rule: transaction.category_rule ?? null,
-      categorized_at: transaction.category_name
-        ? new Date().toISOString()
-        : null,
-      transaction_class: transaction.transaction_class ?? "unknown",
-      classification_confidence: transaction.classification_confidence ?? 0,
-      classification_reason: transaction.classification_reason ?? null,
-      merchant_name: transaction.merchant_name ?? null,
-      reference: transaction.reference ?? null,
-      extraction_method: preview.extractionMethod,
-    };
+  // One transaction: dedupe against the user's whole history, insert, and mark
+  // the statement processed. The database serialises imports per account, so
+  // two uploads cannot both decide the same row is new.
+  const { data, error } = await supabase.rpc("import_statement_transactions", {
+    p_statement_id: preview.statementId,
+    p_rows: buildImportRpcRows(preview.transactions, categoryIds, preview.extractionMethod),
+    p_statement: buildImportRpcStatement(preview),
+    p_replace: false,
   });
-  let { error } = await supabase.from("transactions").insert(rows);
-  if (
-    error &&
-    /transaction_time|merchant_name|reference|extraction_method|transaction_class|classification_confidence|classification_reason/i.test(
-      error.message ?? "",
-    )
-  ) {
-    console.warn("[TracePay][statement] optional_columns_missing", {
-      code: error.code ?? null,
-    });
-    const legacyRows = rows.map(
-      ({
-        transaction_class: _transactionClass,
-        transaction_time: _transactionTime,
-        classification_confidence: _classificationConfidence,
-        classification_reason: _classificationReason,
-        merchant_name: _merchantName,
-        reference: _reference,
-        extraction_method: _extractionMethod,
-        ...row
-      }) => row,
-    );
-    ({ error } = await supabase.from("transactions").insert(legacyRows));
-  }
   if (error) {
     console.error("[TracePay][statement] transaction_insert_failed", {
       code: error.code ?? null,
       message: error.message ?? "unknown",
-      details: error.details ?? null,
-      hint: error.hint ?? null,
     });
-    throw new Error(
-      `The extracted transactions could not be saved${error.code ? ` (${error.code})` : ""}.`,
-    );
+    throw new Error(describeImportFailure(error));
   }
-  const databaseUpdates = rows.filter((row) => row.category_id).length;
-  console.info("[CATEGORISATION] database_updates", {
-    statementId: preview.statementId,
-    databaseUpdates,
-    unknownAfterAi: preview.transactions.filter(
-      (transaction) =>
-        !transaction.category_name &&
-        (transaction.transaction_class ?? "unknown") === "unknown",
-    ).length,
-  });
-  const statementUpdate = {
-    account_id: account.id,
-    status: "processed" as const,
-    extraction_method: preview.extractionMethod,
-    transaction_count: rows.length - duplicateCount,
-    processed_at: new Date().toISOString(),
-    closing_balance: preview.statement.closingBalance ?? preview.statementBalance.amount,
-    opening_balance: preview.statement.openingBalance,
-    statement_start_date: preview.statement.statementStartDate,
-    statement_end_date:
-      preview.statement.statementEndDate ?? preview.statementBalance.asOfDate,
-    extracted_bank: preview.statement.bank,
-    extracted_last4: preview.statement.accountNumberLast4,
-    balance_as_of:
-      preview.statement.statementEndDate ?? preview.statementBalance.asOfDate,
-    balance_source: preview.statementBalance.source,
-    balance_reconciliation: preview.balanceReconciliation,
-    extraction_confidence: preview.confidence,
-    rows_detected: preview.rowsDetected,
-    rows_rejected: preview.rowsRejected,
-  };
-  let { error: updateError } = await supabase
-    .from("statement_imports")
-    .update(statementUpdate)
-    .eq("id", preview.statementId);
-  if (
-    updateError &&
-    /opening_balance|statement_start_date|statement_end_date|extracted_bank|extracted_last4/i.test(
-      updateError.message ?? "",
-    )
-  ) {
-    const {
-      opening_balance: _opening,
-      statement_start_date: _start,
-      statement_end_date: _end,
-      extracted_bank: _bank,
-      extracted_last4: _last4,
-      ...legacyUpdate
-    } = statementUpdate;
-    ({ error: updateError } = await supabase
-      .from("statement_imports")
-      .update(legacyUpdate)
-      .eq("id", preview.statementId));
-  }
-  if (updateError) {
-    if (updateError.code === "23505") {
-      throw new Error(
-        bankSlotUniqueViolationMessage(updateError.message) ??
-          "A statement for this account and date range is already imported.",
-      );
-    }
-    throw new Error("The statement could not be marked as processed.");
-  }
+  const result = data as ImportRpcResult;
+  const summary = summariseImportResult(result);
 
-  await supabase.rpc("link_internal_transfers").then(({ error: linkError }) => {
-    if (linkError) {
-      console.warn("[TracePay][statement] link_internal_transfers_skipped", {
-        message: linkError.message,
+  if (accountCheck.adoptLastFour) {
+    // The account now has a verified identity; later statements are checked against it.
+    const { error: adoptError } = await supabase
+      .from("accounts")
+      .update({ last_four_digits: accountCheck.adoptLastFour })
+      .eq("id", account.id);
+    if (adoptError) {
+      console.warn("[TracePay][statement] account_last4_not_saved", {
+        code: adoptError.code ?? null,
       });
     }
-  });
+  }
 
-  const inserted = rows.length - duplicateCount;
+  // Link own-account transfers and refunds now that this statement is in.
+  // Evidence-based and best effort; analysis re-derives the same decision.
+  await requestTransferReconciliation();
+
   console.info("[TracePay][statement] persist_completed", {
     statementId: preview.statementId,
-    transactionCount: inserted,
-    duplicateCount,
+    newTransactions: summary.newTransactions,
+    overlapDuplicates: summary.overlapDuplicates,
+    possibleDuplicates: summary.possibleDuplicates,
   });
   let newFindings = 0;
   let updatedFindings = 0;
-  if (shouldReconcileSavedImport("processed", inserted)) {
+  if (shouldReconcileSavedImport("processed", summary.newTransactions)) {
     try {
       const counts = await retryFindingReconciliation(preview.statementId);
       newFindings = counts.newFindings;
       updatedFindings = counts.updatedFindings;
-    } catch (error) {
+    } catch (reconcileError) {
       const message =
-        error instanceof FindingReconciliationError
-          ? error.message
+        reconcileError instanceof FindingReconciliationError
+          ? reconcileError.message
           : "Finding reconciliation could not finish. Your statement is saved. Try again.";
-      throw new FindingReconciliationError(preview.statementId, message, rows.length);
+      throw new FindingReconciliationError(
+        preview.statementId,
+        message,
+        summary.newTransactions,
+      );
     }
   }
   return {
-    inserted,
-    duplicates: duplicateCount,
+    inserted: summary.newTransactions,
+    duplicates: summary.overlapDuplicates,
+    summary,
+    accountNote: accountCheck.note,
     newFindings,
     updatedFindings,
   };
@@ -921,13 +764,10 @@ export async function preparePdfStatement(
       }
     }
 
+    // The bank must be known so the statement can be matched to the right
+    // account, but a bank no longer limits how many statements may be added.
     const bankKey = assertKnownStatementBankKey(account.institution);
-    await releaseStaleBankSlots(bankKey, isResume ? id : null);
-    await assertBankSlotAvailable(
-      userData.user.id,
-      bankKey,
-      isResume ? id : null,
-    );
+    await releaseStaleAttempts(account.id, isResume ? id : null);
 
     const fileBytes = await readPdfBytes(asset.uri);
     const fileSize = asset.size ?? fileBytes.byteLength;
@@ -984,10 +824,7 @@ export async function preparePdfStatement(
         });
       if (importError) {
         await supabase.storage.from("statements").remove([filePath]);
-        throw new Error(
-          bankSlotUniqueViolationMessage(importError.message) ??
-            "The statement record could not be created.",
-        );
+        throw new Error("The statement record could not be created.");
       }
       recordCreated = true;
     } else {
@@ -1137,10 +974,20 @@ export async function preparePdfStatement(
       newFindings: persistResult.newFindings,
       updatedFindings: persistResult.updatedFindings,
     };
+    preview.importSummary = persistResult.summary;
+    if (persistResult.accountNote) {
+      preview.warnings = [...preview.warnings, persistResult.accountNote];
+    }
     if (persistResult.duplicates > 0) {
       preview.warnings = [
         ...preview.warnings,
-        `${persistResult.duplicates} overlapping transaction${persistResult.duplicates === 1 ? "" : "s"} were kept as duplicates and excluded from totals.`,
+        `${persistResult.duplicates} transaction${persistResult.duplicates === 1 ? " was" : "s were"} already in your history from an overlapping statement and ${persistResult.duplicates === 1 ? "is" : "are"} not counted twice.`,
+      ];
+    }
+    if (persistResult.summary.possibleDuplicates > 0) {
+      preview.warnings = [
+        ...preview.warnings,
+        `${persistResult.summary.possibleDuplicates} transaction${persistResult.summary.possibleDuplicates === 1 ? " might" : "s might"} also appear in another statement. ${persistResult.summary.possibleDuplicates === 1 ? "It was" : "They were"} kept and flagged for review.`,
       ];
     }
     console.info("[TracePay][statement] import_completed", {

@@ -26,6 +26,23 @@ class FeatureTransaction:
     is_duplicate: bool = False
     statement_id: str | None = None
     balance: Decimal | None = None
+    # Provenance. All optional: rows imported before multi-account support, and
+    # every existing caller, simply leave them unset.
+    account_id: str | None = None
+    bank_key: str | None = None
+    account_last4: str | None = None
+    currency: str | None = None
+    reference: str | None = None
+    value_date: date | None = None
+    booking_date: date | None = None
+    # high / medium / low when the extractor recorded it; None when unknown.
+    date_confidence: str | None = None
+    source_row: int | None = None
+    dedupe_status: str = "unique"
+    transfer_status: str = "none"
+    transfer_pair_id: str | None = None
+    transfer_fee_for: str | None = None
+    reversal_of: str | None = None
 
 
 class SpendingProfile(BaseModel):
@@ -105,6 +122,11 @@ class RecurrenceFeature(BaseModel):
 
 class MerchantFeature(BaseModel):
     merchant_name: str
+    # Accounts that were charged by this merchant (empty when the rows carry no
+    # account). Lets rules reason about coverage on the accounts that matter.
+    account_ids: list[str] = Field(default_factory=list)
+    # Account of the most recent charge: where the next charge would appear.
+    last_account_id: str | None = None
     merchant_transaction_count: int
     merchant_total_amount: Decimal
     merchant_average_amount: Decimal
@@ -397,4 +419,7 @@ class FinancialFeatureSnapshot(BaseModel):
     # Sanitised statement-import quality; never includes file content or descriptions.
     statement_import_quality: list[StatementImportQuality] = Field(default_factory=list)
     import_ids_by_month: dict[str, list[str]] = Field(default_factory=dict)
+    # Last day each account's uploaded statements vouch for. Absence of a charge
+    # after that day says nothing about the account.
+    account_observation_end: dict[str, date] = Field(default_factory=dict)
 

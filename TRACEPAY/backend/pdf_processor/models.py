@@ -37,6 +37,14 @@ class Transaction(BaseModel):
     classification_reason: str | None = None
     merchant_name: str | None = None
     reference: str | None = None
+    # Date provenance. ``date`` is the transaction date as the statement shows
+    # it; the original text, how sure the parse is, and any other dates the
+    # statement printed are kept so nothing is silently normalised away.
+    date_text: str | None = None
+    date_confidence: Literal["high", "medium", "low"] = "high"
+    date_warnings: list[str] = Field(default_factory=list)
+    booking_date: date | None = None
+    value_date: date | None = None
 
     @computed_field
     @property
@@ -61,6 +69,13 @@ class ValidationResult(BaseModel):
     balance_reconciliation: Literal["verified", "not_available", "mismatch"] = "not_available"
     # The statement's own summary shows no money in or out for the period.
     no_activity: bool = False
+    # Opening balance + extracted movements vs closing balance, using the
+    # account type's balance convention. ``None`` difference means not checked.
+    opening_closing_reconciliation: Literal["verified", "not_available", "mismatch"] = (
+        "not_available"
+    )
+    reconciliation_difference: Decimal | None = None
+    transactions_with_uncertain_dates: int = 0
 
 
 class StatementBalance(BaseModel):
@@ -80,6 +95,10 @@ class ExtractedStatement(BaseModel):
     balance_source: Literal["closing_balance", "running_balance", "unavailable"] = (
         "unavailable"
     )
+    # ``declared``: printed on the statement. ``inferred``: taken from the
+    # first and last extracted transaction, so it proves nothing about days
+    # at either edge. ``unknown``: no dates at all.
+    period_source: Literal["declared", "inferred", "unknown"] = "unknown"
 
 
 class ProcessingResult(BaseModel):

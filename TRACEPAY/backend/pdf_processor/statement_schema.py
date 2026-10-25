@@ -76,10 +76,16 @@ def resolve_extracted_statement(
         parsed_start, parsed_end = _period_from_text(header)
         start = start or parsed_start
         end = end or parsed_end
+    # A period read from the statement is evidence of coverage. One taken from
+    # the first and last transaction is not: the days at either edge may hold
+    # activity that was never extracted.
+    period_source = "declared" if start is not None and end is not None else "unknown"
     if start is None and transactions:
         start = min(item.date for item in transactions)
+        period_source = "inferred"
     if end is None and transactions:
         end = max(item.date for item in transactions)
+        period_source = "inferred"
 
     opening = opening_balance if opening_balance is not None else _labelled_amount(text, _OPENING)
     balance = resolve_statement_balance(text, transactions)
@@ -98,7 +104,13 @@ def resolve_extracted_statement(
         opening_balance=opening,
         closing_balance=closing,
         balance_source=balance.source if closing is not None else "unavailable",
+        period_source=period_source,
     )
+
+
+def period_from_text(text: str) -> tuple[date | None, date | None]:
+    """The statement period printed in the header, if any (never inferred)."""
+    return _period_from_text((text or "")[:2000])
 
 
 def _bank_from_text(text: str, source_filename: str | None = None) -> str | None:

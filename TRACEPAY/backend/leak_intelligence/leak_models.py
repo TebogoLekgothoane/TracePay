@@ -8,6 +8,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from .coverage import CoverageLimit
+
 LeakType = Literal[
     "bank_fee_leak",
     "subscription_leak",
@@ -44,6 +46,51 @@ class SupportingTransaction(BaseModel):
     role: Literal["payment", "fee", "other_fee", "failed_attempt_fee", "reversal"]
 
 
+AmountStatus = Literal["confirmed", "estimated", "potentially_duplicated"]
+AccountPattern = Literal[
+    "single_account",
+    "consolidated_across_accounts",
+    "sequential_move",
+    "concurrent_charges",
+    "unrelated_accounts",
+]
+
+
+class SourceAccount(BaseModel):
+    """An account that contributed evidence. Last four digits only, never a full number."""
+
+    account_id: str | None = None
+    label: str
+    transaction_count: int
+    amount: Decimal = Field(ge=0)
+
+
+class LeakAnalysisContext(BaseModel):
+    """How a finding was reached and what limits it. Additive to LeakDetection."""
+
+    source_accounts: list[SourceAccount] = Field(default_factory=list)
+    cross_account: bool = False
+    account_pattern: AccountPattern = "single_account"
+    date_range_start: date | None = None
+    date_range_end: date | None = None
+    window_rule: str = ""
+    amount: Decimal = Field(default=Decimal("0"), ge=0)
+    currency: str = "ZAR"
+    amount_status: AmountStatus = "confirmed"
+    confidence_level: Literal["high", "medium", "low"] = "medium"
+    confidence_notes: list[str] = Field(default_factory=list)
+    coverage_limits: list[CoverageLimit] = Field(default_factory=list)
+    calculation: str = ""
+    overlaps_with: list[str] = Field(default_factory=list)
+    counted_in_total: bool = True
+
+
+class LeakResultSummary(BaseModel):
+    non_overlapping_amount_by_currency: dict[str, Decimal] = Field(default_factory=dict)
+    coverage_summary: list[str] = Field(default_factory=list)
+    disclaimer: str = ""
+
+
 class LeakDetection(BaseModel):
     """A deterministic, evidence-backed potential financial leak."""
 
@@ -67,6 +114,7 @@ class LeakDetection(BaseModel):
     detected_at: datetime
     period_start: date | None = None
     period_end: date | None = None
+    analysis: LeakAnalysisContext | None = None
 
 
 class LeakDetectionResult(BaseModel):
@@ -78,3 +126,4 @@ class LeakDetectionResult(BaseModel):
     period_end: date | None = None
     detector_version: str
     leaks: list[LeakDetection] = Field(default_factory=list)
+    analysis_summary: LeakResultSummary | None = None

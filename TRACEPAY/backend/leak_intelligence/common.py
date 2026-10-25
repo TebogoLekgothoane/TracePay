@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from functools import lru_cache
 
 from categorisation.normalize import (
     is_bank_boilerplate_label,
@@ -72,10 +73,27 @@ def merchant_group_key(transaction: FeatureTransaction) -> str | None:
     People, banks, processors and payment mechanisms are never treated as merchants.
     Free-text extraction is used only when source identity confirms a merchant.
     """
-    if transaction.categorisation.transaction_class in _NON_MERCHANT_GROUP_CLASSES:
+    return _merchant_group_key(
+        transaction.categorisation.transaction_class,
+        transaction.description,
+        transaction.merchant_name,
+        transaction.categorisation.merchant_name,
+    )
+
+
+# The key depends only on these four strings, and the analysis asks for it
+# many times per transaction (every rule groups by merchant), so it is cached.
+@lru_cache(maxsize=65_536)
+def _merchant_group_key(
+    transaction_class: str | None,
+    description: str | None,
+    merchant_name: str | None,
+    categorised_merchant: str | None,
+) -> str | None:
+    if transaction_class in _NON_MERCHANT_GROUP_CLASSES:
         return None
 
-    identity = identify_source(transaction.description)
+    identity = identify_source(description)
     if identity.source_type in _NON_MERCHANT_SOURCE_TYPES:
         return None
 
@@ -83,7 +101,7 @@ def merchant_group_key(transaction: FeatureTransaction) -> str | None:
     if identity.source_type == "merchant" and identity.merchant_name:
         value = identity.merchant_name
     else:
-        value = transaction.merchant_name or transaction.categorisation.merchant_name
+        value = merchant_name or categorised_merchant
         if value and is_bank_boilerplate_label(value):
             value = None
 

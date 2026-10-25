@@ -99,7 +99,13 @@ def _inactive_recurring_leaks(snapshot: FinancialFeatureSnapshot) -> list[LeakDe
             or not is_reliable_merchant_display_name(merchant.merchant_name)
         ):
             continue
-        days_since = (snapshot.date_end - last_date).days
+        # Judge absence only as far as the account that was being charged is
+        # covered by uploaded statements: an account whose statements stop
+        # earlier than another's has simply not been seen since.
+        observed_until = snapshot.account_observation_end.get(
+            merchant.last_account_id or "", snapshot.date_end
+        )
+        days_since = (observed_until - last_date).days
         if days_since <= max(30, int(interval * Decimal("1.6"))):
             continue
         monthly = amount * Decimal("30") / interval

@@ -69,7 +69,49 @@ def feature_transaction_from_row(row: Mapping[str, Any], *, expected_user_id: st
         is_duplicate=bool(row.get("is_duplicate", False)),
         statement_id=_optional_text(row, "statement_id"),
         balance=_decimal(row["balance"]) if row.get("balance") not in (None, "") else None,
+        account_id=_optional_text(row, "account_id"),
+        bank_key=_optional_text(row, "bank_key"),
+        account_last4=_account_last4(row.get("accounts")),
+        currency=_optional_text(row, "currency"),
+        reference=_optional_text(row, "reference"),
+        value_date=_date(row.get("value_date")),
+        booking_date=_date(row.get("booking_date")),
+        date_confidence=_choice(row, "date_confidence", _DATE_CONFIDENCES),
+        source_row=_optional_int(row.get("source_row")),
+        dedupe_status=_choice(row, "dedupe_status", _DEDUPE_STATUSES) or "unique",
+        transfer_status=_choice(row, "transfer_status", _TRANSFER_STATUSES) or "none",
+        transfer_pair_id=_optional_text(row, "transfer_pair_id"),
+        transfer_fee_for=_optional_text(row, "transfer_fee_for"),
+        reversal_of=_optional_text(row, "reversal_of"),
     )
+
+
+_DATE_CONFIDENCES = {"high", "medium", "low"}
+_DEDUPE_STATUSES = {"unique", "overlap_duplicate", "possible_duplicate"}
+_TRANSFER_STATUSES = {"none", "candidate", "confirmed"}
+
+
+def _choice(row: Mapping[str, Any], key: str, allowed: set[str]) -> str | None:
+    value = _optional_text(row, key)
+    return value if value in allowed else None
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _account_last4(value: Any) -> str | None:
+    if isinstance(value, list) and value:
+        value = value[0]
+    if not isinstance(value, Mapping):
+        return None
+    digits = value.get("last_four_digits")
+    return digits if isinstance(digits, str) and len(digits) == 4 and digits.isdigit() else None
 
 
 def _required_text(row: Mapping[str, Any], key: str) -> str:

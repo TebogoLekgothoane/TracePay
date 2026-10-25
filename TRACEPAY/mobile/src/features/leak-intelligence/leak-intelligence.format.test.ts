@@ -12,7 +12,16 @@ import {
   merchantDisplayName,
   recognisedCategoryKey,
 } from "./leak-intelligence.format";
-import { parseLeakDetectionResult } from "./leak-intelligence.parse";
+import {
+  accountPatternExplanation,
+  amountStatusLabel,
+  confidenceLevelLabel,
+  formatAnalysisAmount,
+  formatAnalysisDateRange,
+  isConfirmedAmount,
+  notCountedInTotalNote,
+} from "./leak-intelligence.format";
+import { parseLeakAnalysis, parseLeakDetectionResult } from "./leak-intelligence.parse";
 import { catalogLogoUrl, resolveCatalogLogo } from "../transactions/merchant-logos";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -251,3 +260,66 @@ test("formats new FI-017, FI-024, FI-028, FI-030, FI-032, and FI-033 evidence fi
   assert(rows.some((r) => r.label === "Convenience-store visits" && r.value === "10"), "convenience count");
 });
 
+
+test("evidence helpers never present estimates or duplicates as confirmed", () => {
+  assert(amountStatusLabel("confirmed") === "Confirmed from your transactions", "confirmed label");
+  assert(amountStatusLabel("estimated") === "Estimated", "estimated label");
+  assert(amountStatusLabel("potentially_duplicated").includes("verify"), "duplicate label");
+  assert(isConfirmedAmount("confirmed"), "confirmed is confirmed");
+  assert(!isConfirmedAmount("estimated"), "estimated not confirmed");
+  assert(!isConfirmedAmount("potentially_duplicated"), "duplicate not confirmed");
+  assert(confidenceLevelLabel("medium") === "Medium confidence", "confidence label");
+  assert(confidenceLevelLabel(null).includes("not available"), "null confidence");
+});
+
+test("account patterns are explained only where needed", () => {
+  assert(accountPatternExplanation("single_account") === null, "single needs no note");
+  assert(accountPatternExplanation(null) === null, "null needs no note");
+  assert(Boolean(accountPatternExplanation("sequential_move")), "sequential explained");
+  assert(Boolean(accountPatternExplanation("concurrent_charges")), "concurrent explained");
+  assert(Boolean(accountPatternExplanation("unrelated_accounts")), "unrelated explained");
+});
+
+test("parses the optional analysis block defensively", () => {
+  assert(parseLeakAnalysis(undefined) === null, "missing block is null");
+  assert(parseLeakAnalysis("nope") === null, "malformed block is null");
+  const analysis = parseLeakAnalysis({
+    source_accounts: [
+      { account_id: "a", label: "FNB ••1234", transaction_count: 3, amount: "120.50" },
+      { account_id: "b" },
+    ],
+    cross_account: true,
+    account_pattern: "mystery",
+    date_range_start: "2026-03-01",
+    date_range_end: "2026-03-31",
+    amount: "120.50",
+    currency: "ZAR",
+    amount_status: "totally_sure",
+    confidence_level: "extreme",
+    confidence_notes: ["a", 3],
+    coverage_limits: [{ message: "Feb missing", materially_limits: true }, { kind: "x" }],
+    calculation: "sum",
+    counted_in_total: false,
+  });
+  assert(analysis !== null, "parsed");
+  assert(analysis.source_accounts.length === 1, "drops malformed account");
+  assert(analysis.account_pattern === null, "unknown pattern dropped");
+  assert(analysis.amount_status === "estimated", "unknown status never confirmed");
+  assert(analysis.confidence_level === null, "unknown confidence dropped");
+  assert(analysis.confidence_notes.length === 0, "bad notes array rejected");
+  assert(analysis.coverage_limits.length === 1, "drops limit without message");
+  assert(analysis.counted_in_total === false, "counted_in_total false kept");
+  assert(formatAnalysisDateRange(analysis) === "1 Mar 2026 – 31 Mar 2026", "date range not shifted");
+  assert(notCountedInTotalNote(analysis) !== null, "note shown when not counted");
+  assert(formatAnalysisAmount("120.50", "ZAR").includes("120"), "amount formatted");
+});
+
+test("results without analysis keep the old shape", () => {
+  const result = parseLeakDetectionResult({
+    user_id: "u",
+    transaction_count: 0,
+    detector_version: "v",
+    leaks: [],
+  });
+  assert(result.analysis_summary === null, "no summary");
+});

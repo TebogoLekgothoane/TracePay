@@ -12,6 +12,7 @@ from app.auth import require_supabase_user
 from app.anthropic_analysis import build_user_anthropic_analysis
 from app.behaviour_analysis import build_user_behaviour_analysis
 from app.category_catalog import fetch_category_names
+from app.consolidation_service import build_user_coverage_payload, reconcile_user_transfers
 from app.financial_features import build_user_feature_snapshot, public_feature_payload
 from app.financial_intelligence_report import (
     ReportCompositionError,
@@ -313,6 +314,31 @@ async def leak_detections(
         len(result.leaks),
     )
     return result.model_dump(mode="json")
+
+
+@app.get("/statement-coverage")
+async def statement_coverage(
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Accounts and periods the uploaded statements cover, gaps, overlaps and issues."""
+    enforce_rate_limit(f"coverage-user:{_user_id}", 60, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    return await build_user_coverage_payload(_user_id, access_token)
+
+
+@app.post("/consolidation/reconcile")
+async def consolidation_reconcile(
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Link own-account transfers and refunds from evidence, after an import.
+
+    Idempotent: repeating it changes nothing. Equal amounts alone never link.
+    """
+    enforce_rate_limit(f"reconcile-user:{_user_id}", 30, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    return await reconcile_user_transfers(_user_id, access_token)
 
 
 @app.get("/financial-reasoning")

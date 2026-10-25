@@ -8,7 +8,7 @@ import { getSupabase, isSupabaseConfigured } from "../lib/supabase";
 
 export { SubscriptionsDebugApiError };
 
-const REQUEST_TIMEOUT_MS = 15_000;
+const REQUEST_TIMEOUT_MS = 45_000;
 
 export async function fetchDetectedSubscriptions(
   signal?: AbortSignal,

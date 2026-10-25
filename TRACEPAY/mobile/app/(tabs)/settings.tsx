@@ -5,6 +5,7 @@ import type { LucideIcon } from "lucide-react-native";
 import {
   Bell,
   ChevronRight,
+  FileText,
   FlaskConical,
   Globe,
   HelpCircle,
@@ -42,6 +43,7 @@ const PERSONAL_DETAILS_HREF = "/settings/account";
 const SECURITY_HREF = "/settings/security";
 const PRIVACY_HREF = "/settings/privacy";
 const LANGUAGE_HREF = "/settings/language";
+const STATEMENT_COVERAGE_HREF = "/statements/coverage";
 const HELP_HREF = "/settings/help";
 const NOTIFICATIONS_HREF = "/settings/notifications";
 const SYNTHETIC_INTELLIGENCE_DEBUG_HREF = "/debug/synthetic-intelligence";
@@ -72,6 +74,12 @@ const ACCOUNT_ROWS: SettingsRow[] = [
     label: "My accounts",
     Icon: Wallet,
     href: LINKED_ACCOUNTS_HREF,
+  },
+  {
+    id: "statement-coverage",
+    label: "Statements & coverage",
+    Icon: FileText,
+    href: STATEMENT_COVERAGE_HREF,
   },
   {
     id: "security",

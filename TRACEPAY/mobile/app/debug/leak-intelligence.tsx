@@ -25,6 +25,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { IconButton } from "../../src/components/ui/IconButton";
 import { Button } from "../../src/components/ui/Button";
+import { LeakEvidenceSection } from "../../src/components/leaks/LeakEvidenceSection";
 import { AnthropicAnalysisSection } from "../../src/components/ui/AnthropicAnalysisCard";
 import { SyntheticSourceNote } from "../../src/features/synthetic-intelligence/SyntheticSourceNote";
 import { scenarioLabel } from "../../src/features/synthetic-intelligence/synthetic-intelligence.parse";
@@ -383,6 +384,7 @@ function LeakCard({
         rows={leak.supporting_transactions}
         total={leak.supporting_transaction_count}
       />
+      <LeakEvidenceSection analysis={leak.analysis} />
       <Text className="mt-4 text-[12px] text-muted-foreground">
         Status: {humanize(leak.status)} · Analysis period:{" "}
         {formatPeriod(leak.period_start, leak.period_end)}

@@ -8,7 +8,8 @@ import { getSupabase, isSupabaseConfigured } from "../lib/supabase";
 
 export { LeakIntelligenceApiError };
 
-const REQUEST_TIMEOUT_MS = 15_000;
+// Analysis reads every statement across all accounts, so allow it more time.
+const REQUEST_TIMEOUT_MS = 45_000;
 
 export async function fetchLeakDetections(
   signal?: AbortSignal,

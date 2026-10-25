@@ -10,6 +10,7 @@ import re
 from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import Mapping
 from statistics import median, pvariance
 
 from .common import (
@@ -38,6 +39,7 @@ from .models import (
     RecurrenceFeature,
     WeekendSpendingFeatures,
 )
+from .consolidation import order_chronologically
 from .subscription_detection import detect_subscriptions
 from .subscription_llm import label_subscription_groups, merchant_resolver
 from .recurrence_rules import (
@@ -114,12 +116,15 @@ def build_financial_features(
     transactions: list[FeatureTransaction],
     *,
     statement_import_quality: list[StatementImportQuality] | None = None,
+    account_observation_end: Mapping[str, date] | None = None,
 ) -> FinancialFeatureSnapshot:
     """Build one user's financial observations from already categorised data."""
     if not user_id:
         raise ValueError("A user id is required for financial feature calculation.")
 
-    active = _active_user_transactions(user_id, transactions)
+    # Chronological, with a deterministic order for same-day rows. Rules that
+    # take "latest" or "first" must not depend on how rows were extracted.
+    active = order_chronologically(_active_user_transactions(user_id, transactions))
     dates = [item.transaction_date for item in active if item.transaction_date is not None]
     date_start = min(dates) if dates else None
     date_end = max(dates) if dates else None
@@ -158,6 +163,7 @@ def build_financial_features(
         irregular_candidates=_irregular_candidates(active),
         statement_import_quality=qualities,
         import_ids_by_month=import_ids_by_month,
+        account_observation_end=dict(account_observation_end or {}),
     )
 
 
@@ -658,6 +664,10 @@ def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantF
         features.append(
             MerchantFeature(
                 merchant_name=merchant,
+                account_ids=sorted({item.account_id for item in items if item.account_id}),
+                last_account_id=next(
+                    (item.account_id for item in reversed(items) if item.account_id), None
+                ),
                 merchant_transaction_count=len(items),
                 merchant_total_amount=sum(amounts, ZERO),
                 merchant_average_amount=_average(amounts) or ZERO,
@@ -1481,6 +1491,11 @@ def _is_overlapping_statement_import_copy(
     transactions: list[FeatureTransaction],
 ) -> bool:
     if len(transactions) < 2:
+        return False
+    account_ids = {item.account_id for item in transactions if item.account_id}
+    if len(account_ids) > 1:
+        # Two statements of two different accounts are two real charges, not one
+        # transaction printed twice by overlapping statements.
         return False
     statement_ids = [item.statement_id for item in transactions if item.statement_id]
     if len(statement_ids) != len(transactions):

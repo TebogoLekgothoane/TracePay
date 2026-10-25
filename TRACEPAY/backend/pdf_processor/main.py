@@ -9,10 +9,10 @@ from .ai_extract import (
 from .extract import ExtractionError, extract_layers
 from .models import ProcessingResult, StatementBalance, Transaction, ValidationResult
 from .normalise import normalize_row, parse_text_rows, split_same_row_fee, table_marks_debits_with_sign
-from .statement_schema import resolve_extracted_statement, statement_has_no_activity
+from .statement_schema import period_from_text, resolve_extracted_statement, statement_has_no_activity
 from .tables import align_row_to_headers, is_transaction_table, merge_continuation_rows, table_headers
 from .text_chain import text_chain_transactions
-from .validate import validate_transactions
+from .validate import reconcile_opening_closing, validate_transactions
 from categorisation.service import CategorisableTransaction, categorise_batch
 
 
@@ -51,6 +51,8 @@ def process_pdf(
     transactions: list[Transaction] = []
     rows_rejected = 0
     ai_statement = None
+    # Only a period printed on the statement can place year-less dates.
+    header_period = period_from_text(text)
 
     chain_transactions = text_chain_transactions(text) if raw.extraction_method == "text" else None
     if chain_transactions is not None:
@@ -92,6 +94,7 @@ def process_pdf(
                         aligned_headers,
                         len(transactions) + 1,
                         unsigned_is_credit=unsigned_is_credit,
+                        period=header_period,
                     )
                     if transaction:
                         previous_balance = next(
@@ -105,7 +108,7 @@ def process_pdf(
             raw = raw.model_copy(update={"rows_found": table_rows_detected})
         rows_rejected = max(raw.rows_found - len(transactions), 0)
         if not transactions:
-            transactions, detected_rows = parse_text_rows(text)
+            transactions, detected_rows = parse_text_rows(text, period=header_period)
             raw = raw.model_copy(update={"rows_found": detected_rows})
             rows_rejected = max(detected_rows - len(transactions), 0)
 
@@ -227,6 +230,33 @@ def process_pdf(
         closing_balance=ai_statement.closing_balance if ai_statement else None,
         source_filename=filename,
     )
+    if not no_activity:
+        reconciliation, difference = reconcile_opening_closing(
+            statement.opening_balance,
+            statement.closing_balance,
+            transactions,
+            statement.account_type,
+        )
+        uncertain_dates = sum(1 for item in transactions if item.date_confidence != "high")
+        extra_warnings = list(validation.warnings)
+        if reconciliation == "mismatch":
+            extra_warnings.append(
+                "Opening balance plus extracted transactions does not equal the closing balance; "
+                "some activity may be missing or misread."
+            )
+        if uncertain_dates:
+            extra_warnings.append(
+                f"{uncertain_dates} transaction date(s) could not be read with full confidence."
+            )
+        validation = validation.model_copy(
+            update={
+                "opening_closing_reconciliation": reconciliation,
+                "reconciliation_difference": difference,
+                "transactions_with_uncertain_dates": uncertain_dates,
+                "warnings": extra_warnings,
+                "status": "warning" if extra_warnings and validation.status == "valid" else validation.status,
+            }
+        )
     statement_balance = StatementBalance(
         amount=statement.closing_balance,
         as_of_date=statement.statement_end_date,

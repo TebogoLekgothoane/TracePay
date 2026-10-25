@@ -27,9 +27,10 @@ def test_missing_optional_transaction_time_column_falls_back_to_legacy_select(
     monkeypatch.setattr(financial_features, "_authenticated_get", fake_get)
 
     assert financial_features._fetch_transaction_rows("user-a", "token") == []
-    assert len(calls) == 2
-    assert "transaction_time" in calls[0]
-    assert "transaction_time" not in calls[1]
+    # Newest schema first, then each older shape, ending on the legacy select.
+    assert len(calls) == len(financial_features._TRANSACTION_SELECTS)
+    assert "transaction_time" in calls[0] and "account_id" in calls[0]
+    assert "transaction_time" not in calls[-1] and "account_id" not in calls[-1]
 
 
 def test_only_missing_optional_transaction_time_http_errors_use_compatibility_path(

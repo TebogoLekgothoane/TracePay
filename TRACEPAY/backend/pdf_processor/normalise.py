@@ -1,7 +1,8 @@
 import re
-from datetime import date, datetime, time
+from datetime import date, time
 from decimal import Decimal, InvalidOperation
 
+from .dates import ParsedDate, parse_statement_date
 from .models import Transaction
 
 # Thousands groups must stay inside the amount token. Stopping at the first
@@ -14,24 +15,10 @@ _TEXT_ROW_AMOUNT = re.compile(
     r"\)?"
 )
 _TEXT_ROW_DATE = re.compile(
-    r"^(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}-\d{1,2}-\d{1,2})\s+(.+)$",
+    r"^(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}-\d{1,2}-\d{1,2}"
+    r"|\d{1,2}\s?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:\s\d{4})?)\s+(.+)$",
+    re.IGNORECASE,
 )
-
-DATE_FORMATS = (
-    "%Y-%m-%d",
-    "%d/%m/%Y",
-    "%d/%m/%y",
-    "%m/%d/%Y",
-    "%m/%d/%y",
-    "%d-%m-%Y",
-    "%d-%m-%y",
-    "%d %b %Y",
-    "%d %B %Y",
-    "%d %b %y",
-    "%b %d %Y",
-    "%b %d, %Y",
-)
-
 
 def parse_time(value: str) -> time | None:
     match = re.search(r"\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b", value.strip())
@@ -44,16 +31,12 @@ def parse_time(value: str) -> time | None:
 
 
 def parse_date(value: str) -> date | None:
-    value = value.strip()
-    for candidate in (value, value.split()[0] if value else ""):
-        if not candidate:
-            continue
-        for fmt in DATE_FORMATS:
-            try:
-                return datetime.strptime(candidate, fmt).date()
-            except ValueError:
-                continue
-    return None
+    """Full-date parse kept for callers that only need the value.
+
+    Year-less dates return ``None`` here because no statement period is
+    available; use ``parse_statement_date`` when provenance matters.
+    """
+    return parse_statement_date(value).value
 
 
 # 22,000 is thousands. 186,40 stays a decimal comma. Other comma shapes are
@@ -100,12 +83,47 @@ def _normalize_amount_body(cleaned: str) -> str | None:
     return None
 
 
+_TRANSACTION_DATE_HEADERS = ("transaction date", "date", "trans date", "tran date")
+# Last-resort headers: used only when no transaction date column exists.
+_NON_TRANSACTION_DATE_HEADERS = frozenset(
+    {"posting date", "booking date", "post date", "value date"}
+)
+
+
+def _pick_date_cell(values: dict[str, str]) -> tuple[str, str]:
+    """Choose the transaction-date column by precedence, not column order.
+
+    ``value date`` and ``posting date`` columns can appear before the
+    transaction date, so the first date-like header must not win.
+    """
+    for header in (*_TRANSACTION_DATE_HEADERS, "posting date", "booking date", "post date", "value date"):
+        if values.get(header):
+            return values[header], header
+    return "", ""
+
+
+def _date_confidence(parsed: ParsedDate, warnings: list[str]) -> str:
+    if parsed.confidence in {"low", "medium"}:
+        return parsed.confidence
+    return "medium" if any(w.startswith("date_is_") for w in warnings) else "high"
+
+
+def _secondary_date(
+    text: str, transaction_date: date, period: tuple[date | None, date | None] | None
+) -> date | None:
+    if not text:
+        return None
+    parsed = parse_statement_date(text, period=period)
+    return parsed.value
+
+
 def normalize_row(
     row: list[str],
     headers: list[str],
     row_number: int,
     *,
     unsigned_is_credit: bool = False,
+    period: tuple[date | None, date | None] | None = None,
 ) -> Transaction | None:
     """Build one transaction from a table row.
 
@@ -114,8 +132,16 @@ def normalize_row(
     Without that evidence an unsigned single amount is rejected, not guessed.
     """
     values = {header: row[index].strip() if index < len(row) else "" for index, header in enumerate(headers)}
-    date_value = next(
-        (values[name] for name in values if name in {"date", "transaction date", "value date", "trans date"}),
+    date_value, date_header = _pick_date_cell(values)
+    value_date_text = next(
+        (values[name] for name in values if name == "value date" and values[name]), ""
+    )
+    posting_date_text = next(
+        (
+            values[name]
+            for name in values
+            if name in {"posting date", "booking date", "post date"} and values[name]
+        ),
         "",
     )
     description = next(
@@ -130,9 +156,16 @@ def normalize_row(
     )
     if not date_value or not description:
         return None
-    transaction_date = parse_date(date_value)
-    if transaction_date is None:
+    parsed_date = parse_statement_date(date_value, period=period)
+    if parsed_date.value is None:
         return None
+    transaction_date = parsed_date.value
+    date_warnings = list(parsed_date.warnings)
+    if date_header in _NON_TRANSACTION_DATE_HEADERS:
+        # The statement only prints a value/posting date, so the transaction
+        # date itself is unknown. Keep the date but say what it really is.
+        date_warnings.append(f"date_is_{date_header.replace(' ', '_')}")
+    confidence = _date_confidence(parsed_date, date_warnings)
 
     debit = next(
         (
@@ -233,6 +266,11 @@ def normalize_row(
         source_row=row_number,
         currency=None,
         confidence="medium",
+        date_text=date_value[:40],
+        date_confidence=confidence,
+        date_warnings=date_warnings,
+        value_date=_secondary_date(value_date_text, transaction_date, period),
+        booking_date=_secondary_date(posting_date_text, transaction_date, period),
         reference=reference_value[:80] or None,
         category_name=statement_category[:80] or None,
         category_confidence=0.85 if statement_category else 0,
@@ -240,7 +278,9 @@ def normalize_row(
     )
 
 
-def parse_text_rows(text: str) -> tuple[list[Transaction], int]:
+def parse_text_rows(
+    text: str, *, period: tuple[date | None, date | None] | None = None
+) -> tuple[list[Transaction], int]:
     """Parse signed-amount transaction lines from extracted statement text."""
     rows: list[Transaction] = []
     detected_rows = 0
@@ -256,7 +296,8 @@ def parse_text_rows(text: str) -> tuple[list[Transaction], int]:
         if len(signed_amounts) != 1:
             continue
         amount_match = signed_amounts[0]
-        transaction_date = parse_date(match.group(1))
+        parsed_date = parse_statement_date(match.group(1), period=period)
+        transaction_date = parsed_date.value
         amount = parse_amount(amount_match.group(0))
         description = match.group(2)[: amount_match.start()].strip(" |-:")
         if transaction_date is None or amount is None or not description:
@@ -269,6 +310,9 @@ def parse_text_rows(text: str) -> tuple[list[Transaction], int]:
                 type="credit" if amount > 0 else "debit",
                 source_row=row_number,
                 confidence="low",
+                date_text=match.group(1)[:40],
+                date_confidence=parsed_date.confidence if parsed_date.confidence != "none" else "low",
+                date_warnings=list(parsed_date.warnings),
             ),
         )
     return rows, detected_rows

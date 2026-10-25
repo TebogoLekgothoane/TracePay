@@ -1,4 +1,11 @@
-import type { LeakImpactKind } from "./leak-intelligence.types";
+import { formatCoverageRange } from "../statement-coverage/statement-coverage.format";
+import type {
+  LeakAccountPattern,
+  LeakAmountStatus,
+  LeakAnalysis,
+  LeakConfidenceLevel,
+  LeakImpactKind,
+} from "./leak-intelligence.types";
 
 const currencyFormatter = new Intl.NumberFormat("en-ZA", {
   style: "currency",
@@ -334,4 +341,81 @@ export function formatIrregularFinding(evidence: Record<string, unknown>): Evide
     }
     return [{ label: EVIDENCE_LABELS[key] ?? key, value: formatEvidenceValue(key, value) }];
   });
+}
+
+
+// ---- Evidence (analysis block) helpers ----
+
+export function amountStatusLabel(status: LeakAmountStatus): string {
+  switch (status) {
+    case "confirmed":
+      return "Confirmed from your transactions";
+    case "potentially_duplicated":
+      return "Possibly a duplicate — please verify";
+    default:
+      return "Estimated";
+  }
+}
+
+/** Only a confirmed amount may be described as a saving; the rest are never confirmed. */
+export function isConfirmedAmount(status: LeakAmountStatus): boolean {
+  return status === "confirmed";
+}
+
+export function confidenceLevelLabel(level: LeakConfidenceLevel | null): string {
+  switch (level) {
+    case "high":
+      return "High confidence";
+    case "medium":
+      return "Medium confidence";
+    case "low":
+      return "Low confidence";
+    default:
+      return "Confidence not available";
+  }
+}
+
+/** Plain explanation for patterns that need one; null when nothing extra is needed. */
+export function accountPatternExplanation(pattern: LeakAccountPattern | null): string | null {
+  switch (pattern) {
+    case "sequential_move":
+      return "This looks like a payment that moved from one account to another, so it is counted once, not twice.";
+    case "concurrent_charges":
+      return "The same kind of charge appears on more than one account at the same time. Check whether you are paying twice.";
+    case "unrelated_accounts":
+      return "These charges are on different accounts and may be unrelated, so they are not treated as one problem.";
+    case "consolidated_across_accounts":
+      return "Matching activity from more than one account was combined into this finding.";
+    default:
+      return null;
+  }
+}
+
+export function formatAnalysisDateRange(analysis: LeakAnalysis): string | null {
+  if (!analysis.date_range_start || !analysis.date_range_end) return null;
+  return formatCoverageRange(analysis.date_range_start, analysis.date_range_end);
+}
+
+export function formatAnalysisAmount(amount: number | string | null, currency: string | null): string {
+  const value = finiteNumber(amount);
+  if (value === null) return "Not available";
+  if (!currency || currency.toUpperCase() === "ZAR") return currencyFormatter.format(value);
+  try {
+    return new Intl.NumberFormat("en-ZA", { style: "currency", currency: currency.toUpperCase() }).format(value);
+  } catch {
+    return `${currency} ${value.toFixed(2)}`;
+  }
+}
+
+export function notCountedInTotalNote(analysis: LeakAnalysis): string | null {
+  return analysis.counted_in_total
+    ? null
+    : "Part of a larger finding — not added to your total again.";
+}
+
+export function coverageLimitLabel(limit: LeakAnalysis["coverage_limits"][number]): string {
+  const where = limit.account_label ?? "";
+  const when = limit.start && limit.end ? formatCoverageRange(limit.start, limit.end) : "";
+  const head = [where, when].filter(Boolean).join(" · ");
+  return head ? `${head}: ${limit.message}` : limit.message;
 }

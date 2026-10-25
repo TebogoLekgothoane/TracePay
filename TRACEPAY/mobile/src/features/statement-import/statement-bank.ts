@@ -1,11 +1,8 @@
 /**
- * Canonical bank identity for one-statement-per-bank.
+ * Canonical bank identity for statements (a user may upload many per bank).
  * Mirrors TRACEPAY/backend/pdf_processor/statement_schema.py aliases
  * and public.normalize_statement_bank_key().
  */
-
-export const BANK_ALREADY_UPLOADED_MESSAGE =
-  "You've already uploaded a statement from this bank. TracePay currently allows one statement per bank.";
 
 export const BANK_UNIDENTIFIED_MESSAGE =
   "We couldn't confidently identify the bank on this statement. Please verify you selected the correct bank, or try a clearer statement PDF.";
@@ -92,24 +89,9 @@ export function assertExtractedBankMatchesSelected(
   }
 }
 
-export function isBankAlreadyUploadedError(message: string): boolean {
-  return /already uploaded a statement from this bank/i.test(message);
-}
-
 export function isBankMismatchError(message: string): boolean {
   return (
     /different bank than the one you selected/i.test(message) ||
     /looks like a .+ statement, but you selected/i.test(message)
   );
-}
-
-export function bankSlotUniqueViolationMessage(errorMessage: string | null | undefined): string | null {
-  const text = errorMessage ?? "";
-  if (
-    /statement_imports_user_bank_slot_active_key/i.test(text) ||
-    (/duplicate key/i.test(text) && /bank_key|bank_slot/i.test(text))
-  ) {
-    return BANK_ALREADY_UPLOADED_MESSAGE;
-  }
-  return null;
 }

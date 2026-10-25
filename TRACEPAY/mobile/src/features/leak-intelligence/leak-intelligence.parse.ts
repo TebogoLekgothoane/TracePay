@@ -1,4 +1,10 @@
 import type {
+  LeakAccountPattern,
+  LeakAmountStatus,
+  LeakAnalysis,
+  LeakAnalysisSummary,
+  LeakConfidenceLevel,
+  LeakCoverageLimit,
   LeakDetection,
   LeakDetectionResult,
   LeakImpactKind,
@@ -41,6 +47,103 @@ export function parseLeakDetectionResult(payload: unknown): LeakDetectionResult 
     period_end: optionalDate(payload.period_end),
     detector_version: payload.detector_version,
     leaks,
+    analysis_summary: parseAnalysisSummary(payload.analysis_summary),
+  };
+}
+
+const ACCOUNT_PATTERNS: readonly LeakAccountPattern[] = [
+  "single_account",
+  "consolidated_across_accounts",
+  "sequential_move",
+  "concurrent_charges",
+  "unrelated_accounts",
+];
+
+function optionalText(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function parseCoverageLimits(value: unknown): LeakCoverageLimit[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): LeakCoverageLimit[] => {
+    if (!isRecord(item) || typeof item.message !== "string" || !item.message.trim()) return [];
+    return [
+      {
+        kind: typeof item.kind === "string" ? item.kind : "unknown",
+        account_id: optionalText(item.account_id),
+        account_label: optionalText(item.account_label),
+        start: optionalText(item.start),
+        end: optionalText(item.end),
+        message: item.message,
+        materially_limits: item.materially_limits === true,
+      },
+    ];
+  });
+}
+
+/** Defensive: a missing or malformed block yields null, never throws. */
+export function parseLeakAnalysis(value: unknown): LeakAnalysis | null {
+  if (!isRecord(value)) return null;
+  const status: LeakAmountStatus =
+    value.amount_status === "confirmed" || value.amount_status === "potentially_duplicated"
+      ? value.amount_status
+      : "estimated"; // unknown values must never read as confirmed
+  const level: LeakConfidenceLevel | null =
+    value.confidence_level === "high" ||
+    value.confidence_level === "medium" ||
+    value.confidence_level === "low"
+      ? value.confidence_level
+      : null;
+  const pattern = ACCOUNT_PATTERNS.includes(value.account_pattern as LeakAccountPattern)
+    ? (value.account_pattern as LeakAccountPattern)
+    : null;
+  const accounts = Array.isArray(value.source_accounts)
+    ? value.source_accounts.flatMap((item) => {
+        if (!isRecord(item) || typeof item.label !== "string") return [];
+        return [
+          {
+            account_id: typeof item.account_id === "string" ? item.account_id : "",
+            label: item.label,
+            transaction_count: isFiniteNumber(item.transaction_count)
+              ? Math.max(0, Math.floor(item.transaction_count))
+              : 0,
+            amount: isMoney(item.amount) ? item.amount : null,
+          },
+        ];
+      })
+    : [];
+  return {
+    source_accounts: accounts,
+    cross_account: value.cross_account === true,
+    account_pattern: pattern,
+    date_range_start: optionalText(value.date_range_start),
+    date_range_end: optionalText(value.date_range_end),
+    window_rule: typeof value.window_rule === "string" ? value.window_rule : "",
+    amount: isMoney(value.amount) ? value.amount : null,
+    currency: optionalText(value.currency),
+    amount_status: status,
+    confidence_level: level,
+    confidence_notes: isStringArray(value.confidence_notes) ? value.confidence_notes : [],
+    coverage_limits: parseCoverageLimits(value.coverage_limits),
+    calculation: typeof value.calculation === "string" ? value.calculation : "",
+    overlaps_with: isStringArray(value.overlaps_with) ? value.overlaps_with : [],
+    // Only an explicit false suppresses the total note; absent means counted.
+    counted_in_total: value.counted_in_total !== false,
+  };
+}
+
+function parseAnalysisSummary(value: unknown): LeakAnalysisSummary | null {
+  if (!isRecord(value)) return null;
+  const amounts: Record<string, number | string> = {};
+  if (isRecord(value.non_overlapping_amount_by_currency)) {
+    for (const [currency, amount] of Object.entries(value.non_overlapping_amount_by_currency)) {
+      if (isMoney(amount)) amounts[currency] = amount;
+    }
+  }
+  return {
+    non_overlapping_amount_by_currency: amounts,
+    coverage_summary: isStringArray(value.coverage_summary) ? value.coverage_summary : [],
+    disclaimer: typeof value.disclaimer === "string" ? value.disclaimer : "",
   };
 }
 
@@ -100,6 +203,7 @@ function parseLeakDetection(value: unknown): LeakDetection {
     detected_at: text.detected_at,
     period_start: optionalDate(value.period_start),
     period_end: optionalDate(value.period_end),
+    analysis: parseLeakAnalysis(value.analysis),
   };
 }
 

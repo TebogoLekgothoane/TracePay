@@ -1,9 +1,7 @@
 import {
   assertExtractedBankMatchesSelected,
   assertKnownStatementBankKey,
-  BANK_ALREADY_UPLOADED_MESSAGE,
   BANK_UNIDENTIFIED_MESSAGE,
-  bankSlotUniqueViolationMessage,
   normalizeStatementBankKey,
 } from "./statement-bank";
 
@@ -59,12 +57,9 @@ test("unknown or empty bank is not guessed", () => {
   assertEqual(normalizeStatementBankKey(null), null, "null");
 });
 
-test("second statement from same bank is rejected by match helper messaging", () => {
-  assertEqual(
-    BANK_ALREADY_UPLOADED_MESSAGE.includes("one statement per bank"),
-    true,
-    "user-facing copy",
-  );
+test("the same bank can be matched again for a second statement", () => {
+  assertExtractedBankMatchesSelected("Capitec", "Capitec");
+  assertExtractedBankMatchesSelected("Capitec", "Capitec Bank");
 });
 
 test("different bank is allowed by identity comparison", () => {
@@ -88,23 +83,6 @@ test("mismatched extracted bank is blocked", () => {
   assertThrows(
     () => assertExtractedBankMatchesSelected("Capitec", "FNB"),
     /looks like a FNB statement/,
-  );
-});
-
-test("duplicate-file unique violation stays distinct from bank-slot violation", () => {
-  assertEqual(
-    bankSlotUniqueViolationMessage(
-      'duplicate key value violates unique constraint "statement_imports_user_content_hash_processed_key"',
-    ),
-    null,
-    "hash unique is not bank slot",
-  );
-  assertEqual(
-    bankSlotUniqueViolationMessage(
-      'duplicate key value violates unique constraint "statement_imports_user_bank_slot_active_key"',
-    ),
-    BANK_ALREADY_UPLOADED_MESSAGE,
-    "bank slot unique maps to message",
   );
 });
 

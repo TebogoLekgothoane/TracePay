@@ -78,3 +78,33 @@ def validate_transactions(
         duplicate_count=duplicates,
         balance_reconciliation=reconciliation,
     )
+
+
+RECONCILIATION_TOLERANCE = Decimal("0.05")
+
+
+def reconcile_opening_closing(
+    opening: Decimal | None,
+    closing: Decimal | None,
+    transactions: list[Transaction],
+    account_type: str | None = None,
+) -> tuple[str, Decimal | None]:
+    """Check opening balance + extracted movements against the closing balance.
+
+    Returns ``(status, difference)``; ``difference`` is closing minus the
+    figure the extracted rows imply, and is ``None`` when not checkable.
+    Amounts are signed from the account holder's side (debits negative). Credit
+    cards print the balance owed as a positive number, so a card is accepted
+    when either the signed chain or the owed chain (owed falls as payments
+    credit the card) closes.
+    """
+    if opening is None or closing is None or not transactions:
+        return "not_available", None
+    net = sum((item.amount for item in transactions), Decimal("0"))
+    candidates = [closing - (opening + net)]
+    if account_type == "credit_card":
+        candidates.append(closing - (opening - net))
+    best = min(candidates, key=abs)
+    if abs(best) <= RECONCILIATION_TOLERANCE:
+        return "verified", Decimal("0")
+    return "mismatch", best

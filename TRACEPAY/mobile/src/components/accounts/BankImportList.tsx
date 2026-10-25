@@ -9,10 +9,7 @@ import {
   resolveInstitutionLogoDomain,
   type SaInstitution,
 } from "../../features/accounts/account.constants";
-import {
-  BANK_ALREADY_UPLOADED_MESSAGE,
-  normalizeStatementBankKey,
-} from "../../features/statement-import/statement-bank";
+import { COVERAGE_OPTIONAL_MESSAGE } from "../../features/statement-import/statement-import.messages";
 import { COLORS } from "../../theme/colors";
 import { BridgedTextField } from "../ui/BridgedTextField";
 import { InstitutionLogo } from "./InstitutionLogo";
@@ -20,8 +17,6 @@ import { InstitutionLogo } from "./InstitutionLogo";
 type Props = {
   selected?: SaInstitution | null;
   disabled?: boolean;
-  /** Normalized bank keys that already hold an active statement for this user. */
-  occupiedBankKeys?: ReadonlyArray<string>;
   onSelect: (bank: SaInstitution) => void;
 };
 
@@ -32,14 +27,11 @@ function brandColor(institution: SaInstitution, fallback: string): string {
 export function BankImportList({
   selected = null,
   disabled = false,
-  occupiedBankKeys = [],
   onSelect,
 }: Props) {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const [query, setQuery] = useState("");
-
-  const occupied = useMemo(() => new Set(occupiedBankKeys), [occupiedBankKeys]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -52,11 +44,10 @@ export function BankImportList({
   return (
     <View>
       <Text className="text-[26px] font-bold tracking-[-0.5px] text-foreground">
-        Choose your bank
+        Choose a bank
       </Text>
       <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">
-        A bank statement is required to continue. Select your bank, then upload a
-        PDF. One statement per bank.
+        Select the bank, then upload one or more statement PDFs. {COVERAGE_OPTIONAL_MESSAGE}
       </Text>
 
       <View className="mt-5 flex-row items-center rounded-2xl bg-input px-3.5">
@@ -109,21 +100,13 @@ export function BankImportList({
             const color = brandColor(bank.name, palette.primary);
             const isSelected = selected === bank.name;
             const isLast = index === filtered.length - 1;
-            const bankKey = normalizeStatementBankKey(bank.name);
-            const alreadyUploaded = Boolean(bankKey && occupied.has(bankKey));
-            const rowDisabled = disabled || alreadyUploaded;
+            const rowDisabled = disabled;
 
             return (
               <Pressable
                 key={bank.name}
-                accessibilityHint={
-                  alreadyUploaded ? BANK_ALREADY_UPLOADED_MESSAGE : bank.hint
-                }
-                accessibilityLabel={
-                  alreadyUploaded
-                    ? `${bank.name} statement already uploaded`
-                    : `Import ${bank.name} statement`
-                }
+                accessibilityHint={bank.hint}
+                accessibilityLabel={`Import ${bank.name} statement`}
                 accessibilityRole="button"
                 accessibilityState={{ disabled: rowDisabled, selected: isSelected }}
                 className={`flex-row items-center px-4 py-3.5 active:opacity-80 ${
@@ -145,21 +128,17 @@ export function BankImportList({
                     <Text className="text-[16px] font-semibold text-foreground">{bank.name}</Text>
                     <View className="rounded-md bg-muted px-1.5 py-0.5">
                       <Text className="text-[10px] font-bold tracking-[0.4px] text-muted-foreground">
-                        {alreadyUploaded ? "UPLOADED" : "PDF"}
+                        PDF
                       </Text>
                     </View>
                   </View>
                   <Text className="mt-0.5 text-[12px] text-muted-foreground" numberOfLines={2}>
-                    {alreadyUploaded
-                      ? "You've already uploaded a statement from this bank."
-                      : bank.hint}
+                    {bank.hint}
                   </Text>
                 </View>
-                {!alreadyUploaded ? (
-                  <View className="ml-1 opacity-50">
-                    <ChevronRight color={palette.mutedForeground} size={18} strokeWidth={2} />
-                  </View>
-                ) : null}
+                <View className="ml-1 opacity-50">
+                  <ChevronRight color={palette.mutedForeground} size={18} strokeWidth={2} />
+                </View>
               </Pressable>
             );
           })}
