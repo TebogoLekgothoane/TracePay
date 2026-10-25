@@ -125,7 +125,7 @@ export function WelcomeScreen() {
   const compactScale = compactLogoSize / heroLogoSize;
 
   const { error, requestReset, setError, signIn, signUp, submitting } = useAuth();
-  const { hasPin, lockApp, unlockApp } = useAppLock();
+  const appLock = useAppLock();
   const [authMode, setAuthMode] = useState<WelcomeAuthMode | null>(null);
   const sheetOpen = authMode !== null;
   /** 0 = hero (sheet closed), 1 = compact (sheet open). Scrubs with sheet drag. */
@@ -153,7 +153,7 @@ export function WelcomeScreen() {
   }));
 
   const continueAfterLogin = () => {
-    void continueAfterAuth({ hasPin, lockApp, router, unlockApp });
+    void continueAfterAuth({ appLock, router });
   };
 
   const openSheet = (mode: WelcomeAuthMode) => {

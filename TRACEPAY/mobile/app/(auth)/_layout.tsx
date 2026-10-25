@@ -101,30 +101,6 @@ export default function AuthLayout() {
       />
 
       <Stack.Screen
-        name="reset-pin-create"
-        options={{
-          headerShown: false,
-          gestureEnabled: false,
-        }}
-      />
-
-      <Stack.Screen
-        name="reset-pin-confirm"
-        options={{
-          headerShown: false,
-          gestureEnabled: false,
-        }}
-      />
-
-      <Stack.Screen
-        name="reset-pin-success"
-        options={{
-          headerShown: false,
-          gestureEnabled: false,
-        }}
-      />
-
-      <Stack.Screen
         name="new-password"
         options={{
           headerShown: false,

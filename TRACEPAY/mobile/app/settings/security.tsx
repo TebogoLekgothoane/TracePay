@@ -33,8 +33,8 @@ export default function SecurityScreen() {
     biometricsEnabled,
     enableBiometrics,
     hasPin,
+    disableBiometrics,
     isHydrated,
-    skipBiometrics,
   } = useAppLock();
   const {
     hideBalances,
@@ -67,7 +67,7 @@ export default function SecurityScreen() {
           return;
         }
 
-        await skipBiometrics();
+        await disableBiometrics();
       } catch {
         Alert.alert(
           "Could not update security",
@@ -104,12 +104,16 @@ export default function SecurityScreen() {
   const handleChangePin = () => {
     Alert.alert(
       "Change app PIN",
-      "You will set a new PIN for unlocking TracePay on this device.",
+      "Enter your current PIN, then choose a new one for unlocking TracePay on this device.",
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Continue",
-          onPress: () => router.push("/(auth)/device-security"),
+          onPress: () =>
+            router.push({
+              pathname: "/(auth)/device-security",
+              params: { flow: "change" },
+            }),
         },
       ],
     );

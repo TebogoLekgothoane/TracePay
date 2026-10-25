@@ -2,7 +2,6 @@ import { Redirect, type Href } from "expo-router";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 
-import { resolveAuthenticatedHomeHref } from "../src/features/auth/auth.navigation";
 import { hasAuthSession } from "../src/features/auth/auth.service";
 import { loadOnboardingCompleted } from "../src/features/onboarding/onboarding.service";
 
@@ -23,10 +22,8 @@ export default function Index() {
         }
 
         if (sessionPresent) {
-          const home = await resolveAuthenticatedHomeHref();
-          if (active) {
-            setTarget(home);
-          }
+          // The root navigator's lock guard routes signed-in users (unlock,
+          // PIN setup or home); redirecting here too would race it.
           return;
         }
 

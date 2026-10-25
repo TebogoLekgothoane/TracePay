@@ -228,8 +228,10 @@ export default function ProfileScreen() {
             void (async () => {
               setLoggingOut(true);
               try {
-                await clearDeviceLock();
+                // Sign out first so the guard routes to welcome rather than
+                // briefly to PIN setup once the PIN disappears.
                 await signOut();
+                await clearDeviceLock();
                 router.replace("/(auth)/welcome");
               } catch {
                 Alert.alert("Could not log out", "Please try again.");

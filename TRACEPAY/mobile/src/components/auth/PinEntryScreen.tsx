@@ -52,7 +52,7 @@ type Props = {
   onClearError?: () => void;
 };
 
-function PinDot({
+export function PinDot({
   filled,
   hasError,
   index,

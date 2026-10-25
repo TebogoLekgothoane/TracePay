@@ -1,41 +1,40 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useColorScheme } from "nativewind";
-import { useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { useState } from "react";
+import { Alert, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Button } from "../../src/components/ui/Button";
-import { BridgedTextField } from "../../src/components/ui/BridgedTextField";
 import { IconButton } from "../../src/components/ui/IconButton";
+import { signOut } from "../../src/features/auth/auth.service";
+import { useAppLock } from "../../src/features/security/AppLockProvider";
 import { COLORS } from "../../src/theme/colors";
 
-const CODE_LENGTH = 6;
-
+/**
+ * A forgotten PIN is recovered by proving account ownership again, not by a
+ * local code: the local unlock is wiped, the session is signed out, and the
+ * user signs in with phone number + password (and OTP) before creating a
+ * new PIN. Reopening the app cannot skip this.
+ */
 export default function ResetPinScreen() {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
-  const [code, setCode] = useState("");
-  const verifyingRef = useRef(false);
+  const { clearDeviceLock } = useAppLock();
+  const [busy, setBusy] = useState(false);
 
-  const verify = () => {
-    if (verifyingRef.current) {
+  const signInAgain = async () => {
+    if (busy) {
       return;
     }
-    verifyingRef.current = true;
-    router.replace("/(auth)/reset-pin-create");
-  };
-
-  const handleChangeText = (nextValue: string) => {
-    if (verifyingRef.current) {
-      return;
-    }
-
-    const digitsOnly = nextValue.replace(/\D/g, "").slice(0, CODE_LENGTH);
-    setCode(digitsOnly);
-
-    if (digitsOnly.length === CODE_LENGTH) {
-      verify();
+    setBusy(true);
+    try {
+      await signOut();
+      await clearDeviceLock();
+      router.replace("/(auth)/welcome");
+    } catch {
+      setBusy(false);
+      Alert.alert("Could not reset your PIN", "Please try again.");
     }
   };
 
@@ -45,6 +44,7 @@ export default function ResetPinScreen() {
         <IconButton
           accessibilityLabel="Back to unlock"
           className="self-start"
+          disabled={busy}
           variant="ghost"
           onPress={() => router.replace("/(auth)/unlock")}
         >
@@ -59,38 +59,29 @@ export default function ResetPinScreen() {
           Reset PIN
         </Text>
         <Text className="mt-2.5 max-w-[330px] text-center text-[14px] leading-[21px] text-muted-foreground">
-          Enter the 6-digit verification code sent to your registered phone
-          number.
+          To keep your account safe, you need to sign in again with your mobile
+          number and password before creating a new PIN. We'll send a
+          verification code to your phone.
+        </Text>
+        <Text className="mt-3 max-w-[330px] text-center text-[13px] leading-[19px] text-muted-foreground">
+          Biometric unlock will be turned off on this device until you enable it
+          again.
         </Text>
 
-        <View className="mt-[38px] h-[60px] w-[258px] overflow-hidden rounded-2xl bg-input">
-          <BridgedTextField
-            autoFocus
-            hostStyle={{ height: 60, width: 258 }}
-            inputStyle={{
-              height: 60,
-              width: 258,
-              backgroundColor: "transparent",
-              borderWidth: 0,
-              paddingHorizontal: 25,
-            }}
-            keyboardType="number-pad"
-            maxLength={CODE_LENGTH}
-            placeholder="000000"
-            textStyle={{
-              fontSize: 25,
-              fontWeight: "600",
-              letterSpacing: 18,
-              textAlign: "center",
-            }}
-            value={code}
-            onChangeText={handleChangeText}
-          />
+        <View className="mt-auto w-full max-w-[360px] gap-3">
+          <Button loading={busy} onPress={() => void signInAgain()}>
+            Sign in again
+          </Button>
+          <Button
+            disabled={busy}
+            onPress={() => router.replace("/(auth)/unlock")}
+            size="md"
+            variant="ghost"
+            labelClassName="text-muted-foreground"
+          >
+            I remember my PIN
+          </Button>
         </View>
-
-        <Button size="sm" variant="ghost">
-          Resend code
-        </Button>
       </View>
     </SafeAreaView>
   );

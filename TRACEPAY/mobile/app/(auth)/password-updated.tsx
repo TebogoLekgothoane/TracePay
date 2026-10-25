@@ -8,7 +8,7 @@ import { continueAfterAuth } from "../../src/features/auth/auth.navigation";
 import { useAppLock } from "../../src/features/security/AppLockProvider";
 
 export default function PasswordUpdatedScreen() {
-  const { hasPin, lockApp, unlockApp } = useAppLock();
+  const appLock = useAppLock();
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -21,7 +21,7 @@ export default function PasswordUpdatedScreen() {
         <View className="pb-5">
           <Button
             onPress={() =>
-              void continueAfterAuth({ hasPin, lockApp, router, unlockApp })
+              void continueAfterAuth({ appLock, router })
             }
           >
             Continue

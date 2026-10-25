@@ -8,6 +8,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import TracePayIcon from "../../assets/icons/assembled TracePay icon.svg";
 import { Button } from "../../src/components/ui/Button";
+import { resolveAuthenticatedHomeHref } from "../../src/features/auth/auth.navigation";
 import { useAppLock } from "../../src/features/security/AppLockProvider";
 import {
   biometricUnavailableCopy,
@@ -22,8 +23,8 @@ export default function BiometricSetupScreen() {
   const params = useLocalSearchParams<{ flow?: string }>();
   const {
     biometricAvailability,
+    disableBiometrics,
     enableBiometrics,
-    skipBiometrics,
   } = useAppLock();
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
@@ -51,20 +52,23 @@ export default function BiometricSetupScreen() {
   );
 
   const continueToApp = () => {
-    router.replace(
-      isSignupFlow
-        ? {
-            pathname: "/(auth)/financial-data-consent",
-            params: { flow: "signup" },
-          }
-        : "/(tabs)",
-    );
+    if (isSignupFlow) {
+      router.replace({
+        pathname: "/(auth)/financial-data-consent",
+        params: { flow: "signup" },
+      });
+      return;
+    }
+    void resolveAuthenticatedHomeHref().then((href) => router.replace(href));
   };
 
   const handleEnable = async () => {
     setIsBusy(true);
     setMessage(null);
-    const result = await enableBiometrics();
+    const result = await enableBiometrics().catch(() => ({
+      enabled: false,
+      message: undefined,
+    }));
     setIsBusy(false);
 
     if (result.enabled) {
@@ -79,14 +83,14 @@ export default function BiometricSetupScreen() {
 
   const handleSkip = async () => {
     setIsBusy(true);
-    await skipBiometrics();
+    await disableBiometrics().catch(() => undefined);
     continueToApp();
   };
 
   const description = faceIdBlockedInExpoGo
     ? "Face ID cannot run inside Expo Go. Continue with your PIN for now, then install a TracePay development build to enable Face ID."
     : availability.available
-      ? `Use ${biometricName} to unlock TracePay on this device. Your PIN will always remain available.`
+      ? `Use ${biometricName} to unlock your signed-in TracePay session without typing your password each time. ${biometricName} stays on your device — TracePay never sees it — and your PIN always works as a backup.`
       : biometricUnavailableCopy(availability.unavailableReason);
 
   return (

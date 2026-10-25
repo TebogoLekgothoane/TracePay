@@ -10,17 +10,27 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.tracepay.mobile",
       "infoPlist": {
-        "NSFaceIDUsageDescription": "Allow TracePay to use Face ID to unlock the app."
+        "NSFaceIDUsageDescription": "Allow TracePay to use Face ID to unlock the app.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.tracepay.mobile",
-      "softwareKeyboardLayoutMode": "pan"
+      "softwareKeyboardLayoutMode": "pan",
+      "permissions": [
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
     },
     "plugins": [
       "expo-router",
       "expo-dev-client",
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "Allow TracePay to use Face ID to unlock the app."
+        }
+      ],
       "expo-sqlite",
       "./plugins/withTracePayAndroidIngestion",
       [
@@ -44,6 +54,12 @@
     },
     "web": {
       "bundler": "metro"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "872cf9c9-a9e6-45c5-a426-bcb00f70468c"
+      }
     }
   }
 }

@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test:dedupe": "npx tsx src/features/transactions/transaction.dedupe.test.ts",
     "test:validation": "npx tsx src/features/statement-import/statement-import.validation.test.ts",
-    "test:statement-bank": "npx tsx src/features/statement-import/statement-bank.test.ts"
+    "test:statement-bank": "npx tsx src/features/statement-import/statement-bank.test.ts",
+    "test:app-lock": "npx tsx src/features/security/app-lock.test.ts",
+    "test": "npx tsx src/features/accounts/account.password-hints.test.ts && npx tsx src/features/accounts/account.relationships.test.ts && npx tsx src/features/financial-reasoning/financial-reasoning.format.test.ts && npx tsx src/features/financial-recommendations/financial-recommendations.format.test.ts && npx tsx src/features/for-you/for-you.cards.test.ts && npx tsx src/features/guidance/finding-guidance.model.test.ts && npx tsx src/features/insights/spending-patterns.test.ts && npx tsx src/features/leak-intelligence/leak-intelligence.format.test.ts && npx tsx src/features/notifications/finding-notifications.test.ts && npx tsx src/features/security/app-lock.test.ts && npx tsx src/features/statement-import/statement-bank.test.ts && npx tsx src/features/statement-import/statement-import.messages.test.ts && npx tsx src/features/statement-import/statement-import.progress.test.ts && npx tsx src/features/statement-import/statement-import.reconciliation.test.ts && npx tsx src/features/statement-import/statement-import.validation.test.ts && npx tsx src/features/statement-import/statement-pdf-password.test.ts && npx tsx src/features/subscriptions-debug/subscriptions.format.test.ts && npx tsx src/features/synthetic-intelligence/synthetic-intelligence.parse.test.ts && npx tsx src/features/transactions/merchant-logos.test.ts && npx tsx src/features/transactions/transaction.dedupe.test.ts && npx tsx src/features/transactions/transaction.query.test.ts"
   },
   "dependencies": {
     "@expo/ui": "~57.0.12",

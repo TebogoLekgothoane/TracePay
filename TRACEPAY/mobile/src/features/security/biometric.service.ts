@@ -1,172 +1,108 @@
+import { getRandomBytesAsync } from "expo-crypto";
 import * as LocalAuthentication from "expo-local-authentication";
+import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
-import { secureStorage } from "../../lib/secure-storage";
+import { credentialStorage } from "../../lib/secure-storage";
+import {
+  biometricUnavailableMessage,
+  resolveBiometricAvailability,
+} from "./biometric.policy";
 import { SECURITY_STORAGE_KEYS } from "./security.constants";
 import type {
   BiometricAvailability,
   BiometricEnableResult,
+  BiometricUnlockResult,
 } from "./security.types";
 
-export async function getBiometricAvailability(): Promise<BiometricAvailability> {
-  const [hasHardware, isEnrolled, supportedTypes] = await Promise.all([
-    LocalAuthentication.hasHardwareAsync(),
-    LocalAuthentication.isEnrolledAsync(),
-    LocalAuthentication.supportedAuthenticationTypesAsync(),
-  ]);
+/**
+ * Biometric unlock is bound to a random secret stored behind OS access
+ * control (iOS Keychain `.biometryCurrentSet`; Android Keystore key with
+ * user authentication and BIOMETRIC_STRONG). Unlocking means the OS released
+ * that secret after its own biometric prompt — not merely that a JS call
+ * returned `success`. Enrolling a new face or fingerprint invalidates the
+ * key, which forces the PIN and a fresh opt-in.
+ */
+const unavailableBiometrics: BiometricAvailability = {
+  available: false,
+  kind: null,
+  label: null,
+  unavailableReason: "unsupported",
+};
 
-  if (!hasHardware) {
-    return {
-      available: false,
-      kind: null,
-      label: null,
-      unavailableReason: "no_hardware",
-    };
-  }
-
-  if (!isEnrolled) {
-    return {
-      available: false,
-      kind: null,
-      label: null,
-      unavailableReason: "not_enrolled",
-    };
-  }
-
-  const hasFace = supportedTypes.includes(
-    LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION,
-  );
-  const hasFingerprint = supportedTypes.includes(
-    LocalAuthentication.AuthenticationType.FINGERPRINT,
-  );
-
-  if (hasFace && (Platform.OS === "ios" || !hasFingerprint)) {
-    return {
-      available: true,
-      kind: "face",
-      label: Platform.OS === "ios" ? "Face ID" : "Face unlock",
-      unavailableReason: null,
-    };
-  }
-  if (hasFingerprint) {
-    return {
-      available: true,
-      kind: "fingerprint",
-      label: Platform.OS === "ios" ? "Touch ID" : "Fingerprint",
-      unavailableReason: null,
-    };
-  }
-  if (hasFace) {
-    return {
-      available: true,
-      kind: "face",
-      label: Platform.OS === "ios" ? "Face ID" : "Face unlock",
-      unavailableReason: null,
-    };
-  }
-
+function boundSecretOptions(prompt: string): SecureStore.SecureStoreOptions {
   return {
-    available: false,
-    kind: null,
-    label: null,
-    unavailableReason: "unsupported",
+    requireAuthentication: true,
+    authenticationPrompt: prompt,
+    // Removed by iOS if the device passcode is turned off.
+    keychainAccessible: SecureStore.WHEN_PASSCODE_SET_THIS_DEVICE_ONLY,
   };
 }
 
-type AuthAttempt =
-  | { success: true }
-  | { success: false; message: string; code?: string };
+export async function getBiometricAvailability(): Promise<BiometricAvailability> {
+  try {
+    const [hasHardware, isEnrolled, supportedTypes, enrolledLevel] =
+      await Promise.all([
+        LocalAuthentication.hasHardwareAsync(),
+        LocalAuthentication.isEnrolledAsync(),
+        LocalAuthentication.supportedAuthenticationTypesAsync(),
+        LocalAuthentication.getEnrolledLevelAsync(),
+      ]);
 
-function mapAuthError(
+    return resolveBiometricAvailability({
+      platform: Platform.OS,
+      hasHardware,
+      isEnrolled,
+      hasFace: supportedTypes.includes(
+        LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION,
+      ),
+      hasFingerprint: supportedTypes.includes(
+        LocalAuthentication.AuthenticationType.FINGERPRINT,
+      ),
+      strongEnrolled:
+        enrolledLevel >= LocalAuthentication.SecurityLevel.BIOMETRIC_STRONG,
+    });
+  } catch {
+    return unavailableBiometrics;
+  }
+}
+
+export function biometricUnavailableCopy(
+  reason: BiometricAvailability["unavailableReason"],
+): string {
+  return biometricUnavailableMessage(reason, Platform.OS);
+}
+
+function enableErrorCopy(
   error: LocalAuthentication.LocalAuthenticationError | string,
-  warning?: string,
-  biometricLabel = "Face ID",
+  label: string,
 ): string {
   switch (error) {
     case "missing_usage_description":
-      return (
-        warning ??
-        `${biometricLabel} needs a TracePay development build (not Expo Go). Build with EAS, then enable ${biometricLabel} again.`
-      );
+      return `${label} needs a TracePay development build (not Expo Go).`;
     case "user_cancel":
     case "system_cancel":
     case "app_cancel":
-      return `${biometricLabel} was cancelled. Enter your TracePay PIN instead.`;
     case "user_fallback":
-      return `Enter your TracePay PIN to continue.`;
-    case "not_enrolled":
-      return Platform.OS === "ios"
-        ? "Face ID is not set up. Add it in iOS Settings → Face ID & Passcode, or use your TracePay PIN."
-        : "No biometrics are enrolled on this device. Use your TracePay PIN.";
-    case "not_available":
-      return Platform.OS === "ios"
-        ? `${biometricLabel} is blocked for this app. Open iOS Settings → TracePay → enable Face ID, or use your TracePay PIN.`
-        : "Biometrics are not available right now. Use your TracePay PIN.";
+      return `${label} was not turned on. You can enable it later in Security settings.`;
     case "lockout":
-      return `${biometricLabel} is locked after too many attempts. Unlock your iPhone, then use your TracePay PIN here.`;
+      return `${label} is temporarily locked. Unlock your device with its passcode, then try again.`;
     case "passcode_not_set":
-      return "Set an iPhone passcode in Settings before enabling Face ID.";
+      return "Set a device passcode before enabling biometric unlock.";
     case "authentication_failed":
-      return `${biometricLabel} did not match. Enter your TracePay PIN, or try Face ID again.`;
-    case "timeout":
-      return `${biometricLabel} timed out. Enter your TracePay PIN, or try again.`;
+      return `${label} did not match. Please try again.`;
     default:
-      return (
-        warning ??
-        `Could not verify ${biometricLabel}. Enter your TracePay PIN instead.`
-      );
+      return `Could not verify ${label}. Please try again.`;
   }
 }
 
 /**
- * Biometrics only (Face ID / fingerprint). Never offers the device passcode —
- * TracePay PIN on the unlock screen is the fallback.
+ * Asks for explicit consent via the OS prompt, then stores the bound secret.
+ * Android prompts on the write itself (Keystore encryption needs the user);
+ * iOS writes silently, so it prompts with LocalAuthentication first.
  */
-export async function authenticateLocally(options?: {
-  promptMessage?: string;
-  cancelLabel?: string;
-  biometricLabel?: string;
-}): Promise<AuthAttempt> {
-  const biometricLabel = options?.biometricLabel ?? "Face ID";
-
-  try {
-    const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: options?.promptMessage ?? "Unlock TracePay",
-      cancelLabel: options?.cancelLabel ?? "Use PIN",
-      // true = biometrics only (no iOS device passcode fallback)
-      disableDeviceFallback: true,
-    });
-
-    if (result.success) {
-      return { success: true };
-    }
-
-    return {
-      success: false,
-      code: result.error,
-      message: mapAuthError(result.error, result.warning, biometricLabel),
-    };
-  } catch {
-    return {
-      success: false,
-      message:
-        Platform.OS === "ios"
-          ? "Face ID could not start. Enable Face ID for Expo Go (or TracePay) in iOS Settings, or use your TracePay PIN."
-          : "Biometric authentication could not start. Use your TracePay PIN.",
-    };
-  }
-}
-
 export async function enableBiometricsOnDevice(): Promise<BiometricEnableResult> {
-  const availability = await getBiometricAvailability().catch(
-    (): BiometricAvailability => ({
-      available: false,
-      kind: null,
-      label: null,
-      unavailableReason: "unsupported",
-    }),
-  );
-
+  const availability = await getBiometricAvailability();
   if (!availability.available) {
     return {
       enabled: false,
@@ -174,49 +110,114 @@ export async function enableBiometricsOnDevice(): Promise<BiometricEnableResult>
     };
   }
 
-  const label = availability.label ?? "biometrics";
-  const attempt = await authenticateLocally({
-    promptMessage: `Enable ${label} for TracePay`,
-    cancelLabel: "Cancel",
-    biometricLabel: label,
-  });
+  const label = availability.label ?? "Biometrics";
 
-  if (!attempt.success) {
-    return { enabled: false, message: attempt.message };
+  if (!SecureStore.canUseBiometricAuthentication()) {
+    return {
+      enabled: false,
+      message: biometricUnavailableCopy("weak_only"),
+    };
+  }
+
+  if (Platform.OS === "ios") {
+    const result = await LocalAuthentication.authenticateAsync({
+      promptMessage: `Enable ${label} for TracePay`,
+      cancelLabel: "Cancel",
+      disableDeviceFallback: true,
+    }).catch(() => null);
+
+    if (!result) {
+      return { enabled: false, message: `Could not start ${label}.` };
+    }
+    if (!result.success) {
+      return { enabled: false, message: enableErrorCopy(result.error, label) };
+    }
+  }
+
+  try {
+    const secret = Array.from(await getRandomBytesAsync(32), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    await SecureStore.deleteItemAsync(
+      SECURITY_STORAGE_KEYS.biometricSecret,
+      boundSecretOptions(""),
+    ).catch(() => undefined);
+    await SecureStore.setItemAsync(
+      SECURITY_STORAGE_KEYS.biometricSecret,
+      secret,
+      boundSecretOptions(`Enable ${label} for TracePay`),
+    );
+  } catch {
+    return {
+      enabled: false,
+      message: `${label} was not turned on. You can enable it later in Security settings.`,
+    };
   }
 
   await saveBiometricsEnabled(true);
   return { enabled: true };
 }
 
+/**
+ * Shows the OS biometric prompt by reading the bound secret. Never offers
+ * the device passcode: the TracePay PIN is the fallback.
+ */
+export async function unlockWithBiometrics(
+  label: string,
+): Promise<BiometricUnlockResult> {
+  const availability = await getBiometricAvailability();
+  if (!availability.available) {
+    return {
+      status: "unavailable",
+      message: `${label} is not available right now. Enter your PIN.`,
+    };
+  }
+
+  let secret: string | null;
+  try {
+    secret = await SecureStore.getItemAsync(
+      SECURITY_STORAGE_KEYS.biometricSecret,
+      boundSecretOptions("Unlock TracePay"),
+    );
+  } catch {
+    // Cancelled, mismatched, OS lockout, or the app's Face ID permission is
+    // off. The OS already explained mismatches; offer the PIN.
+    return {
+      status: "failed",
+      message: `${label} didn't unlock TracePay. Enter your PIN, or try ${label} again.`,
+    };
+  }
+
+  if (!secret || secret.length < 32) {
+    return {
+      status: "invalidated",
+      message: `Your device's biometrics changed, so ${label} was turned off. Enter your PIN, then turn it back on in Security settings.`,
+    };
+  }
+
+  return { status: "success" };
+}
+
 export async function loadBiometricsEnabled(): Promise<boolean> {
   return (
-    (await secureStorage.get(SECURITY_STORAGE_KEYS.biometricsEnabled)) ===
+    (await credentialStorage.get(SECURITY_STORAGE_KEYS.biometricsEnabled)) ===
     "true"
   );
 }
 
 export async function saveBiometricsEnabled(enabled: boolean): Promise<void> {
-  await secureStorage.set(
+  await credentialStorage.set(
     SECURITY_STORAGE_KEYS.biometricsEnabled,
     enabled ? "true" : "false",
   );
 }
 
-export async function clearBiometricsEnabled(): Promise<void> {
-  await secureStorage.remove(SECURITY_STORAGE_KEYS.biometricsEnabled);
-}
-
-export function biometricUnavailableCopy(
-  reason: BiometricAvailability["unavailableReason"],
-): string {
-  if (reason === "not_enrolled") {
-    return Platform.OS === "ios"
-      ? "Set up Face ID or Touch ID in iOS Settings, then return here to enable it."
-      : "Add a fingerprint or face unlock in your device settings, then return here.";
-  }
-  if (reason === "no_hardware") {
-    return "This device does not support biometric unlock.";
-  }
-  return "Biometric unlock is not available on this device. You can continue using your PIN.";
+export async function clearBiometrics(): Promise<void> {
+  await Promise.all([
+    credentialStorage.remove(SECURITY_STORAGE_KEYS.biometricsEnabled),
+    SecureStore.deleteItemAsync(
+      SECURITY_STORAGE_KEYS.biometricSecret,
+      boundSecretOptions(""),
+    ).catch(() => undefined),
+  ]);
 }
