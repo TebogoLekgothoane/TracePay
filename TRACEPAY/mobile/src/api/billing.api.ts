@@ -18,6 +18,7 @@ export class BillingApiError extends Error {
   constructor(
     message: string,
     readonly status?: number,
+    readonly code?: string,
   ) {
     super(message);
     this.name = "BillingApiError";
@@ -54,13 +55,19 @@ async function call(path: string, init?: { method?: string; body?: unknown }): P
     });
     const payload: unknown = await response.json().catch(() => null);
     if (!response.ok) {
-      const detail =
-        payload &&
-        typeof payload === "object" &&
-        typeof (payload as { detail?: unknown }).detail === "string"
-          ? (payload as { detail: string }).detail
-          : "Payments are temporarily unavailable.";
-      throw new BillingApiError(detail, response.status);
+      const raw = payload && typeof payload === "object" ? (payload as { detail?: unknown }).detail : null;
+      if (raw && typeof raw === "object") {
+        const { code, message } = raw as { code?: unknown; message?: unknown };
+        throw new BillingApiError(
+          typeof message === "string" ? message : "Payments are temporarily unavailable.",
+          response.status,
+          typeof code === "string" ? code : undefined,
+        );
+      }
+      throw new BillingApiError(
+        typeof raw === "string" ? raw : "Payments are temporarily unavailable.",
+        response.status,
+      );
     }
     return payload;
   } catch (error) {
@@ -82,8 +89,10 @@ export async function fetchEntitlements(): Promise<BillingEntitlements> {
   return parseEntitlements(await call("/billing/entitlements"));
 }
 
-export async function startCheckout(product: BillingProduct): Promise<CheckoutResult> {
-  return parseCheckout(await call("/billing/checkout", { method: "POST", body: { product } }));
+export async function startCheckout(product: BillingProduct, email?: string): Promise<CheckoutResult> {
+  return parseCheckout(
+    await call("/billing/checkout", { method: "POST", body: { product, ...(email ? { email } : {}) } }),
+  );
 }
 
 export async function verifyPayment(reference: string): Promise<VerifyResult> {

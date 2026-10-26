@@ -11,6 +11,7 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal
@@ -32,9 +33,14 @@ DEFAULT_ANALYSIS_KEY = "primary"
 LIVE_SUBSCRIPTION_STATUSES = ("active", "non_renewing", "attention")
 
 
+_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
+
+
 class CheckoutRequest(BaseModel):
     product: Product
     analysis_key: str = Field(default=DEFAULT_ANALYSIS_KEY, min_length=1, max_length=80)
+    # Only used when the account has no email (phone sign-ups). Paystack needs one for the receipt.
+    email: str | None = Field(default=None, max_length=120)
 
 
 class VerifyRequest(BaseModel):
@@ -298,7 +304,18 @@ def create_checkout(
 
     email = _fetch_user_email(access_token)
     if not email:
-        raise HTTPException(status_code=422, detail="Add an email address to your account to pay.")
+        supplied = (request.email or "").strip()
+        if not _EMAIL.match(supplied):
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "email_required",
+                    "message": "Enter an email address for your payment receipt."
+                    if not supplied
+                    else "That email address does not look right.",
+                },
+            )
+        email = supplied
 
     amount = product_price_cents(request.product)
     reference = f"tp_{uuid.uuid4().hex}"

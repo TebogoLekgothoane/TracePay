@@ -1,11 +1,12 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { CreditCard, Lock } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 
 import { BillingShell, ErrorNote, Panel, goBackOr } from "../../src/components/billing/BillingShell";
 import { Button } from "../../src/components/ui/Button";
+import { Input } from "../../src/components/ui/Input";
 import { formatCents } from "../../src/features/billing/billing.format";
 import { useBilling } from "../../src/features/billing/billing.store";
 import type { BillingProduct } from "../../src/features/billing/billing.types";
@@ -32,6 +33,7 @@ const STATUS: Record<PaymentPhase, string> = {
   verifying: "Confirming with Paystack…",
   success: "Payment confirmed",
   failed: "Payment not completed",
+  needs_email: "Email needed for your receipt",
   delayed: "Waiting for confirmation",
   error: "Something went wrong",
 };
@@ -45,6 +47,7 @@ export default function CheckoutScreen() {
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const { products, entitlements } = useBilling();
   const flow = usePaymentFlow(product);
+  const [email, setEmail] = useState("");
 
   const cents =
     product === "full_analysis"
@@ -67,6 +70,8 @@ export default function CheckoutScreen() {
 
   const busy = flow.phase === "starting" || flow.phase === "verifying";
   const waiting = flow.phase === "awaiting" || flow.phase === "delayed";
+  const needsEmail = flow.phase === "needs_email";
+  const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email.trim());
   const amount = cents ? formatCents(cents) : "—";
 
   return (
@@ -77,6 +82,10 @@ export default function CheckoutScreen() {
           {waiting ? (
             <Button loading={busy} onPress={() => void flow.verify()}>
               I have paid — check status
+            </Button>
+          ) : needsEmail ? (
+            <Button disabled={!emailValid} onPress={() => void flow.start(email.trim())}>
+              Continue to payment
             </Button>
           ) : (
             <Button
@@ -132,7 +141,28 @@ export default function CheckoutScreen() {
         </View>
       </Panel>
 
-      {flow.message ? (
+      {needsEmail ? (
+        <View className="mt-3 rounded-2xl bg-card p-4">
+          <Text className="mb-3 text-[13px] leading-5 text-muted-foreground">
+            Paystack sends your receipt by email. Your account was set up with a phone number, so enter an email
+            to use for this payment.
+          </Text>
+          <Input
+            label="Email address"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="you@example.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
+            autoCorrect={false}
+            returnKeyType="done"
+            error={flow.message}
+          />
+        </View>
+      ) : null}
+
+      {flow.message && !needsEmail ? (
         <View className="mt-3">
           {flow.phase === "delayed" ? (
             <Panel>

@@ -212,3 +212,23 @@ def test_cancel_marks_non_renewing(env) -> None:
     result = billing.cancel_monitoring(USER)
     assert result["monitoring"]["cancel_at_period_end"] is True
     assert result["monitoring"]["active"] is True  # paid period still runs
+
+
+def test_phone_only_account_must_supply_a_valid_email(env, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(billing, "_fetch_user_email", lambda _t: None)
+    with pytest.raises(HTTPException) as missing:
+        billing.create_checkout(USER, "token", billing.CheckoutRequest(product="full_analysis"))
+    assert missing.value.status_code == 422
+    assert missing.value.detail["code"] == "email_required"
+
+    with pytest.raises(HTTPException) as bad:
+        billing.create_checkout(USER, "token", billing.CheckoutRequest(product="full_analysis", email="nope"))
+    assert bad.value.detail["code"] == "email_required"
+
+    _, calls, _ = env
+    ok = billing.create_checkout(
+        USER, "token", billing.CheckoutRequest(product="full_analysis", email="me@example.com")
+    )
+    assert ok["status"] == "pending"
+    init = next(body for method, path, body in calls if path == "/transaction/initialize")
+    assert init["email"] == "me@example.com"

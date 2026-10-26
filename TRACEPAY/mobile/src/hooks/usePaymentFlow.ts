@@ -14,6 +14,8 @@ export type PaymentPhase =
   | "success"
   /** The provider reported a failure or the user left without paying. */
   | "failed"
+  /** The account has no email; the user must give one for the receipt. */
+  | "needs_email"
   /** Paid or possibly paid, but the provider has not confirmed yet. */
   | "delayed"
   | "error";
@@ -80,13 +82,13 @@ export function usePaymentFlow(product: BillingProduct) {
     }
   }, []);
 
-  const start = useCallback(async (): Promise<void> => {
+  const start = useCallback(async (email?: string): Promise<void> => {
     if (busy.current) return;
     busy.current = true;
     setPhase("starting");
     setMessage(null);
     try {
-      const checkout = await startCheckout(product);
+      const checkout = await startCheckout(product, email);
       if (checkout.status === "already_owned") {
         await refreshBilling();
         if (mounted.current) setPhase("success");
@@ -97,6 +99,11 @@ export function usePaymentFlow(product: BillingProduct) {
       if (mounted.current) setPhase("awaiting");
     } catch (error) {
       if (!mounted.current) return;
+      if (error instanceof BillingApiError && error.code === "email_required") {
+        setPhase("needs_email");
+        setMessage(email ? error.message : null);
+        return;
+      }
       setPhase("error");
       setMessage(
         error instanceof BillingApiError ? error.message : "Could not open checkout. Please try again.",
