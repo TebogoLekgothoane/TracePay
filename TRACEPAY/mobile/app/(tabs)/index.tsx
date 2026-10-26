@@ -153,14 +153,13 @@ export default function HomeScreen() {
         contentContainerStyle={{ paddingBottom: 120 }}
         showsVerticalScrollIndicator={false}
       >
-        <View className="px-5 pt-2">
+        <View className="px-2.5 pt-1">
           <HomeHeader
             greeting={firstName ? `${greeting},` : greeting}
             name={firstName}
             initials={initialsFromName(profile?.fullName ?? "")}
             hasUnreadNotifications={hasUnreadNotifications}
             onNotificationsPress={() => router.push("/settings/notifications")}
-            onProfilePress={() => router.push("/(tabs)/settings")}
           />
 
           <BalanceCard

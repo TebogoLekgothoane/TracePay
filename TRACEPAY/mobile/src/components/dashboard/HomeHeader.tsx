@@ -20,7 +20,7 @@ export function HomeHeader({
   initials,
   hasUnreadNotifications,
   onNotificationsPress,
-  onProfilePress,
+  
 }: Props) {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
@@ -57,25 +57,16 @@ export function HomeHeader({
               />
             ) : null}
           </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Open your profile"
-            className="h-10 w-10 items-center justify-center rounded-full active:opacity-80"
-            style={{ backgroundColor: withAlpha(palette.primary, 0.16) }}
-            onPress={onProfilePress}
-          >
-            <Text className="text-[15px] font-bold text-primary">{initials}</Text>
-          </Pressable>
         </View>
       </View>
 
-      <View className="mt-4">
-        <Text className="text-[14px] text-muted-foreground" numberOfLines={1}>
+      <View className="mt-4 px-2.5">
+        <Text className="text-[16px] font-medium text-muted-foreground" numberOfLines={1}>
           {greeting}
         </Text>
         {name ? (
           <Text
-            className="text-[26px] font-bold tracking-[-0.5px] text-foreground"
+            className="text-[30px] font-bold tracking-[-0.5px] text-foreground"
             numberOfLines={1}
           >
             {name}
