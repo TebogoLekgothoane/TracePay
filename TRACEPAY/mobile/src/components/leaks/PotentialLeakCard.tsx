@@ -2,7 +2,7 @@ import { Pressable, Text, View } from "react-native";
 import { useColorScheme } from "nativewind";
 
 import type { PotentialLeak } from "../../features/leaks/potential-leaks";
-import { ReviewIconTile, ReviewStatusBadge, reviewIconColor, statusColor } from "./ReviewVisuals";
+import { ReviewStatusBadge, statusColor } from "./ReviewVisuals";
 
 type Props = {
   leak: PotentialLeak;
@@ -12,7 +12,6 @@ type Props = {
 export function PotentialLeakCard({ leak, onPress }: Props) {
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === "dark" ? "dark" : "light";
-  const iconColor = reviewIconColor(scheme, leak.icon);
   const badgeColor = statusColor(scheme, leak.status);
 
   return (
@@ -20,9 +19,8 @@ export function PotentialLeakCard({ leak, onPress }: Props) {
       accessibilityRole="button"
       accessibilityLabel={`${leak.title}, ${leak.listAmount ?? leak.amount}, ${leak.description}`}
       onPress={() => onPress(leak.id)}
-      className="flex-row items-start gap-3 rounded-3xl border border-border bg-card px-4 py-4 active:opacity-80"
+      className="flex-row items-start rounded-3xl bg-card px-4 py-4 active:opacity-80"
     >
-      <ReviewIconTile icon={leak.icon} color={iconColor} />
       <View className="min-w-0 flex-1">
         <View className="flex-row items-start justify-between gap-3">
           <Text className="flex-1 text-[15px] font-semibold text-foreground">

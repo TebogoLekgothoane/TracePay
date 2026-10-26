@@ -66,7 +66,7 @@ function InsightMiniCard({
   const color = toneColor(palette, item.tone);
 
   return (
-    <View className="mr-3 w-[248px] rounded-3xl border border-border bg-card p-4">
+    <View className="mr-3 w-[248px] rounded-3xl bg-card p-4">
       <View
         className="mb-3 h-10 w-10 items-center justify-center rounded-full"
       >

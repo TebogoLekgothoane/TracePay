@@ -216,7 +216,7 @@ export default function AllInsightsScreen() {
               return (
                 <Pressable
                   key={item.id}
-                  className="flex-row items-center gap-3 rounded-3xl border border-border bg-card px-4 py-4 active:opacity-80"
+                  className="flex-row items-center gap-3 rounded-3xl bg-card px-4 py-4 active:opacity-80"
                 >
                   <View className="h-11 w-11 items-center justify-center rounded-full">
                     <item.Icon color={color} size={20} strokeWidth={2.2} />

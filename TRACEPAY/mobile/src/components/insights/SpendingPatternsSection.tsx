@@ -9,7 +9,7 @@ import {
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useMemo } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 import {
   buildSpendingPatterns,
@@ -17,6 +17,8 @@ import {
 } from "../../features/insights/spending-patterns";
 import { useSpendingPatternData } from "../../hooks/useSpendingPatternData";
 import { COLORS, withAlpha } from "../../theme/colors";
+import { Button } from "../ui/Button";
+import { SkeletonCard } from "../ui/SkeletonGroups";
 
 const patternIcons = [CircleAlert, Coins, Repeat2, ShoppingBag] as const;
 
@@ -52,14 +54,11 @@ export function SpendingPatternsSection() {
       </View>
 
       {loading && !data ? (
-        <View className="mt-4 items-center rounded-3xl border border-border/60 bg-card p-6">
-          <ActivityIndicator color={palette.primary} />
-          <Text className="mt-3 text-[13px] text-muted-foreground">
-            Reading your transactions…
-          </Text>
+        <View className="mt-4">
+          <SkeletonCard height={120} />
         </View>
       ) : error && !data ? (
-        <View className="mt-4 rounded-3xl border border-border/60 bg-card p-4">
+        <View className="mt-4 rounded-3xl bg-card p-4">
           <Text className="text-[14px] font-semibold text-foreground">
             Spending patterns unavailable
           </Text>
@@ -73,7 +72,7 @@ export function SpendingPatternsSection() {
           </Pressable>
         </View>
       ) : !data || !data.referenceDate || !patterns ? (
-        <View className="mt-4 rounded-3xl border border-border/60 bg-card p-4">
+        <View className="mt-4 rounded-3xl bg-card p-4">
           <Text className="text-[14px] font-semibold text-foreground">
             No transactions yet
           </Text>
@@ -144,7 +143,7 @@ function TodaySummary({
   referenceDate: Date;
 }) {
   return (
-    <View className="mt-4 rounded-3xl border border-border/60 bg-card p-4">
+    <View className="mt-4 rounded-3xl bg-card p-4">
       <View className="flex-row items-start justify-between gap-3">
         <View className="flex-1">
           <Text className="text-[13px] font-medium text-muted-foreground">
@@ -163,15 +162,13 @@ function TodaySummary({
               : `${patterns.todayCount} ${patterns.todayCount === 1 ? "payment" : "payments"} recorded`}
           </Text>
         </View>
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          variant="muted"
           accessibilityLabel="View today's transactions"
-          className="flex-row items-center gap-1 rounded-full bg-muted px-3 py-2 active:opacity-70"
           onPress={() => router.push("/(tabs)/transactions")}
         >
-          <Text className="text-[12px] font-semibold text-foreground">View</Text>
-          <ArrowUpRight color={palette.foreground} size={14} strokeWidth={2.2} />
-        </Pressable>
+          View
+        </Button>
       </View>
 
       {patterns.todayCategories.length > 0 ? (
@@ -200,7 +197,7 @@ function PatternCard({
   palette: typeof COLORS.light | typeof COLORS.dark;
 }) {
   return (
-    <View className="rounded-3xl border border-border/60 bg-card p-4">
+    <View className="rounded-3xl bg-card p-4">
       <View className="flex-row items-start gap-3">
         <View
           className="h-10 w-10 items-center justify-center rounded-2xl"

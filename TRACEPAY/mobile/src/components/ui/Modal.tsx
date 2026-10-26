@@ -74,7 +74,7 @@ export function InfoSheet({
         <Text className="mt-2 text-[14px] leading-6 text-muted-foreground">
           {message}
         </Text>
-        <Button className="mt-5" size="md" onPress={onClose}>
+        <Button className="mt-5" onPress={onClose}>
           {confirmLabel}
         </Button>
       </BottomSheetView>

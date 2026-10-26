@@ -88,14 +88,14 @@ export function BankImportList({
       </Text>
 
       {filtered.length === 0 ? (
-        <View className="items-center rounded-3xl border border-dashed border-border px-6 py-10">
+        <View className="items-center rounded-3xl px-6 py-10">
           <Text className="text-[15px] font-semibold text-foreground">No bank matched</Text>
           <Text className="mt-1 text-center text-[13px] text-muted-foreground">
             Try another name, or clear search to browse the full list.
           </Text>
         </View>
       ) : (
-        <View className="overflow-hidden rounded-3xl border border-border bg-card">
+        <View className="overflow-hidden rounded-3xl bg-card">
           {filtered.map((bank, index) => {
             const color = brandColor(bank.name, palette.primary);
             const isSelected = selected === bank.name;

@@ -30,6 +30,7 @@ export function LeaksSummaryCard({
         paddingVertical: 16,
         overflow: "hidden",
         minHeight: 136,
+        
       }}
     >
       <View className="flex-row items-center">

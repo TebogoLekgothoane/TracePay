@@ -5,6 +5,7 @@ import { Pressable, Text, View } from "react-native";
 import { COLORS } from "../../theme/colors";
 import { InstitutionLogo } from "../accounts/InstitutionLogo";
 import { Button } from "../ui/Button";
+import { SkeletonRows } from "../ui/SkeletonGroups";
 
 export type AccountPreview = {
   id: string;
@@ -43,21 +44,15 @@ export function AccountsCard({
         <Text className="text-[17px] font-bold text-foreground">
           Your accounts
         </Text>
-        <Button onPress={onSeeDetails} size="sm" variant="ghost" className="px-0">
+        <Button onPress={onSeeDetails} variant="ghost" className="px-0">
           See all
         </Button>
       </View>
 
-      {loading && accounts.length === 0 ? (
-        <View className="rounded-2xl border border-border/60 bg-card px-4 py-6">
-          <Text className="text-[14px] text-muted-foreground">
-            Loading your accounts…
-          </Text>
-        </View>
-      ) : null}
+      {loading && accounts.length === 0 ? <SkeletonRows count={2} /> : null}
 
       {!loading && accounts.length === 0 ? (
-        <View className="rounded-2xl border border-border/60 bg-card px-4 py-6">
+        <View className="rounded-2xl bg-card px-4 py-6">
           <Text className="text-[14px] leading-6 text-muted-foreground">
             Add your bank accounts manually for now. TracePay will analyse all of
             them together once transactions are connected.
@@ -70,7 +65,7 @@ export function AccountsCard({
           <Pressable
             key={account.id}
             onPress={() => onAccountPress?.(account)}
-            className="flex-row items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5 active:opacity-70"
+            className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-70"
           >
             <InstitutionLogo
               name={account.name}
@@ -112,7 +107,6 @@ export function AccountsCard({
 
       <Button
         className="mt-3 border-dashed border-primary/50"
-        size="md"
         variant="secondary"
         onPress={onAddAccount}
       >

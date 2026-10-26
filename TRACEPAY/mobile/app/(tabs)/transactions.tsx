@@ -18,6 +18,7 @@ import {
   DocumentActionsMenu,
   type DocumentActionsMenuAction,
 } from "../../src/components/ui/DocumentActionsMenu";
+import { SkeletonRows } from "../../src/components/ui/SkeletonGroups";
 import {
   ADD_ACCOUNT_HREF,
   accountSetupHref,
@@ -149,11 +150,8 @@ export default function TransactionsScreen() {
       </View>
 
       {loading ? (
-        <View className="mb-4 items-center rounded-3xl border border-border/60 bg-card px-4 py-8">
-          <ActivityIndicator color={trace.primary} />
-          <Text className="mt-3 text-[13px] text-muted-foreground">
-            Loading transactions…
-          </Text>
+        <View className="mb-4">
+          <SkeletonRows count={6} />
         </View>
       ) : error && transactions.length === 0 ? (
         <View className="mb-4 rounded-3xl bg-destructive/10 px-4 py-6">
@@ -167,7 +165,7 @@ export default function TransactionsScreen() {
           </Pressable>
         </View>
       ) : !loading && transactions.length === 0 ? (
-        <View className="mb-4 rounded-3xl border border-border/60 bg-card px-4 py-6">
+        <View className="mb-4 rounded-3xl bg-card px-4 py-6">
           <Text className="text-[14px] leading-6 text-muted-foreground">
             Imported transactions will appear here. Use the documents menu to upload a
             statement.

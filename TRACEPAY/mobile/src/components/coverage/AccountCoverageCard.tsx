@@ -49,7 +49,7 @@ export function AccountCoverageCard({ account, statements }: Props) {
 
   return (
     <View
-      className="rounded-3xl border border-border bg-card px-4 py-4"
+      className="rounded-3xl bg-card px-4 py-4"
       accessibilityLabel={`${account.label}. ${TONE_TEXT[tone]}`}
     >
       <View className="flex-row items-center gap-3">
@@ -80,7 +80,6 @@ export function AccountCoverageCard({ account, statements }: Props) {
           {canAdd ? (
             <Button
               className="mt-3"
-              size="md"
               variant="primary"
               onPress={() => router.push(accountSetupHref(account.accountId) as never)}
             >
@@ -170,7 +169,6 @@ export function AccountCoverageCard({ account, statements }: Props) {
           {canAdd ? (
             <Button
               className="mt-4"
-              size="md"
               variant="outline"
               onPress={() => router.push(accountSetupHref(account.accountId) as never)}
             >

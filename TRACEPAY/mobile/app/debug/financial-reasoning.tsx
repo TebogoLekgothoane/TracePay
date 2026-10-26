@@ -103,7 +103,6 @@ function FinancialReasoningDebugScreen() {
               <Button
                 accessibilityLabel="Refresh Analysis"
                 loading={loading}
-                size="md"
                 onPress={refresh}
               >
                 Refresh Analysis
@@ -155,7 +154,7 @@ function ErrorState({
       <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">
         {message}
       </Text>
-      <Button className="mt-4 self-start" size="sm" variant="outline" onPress={onRetry}>
+      <Button className="mt-4 self-start" variant="outline" onPress={onRetry}>
         Try again
       </Button>
     </View>
@@ -258,7 +257,7 @@ function ReasoningCard({ analysis }: { analysis: FinancialReasoning }) {
       </View>
 
       {verification ? (
-        <View className="mt-3 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3">
+        <View className="mt-3 rounded-2xl bg-primary/5 px-4 py-3">
           <Text className="text-[13px] font-semibold text-primary">
             Verification required
           </Text>

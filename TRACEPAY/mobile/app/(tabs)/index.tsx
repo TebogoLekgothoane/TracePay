@@ -167,11 +167,13 @@ export default function HomeScreen() {
             metaLabel={metaLabel}
             accounts={previews}
             hidden={hideBalances}
+            loading={accountsLoading}
             onToggleVisibility={() => {
               void toggleHideBalances();
             }}
             onImportStatement={() => router.push(ADD_ACCOUNT_HREF)}
             onViewAccounts={() => router.push(LINKED_ACCOUNTS_HREF)}
+            onAddAccount={() => router.push(ADD_ACCOUNT_HREF)}
           />
 
           <View className="mb-3 mt-7 flex-row items-center justify-between">

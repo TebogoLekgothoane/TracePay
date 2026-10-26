@@ -30,6 +30,7 @@ import { formatPercent } from "../../src/features/insights/category-breakdown";
 import { SpendingPatternsSection } from "../../src/components/insights/SpendingPatternsSection";
 import { Button } from "../../src/components/ui/Button";
 import { SelectionSheet } from "../../src/components/ui/Modal";
+import { Skeleton } from "../../src/components/ui/Skeleton";
 import {
   CUSTOM_RANGES,
   formatRandAmount,
@@ -461,17 +462,15 @@ export default function InsightsScreen() {
                 ? "Spending by category"
                 : "Income by category"}
             </Text>
-            <Button size="sm" variant="ghost" className="px-0">
+            <Button variant="ghost" className="px-0">
               {periodLabel}
             </Button>
           </View>
-          <View className="rounded-3xl border border-border bg-card p-4">
+          <View className="rounded-3xl bg-card p-4">
             {categoriesLoading && !categoryData ? (
-              <View className="items-center py-6">
-                <ActivityIndicator color={palette.primary} />
-                <Text className="mt-3 text-[13px] text-muted-foreground">
-                  Reading your transactions…
-                </Text>
+              <View className="gap-3 py-1">
+                <Skeleton width="50%" height={18} />
+                <Skeleton width="100%" height={120} radius={14} />
               </View>
             ) : categoriesError && !categoryData ? (
               <View>
@@ -558,14 +557,13 @@ export default function InsightsScreen() {
             </Text>
             <Button
               onPress={() => router.push("/insights")}
-              size="sm"
               variant="ghost"
               className="px-0"
             >
               View full report
             </Button>
           </View>
-          <View className="rounded-3xl border border-border bg-card p-4">
+          <View className="rounded-3xl bg-card p-4">
             <View className="mb-4 flex-row items-start justify-between gap-3">
               <View className="flex-1">
                 <Text className="text-[13px] text-muted-foreground">

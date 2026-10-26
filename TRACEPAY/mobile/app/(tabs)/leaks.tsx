@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Download } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useCallback, useMemo, useState } from "react";
@@ -12,6 +12,8 @@ import { TabScrollView } from "../../src/components/navigation/TabScrollView";
 import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
 import { InfoSheet } from "../../src/components/ui/Modal";
+import { formatWholeRand } from "../../src/features/billing/billing.format";
+import { useBilling } from "../../src/features/billing/billing.store";
 import { useLeakEntitlement } from "../../src/features/leaks/leak-entitlement.store";
 import {
   FREE_LEAK_COUNT,
@@ -35,6 +37,14 @@ export default function LeaksScreen() {
   const total = useMemo(() => totalMonthlyLeaks(leaks), [leaks]);
   const paywall = useMemo(() => splitLeaksForPaywall(leaks), [leaks]);
   const { unlocked, hydrated } = useLeakEntitlement();
+  const { products, entitlements, refresh } = useBilling();
+  const price = products?.fullAnalysis.priceCents;
+  const unlockLabel = price ? `Unlock full analysis` : "Unlock full analysis";
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
+  );
   const visible = useMemo(
     () => (filter === "all" ? leaks : leaks.filter((leak) => leak.status === filter)),
     [filter, leaks],
@@ -44,6 +54,9 @@ export default function LeaksScreen() {
   }, []);
   const openUpgrade = useCallback(() => {
     router.push("/upgrade");
+  }, []);
+  const openLockedSummary = useCallback(() => {
+    router.push("/billing/locked");
   }, []);
 
   return (
@@ -103,7 +116,7 @@ export default function LeaksScreen() {
                       className="rounded-full px-4 py-2.5 active:opacity-80"
                       style={{
                         backgroundColor: selected ? palette.foreground : palette.card,
-                        borderWidth: selected ? 0 : 1,
+                        borderWidth: 0,
                         borderColor: palette.border,
                       }}
                     >
@@ -120,7 +133,7 @@ export default function LeaksScreen() {
 
               <View className="mt-4 gap-3">
                 {visible.length === 0 ? (
-                  <View className="rounded-3xl border border-border bg-card px-4 py-6">
+                  <View className="rounded-3xl bg-card px-4 py-6">
                     <Text className="text-[15px] font-semibold text-foreground">
                       Nothing in {REVIEW_STATUS_LABEL[filter === "all" ? "new" : filter].toLowerCase()}
                     </Text>
@@ -134,14 +147,34 @@ export default function LeaksScreen() {
                   ))
                 )}
               </View>
+
+              <Pressable
+                accessibilityRole="button"
+                className="mt-6 rounded-3xl bg-card px-4 py-4 active:opacity-80"
+                onPress={() =>
+                  router.push((entitlements?.monitoring.active ? "/monitoring" : "/monitoring/offer") as never)
+                }
+              >
+                <Text className="text-[16px] font-bold text-foreground">
+                  {entitlements?.monitoring.active
+                    ? "Monitoring is on"
+                    : "Keep TracePay working for you"}
+                </Text>
+                <Text className="mt-1 text-[13px] leading-5 text-muted-foreground">
+                  {entitlements?.monitoring.active
+                    ? "See your plan, renewal date and recent alerts."
+                    : "Get alerted to new potential leaks as your activity changes. Optional."}
+                </Text>
+              </Pressable>
             </>
           ) : (
             <>
               <Text className="mb-1 mt-7 text-[22px] font-bold tracking-[-0.3px] text-foreground">
-                Top {FREE_LEAK_COUNT} leaks (preview)
+                Top {FREE_LEAK_COUNT} leaks
               </Text>
               <Text className="text-[14px] leading-5 text-muted-foreground">
-                Here are the biggest opportunities we found.
+                {leaks.length} potential {leaks.length === 1 ? "leak" : "leaks"} detected, an estimated{" "}
+                {total} a month. Here are the biggest.
               </Text>
 
               <View className="mt-4 gap-3">
@@ -161,13 +194,17 @@ export default function LeaksScreen() {
 
                   <View className="mt-4 gap-2">
                     {paywall.locked.map((leak) => (
-                      <LockedLeakRow key={leak.id} leak={leak} onPress={openUpgrade} />
+                      <LockedLeakRow key={leak.id} leak={leak} onPress={openLockedSummary} />
                     ))}
                   </View>
 
-                  <Button arrow className="mt-5" onPress={openUpgrade}>
-                    Unlock all {leaks.length} leaks
+                  <Button className="mt-4" onPress={openUpgrade}>
+                    {unlockLabel}
                   </Button>
+                  <Text className="mt-1.5 text-center text-[12px] text-muted-foreground">
+                    One payment. Not a subscription.
+                  </Text>
+                  
                 </>
               ) : null}
             </>

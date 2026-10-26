@@ -57,7 +57,7 @@ export default function LeakLineItemScreen() {
         <Text className="text-center text-[16px] font-semibold text-foreground">
           This item could not be found.
         </Text>
-        <Button className="mt-4" size="md" onPress={() => router.back()}>
+        <Button className="mt-4" onPress={() => router.back()}>
           Go back
         </Button>
       </SafeAreaView>

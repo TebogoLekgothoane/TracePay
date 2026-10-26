@@ -142,7 +142,7 @@ export default function SubscriptionDetailScreen() {
           </LinearGradient>
 
           <>
-              <View className="mt-5 rounded-3xl border border-border/70 bg-card p-4">
+              <View className="mt-5 rounded-3xl bg-card p-4">
                 <View className="mb-3 flex-row items-center gap-2">
                   <View className="h-8 w-8 items-center justify-center rounded-xl bg-muted">
                     <CreditCard color={palette.primary} size={16} strokeWidth={2.2} />
@@ -167,7 +167,7 @@ export default function SubscriptionDetailScreen() {
                 </View>
                 <Text className="text-[12px] font-semibold text-primary">{sub.billing}</Text>
               </View>
-              <View className="rounded-3xl border border-border/70 bg-card p-4">
+              <View className="rounded-3xl bg-card p-4">
                 <View className="h-40 flex-row items-end gap-2">
                   {sub.history.map((value, index) => {
                     const height = value > 0 ? Math.max((value / maxSpend) * 92, 8) : 8;
@@ -208,7 +208,7 @@ export default function SubscriptionDetailScreen() {
                   Review options
                 </Text>
               </View>
-              <View className="overflow-hidden rounded-3xl border border-border/70 bg-card">
+              <View className="overflow-hidden rounded-3xl bg-card">
                 {actions.map((item, index) => (
                   <Pressable
                     key={item.id}
@@ -219,7 +219,6 @@ export default function SubscriptionDetailScreen() {
                   >
                     <View
                       className="h-10 w-10 items-center justify-center rounded-xl"
-                      style={{ backgroundColor: withAlpha(accent, 0.12) }}
                     >
                       <item.Icon color={accent} size={18} strokeWidth={2.2} />
                     </View>

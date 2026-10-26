@@ -84,7 +84,7 @@ export function LeakPrimaryFooter({
           {subtitle}
         </Text>
       </View>
-      <Button onPress={onPress} size="sm">
+      <Button onPress={onPress}>
         {buttonLabel}
       </Button>
     </View>

@@ -1,8 +1,8 @@
 import { router } from "expo-router";
-import { ArrowDown, ArrowUp, ChevronDown } from "lucide-react-native";
+import { ArrowDown, ArrowUp } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View, type LayoutChangeEvent } from "react-native";
+import { Pressable, Text, View, type LayoutChangeEvent } from "react-native";
 import Svg, {
   Circle,
   Defs,
@@ -17,14 +17,14 @@ import Svg, {
 
 import {
   formatAxisAmount,
-  RHYTHM_SPANS,
   type RhythmPoint,
   type RhythmSpan,
   type SpendingRhythm,
 } from "../../features/dashboard/spending-rhythm";
 import { COLORS, withAlpha } from "../../theme/colors";
+import { Skeleton } from "../ui/Skeleton";
 import { formatRandAmount } from "../../utils/currency";
-import { SelectionSheet } from "../ui/Modal";
+import { RhythmSpanMenu } from "./RhythmSpanMenu";
 
 type Props = {
   span: RhythmSpan;
@@ -237,7 +237,6 @@ export function SpendingRhythmCard({
 }: Props) {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
-  const [showSheet, setShowSheet] = useState(false);
   const [picked, setPicked] = useState<number | null>(null);
 
   const hasSpending = rhythm?.points.some((point) => point.current > 0 || point.previous > 0);
@@ -248,24 +247,20 @@ export function SpendingRhythmCard({
     <View>
       <View className="mb-3 flex-row items-center justify-between">
         <Text className="text-[17px] font-bold text-foreground">Spending rhythm</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Choose how many months to show"
-          className="flex-row items-center gap-1 rounded-full border border-border/70 bg-card px-3 py-1.5 active:opacity-75"
-          onPress={() => setShowSheet(true)}
-        >
-          <Text className="text-[12px] font-medium text-foreground">{span}</Text>
-          <ChevronDown color={palette.mutedForeground} size={14} strokeWidth={2} />
-        </Pressable>
+        <RhythmSpanMenu
+          span={span}
+          onSpanChange={(next) => {
+            setPicked(null);
+            onSpanChange(next);
+          }}
+        />
       </View>
 
-      <View className="rounded-3xl border border-border/60 bg-card p-4">
+      <View className="rounded-3xl bg-card p-4">
         {loading && !rhythm ? (
-          <View className="items-center py-10">
-            <ActivityIndicator color={palette.primary} />
-            <Text className="mt-3 text-[13px] text-muted-foreground">
-              Reading your transactions…
-            </Text>
+          <View className="gap-3 py-1">
+            <Skeleton width="45%" height={22} radius={8} />
+            <Skeleton width="100%" height={HEIGHT - 40} radius={14} />
           </View>
         ) : error && !rhythm ? (
           <View>
@@ -365,17 +360,6 @@ export function SpendingRhythmCard({
         )}
       </View>
 
-      <SelectionSheet
-        visible={showSheet}
-        title="Show spending for"
-        selected={span}
-        onSelect={(next) => {
-          setPicked(null);
-          onSpanChange(next);
-        }}
-        onClose={() => setShowSheet(false)}
-        options={RHYTHM_SPANS.map((value) => ({ value, label: value }))}
-      />
     </View>
   );
 }

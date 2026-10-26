@@ -238,7 +238,6 @@ export default function UnlockScreen() {
             <Button
               disabled={state.phase === "unlocking"}
               onPress={() => dispatch({ type: "USE_PIN" })}
-              size="md"
               variant="ghost"
             >
               Use PIN

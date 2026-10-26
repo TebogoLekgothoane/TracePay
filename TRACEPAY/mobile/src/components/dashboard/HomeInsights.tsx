@@ -3,6 +3,7 @@ import { useColorScheme } from "nativewind";
 import { Pressable, Text, View } from "react-native";
 
 import type { SpendingPatternInsight } from "../../features/insights/spending-patterns";
+import { SkeletonRows } from "../ui/SkeletonGroups";
 import { COLORS, withAlpha } from "../../theme/colors";
 
 type Props = {
@@ -40,7 +41,7 @@ export function HomeInsights({ insights, loading, noData, onPress, onSeeAll }: P
               key={insight.id}
               accessibilityRole="button"
               accessibilityLabel={insight.title}
-              className="flex-row items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5 active:opacity-75"
+              className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-75"
               onPress={onPress}
             >
               <View
@@ -64,14 +65,14 @@ export function HomeInsights({ insights, loading, noData, onPress, onSeeAll }: P
             </Pressable>
           ))}
         </View>
+      ) : loading ? (
+        <SkeletonRows count={2} />
       ) : (
-        <View className="rounded-2xl border border-border/60 bg-card px-4 py-4">
+        <View className="rounded-2xl bg-card px-4 py-4">
           <Text className="text-[13px] leading-5 text-muted-foreground">
-            {loading
-              ? "Reading your recent spending…"
-              : noData
-                ? "Add a bank statement to get insights about your own spending."
-                : "Nothing unusual in your recent spending."}
+            {noData
+              ? "Add a bank statement to get insights about your own spending."
+              : "Nothing unusual in your recent spending."}
           </Text>
         </View>
       )}

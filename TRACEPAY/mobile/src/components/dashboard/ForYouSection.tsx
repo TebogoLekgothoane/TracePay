@@ -1,10 +1,11 @@
 import * as Haptics from "expo-haptics";
 import { Sparkles } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import type { ForYouCard } from "../../features/for-you/for-you.types";
 import { COLORS } from "../../theme/colors";
+import { Button } from "../ui/Button";
 import { BrandLogo } from "../ui/BrandLogo";
 
 type Props = {
@@ -25,7 +26,7 @@ function ForYouInsightCard({
   onIgnore: (cardId: string) => void;
 }) {
   return (
-    <View className="rounded-[28px] border border-border/70 bg-card px-5 py-5">
+    <View className="rounded-[28px] bg-card px-5 py-5">
       <View className="flex-row items-center gap-2.5">
         {card.brands.map((brand) => (
           <BrandLogo
@@ -46,30 +47,19 @@ function ForYouInsightCard({
       </Text>
 
       <View className="mt-5 flex-row flex-wrap gap-2">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={card.actionLabel}
-          className="flex-row items-center gap-1.5 rounded-full bg-muted px-4 py-2.5 active:opacity-75"
-          onPress={() => onAction(card)}
-        >
-          <Sparkles color={iconColor} size={14} strokeWidth={2.2} />
-          <Text className="text-[13px] font-semibold text-foreground">
-            {card.actionLabel}
-          </Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
+        <Button variant="muted" accessibilityLabel={card.actionLabel} onPress={() => onAction(card)}>
+          {card.actionLabel}
+        </Button>
+        <Button
+          variant="muted"
           accessibilityLabel={`Ignore ${card.title}`}
-          className="rounded-full bg-muted px-4 py-2.5 active:opacity-75"
           onPress={() => {
             void Haptics.selectionAsync();
             onIgnore(card.id);
           }}
         >
-          <Text className="text-[13px] font-semibold text-foreground">
-            Ignore
-          </Text>
-        </Pressable>
+          Ignore
+        </Button>
       </View>
     </View>
   );

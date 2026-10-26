@@ -245,7 +245,7 @@ function DetailPhase(
               <Text className="text-[17px] font-bold text-foreground">Why this was flagged</Text>
               <Text className="mt-2 text-[15px] leading-6 text-muted-foreground">{props.why}</Text>
               {props.evidence.length > 0 ? (
-                <View className="mt-4 flex-row gap-3 rounded-3xl border border-border bg-card px-4 py-4">
+                <View className="mt-4 flex-row gap-3 rounded-3xl bg-card px-4 py-4">
                   {props.evidence.map((item) => (
                     <View key={item.label} className="flex-1">
                       <Text className="text-[12px] text-muted-foreground">{item.label}</Text>
@@ -291,7 +291,7 @@ function DetailPhase(
             <View className="mt-6 gap-3">
               {props.historyExtra}
               {props.history.map((item) => (
-                <View key={item.title} className="rounded-3xl border border-border bg-card px-4 py-4">
+                <View key={item.title} className="rounded-3xl bg-card px-4 py-4">
                   <Text className="text-[15px] font-semibold text-foreground">{item.title}</Text>
                   <Text className="mt-1 text-[14px] leading-5 text-muted-foreground">{item.detail}</Text>
                 </View>
@@ -408,11 +408,10 @@ function ResponsePhase({
                   accessibilityRole="radio"
                   accessibilityState={{ selected: active }}
                   onPress={() => setSelected(item.action)}
-                  className="flex-row items-center gap-3 rounded-3xl border border-border bg-card px-4 py-4 active:opacity-80"
+                  className="flex-row items-center gap-3 rounded-3xl bg-card px-4 py-4 active:opacity-80"
                 >
                   <View
                     className="h-10 w-10 items-center justify-center rounded-full"
-                    style={{ backgroundColor: withAlpha(palette.primary, 0.1) }}
                   >
                     <item.Icon color={palette.foreground} size={18} strokeWidth={2.2} />
                   </View>
@@ -439,7 +438,7 @@ function ResponsePhase({
           <Text className="mb-2 mt-6 text-[15px] font-semibold text-foreground">
             Add a note (optional)
           </Text>
-          <View className="overflow-hidden rounded-2xl border border-border bg-card">
+          <View className="overflow-hidden rounded-2xl bg-card">
             <BridgedTextField
               autoCapitalize="sentences"
               editable={!saving}
@@ -517,7 +516,6 @@ function TransactionRow({
       ) : (
         <View
           className="h-10 w-10 items-center justify-center rounded-full"
-          style={{ backgroundColor: withAlpha(markColor, 0.14) }}
         >
           <Text className="text-[14px] font-bold" style={{ color: markColor }}>
             {item.mark ?? item.title.slice(0, 1)}
@@ -550,7 +548,7 @@ function StepList({ steps }: { steps: ReviewStep[] }) {
   return (
     <View className="gap-3">
       {steps.map((step, index) => (
-        <View key={step.title} className="flex-row gap-3 rounded-3xl border border-border bg-card px-4 py-4">
+        <View key={step.title} className="flex-row gap-3 rounded-3xl bg-card px-4 py-4">
           <View
             className="h-8 w-8 items-center justify-center rounded-full"
             style={{ backgroundColor: palette.foreground }}
@@ -608,7 +606,7 @@ function KnownBlock({ known, uncertain }: { known: string[]; uncertain: string[]
 function ResponseSummary({ response }: { response: StoredLeakResponse | null }) {
   if (!response) {
     return (
-      <View className="rounded-3xl border border-border bg-card px-4 py-4">
+      <View className="rounded-3xl bg-card px-4 py-4">
         <Text className="text-[15px] font-semibold text-foreground">Your response</Text>
         <Text className="mt-1 text-[14px] leading-5 text-muted-foreground">
           No response recorded yet. Recording one does not mark this finding resolved.
@@ -621,7 +619,7 @@ function ResponseSummary({ response }: { response: StoredLeakResponse | null }) 
     ? "Saved"
     : date.toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
   return (
-    <View className="rounded-3xl border border-border bg-card px-4 py-4">
+    <View className="rounded-3xl bg-card px-4 py-4">
       <Text className="text-[15px] font-semibold text-foreground">Your response</Text>
       <Text className="mt-1 text-[14px] text-foreground">{ACTION_LABELS[response.action]}</Text>
       <Text className="mt-0.5 text-[12px] text-muted-foreground">{when}</Text>

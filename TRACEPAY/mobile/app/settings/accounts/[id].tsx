@@ -161,7 +161,6 @@ export default function AccountDetailScreen() {
           <View className="mt-6 flex-row gap-2">
             <Button
               className="flex-1"
-              size="md"
               onPress={() =>
                 router.push(
                   accountSetupHref(accountId, `/settings/accounts/${accountId}`) as never,
@@ -175,7 +174,7 @@ export default function AccountDetailScreen() {
                 </Text>
               </>
             </Button>
-            <Button className="flex-1" size="md" variant="secondary" disabled>
+            <Button className="flex-1" variant="secondary" disabled>
               <>
                 <Link2 color={palette.primary} size={16} />
                 <Text className="text-[14px] font-semibold text-primary">

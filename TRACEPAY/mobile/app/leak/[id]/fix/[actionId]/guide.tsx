@@ -40,7 +40,6 @@ export default function FixGuideScreen() {
             >
               <View
                 className="h-9 w-9 items-center justify-center rounded-full"
-                style={{ backgroundColor: withAlpha(palette.primary, 0.12) }}
               >
                 <Text className="text-[14px] font-bold text-primary">{index + 1}</Text>
               </View>
@@ -77,7 +76,6 @@ export default function FixGuideScreen() {
 
         <Button
           className="mt-6"
-          size="md"
           onPress={() => router.push(`/leak/${leakId}/fix/${actionId}/success`)}
         >
           {detail.guideCta}

@@ -61,12 +61,12 @@ export default function StatementCoverageScreen() {
           ) : null}
 
           {error && coverage === null ? (
-            <View className="mt-6 rounded-3xl border border-border bg-card px-4 py-5">
+            <View className="mt-6 rounded-3xl bg-card px-4 py-5">
               <Text className="text-[16px] font-bold text-foreground">
                 Could not load your coverage
               </Text>
               <Text className="mt-1 text-[13px] leading-5 text-muted-foreground">{error}</Text>
-              <Button className="mt-4" size="md" variant="primary" onPress={reload}>
+              <Button className="mt-4" variant="primary" onPress={reload}>
                 Try again
               </Button>
             </View>
@@ -79,7 +79,7 @@ export default function StatementCoverageScreen() {
           ) : null}
 
           {coverage !== null && isEmpty ? (
-            <View className="mt-6 rounded-3xl border border-border bg-card px-4 py-5">
+            <View className="mt-6 rounded-3xl bg-card px-4 py-5">
               <Text className="text-[16px] font-bold text-foreground">No statements yet</Text>
               <Text className="mt-1 text-[13px] leading-5 text-muted-foreground">
                 Add a bank statement and TracePay will show which accounts and months it covers.
@@ -87,7 +87,6 @@ export default function StatementCoverageScreen() {
               </Text>
               <Button
                 className="mt-4"
-                size="md"
                 variant="primary"
                 onPress={() => router.push(ADD_ACCOUNT_HREF as never)}
               >
@@ -98,7 +97,7 @@ export default function StatementCoverageScreen() {
 
           {coverage !== null && !isEmpty ? (
             <>
-              <View className="mt-5 rounded-3xl border border-primary/20 bg-primary/10 px-4 py-4">
+              <View className="mt-5 rounded-3xl bg-primary/10 px-4 py-4">
                 <Text className="text-[17px] font-bold text-foreground">
                   {coverageHeadline(coverage)}
                 </Text>

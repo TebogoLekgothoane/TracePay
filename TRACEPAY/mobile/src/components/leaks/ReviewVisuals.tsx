@@ -4,7 +4,7 @@ import { Text, View } from "react-native";
 
 import type { ReviewIcon, ReviewStatus } from "../../features/leaks/potential-leaks";
 import { REVIEW_STATUS_LABEL } from "../../features/leaks/potential-leaks";
-import { withAlpha, COLORS, type ColorScheme } from "../../theme/colors";
+import { COLORS, type ColorScheme } from "../../theme/colors";
 
 const ICONS: Record<ReviewIcon, LucideIcon> = {
   copy: Copy,
@@ -49,7 +49,7 @@ export function ReviewIconTile({
       style={{
         width: size,
         height: size,
-        backgroundColor: withAlpha(color, 0.14),
+
       }}
     >
       <Icon color={color} size={Math.round(size * 0.42)} strokeWidth={2.2} />
@@ -65,13 +65,8 @@ export function ReviewStatusBadge({
   color: string;
 }) {
   return (
-    <View
-      className="rounded-full px-2.5 py-1"
-      style={{ backgroundColor: withAlpha(color, 0.14) }}
-    >
-      <Text className="text-[12px] font-semibold" style={{ color }}>
-        {REVIEW_STATUS_LABEL[status]}
-      </Text>
-    </View>
+    <Text className="text-[12px] font-semibold" style={{ color }}>
+      {REVIEW_STATUS_LABEL[status]}
+    </Text>
   );
 }

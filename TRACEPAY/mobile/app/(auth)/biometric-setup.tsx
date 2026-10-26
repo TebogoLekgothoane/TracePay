@@ -127,7 +127,6 @@ export default function BiometricSetupScreen() {
           <Button
             disabled={isBusy}
             onPress={handleSkip}
-            size="md"
             variant={canEnable ? "ghost" : "primary"}
             labelClassName={canEnable ? "text-muted-foreground" : undefined}
           >

@@ -45,9 +45,9 @@ const TAB_ITEMS = [
 ] as const;
 
 const BAR_WIDTH = 276;
-const BAR_HEIGHT = 56;
-const BAR_HORIZONTAL_PADDING = 8;
-const TAB_BUTTON_HEIGHT = 44;
+const BAR_HEIGHT = 46;
+const BAR_HORIZONTAL_PADDING = 6;
+const TAB_BUTTON_HEIGHT = 36;
 const SLOT = (BAR_WIDTH - BAR_HORIZONTAL_PADDING * 2) / TAB_ITEMS.length;
 
 export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
@@ -100,7 +100,7 @@ export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
               spacing={0}
               modifiers={[
                 frame({ width: BAR_WIDTH, height: BAR_HEIGHT }),
-                padding({ horizontal: BAR_HORIZONTAL_PADDING, vertical: 6 }),
+                padding({ horizontal: BAR_HORIZONTAL_PADDING, vertical: 5 }),
                 glassEffect({
                   glass: {
                     variant: "regular",
@@ -145,7 +145,7 @@ export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
                   >
                     <Image
                       systemName={item.systemImage}
-                      size={22}
+                      size={19}
                       color={
                         selected
                           ? palette.foreground

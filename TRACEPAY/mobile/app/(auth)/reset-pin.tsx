@@ -75,7 +75,6 @@ export default function ResetPinScreen() {
           <Button
             disabled={busy}
             onPress={() => router.replace("/(auth)/unlock")}
-            size="md"
             variant="ghost"
             labelClassName="text-muted-foreground"
           >

@@ -110,7 +110,6 @@ export default function LeakProgressScreen() {
                 {isDone ? (
                   <View
                     className="rounded-full px-2.5 py-1"
-                    style={{ backgroundColor: withAlpha(palette.success, 0.14) }}
                   >
                     <Text
                       className="text-[10px] font-semibold"

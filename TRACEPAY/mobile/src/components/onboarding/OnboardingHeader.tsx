@@ -26,7 +26,6 @@ function OnboardingHeaderComponent({
           disabled={disabled}
           hitSlop={12}
           onPress={onBack}
-          size="sm"
           variant="ghost"
           className="min-h-11 px-0"
         >
@@ -42,7 +41,6 @@ function OnboardingHeaderComponent({
           disabled={disabled}
           hitSlop={12}
           onPress={onSkip}
-          size="sm"
           variant="ghost"
           className="min-h-11 px-0"
         >

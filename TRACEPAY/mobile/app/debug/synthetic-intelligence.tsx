@@ -133,7 +133,6 @@ function SyntheticIntelligenceDebugScreen() {
               accessibilityLabel="Run analysis"
               disabled={!selected}
               loading={running}
-              size="md"
               onPress={runAnalysis}
             >
               Run analysis
@@ -231,7 +230,6 @@ function AnalysisSummary({ analysis }: { analysis: SyntheticScenarioAnalysis }) 
       <View className="mt-5 gap-3">
         <Button
           accessibilityLabel="Open leak intelligence"
-          size="md"
           variant="outline"
           onPress={() =>
             router.push({
@@ -244,7 +242,6 @@ function AnalysisSummary({ analysis }: { analysis: SyntheticScenarioAnalysis }) 
         </Button>
         <Button
           accessibilityLabel="Open financial reasoning"
-          size="md"
           variant="outline"
           onPress={() =>
             router.push({
@@ -257,7 +254,6 @@ function AnalysisSummary({ analysis }: { analysis: SyntheticScenarioAnalysis }) 
         </Button>
         <Button
           accessibilityLabel="Open recommendations"
-          size="md"
           variant="outline"
           onPress={() =>
             router.push({
@@ -356,7 +352,7 @@ function ErrorState({
     <View className="mt-6 rounded-3xl bg-card px-5 py-5">
       <Text className="text-[16px] font-semibold text-destructive">{title}</Text>
       <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">{message}</Text>
-      <Button className="mt-4 self-start" size="sm" variant="outline" onPress={onRetry}>
+      <Button className="mt-4 self-start" variant="outline" onPress={onRetry}>
         Try again
       </Button>
     </View>

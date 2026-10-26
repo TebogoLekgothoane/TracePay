@@ -39,7 +39,6 @@ export default function FixCompareScreen() {
 
           <Button
             className="mt-6"
-            size="md"
             onPress={() => router.push(`/leak/${leakId}/fix/${actionId}/guide`)}
           >
             {detail.compareCta}
@@ -104,7 +103,6 @@ export default function FixCompareScreen() {
 
         <Button
           className="mt-6"
-          size="md"
           onPress={() => router.push(`/leak/${leakId}/fix/${actionId}/guide`)}
         >
           <>
@@ -117,7 +115,6 @@ export default function FixCompareScreen() {
 
         <Button
           className="mt-3"
-          size="md"
           variant="muted"
           onPress={() => router.push(`/leak/${leakId}/fix/${actionId}/guide`)}
         >

@@ -19,6 +19,7 @@ import {
   type DocumentActionsMenuAction,
 } from "../../../src/components/ui/DocumentActionsMenu";
 import { Modal } from "../../../src/components/ui/Modal";
+import { SkeletonRows } from "../../../src/components/ui/SkeletonGroups";
 import { resolveInstitutionLogoDomain } from "../../../src/features/accounts/account.constants";
 import {
   ADD_ACCOUNT_HREF,
@@ -261,8 +262,8 @@ export default function LinkedAccountsScreen() {
           ) : null}
 
           {loading && accounts.length === 0 ? (
-            <View className="mt-8 rounded-[20px] bg-card px-4 py-5">
-              <Text className="text-[14px] text-muted-foreground">Loading your accounts…</Text>
+            <View className="mt-8">
+              <SkeletonRows count={3} />
             </View>
           ) : null}
 
@@ -344,7 +345,6 @@ export default function LinkedAccountsScreen() {
             className="mt-8"
             disabled={busy}
             onPress={() => router.push(ADD_ACCOUNT_HREF)}
-            size="md"
           >
             <>
               <Plus color={trace.primaryForeground} size={18} strokeWidth={2.4} />
@@ -379,7 +379,6 @@ export default function LinkedAccountsScreen() {
               <Button
                 className="flex-1"
                 disabled={renaming}
-                size="md"
                 variant="secondary"
                 onPress={closeRename}
               >
@@ -388,7 +387,6 @@ export default function LinkedAccountsScreen() {
               <Button
                 className="flex-1"
                 disabled={renaming}
-                size="md"
                 onPress={submitRename}
               >
                 {renaming ? "Saving…" : "Save"}

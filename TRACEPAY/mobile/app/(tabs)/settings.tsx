@@ -91,6 +91,12 @@ const ACCOUNT_ROWS: SettingsRow[] = [
 
 const PREFERENCE_ROWS: SettingsRow[] = [
   {
+    id: "monitoring",
+    label: "Monitoring",
+    Icon: Bell,
+    href: "/monitoring",
+  },
+  {
     id: "notifications",
     label: "Notifications",
     Icon: Bell,
@@ -361,7 +367,6 @@ export default function ProfileScreen() {
             className="mt-6"
             loading={loggingOut}
             onPress={handleLogout}
-            size="md"
             variant="destructive"
           >
             <>

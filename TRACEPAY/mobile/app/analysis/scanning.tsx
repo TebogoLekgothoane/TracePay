@@ -14,7 +14,7 @@ export default function ScanningScreen() {
         <Text className="mt-2 text-center text-[14px] text-muted-foreground">
           Transaction scan will start here.
         </Text>
-        <Button className="mt-6" size="md" onPress={() => router.back()}>
+        <Button className="mt-6" onPress={() => router.back()}>
           Go back
         </Button>
       </View>

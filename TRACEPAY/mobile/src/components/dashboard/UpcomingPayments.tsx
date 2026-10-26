@@ -9,6 +9,7 @@ import {
 import { resolveLogoDomainFromMerchantLabel } from "../../features/transactions/merchant-logos";
 import { COLORS, withAlpha } from "../../theme/colors";
 import { formatRandAmount } from "../../utils/currency";
+import { Skeleton } from "../ui/Skeleton";
 import { BrandLogo } from "../ui/BrandLogo";
 
 type Props = {
@@ -64,7 +65,7 @@ export function UpcomingPayments({ payments, loading, error, onSeeAll }: Props) 
           {payments.map((payment) => (
             <View
               key={payment.id}
-              className="w-[156px] rounded-2xl border border-border/60 bg-card p-3.5"
+              className="w-[156px] rounded-2xl bg-card p-3.5"
             >
               <View className="flex-row items-center gap-2.5">
                 <PaymentLogo payment={payment} />
@@ -84,12 +85,23 @@ export function UpcomingPayments({ payments, loading, error, onSeeAll }: Props) 
             </View>
           ))}
         </ScrollView>
+      ) : loading ? (
+        <View className="flex-row gap-3">
+          {[0, 1].map((i) => (
+            <View
+              key={i}
+              className="w-[150px] gap-3 rounded-2xl bg-card p-4"
+            >
+              <Skeleton width={36} height={36} radius={10} />
+              <Skeleton width="70%" height={13} />
+              <Skeleton width="45%" height={11} />
+            </View>
+          ))}
+        </View>
       ) : (
-        <View className="rounded-2xl border border-border/60 bg-card px-4 py-4">
+        <View className="rounded-2xl bg-card px-4 py-4">
           <Text className="text-[13px] leading-5 text-muted-foreground">
-            {loading
-              ? "Looking for your recurring payments…"
-              : error
+            {error
                 ? "Upcoming payments could not be loaded right now."
                 : "No upcoming payments yet. They appear once TracePay sees a charge repeat in your statements."}
           </Text>

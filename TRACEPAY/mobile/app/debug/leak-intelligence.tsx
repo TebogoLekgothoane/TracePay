@@ -131,7 +131,6 @@ function LeakIntelligenceDebugScreen() {
               <Button
                 accessibilityLabel="Refresh Analysis"
                 loading={loading}
-                size="md"
                 onPress={refresh}
               >
                 Refresh Analysis
@@ -192,7 +191,7 @@ function ErrorState({
       <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">
         {message}
       </Text>
-      <Button className="mt-4 self-start" size="sm" variant="outline" onPress={onRetry}>
+      <Button className="mt-4 self-start" variant="outline" onPress={onRetry}>
         Try again
       </Button>
     </View>

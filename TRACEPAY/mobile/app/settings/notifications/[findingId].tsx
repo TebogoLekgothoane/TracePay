@@ -239,7 +239,6 @@ export default function FindingGuidanceScreen() {
                     <Button
                       key={actionType}
                       variant="secondary"
-                      size="md"
                       loading={pending === actionType}
                       disabled={saving}
                       onPress={() => void onRecord(actionType)}

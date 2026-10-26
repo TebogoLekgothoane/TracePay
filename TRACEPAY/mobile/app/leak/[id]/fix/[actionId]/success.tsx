@@ -70,7 +70,6 @@ export default function FixSuccessScreen() {
               <View key={step} className="flex-row items-start gap-3">
                 <View
                   className="mt-0.5 h-5 w-5 items-center justify-center rounded-full"
-                  style={{ backgroundColor: withAlpha(palette.primary, 0.14) }}
                 >
                   <Check color={palette.primary} size={12} strokeWidth={2.5} />
                 </View>
@@ -82,7 +81,6 @@ export default function FixSuccessScreen() {
 
         <Button
           className="mt-8"
-          size="md"
           onPress={() => router.replace(`/leak/${leakId}/progress`)}
         >
           {detail.doneCta}

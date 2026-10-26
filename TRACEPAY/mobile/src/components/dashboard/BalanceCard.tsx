@@ -1,10 +1,11 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { ArrowRight, Eye, EyeOff, Upload } from "lucide-react-native";
+import { ArrowRight, Eye, EyeOff, Plus, Upload } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
 
 import { TRACEPAY } from "../../theme/colors";
 import { InstitutionLogo } from "../accounts/InstitutionLogo";
 import { Button } from "../ui/Button";
+import { Skeleton } from "../ui/Skeleton";
 import type { AccountPreview } from "./AccountsCard";
 
 type Props = {
@@ -12,9 +13,11 @@ type Props = {
   metaLabel: string;
   accounts: AccountPreview[];
   hidden?: boolean;
+  loading?: boolean;
   onToggleVisibility?: () => void;
   onImportStatement?: () => void;
   onViewAccounts?: () => void;
+  onAddAccount?: () => void;
 };
 
 const MAX_CHIPS = 3;
@@ -42,7 +45,13 @@ function BalanceAmount({ balance, hidden }: { balance: string; hidden: boolean }
 }
 
 /** Overlapping bank logos for the connected accounts, with a "+N" for the rest. */
-function AccountChips({ accounts }: { accounts: AccountPreview[] }) {
+function AccountChips({
+  accounts,
+  onAddAccount,
+}: {
+  accounts: AccountPreview[];
+  onAddAccount?: () => void;
+}) {
   const shown = accounts.slice(0, MAX_CHIPS);
   const extra = accounts.length - shown.length;
   return (
@@ -72,7 +81,17 @@ function AccountChips({ accounts }: { accounts: AccountPreview[] }) {
           <Text className="text-[12px] font-semibold text-white">+{extra}</Text>
         </View>
       ) : null}
-    </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Add another bank"
+        hitSlop={6}
+        className="h-[38px] w-[38px] justify-center active:opacity-70"
+        style={{ marginLeft: accounts.length > 0 ? 0 : 6 }}
+    onPress={onAddAccount}
+  >
+    <Plus color="#FFFFFF" size={18} strokeWidth={2.4} />
+  </Pressable>
+</View>
   );
 }
 
@@ -81,9 +100,11 @@ export function BalanceCard({
   metaLabel,
   accounts,
   hidden = false,
+  loading = false,
   onToggleVisibility,
   onImportStatement,
   onViewAccounts,
+  onAddAccount,
 }: Props) {
   const heading =
     accounts.length > 0
@@ -104,15 +125,23 @@ export function BalanceCard({
       }}
     >
       <View className="flex-row items-start justify-between gap-3">
-        <View className="min-w-0 flex-1">
-          <Text className="text-[13px] font-medium text-white/70">{heading}</Text>
-          <View className="mt-1.5">
-            <BalanceAmount balance={balance} hidden={hidden} />
+        {loading ? (
+          <View className="min-w-0 flex-1 gap-2.5 py-1">
+            <Skeleton onDark width={130} height={13} />
+            <Skeleton onDark width={190} height={34} radius={10} />
+            <Skeleton onDark width={150} height={11} />
           </View>
-          <Text className="mt-1.5 text-[12px] leading-5 text-white/60" numberOfLines={2}>
-            {metaLabel}
-          </Text>
-        </View>
+        ) : (
+          <View className="min-w-0 flex-1">
+            <Text className="text-[13px] font-medium text-white/70">{heading}</Text>
+            <View className="mt-1.5">
+              <BalanceAmount balance={balance} hidden={hidden} />
+            </View>
+            <Text className="mt-1.5 text-[12px] leading-5 text-white/60" numberOfLines={2}>
+              {metaLabel}
+            </Text>
+          </View>
+        )}
 
         <View className="flex-row gap-2">
           <Pressable
@@ -141,21 +170,20 @@ export function BalanceCard({
       </View>
 
       <View className="mt-5 flex-row items-center justify-between gap-3">
-        {accounts.length > 0 ? (
+        {loading ? (
           <>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="View accounts"
-              className="h-11 flex-row items-center gap-2 rounded-full border border-white/20 bg-white/15 px-5 active:opacity-80"
-              onPress={onViewAccounts}
-            >
-              <Text className="text-[14px] font-semibold text-white">View accounts</Text>
-              <ArrowRight color="#FFFFFF" size={16} strokeWidth={2.2} />
-            </Pressable>
-            <AccountChips accounts={accounts} />
+            <Skeleton onDark width={160} height={56} radius={28} />
+            <View className="flex-row">
+              <Skeleton onDark width={34} height={34} circle />
+            </View>
+          </>
+        ) : accounts.length > 0 ? (
+          <>
+          
+            <AccountChips accounts={accounts} onAddAccount={onAddAccount ?? onImportStatement} />
           </>
         ) : (
-          <Button className="flex-1" size="md" onPress={onImportStatement}>
+          <Button className="flex-1" onPress={onImportStatement}>
             <>
               <Upload color="#FFFFFF" size={17} strokeWidth={2.2} />
               <Text className="text-[14px] font-semibold text-white">Add a statement</Text>

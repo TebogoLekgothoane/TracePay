@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useColorScheme } from "nativewind";
-import type { ReactNode } from "react";
+import { Children, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -19,14 +19,13 @@ export type ButtonVariant =
   | "outline"
   | "muted"
   | "ghost"
-  | "destructive";
-
-export type ButtonSize = "lg" | "md" | "sm";
+  | "destructive"
+  /** Translucent white, for buttons sitting on the dark purple balance card. */
+  | "light";
 
 type Props = Omit<PressableProps, "children" | "style"> & {
   children: ReactNode;
   variant?: ButtonVariant;
-  size?: ButtonSize;
   loading?: boolean;
   arrow?: boolean;
   className?: string;
@@ -36,11 +35,12 @@ type Props = Omit<PressableProps, "children" | "style"> & {
 
 const CONTAINER: Record<ButtonVariant, string> = {
   primary: "bg-primary",
-  secondary: "border border-border bg-card",
-  outline: "border border-primary bg-transparent",
+  secondary: "bg-card",
+  outline: "bg-primary/10",
   muted: "bg-muted",
   ghost: "bg-transparent",
   destructive: "bg-muted",
+  light: "bg-white/15",
 };
 
 const LABEL: Record<ButtonVariant, string> = {
@@ -50,24 +50,25 @@ const LABEL: Record<ButtonVariant, string> = {
   muted: "text-primary",
   ghost: "text-primary",
   destructive: "text-destructive",
+  light: "text-white",
 };
 
-const SIZE: Record<ButtonSize, string> = {
-  lg: "min-h-[56px] px-6",
-  md: "min-h-[48px] px-5",
-  sm: "min-h-[40px] px-4",
-};
+/** One size for every button, so they all line up across the app. */
+const SIZE = "min-h-[56px] px-6";
+const LABEL_SIZE = "text-[16px] font-bold";
 
-const LABEL_SIZE: Record<ButtonSize, string> = {
-  lg: "text-[16px] font-bold",
-  md: "text-[15px] font-semibold",
-  sm: "text-[13px] font-semibold",
-};
+/** Joins `Text {value} more` style children into one label so they never render bare. */
+function labelFrom(children: ReactNode): string | null {
+  const parts = Children.toArray(children);
+  if (parts.length === 0) return null;
+  return parts.every((part) => typeof part === "string" || typeof part === "number")
+    ? parts.join("")
+    : null;
+}
 
 export function Button({
   children,
   variant = "primary",
-  size = "lg",
   loading = false,
   arrow = false,
   disabled,
@@ -81,26 +82,27 @@ export function Button({
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
   const isDisabled = Boolean(disabled || loading);
-  const spinnerColor =
-    variant === "primary" ? COLORS.white : palette.primary;
-  const iconColor =
-    variant === "primary" ? COLORS.white : palette.primary;
+  const onFill = variant === "primary" || variant === "light";
+  const spinnerColor = onFill ? COLORS.white : palette.primary;
+  const iconColor = onFill ? COLORS.white : palette.primary;
+  const label = labelFrom(children);
 
   return (
     <Pressable
       accessibilityRole={accessibilityRole}
       disabled={isDisabled}
-      className={`flex-row items-center justify-center gap-2 rounded-full active:opacity-80 ${SIZE[size]} ${CONTAINER[variant]} ${isDisabled ? "opacity-50" : ""} ${className}`}
+      className={`flex-row items-center justify-center gap-2 rounded-full active:opacity-80 ${SIZE} ${CONTAINER[variant]} ${isDisabled ? "opacity-50" : ""} ${className}`}
       style={style}
       {...props}
     >
       {loading ? (
         <ActivityIndicator color={spinnerColor} />
-      ) : typeof children === "string" || typeof children === "number" ? (
+      ) : label !== null ? (
         <Text
-          className={`${LABEL_SIZE[size]} ${LABEL[variant]} ${labelClassName}`}
+          className={`${LABEL_SIZE} ${LABEL[variant]} ${labelClassName}`}
+          numberOfLines={1}
         >
-          {children}
+          {label}
         </Text>
       ) : (
         children

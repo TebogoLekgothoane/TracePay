@@ -235,7 +235,7 @@ function DocumentCard({
   const label = bankName ? `${bankName.toUpperCase()} STATEMENT` : "BANK STATEMENT";
 
   return (
-    <View className="w-[220px] rounded-3xl border border-border bg-card px-4 pb-3.5 pt-4">
+    <View className="w-[220px] rounded-3xl bg-card px-4 pb-3.5 pt-4">
       <View className="mb-3.5 flex-row items-center">
         <FileText color={palette.primary} size={16} strokeWidth={2.2} />
         <Text
@@ -355,7 +355,7 @@ function statusIcon(status: QueueItemStatus, palette: ReturnType<typeof usePalet
 export function QueueStatusList({ rows }: { rows: ReadonlyArray<QueueStatusRow> }) {
   const palette = usePalette();
   return (
-    <View className="w-full rounded-3xl border border-border bg-card">
+    <View className="w-full rounded-3xl bg-card">
       {rows.map((row, index) => (
         <View key={row.id}>
           {index > 0 ? <View className="mx-4 h-px bg-border" /> : null}
@@ -471,7 +471,7 @@ export function StatementProcessingScreen({
             </View>
           </View>
 
-          <View className="mt-7 rounded-3xl border border-border bg-card px-3.5 pb-4 pt-[18px]">
+          <View className="mt-7 rounded-3xl bg-card px-3.5 pb-4 pt-[18px]">
             <ConnectedStepper current={current} />
 
             <View className="mt-5 flex-row items-center gap-3">

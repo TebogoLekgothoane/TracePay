@@ -101,7 +101,6 @@ export default function FixActionDetailScreen() {
                       {account.featured ? (
                         <View
                           className="rounded-full px-2 py-0.5"
-                          style={{ backgroundColor: withAlpha(palette.success, 0.14) }}
                         >
                           <Text
                             className="text-[10px] font-semibold"
@@ -120,7 +119,6 @@ export default function FixActionDetailScreen() {
                         <View
                           key={tag}
                           className="rounded-full px-2 py-0.5"
-                          style={{ backgroundColor: withAlpha(palette.primary, 0.1) }}
                         >
                           <Text className="text-[10px] font-medium text-primary">{tag}</Text>
                         </View>
@@ -148,7 +146,6 @@ export default function FixActionDetailScreen() {
 
         <Button
           className="mt-6"
-          size="md"
           onPress={() => router.push(nextRoute as never)}
         >
           {detail.bankComparison

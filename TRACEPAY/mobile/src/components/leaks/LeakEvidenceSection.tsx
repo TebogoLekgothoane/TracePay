@@ -31,7 +31,7 @@ export function LeakEvidenceSection({ analysis }: { analysis: LeakAnalysis | nul
         : "text-muted-foreground";
 
   return (
-    <View className="mt-5 rounded-3xl border border-border bg-card px-4 py-4">
+    <View className="mt-5 rounded-3xl bg-card px-4 py-4">
       <Text className="text-[16px] font-bold text-foreground">Evidence</Text>
 
       <Block title={confirmed ? "Amount" : "Amount (not a confirmed saving)"}>

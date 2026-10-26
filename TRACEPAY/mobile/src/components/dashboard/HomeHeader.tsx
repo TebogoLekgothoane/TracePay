@@ -11,7 +11,6 @@ type Props = {
   initials: string;
   hasUnreadNotifications: boolean;
   onNotificationsPress: () => void;
-  onProfilePress: () => void;
 };
 
 export function HomeHeader({

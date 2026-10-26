@@ -258,7 +258,6 @@ export default function PersonalDetailsScreen() {
               disabled={!canSave}
               loading={saving}
               onPress={handleSave}
-              size="md"
             >
               Save changes
             </Button>

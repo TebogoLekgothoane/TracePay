@@ -9,7 +9,7 @@ export function AnthropicAnalysisCard({ analysis, mode }: { analysis: AnthropicA
   if (!analysis) return null;
   const items = mode === "leaks" ? analysis.leaks : analysis.subscriptions;
   return (
-    <View className="mt-6 rounded-3xl border border-primary/20 bg-primary/5 px-5 py-5">
+    <View className="mt-6 rounded-3xl bg-primary/5 px-5 py-5">
       <Text className="text-[12px] font-semibold uppercase tracking-[0.8px] text-primary">Anthropic AI analysis</Text>
       <Text className="mt-1 text-[16px] font-bold text-foreground">
         {analysis.available ? `${items.length} AI ${mode} found` : "AI analysis unavailable"}
@@ -65,7 +65,6 @@ export function AnthropicAnalysisSection({
       <Button
         accessibilityLabel={analysis ? "Run AI analysis again" : "Run AI analysis"}
         loading={loading}
-        size="md"
         variant="outline"
         onPress={onRun}
       >

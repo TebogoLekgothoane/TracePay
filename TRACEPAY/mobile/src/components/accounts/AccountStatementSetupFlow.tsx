@@ -899,7 +899,7 @@ export function AccountStatementSetupFlow({
                       key={account.id}
                       accessibilityRole="button"
                       accessibilityState={{ disabled: busy }}
-                      className="rounded-2xl border border-border bg-card px-4 py-3 active:opacity-80"
+                      className="rounded-2xl bg-card px-4 py-3 active:opacity-80"
                       disabled={busy}
                       onPress={() =>
                         void pickAndRun({
@@ -919,7 +919,7 @@ export function AccountStatementSetupFlow({
                   <Pressable
                     accessibilityRole="button"
                     accessibilityState={{ disabled: busy }}
-                    className="rounded-2xl border border-dashed border-primary bg-primary/5 px-4 py-3 active:opacity-80"
+                    className="rounded-2xl bg-primary/5 px-4 py-3 active:opacity-80"
                     disabled={busy}
                     onPress={() => void pickAndRun({ account: null, bank: chooserBank })}
                   >
@@ -934,7 +934,6 @@ export function AccountStatementSetupFlow({
                 <Button
                   className="mt-4"
                   disabled={busy}
-                  size="sm"
                   variant="secondary"
                   onPress={() => setChooserBank(null)}
                 >
@@ -954,7 +953,7 @@ export function AccountStatementSetupFlow({
                       key={account.id}
                       accessibilityRole="button"
                       accessibilityState={{ disabled: busy }}
-                      className="rounded-2xl border border-border bg-card px-4 py-3 active:opacity-80"
+                      className="rounded-2xl bg-card px-4 py-3 active:opacity-80"
                       disabled={busy}
                       onPress={() =>
                         void pickAndRun({
@@ -989,7 +988,7 @@ export function AccountStatementSetupFlow({
               <Pressable
                 accessibilityRole="button"
                 accessibilityState={{ disabled: busy }}
-                className={`mt-4 items-center rounded-3xl border border-dashed border-border bg-card px-6 py-14 ${
+                className={`mt-4 items-center rounded-3xl bg-card px-6 py-14 ${
                   busy ? "opacity-50" : "active:opacity-90"
                 }`}
                 disabled={busy}

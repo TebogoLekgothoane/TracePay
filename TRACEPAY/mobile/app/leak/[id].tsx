@@ -244,7 +244,7 @@ function LeakDetailContent() {
         <Text className="text-center text-[16px] font-semibold text-foreground">
           This leak could not be found.
         </Text>
-        <Button className="mt-4" size="md" onPress={() => router.back()}>
+        <Button className="mt-4" onPress={() => router.back()}>
           Go back
         </Button>
       </SafeAreaView>
@@ -684,7 +684,7 @@ function UpcomingSubscriptionsSection({
               key={item.id}
               accessibilityRole="button"
               accessibilityLabel={`${item.name}, next charge ${item.nextChargeLabel}`}
-              className="flex-row items-center gap-3 rounded-2xl border border-border/70 bg-card px-4 py-3.5 active:opacity-80"
+              className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-80"
               onPress={() => router.push(`/leak/subscription/${item.id}`)}
             >
               {item.logoDomain ? (

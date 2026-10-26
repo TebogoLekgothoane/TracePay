@@ -182,7 +182,7 @@ export default function SecurityScreen() {
                 </Text>
               </Pressable>
             ) : (
-              <Button className="mt-2" onPress={handleSetupPin} size="md">
+              <Button className="mt-2" onPress={handleSetupPin}>
                 Set up PIN
               </Button>
             )}
