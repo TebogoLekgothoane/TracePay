@@ -1,9 +1,9 @@
 import { router, useFocusEffect } from "expo-router";
 import { Download } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { LeaksSummaryCard } from "../../src/components/leaks/LeaksSummaryCard";
 import { LockedLeakRow } from "../../src/components/leaks/LockedLeakRow";
@@ -26,6 +26,7 @@ import {
   listPotentialLeaks,
   type ReviewStatus,
 } from "../../src/features/leaks/potential-leaks";
+import { useTabBarScroll } from "../../src/context/TabBarScrollContext";
 import { COLORS } from "../../src/theme/colors";
 
 export default function LeaksScreen() {
@@ -37,14 +38,23 @@ export default function LeaksScreen() {
   const total = useMemo(() => totalMonthlyLeaks(leaks), [leaks]);
   const paywall = useMemo(() => splitLeaksForPaywall(leaks), [leaks]);
   const { unlocked, hydrated } = useLeakEntitlement();
+  const insets = useSafeAreaInsets();
+  const { tabBarLift } = useTabBarScroll();
+  const showUnlockBar = hydrated && !unlocked && paywall.locked.length > 0;
   const { products, entitlements, refresh } = useBilling();
   const price = products?.fullAnalysis.priceCents;
-  const unlockLabel = price ? `Unlock full analysis` : "Unlock full analysis";
+  const unlockLabel = price ? `Unlock full analysis · ${formatWholeRand(price)}` : "Unlock full analysis";
   useFocusEffect(
     useCallback(() => {
       void refresh();
-    }, [refresh]),
+      return () => {
+        tabBarLift.value = 0;
+      };
+    }, [refresh, tabBarLift]),
   );
+  useEffect(() => {
+    if (!showUnlockBar) tabBarLift.value = 0;
+  }, [showUnlockBar, tabBarLift]);
   const visible = useMemo(
     () => (filter === "all" ? leaks : leaks.filter((leak) => leak.status === filter)),
     [filter, leaks],
@@ -63,7 +73,7 @@ export default function LeaksScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <TabScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: 120 }}
+        contentContainerStyle={{ paddingBottom: showUnlockBar ? 200 : 120 }}
         showsVerticalScrollIndicator={false}
       >
         <View className="px-5 pt-1">
@@ -170,11 +180,12 @@ export default function LeaksScreen() {
           ) : (
             <>
               <Text className="mb-1 mt-7 text-[22px] font-bold tracking-[-0.3px] text-foreground">
-                Top {FREE_LEAK_COUNT} leaks
+                Biggest leaks
               </Text>
               <Text className="text-[14px] leading-5 text-muted-foreground">
-                {leaks.length} potential {leaks.length === 1 ? "leak" : "leaks"} detected, an estimated{" "}
-                {total} a month. Here are the biggest.
+                {leaks.length} potential {leaks.length === 1 ? "leak" : "leaks"} · {total} estimated
+                monthly impact
+                {FREE_LEAK_COUNT < leaks.length ? `. Showing the top ${FREE_LEAK_COUNT}.` : ""}
               </Text>
 
               <View className="mt-4 gap-3">
@@ -186,10 +197,10 @@ export default function LeaksScreen() {
               {paywall.locked.length > 0 ? (
                 <>
                   <Text className="mb-1 mt-7 text-[22px] font-bold tracking-[-0.3px] text-foreground">
-                    {paywall.locked.length} more {paywall.locked.length === 1 ? "leak" : "leaks"} found
+                    {paywall.locked.length} more {paywall.locked.length === 1 ? "leak" : "leaks"} detected
                   </Text>
                   <Text className="text-[14px] leading-5 text-muted-foreground">
-                    Upgrade to see every leak, what it costs you and how to fix it.
+                    See the full breakdown and steps to investigate.
                   </Text>
 
                   <View className="mt-4 gap-2">
@@ -198,19 +209,29 @@ export default function LeaksScreen() {
                     ))}
                   </View>
 
-                  <Button className="mt-4" onPress={openUpgrade}>
-                    {unlockLabel}
-                  </Button>
-                  <Text className="mt-1.5 text-center text-[12px] text-muted-foreground">
-                    One payment. Not a subscription.
-                  </Text>
-                  
                 </>
               ) : null}
             </>
           )}
         </View>
       </TabScrollView>
+
+      {showUnlockBar ? (
+        <View
+          className="absolute bottom-0 left-0 right-0 border-t border-border/40 bg-background px-5 pt-2.5"
+          style={{ paddingBottom: Math.max(insets.bottom, 8) }}
+          onLayout={(event) => {
+            tabBarLift.value = event.nativeEvent.layout.height;
+          }}
+        >
+          <Button onPress={openUpgrade} arrow style={{ minHeight: 44 }}>
+            {unlockLabel}
+          </Button>
+          <Text className="mt-1.5 text-center text-[11px] text-muted-foreground">
+            One payment. Not a subscription.
+          </Text>
+        </View>
+      ) : null}
 
       <InfoSheet
         visible={showDownloadInfo}

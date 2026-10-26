@@ -56,10 +56,10 @@ export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const palette = COLORS[isDark ? "dark" : "light"];
-  const { tabBarOffset } = useTabBarScroll();
+  const { tabBarOffset, tabBarLift } = useTabBarScroll();
 
   const containerStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: tabBarOffset.value }],
+    transform: [{ translateY: tabBarOffset.value - tabBarLift.value }],
   }));
 
   const focusedName = state.routes[state.index]?.name;

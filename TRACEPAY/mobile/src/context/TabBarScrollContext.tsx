@@ -16,6 +16,8 @@ const SCROLL_THRESHOLD = 4;
 
 type TabBarScrollContextValue = {
   tabBarOffset: SharedValue<number>;
+  /** Extra height a screen pins below the tab bar; the bar rides up by this much. */
+  tabBarLift: SharedValue<number>;
   onScroll: ReturnType<typeof useAnimatedScrollHandler>;
 };
 
@@ -26,6 +28,7 @@ const TabBarScrollContext = createContext<TabBarScrollContextValue | null>(
 export function TabBarScrollProvider({ children }: PropsWithChildren) {
   const scrollY = useSharedValue(0);
   const tabBarOffset = useSharedValue(0);
+  const tabBarLift = useSharedValue(0);
 
   const onScroll = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -56,9 +59,10 @@ export function TabBarScrollProvider({ children }: PropsWithChildren) {
   const value = useMemo(
     () => ({
       tabBarOffset,
+      tabBarLift,
       onScroll,
     }),
-    [onScroll, tabBarOffset],
+    [onScroll, tabBarOffset, tabBarLift],
   );
 
   return (
