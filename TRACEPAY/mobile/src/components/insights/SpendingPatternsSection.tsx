@@ -34,98 +34,6 @@ export function SpendingPatternsSection() {
     [data],
   );
 
-  return (
-    <View className="mt-8">
-      <View className="mb-1 flex-row items-center justify-between">
-        <View className="flex-1 pr-3">
-          <Text className="text-[17px] font-bold text-foreground">
-            Your Spending Patterns
-          </Text>
-          <Text className="mt-1 text-[13px] leading-5 text-muted-foreground">
-            Clear signals from your recent transactions.
-          </Text>
-        </View>
-        <View
-          className="h-10 w-10 items-center justify-center rounded-2xl"
-          style={{ backgroundColor: withAlpha(palette.primary, 0.12) }}
-        >
-          <BarChart3 color={palette.primary} size={19} strokeWidth={2.2} />
-        </View>
-      </View>
-
-      {loading && !data ? (
-        <View className="mt-4">
-          <SkeletonCard height={120} />
-        </View>
-      ) : error && !data ? (
-        <View className="mt-4 rounded-3xl bg-card p-4">
-          <Text className="text-[14px] font-semibold text-foreground">
-            Spending patterns unavailable
-          </Text>
-          <Text className="mt-1 text-[13px] leading-5 text-muted-foreground">{error}</Text>
-          <Pressable
-            accessibilityRole="button"
-            className="mt-3 self-start active:opacity-70"
-            onPress={retry}
-          >
-            <Text className="text-[13px] font-semibold text-primary">Try again</Text>
-          </Pressable>
-        </View>
-      ) : !data || !data.referenceDate || !patterns ? (
-        <View className="mt-4 rounded-3xl bg-card p-4">
-          <Text className="text-[14px] font-semibold text-foreground">
-            No transactions yet
-          </Text>
-          <Text className="mt-1 text-[13px] leading-5 text-muted-foreground">
-            Add a bank statement and TracePay will show where your money goes. Patterns can only
-            come from the statements you add.
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            className="mt-3 self-start active:opacity-70"
-            onPress={() => router.push("/statements/coverage")}
-          >
-            <Text className="text-[13px] font-semibold text-primary">Add a statement</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <>
-          {!data.isCurrent ? (
-            <View className="mt-3 rounded-2xl bg-muted px-3 py-2">
-              <Text className="text-[12px] leading-[18px] text-muted-foreground">
-                Your latest statement activity is from {formatLongDate(data.referenceDate)}. These
-                patterns describe that day and the weeks before it. Add a newer statement to see
-                today.
-              </Text>
-            </View>
-          ) : null}
-          <TodaySummary
-            patterns={patterns}
-            palette={palette}
-            isCurrent={data.isCurrent}
-            referenceDate={data.referenceDate}
-          />
-          {patterns.insights.length > 0 ? (
-            <View className="mt-3 gap-3">
-              {patterns.insights.map((insight, index) => (
-                <PatternCard
-                  key={insight.id}
-                  insight={insight}
-                  icon={patternIcons[index % patternIcons.length]}
-                  palette={palette}
-                />
-              ))}
-            </View>
-          ) : (
-            <Text className="mt-3 text-[13px] leading-5 text-muted-foreground">
-              No unusual patterns in your recent spending.
-            </Text>
-          )}
-        </>
-      )}
-    </View>
-  );
-}
 
 function formatLongDate(date: Date): string {
   return date.toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" });
@@ -142,49 +50,7 @@ function TodaySummary({
   isCurrent: boolean;
   referenceDate: Date;
 }) {
-  return (
-    <View className="mt-4 rounded-3xl bg-card p-4">
-      <View className="flex-row items-start justify-between gap-3">
-        <View className="flex-1">
-          <Text className="text-[13px] font-medium text-muted-foreground">
-            {isCurrent
-              ? "Today’s spending"
-              : `Spending on ${referenceDate.toLocaleDateString("en-ZA", { day: "numeric", month: "short" })}`}
-          </Text>
-          <Text className="mt-1 text-[26px] font-bold tracking-[-0.4px] text-foreground">
-            {formatRand(patterns.todayTotal)}
-          </Text>
-          <Text className="mt-1 text-[12px] text-muted-foreground">
-            {patterns.todayCount === 0
-              ? isCurrent
-                ? "No spending recorded today"
-                : "No spending recorded that day"
-              : `${patterns.todayCount} ${patterns.todayCount === 1 ? "payment" : "payments"} recorded`}
-          </Text>
-        </View>
-        <Button
-          variant="muted"
-          accessibilityLabel="View today's transactions"
-          onPress={() => router.push("/(tabs)/transactions")}
-        >
-          View
-        </Button>
-      </View>
-
-      {patterns.todayCategories.length > 0 ? (
-        <View className="mt-4 gap-2 border-t border-border/60 pt-3">
-          {patterns.todayCategories.slice(0, 4).map((category) => (
-            <View key={category.name} className="flex-row items-center justify-between">
-              <Text className="text-[13px] text-muted-foreground">{category.name}</Text>
-              <Text className="text-[13px] font-semibold text-foreground">
-                {formatRand(category.amount)}
-              </Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
-    </View>
-  );
+  
 }
 
 function PatternCard({
@@ -230,4 +96,5 @@ function formatRand(value: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
 }

@@ -1,8 +1,11 @@
+import { Canvas, LinearGradient, RoundedRect, vec } from "@shopify/react-native-skia";
 import { useColorScheme } from "nativewind";
-import { useEffect } from "react";
-import Animated, {
+import { useEffect, useState } from "react";
+import type { LayoutChangeEvent } from "react-native";
+import { View } from "react-native";
+import {
   Easing,
-  useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withRepeat,
   withTiming,
@@ -11,7 +14,7 @@ import Animated, {
 import { COLORS, withAlpha } from "../../theme/colors";
 import type { SkeletonProps } from "./Skeleton.types";
 
-/** Pulsing placeholder block (non-iOS fallback for the SwiftUI skeleton). */
+/** Placeholder block with a light sweep across it (non-iOS; iOS uses the SwiftUI skeleton). */
 export function Skeleton({
   width = "100%",
   height = 14,
@@ -21,31 +24,37 @@ export function Skeleton({
 }: SkeletonProps) {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
-  const pulse = useSharedValue(1);
+  const [measured, setMeasured] = useState<number>(typeof width === "number" ? width : 0);
+  const sweep = useSharedValue(0);
 
   useEffect(() => {
-    pulse.value = withRepeat(
-      withTiming(0.45, { duration: 900, easing: Easing.inOut(Easing.ease) }),
-      -1,
-      true,
-    );
-  }, [pulse]);
+    sweep.value = withRepeat(withTiming(1, { duration: 1300, easing: Easing.inOut(Easing.ease) }), -1, false);
+  }, [sweep]);
 
-  const style = useAnimatedStyle(() => ({ opacity: pulse.value }));
+  const base = onDark ? "rgba(255,255,255,0.22)" : withAlpha(palette.mutedForeground, 0.2);
+  const shine = onDark ? "rgba(255,255,255,0.45)" : withAlpha(palette.mutedForeground, 0.38);
+  const w = measured;
+  const corner = circle ? height / 2 : radius;
+
+  const start = useDerivedValue(() => vec(-w + sweep.value * w * 2, 0));
+  const end = useDerivedValue(() => vec(sweep.value * w * 2, 0));
 
   return (
-    <Animated.View
-      style={[
-        {
-          width,
-          height,
-          borderRadius: circle ? height / 2 : radius,
-          backgroundColor: onDark
-            ? "rgba(255,255,255,0.28)"
-            : withAlpha(palette.mutedForeground, 0.22),
-        },
-        style,
-      ]}
-    />
+    <View
+      style={{ width, height }}
+      onLayout={
+        typeof width === "number"
+          ? undefined
+          : (event: LayoutChangeEvent) => setMeasured(event.nativeEvent.layout.width)
+      }
+    >
+      {w > 0 ? (
+        <Canvas style={{ width: w, height }}>
+          <RoundedRect x={0} y={0} width={w} height={height} r={corner}>
+            <LinearGradient start={start} end={end} colors={[base, shine, base]} positions={[0, 0.5, 1]} />
+          </RoundedRect>
+        </Canvas>
+      ) : null}
+    </View>
   );
 }

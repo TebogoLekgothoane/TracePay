@@ -1,9 +1,9 @@
 import { Redirect, router, useLocalSearchParams } from "expo-router";
-import { Check } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { Text, View } from "react-native";
 
 import { BillingShell } from "../../src/components/billing/BillingShell";
+import { SkiaCheck } from "../../src/components/feedback/SkiaCheck";
 import { Button } from "../../src/components/ui/Button";
 import { formatLongDate } from "../../src/features/billing/billing.format";
 import { useBilling } from "../../src/features/billing/billing.store";
@@ -49,9 +49,7 @@ export default function PaymentSuccessScreen() {
       }
     >
       <View className="items-center pt-10">
-        <View className="h-16 w-16 items-center justify-center rounded-full bg-primary">
-          <Check color="#FFFFFF" size={32} strokeWidth={3} />
-        </View>
+        <SkiaCheck color={palette.primary} size={72} />
         <Text className="mt-5 text-center text-[26px] font-bold tracking-[-0.4px] text-foreground">
           {monitoring ? "Monitoring is on" : "Full analysis unlocked"}
         </Text>
