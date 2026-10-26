@@ -26,7 +26,7 @@ import {
   enrichParsedTransaction,
   isValidStoredTransaction,
 } from '../lib/transaction-display';
-import { syncTransactions } from '../../lib/backend-client';
+import { syncTransactions } from '@/lib/backend';
 import { useLeaksStore } from '@/stores/leaksStore';
 import { pipelineError, pipelineLog } from '@/lib/pipeline-log';
 

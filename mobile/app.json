@@ -32,11 +32,6 @@
       ],
       "package": "com.tebogo.l.tracepay"
     },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./src/assets/images/favicon.png"
-    },
     "plugins": [
       [
         "expo-splash-screen",
@@ -52,7 +47,6 @@
       ],
       "expo-font",
       "expo-router",
-      "expo-web-browser",
       "expo-secure-store",
       [
         "expo-sqlite",

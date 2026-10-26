@@ -15,7 +15,7 @@ import { useOnboardingStore } from "@/stores/onboardingStore";
 import { useProfileStore } from "@/stores/profileStore";
 import { cn } from "@/lib/cn";
 
-const robotSource = require("@/assets/images/robothandup.png");
+const robotSource = require("@/assets/images/robothandup.webp");
 
 /** South Africa's 11 official languages. */
 const LANGUAGES = [
