@@ -8,9 +8,12 @@ import {
   type FindingNotification,
 } from "../features/notifications/finding-notifications";
 
+/** Last list seen, shown immediately while a fresh one loads. */
+let lastNotifications: FindingNotification[] | null = null;
+
 export function useFindingNotifications() {
-  const [notifications, setNotifications] = useState<FindingNotification[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [notifications, setNotifications] = useState<FindingNotification[]>(lastNotifications ?? []);
+  const [loading, setLoading] = useState(lastNotifications === null);
   const [error, setError] = useState<string | null>(null);
   const [markingId, setMarkingId] = useState<string | null>(null);
   const requestId = useRef(0);
@@ -18,7 +21,7 @@ export function useFindingNotifications() {
   const load = useCallback(async () => {
     const current = requestId.current + 1;
     requestId.current = current;
-    setLoading(true);
+    if (lastNotifications === null) setLoading(true);
     setError(null);
     try {
       const { data, error: authError } = await getSupabase().auth.getUser();
@@ -26,11 +29,12 @@ export function useFindingNotifications() {
         throw new Error("Sign in to see notifications.");
       }
       const rows = await listFindingNotifications(data.user.id);
+      lastNotifications = rows;
       if (requestId.current === current) {
         setNotifications(rows);
       }
     } catch (caught) {
-      if (requestId.current === current) {
+      if (requestId.current === current && lastNotifications === null) {
         setNotifications([]);
         setError(caught instanceof Error ? caught.message : "Notifications could not be loaded.");
       }

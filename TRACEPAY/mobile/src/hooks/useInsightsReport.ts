@@ -1,5 +1,4 @@
-import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 
 import {
   buildCategoryBreakdown,
@@ -12,7 +11,8 @@ import {
   type TrendGrain,
 } from "../features/insights/insights-report";
 import type { CustomRange, Period } from "../features/insights/period";
-import { loadInsightsData, type InsightsData } from "../features/transactions/transaction.service";
+import { loadInsightsData } from "../features/transactions/transaction.service";
+import { useCachedQuery } from "../lib/query-cache";
 
 /** Real data for the whole Insights tab: totals, comparison, trends and categories. */
 export function useInsightsReport(
@@ -21,36 +21,8 @@ export function useInsightsReport(
   mode: CategoryMode,
   grain: TrendGrain,
 ) {
-  const [data, setData] = useState<InsightsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const requestId = useRef(0);
-
-  const load = useCallback(() => {
-    const id = ++requestId.current;
-    setLoading(true);
-    void loadInsightsData(period, customRange)
-      .then((next) => {
-        if (requestId.current !== id) return;
-        setData(next);
-        setError(null);
-      })
-      .catch((caught: unknown) => {
-        if (requestId.current !== id) return;
-        setError(caught instanceof Error ? caught.message : "Could not load your insights.");
-      })
-      .finally(() => {
-        if (requestId.current === id) setLoading(false);
-      });
-  }, [period, customRange]);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-      return () => {
-        requestId.current += 1;
-      };
-    }, [load]),
+  const { data, loading, error, retry } = useCachedQuery(`insights:${period}:${customRange}`, () =>
+    loadInsightsData(period, customRange),
   );
 
   const breakdown: CategoryBreakdown | null = useMemo(
@@ -62,5 +34,5 @@ export function useInsightsReport(
     [data, mode, grain],
   );
 
-  return { data, breakdown, report, loading, error, retry: load };
+  return { data, breakdown, report, loading, error, retry };
 }

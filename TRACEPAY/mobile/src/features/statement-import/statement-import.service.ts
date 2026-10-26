@@ -1,4 +1,5 @@
 import type { DocumentPickerAsset } from "expo-document-picker";
+import { invalidateQueries } from "../../lib/query-cache";
 import * as Crypto from "expo-crypto";
 
 import { listAccounts, requireAccountForImport } from "../accounts/account.service";
@@ -634,6 +635,8 @@ async function persistPreview(
     throw new Error(describeImportFailure(error));
   }
   const result = data as ImportRpcResult;
+  // New transactions: every cached chart and list must refresh on its next visit.
+  invalidateQueries();
   const summary = summariseImportResult(result);
 
   if (accountCheck.adoptLastFour) {

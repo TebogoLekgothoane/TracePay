@@ -1,4 +1,5 @@
 import { getSupabase, isSupabaseConfigured } from "../../lib/supabase";
+import { invalidateQueries } from "../../lib/query-cache";
 import { clearStatementPdfPassword } from "../statement-import/statement-pdf-password.service";
 import { AccountError } from "./account.errors";
 import {
@@ -461,6 +462,7 @@ export async function deleteAccount(accountId: string): Promise<void> {
   if (error || !deletedRows || deletedRows.length === 0) {
     throw new AccountError("Could not remove your account. Please try again.");
   }
+  invalidateQueries();
 
   if (filePaths.length > 0) {
     const { error: storageError } = await supabase.storage

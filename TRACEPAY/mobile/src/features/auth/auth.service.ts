@@ -7,6 +7,8 @@ import {
 import { secureStorage } from "../../lib/secure-storage";
 import { resetAccountsSnapshot } from "../accounts/account.store";
 import { resetBilling } from "../billing/billing.store";
+import { invalidateTransactionLists } from "../../hooks/useTransactions";
+import { clearQueryCache } from "../../lib/query-cache";
 import { clearOnboardingCompleted } from "../onboarding/onboarding.service";
 import { clearFinancialAccountsSetupDismissed } from "../accounts/account-setup.service";
 import { AuthError } from "./auth.errors";
@@ -656,6 +658,8 @@ export async function signOut(): Promise<void> {
   resetProfileSnapshot();
   resetAccountsSnapshot();
   resetBilling();
+  clearQueryCache();
+  invalidateTransactionLists();
   await clearFinancialAccountsSetupDismissed().catch(() => undefined);
 
   if (isSupabaseConfigured()) {
