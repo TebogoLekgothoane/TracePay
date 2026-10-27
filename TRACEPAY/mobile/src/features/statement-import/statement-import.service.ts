@@ -2,6 +2,7 @@ import type { DocumentPickerAsset } from "expo-document-picker";
 import { invalidateQueries } from "../../lib/query-cache";
 import * as Crypto from "expo-crypto";
 
+import { noteImportCompleted } from "../notifications/import-reminder.scheduler";
 import { listAccounts, requireAccountForImport } from "../accounts/account.service";
 import type { FinancialAccount } from "../accounts/account.types";
 import { getPdfProcessorBaseUrl } from "../../constants/config";
@@ -662,6 +663,7 @@ async function persistPreview(
     overlapDuplicates: summary.overlapDuplicates,
     possibleDuplicates: summary.possibleDuplicates,
   });
+  void noteImportCompleted();
   let newFindings = 0;
   let updatedFindings = 0;
   if (shouldReconcileSavedImport("processed", summary.newTransactions)) {

@@ -76,7 +76,7 @@ class Settings(BaseSettings):
     paystack_plan_code: str = ""
     paystack_callback_url: str = "tracepay://billing/return"
     full_analysis_price_cents: int = 3900
-    monitoring_price_cents: int = 29900
+    monitoring_price_cents: int = 19900
     # Billing. Prices are in cents (ZAR) and are the single source of truth; the app
     # reads them from /billing/products. PAYSTACK_PLAN_CODE is the annual plan created
     # in the Paystack dashboard at the same price.
@@ -86,7 +86,7 @@ class Settings(BaseSettings):
     paystack_plan_code: str = ""
     paystack_callback_url: str = "tracepay://billing/return"
     full_analysis_price_cents: int = 3900
-    monitoring_price_cents: int = 29900
+    monitoring_price_cents: int = 19900
     synthetic_intelligence_debug: bool = False
 
     @field_validator("ai_pdf_extraction_enabled", mode="before")

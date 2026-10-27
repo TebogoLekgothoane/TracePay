@@ -81,7 +81,7 @@ def env(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(billing.settings, "paystack_secret_key", SECRET)
     monkeypatch.setattr(billing.settings, "paystack_plan_code", "PLN_test")
     monkeypatch.setattr(billing.settings, "full_analysis_price_cents", 3900)
-    monkeypatch.setattr(billing.settings, "monitoring_price_cents", 29900)
+    monkeypatch.setattr(billing.settings, "monitoring_price_cents", 19900)
     return db, paystack_calls, txns
 
 
@@ -141,10 +141,15 @@ def test_other_users_cannot_verify_a_reference(env) -> None:
     assert error.value.status_code == 404
 
 
-def test_monitoring_requires_the_full_analysis(env) -> None:
-    with pytest.raises(HTTPException) as error:
-        checkout("annual_monitoring")
-    assert error.value.status_code == 409
+def test_annual_monitoring_alone_unlocks_the_full_analysis(env) -> None:
+    _, _, txns = env
+    reference = checkout("annual_monitoring")["reference"]
+    assert billing.load_entitlements(USER)["full_analysis"]["unlocked"] is False
+    txns[reference] = success(reference, amount=19900)
+    entitlements = billing.verify_reference(USER, reference)["entitlements"]
+    assert entitlements["monitoring"]["active"] is True
+    assert entitlements["full_analysis"]["unlocked"] is True
+    assert checkout("full_analysis")["status"] == "already_owned"
 
 
 def test_annual_monitoring_flow_and_expiry(env) -> None:
@@ -155,7 +160,7 @@ def test_annual_monitoring_flow_and_expiry(env) -> None:
          "created_at": "2026-10-01T00:00:00+00:00"}
     )
     reference = checkout("annual_monitoring")["reference"]
-    txns[reference] = success(reference, amount=29900)
+    txns[reference] = success(reference, amount=19900)
     entitlements = billing.verify_reference(USER, reference)["entitlements"]
     assert entitlements["monitoring"]["active"] is True
 

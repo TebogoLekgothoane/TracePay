@@ -19,10 +19,9 @@ import {
 } from "@expo/ui/swift-ui/modifiers";
 import { useColorScheme } from "nativewind";
 import { useId } from "react";
-import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useTabBarScroll } from "../../context/TabBarScrollContext";
 import { COLORS, withAlpha } from "../../theme/colors";
 
 type LiquidTabBarProps = {
@@ -56,11 +55,6 @@ export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const palette = COLORS[isDark ? "dark" : "light"];
-  const { tabBarOffset, tabBarLift } = useTabBarScroll();
-
-  const containerStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: tabBarOffset.value - tabBarLift.value }],
-  }));
 
   const focusedName = state.routes[state.index]?.name;
   const focusedIndex = Math.max(
@@ -70,19 +64,16 @@ export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
   const focusedKey = TAB_ITEMS[focusedIndex]?.key ?? "index";
 
   return (
-    <Animated.View
+    <View
       pointerEvents="box-none"
-      style={[
-        {
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: 0,
-          alignItems: "center",
-          paddingBottom: Math.max(insets.bottom, 10),
-        },
-        containerStyle,
-      ]}
+      style={{
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        alignItems: "center",
+        paddingBottom: Math.max(insets.bottom, 10),
+      }}
     >
       <Host
         matchContents
@@ -159,6 +150,6 @@ export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
           </GlassEffectContainer>
         </Namespace>
       </Host>
-    </Animated.View>
+    </View>
   );
 }

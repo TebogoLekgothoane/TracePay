@@ -1,4 +1,7 @@
-"""Paid entitlements: R39 once-off full analysis and annual monitoring, through Paystack.
+"""Paid entitlements: R39 once-off full analysis and R199 annual monitoring, through Paystack.
+
+Annual monitoring is a bundle: a confirmed annual payment also unlocks the full analysis,
+and that unlock outlives the monitoring year.
 
 Access is granted only after Paystack confirms the transaction (verify call or signed
 webhook) for the exact reference, amount and currency we created. The client's word
@@ -31,6 +34,8 @@ CURRENCY = "ZAR"
 TIMEOUT_SECONDS = 15
 DEFAULT_ANALYSIS_KEY = "primary"
 LIVE_SUBSCRIPTION_STATUSES = ("active", "non_renewing", "attention")
+# Products that unlock the full analysis once paid (annual monitoring bundles it).
+UNLOCKING_PRODUCTS = ("full_analysis", "annual_monitoring")
 
 
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
@@ -228,7 +233,7 @@ def load_entitlements(user_id: str) -> dict[str, Any]:
             f"&user_id=eq.{_eq(user_id)}&limit=1"
         ),
     )
-    paid = [r for r in purchases if r["product"] == "full_analysis" and r["status"] == "succeeded"]
+    paid = [r for r in purchases if r["product"] in UNLOCKING_PRODUCTS and r["status"] == "succeeded"]
     pending = [r for r in purchases if r["status"] == "pending"]
     subscription = subscriptions[0] if subscriptions else None
     entitled = _subscription_entitled(subscription)
@@ -272,11 +277,8 @@ def create_checkout(
     if request.product == "full_analysis":
         if analysis_key in entitlements["full_analysis"]["analysis_keys"]:
             return owned
-    else:
-        if not entitlements["full_analysis"]["unlocked"]:
-            raise HTTPException(status_code=409, detail="Unlock the full analysis first.")
-        if entitlements["monitoring"]["active"]:
-            return owned
+    elif entitlements["monitoring"]["active"]:
+        return owned
 
     existing = _rest(
         "billing_purchases",

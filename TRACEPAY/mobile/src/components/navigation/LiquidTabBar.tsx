@@ -9,7 +9,6 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Droplets, Home, Lightbulb, User } from "lucide-react-native";
 
-import { useTabBarScroll } from "../../context/TabBarScrollContext";
 import { COLORS } from "../../theme/colors";
 import { GradientTabIcon } from "./GradientTabIcon";
 
@@ -43,7 +42,6 @@ export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const palette = COLORS[isDark ? "dark" : "light"];
-  const { tabBarOffset, tabBarLift } = useTabBarScroll();
 
   const visibleIndex = TAB_ITEMS.findIndex(
     (item) => item.key === state.routes[state.index]?.name,
@@ -61,10 +59,6 @@ export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
     });
   }, [activeIndex, progress]);
 
-  const containerStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: tabBarOffset.value - tabBarLift.value }],
-  }));
-
   const blobStyle = useAnimatedStyle(() => {
     const x = PAD_X + progress.value * SLOT + (SLOT - BLOB) / 2;
     const dist = Math.abs(progress.value - Math.round(progress.value));
@@ -77,13 +71,10 @@ export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
   });
 
   return (
-    <Animated.View
+    <View
       pointerEvents="box-none"
       className="absolute bottom-0 left-0 right-0 items-center"
-      style={[
-        { paddingBottom: Math.max(insets.bottom, 14) },
-        containerStyle,
-      ]}
+      style={{ paddingBottom: Math.max(insets.bottom, 14) }}
     >
       <View
         className="overflow-hidden rounded-full border border-border/50 bg-card/95"
@@ -168,6 +159,6 @@ export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
           })}
         </View>
       </View>
-    </Animated.View>
+    </View>
   );
 }

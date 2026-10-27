@@ -4,6 +4,7 @@ import { useColorScheme } from "nativewind";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ImportReminderCard } from "../../../src/components/notifications/ImportReminderCard";
 import { Button } from "../../../src/components/ui/Button";
 import { IconButton } from "../../../src/components/ui/IconButton";
 import { guidanceHref } from "../../../src/features/guidance/finding-guidance.model";
@@ -45,6 +46,10 @@ export default function FindingNotificationsScreen() {
                 New and changed findings from statement imports
               </Text>
             </View>
+          </View>
+
+          <View className="mt-5">
+            <ImportReminderCard />
           </View>
 
           {loading ? (

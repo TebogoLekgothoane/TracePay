@@ -45,7 +45,6 @@ const PRIVACY_HREF = "/settings/privacy";
 const LANGUAGE_HREF = "/settings/language";
 const STATEMENT_COVERAGE_HREF = "/statements/coverage";
 const HELP_HREF = "/settings/help";
-const NOTIFICATIONS_HREF = "/settings/notifications";
 const SYNTHETIC_INTELLIGENCE_DEBUG_HREF = "/debug/synthetic-intelligence";
 const LEAK_INTELLIGENCE_DEBUG_HREF = "/debug/leak-intelligence";
 const SUBSCRIPTIONS_DEBUG_HREF = "/debug/subscriptions";
@@ -96,12 +95,7 @@ const PREFERENCE_ROWS: SettingsRow[] = [
     Icon: Bell,
     href: "/monitoring",
   },
-  {
-    id: "notifications",
-    label: "Notifications",
-    Icon: Bell,
-    href: NOTIFICATIONS_HREF,
-  },
+
   {
     id: "privacy",
     label: "Privacy & consent",

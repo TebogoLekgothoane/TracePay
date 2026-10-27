@@ -107,7 +107,7 @@ export function LeaksSummaryCard({
         </View>
 
         <View className="items-center justify-center pr-1">
-          <LeaksPipeIllustration size={120} />
+          <LeaksPipeIllustration size={84} />
         </View>
       </View>
     </LinearGradient>

@@ -20,9 +20,9 @@ const COPY: Record<BillingProduct, { name: string; detail: string; backTo: strin
     backTo: "/upgrade",
   },
   annual_monitoring: {
-    name: "Annual monitoring",
-    detail: "Billed yearly, cancel any time",
-    backTo: "/monitoring/offer",
+    name: "Analysis + 1 year monitoring",
+    detail: "Includes the full analysis. Billed yearly, cancel any time",
+    backTo: "/upgrade",
   },
 };
 

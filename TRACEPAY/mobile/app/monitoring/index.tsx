@@ -44,7 +44,7 @@ export default function MonitoringDashboardScreen() {
 
   if (!hydrated) return null;
   const monitoring = entitlements?.monitoring;
-  if (!monitoring || monitoring.status === "none") return <Redirect href="/monitoring/offer" />;
+  if (!monitoring || monitoring.status === "none") return <Redirect href="/upgrade" />;
 
   const ends = formatLongDate(monitoring.currentPeriodEnd);
   const renewalLabel = monitoring.active
@@ -133,7 +133,7 @@ export default function MonitoringDashboardScreen() {
       <View className="mt-7 gap-2">
         {error ? <ErrorNote message={error} /> : null}
         {!monitoring.active ? (
-          <Button onPress={() => router.push("/monitoring/offer")}>Renew annual monitoring</Button>
+          <Button onPress={() => router.push("/upgrade")}>Renew annual monitoring</Button>
         ) : null}
         {canCancel ? (
           <Button loading={cancelling} variant="destructive" onPress={confirmCancel}>

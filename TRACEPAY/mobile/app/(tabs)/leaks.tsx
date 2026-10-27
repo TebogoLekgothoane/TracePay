@@ -1,9 +1,9 @@
 import { router, useFocusEffect } from "expo-router";
 import { Download } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { LeaksSummaryCard } from "../../src/components/leaks/LeaksSummaryCard";
 import { LockedLeakRow } from "../../src/components/leaks/LockedLeakRow";
@@ -12,6 +12,8 @@ import { TabScrollView } from "../../src/components/navigation/TabScrollView";
 import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
 import { InfoSheet } from "../../src/components/ui/Modal";
+import { Skeleton } from "../../src/components/ui/Skeleton";
+import { SkeletonCard, SkeletonRows } from "../../src/components/ui/SkeletonGroups";
 import { formatWholeRand } from "../../src/features/billing/billing.format";
 import { useBilling } from "../../src/features/billing/billing.store";
 import { useLeakEntitlement } from "../../src/features/leaks/leak-entitlement.store";
@@ -26,7 +28,6 @@ import {
   listPotentialLeaks,
   type ReviewStatus,
 } from "../../src/features/leaks/potential-leaks";
-import { useTabBarScroll } from "../../src/context/TabBarScrollContext";
 import { COLORS } from "../../src/theme/colors";
 
 export default function LeaksScreen() {
@@ -38,23 +39,14 @@ export default function LeaksScreen() {
   const total = useMemo(() => totalMonthlyLeaks(leaks), [leaks]);
   const paywall = useMemo(() => splitLeaksForPaywall(leaks), [leaks]);
   const { unlocked, hydrated } = useLeakEntitlement();
-  const insets = useSafeAreaInsets();
-  const { tabBarLift } = useTabBarScroll();
-  const showUnlockBar = hydrated && !unlocked && paywall.locked.length > 0;
   const { products, entitlements, refresh } = useBilling();
   const price = products?.fullAnalysis.priceCents;
   const unlockLabel = price ? `Unlock full analysis · ${formatWholeRand(price)}` : "Unlock full analysis";
   useFocusEffect(
     useCallback(() => {
       void refresh();
-      return () => {
-        tabBarLift.value = 0;
-      };
-    }, [refresh, tabBarLift]),
+    }, [refresh]),
   );
-  useEffect(() => {
-    if (!showUnlockBar) tabBarLift.value = 0;
-  }, [showUnlockBar, tabBarLift]);
   const visible = useMemo(
     () => (filter === "all" ? leaks : leaks.filter((leak) => leak.status === filter)),
     [filter, leaks],
@@ -73,7 +65,7 @@ export default function LeaksScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <TabScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: showUnlockBar ? 200 : 120 }}
+        contentContainerStyle={{ paddingBottom: 120 }}
         showsVerticalScrollIndicator={false}
       >
         <View className="px-5 pt-1">
@@ -97,14 +89,26 @@ export default function LeaksScreen() {
           </View>
 
           <View className="mt-5">
-            <LeaksSummaryCard
-              label={unlocked ? undefined : "Estimated total leaked this month"}
-              total={total}
-              changeLabel="↑ 18% vs last month"
-            />
+            {hydrated ? (
+              <LeaksSummaryCard
+                label={unlocked ? undefined : "Estimated total leaked this month"}
+                total={total}
+                changeLabel="↑ 18% vs last month"
+              />
+            ) : (
+              <SkeletonCard height={110} />
+            )}
           </View>
 
-          {!hydrated ? null : unlocked ? (
+          {!hydrated ? (
+            <View className="mt-7 gap-3">
+              <Skeleton width="45%" height={22} />
+              <Skeleton width="80%" height={14} />
+              <View className="mt-1">
+                <SkeletonRows count={4} />
+              </View>
+            </View>
+          ) : unlocked ? (
             <>
               <Text className="mb-1 mt-7 text-[22px] font-bold tracking-[-0.3px] text-foreground">
                 Potential leaks
@@ -162,7 +166,7 @@ export default function LeaksScreen() {
                 accessibilityRole="button"
                 className="mt-6 rounded-3xl bg-card px-4 py-4 active:opacity-80"
                 onPress={() =>
-                  router.push((entitlements?.monitoring.active ? "/monitoring" : "/monitoring/offer") as never)
+                  router.push((entitlements?.monitoring.active ? "/monitoring" : "/upgrade") as never)
                 }
               >
                 <Text className="text-[16px] font-bold text-foreground">
@@ -209,29 +213,20 @@ export default function LeaksScreen() {
                     ))}
                   </View>
 
+                  <View className="mt-5">
+                    <Button onPress={openUpgrade} arrow style={{ minHeight: 44 }}>
+                      {unlockLabel}
+                    </Button>
+                    <Text className="mt-1.5 text-center text-[11px] text-muted-foreground">
+                      One payment. Not a subscription.
+                    </Text>
+                  </View>
                 </>
               ) : null}
             </>
           )}
         </View>
       </TabScrollView>
-
-      {showUnlockBar ? (
-        <View
-          className="absolute bottom-0 left-0 right-0 border-t border-border/40 bg-background px-5 pt-2.5"
-          style={{ paddingBottom: Math.max(insets.bottom, 8) }}
-          onLayout={(event) => {
-            tabBarLift.value = event.nativeEvent.layout.height;
-          }}
-        >
-          <Button onPress={openUpgrade} arrow style={{ minHeight: 44 }}>
-            {unlockLabel}
-          </Button>
-          <Text className="mt-1.5 text-center text-[11px] text-muted-foreground">
-            One payment. Not a subscription.
-          </Text>
-        </View>
-      ) : null}
 
       <InfoSheet
         visible={showDownloadInfo}

@@ -21,7 +21,7 @@ export default function PaymentSuccessScreen() {
   const confirmed = monitoring
     ? entitlements?.monitoring.active
     : entitlements?.fullAnalysis.unlocked;
-  if (!confirmed) return <Redirect href={monitoring ? "/monitoring/offer" : "/upgrade"} />;
+  if (!confirmed) return <Redirect href={monitoring ? "/upgrade" : "/upgrade"} />;
 
   return (
     <BillingShell
@@ -39,7 +39,7 @@ export default function PaymentSuccessScreen() {
               <Button
                 className="mt-1"
                 variant="ghost"
-                onPress={() => router.replace("/monitoring/offer")}
+                onPress={() => router.replace("/upgrade")}
               >
                 Keep TracePay working for you
               </Button>
