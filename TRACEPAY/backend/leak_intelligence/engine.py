@@ -64,7 +64,7 @@ _MANDATE_TOKEN = re.compile(
     r"\b(?:POL|POLICY|CONTRACT|MANDATE|ACC|ACCOUNT|LOAN|PLAN|MEM|MEMBER)[\s:#-]*([A-Z0-9-]{2,})\b",
     re.IGNORECASE,
 )
-_DEBIT_ORDER_MARKERS = ("DEBIT ORDER", "NAEDO", "DEBICHECK", "MAGTAPE DEBIT")
+_DEBIT_ORDER_MARKERS = ("DEBIT ORDER", "ACB DEBIT", "NAEDO", "DEBICHECK", "MAGTAPE DEBIT")
 _OBLIGATORY_SPEND_MARKERS = (
     "DEBIT ORDER",
     "NAEDO",
@@ -941,8 +941,11 @@ def _fee_subtype(transaction: FeatureTransaction) -> str | None:
         return "vas"
     if "BALANCE ENQUIRY" in description or "BALANCE INQUIRY" in description:
         return "balance_enquiry"
-    if "ATM FEE" in description or (
-        "ATM" in description and "WITHDRAWAL" in description and "FEE" in description
+    if (
+        "ATM FEE" in description
+        or "ATM CHARGE" in description
+        or "CASH WITHDRAWAL FEE" in description
+        or ("ATM" in description and "WITHDRAWAL" in description and "FEE" in description)
     ):
         return "atm"
     if "IMMEDIATE PAYMENT" in description:
@@ -970,6 +973,10 @@ def _fee_subtype(transaction: FeatureTransaction) -> str | None:
         return "insufficient_funds"
     if (
         "ACCOUNT" in description
+        or "ADMIN FEE" in description
+        or "ADMINISTRATION FEE" in description
+        or "MANAGEMENT FEE" in description
+        or "MAINTENANCE FEE" in description
         or "MONTHLY FEE" in description
         or "SERVICE CHARGE" in description
         or "SERVICE FEE" in description

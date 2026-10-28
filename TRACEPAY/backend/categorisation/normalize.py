@@ -28,6 +28,9 @@ _EXTRACTION_PREFIXES = (
         re.IGNORECASE,
     ),
     re.compile(r"^EPOS\s+AT\s+", re.IGNORECASE),
+    # Debit-order collections name the collecting company after the bank wording.
+    re.compile(r"^(?:ACB\s+DEBIT(?:\s+EXTERNAL)?|DEBIT\s+ORDER|DEBICHECK|NAEDO|MAGTAPE\s+DEBIT)\s+", re.IGNORECASE),
+    re.compile(r"^INSURANCE\s+PREM(?:IUM)?\s+", re.IGNORECASE),
     re.compile(r"^ONLINE\s+PURCHASE\s*", re.IGNORECASE),
     re.compile(r"^RECURRING\s+CARD\s+PURCHASE:\s*", re.IGNORECASE),
     re.compile(
@@ -106,6 +109,7 @@ _NOISE_PATTERNS = (
     re.compile(r"[*#]+"),
 )
 
+_FEE_WORDING_SUFFIX = re.compile(r"\b(?:FEE|FEES|CHARGE|CHARGES)$")
 _PUNCT_RE = re.compile(r"[^\w\s&'/.-]+", re.UNICODE)
 _SPACE_RE = re.compile(r"\s+")
 _TLD_RE = re.compile(r"\.(?:COM|CO|ZA|NET|ORG|IO|APP)(?:\b|$)", re.IGNORECASE)
@@ -157,6 +161,9 @@ def is_bank_boilerplate_label(value: str | None) -> bool:
         return True
     upper = normalized.upper()
     if upper in _BOILERPLATE_LABELS:
+        return True
+    # "Unpaid Fee", "Service Charge": the bank's own charge, not who was paid.
+    if _FEE_WORDING_SUFFIX.search(upper):
         return True
     for prefix in _BOILERPLATE_LABEL_PREFIXES:
         if upper == prefix:

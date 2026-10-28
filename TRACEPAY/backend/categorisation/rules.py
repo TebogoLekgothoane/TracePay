@@ -29,11 +29,116 @@ def _bounded_phrase(phrase: str) -> re.Pattern[str]:
     return re.compile(rf"(?<![A-Z0-9]){re.escape(phrase)}(?![A-Z0-9])")
 
 
+MerchantGroups = tuple[tuple[str, tuple[str, ...]], ...]
+
+# Insurers and funeral/life cover providers commonly collected by debit order.
+# Bank-owned products are matched by the generic words in INSURANCE_PHRASES.
+INSURER_GROUPS: MerchantGroups = (
+    ("Outsurance", ("OUTSURANCE",)),
+    ("Santam", ("SANTAM",)),
+    ("Sanlam", ("SANLAM",)),
+    ("Old Mutual", ("OLD MUTUAL", "OLDMUTUAL")),
+    ("Discovery Insure", ("DISCOVERY INSURE", "DISCOVERY INSURANCE", "DISCOVERY LIFE")),
+    ("Momentum", ("MOMENTUM LIFE", "MOMENTUM INSURANCE", "MOMENTUM")),
+    ("Liberty", ("LIBERTY LIFE", "LIBERTY GROUP", "LIBERTY INSURANCE")),
+    ("Hollard", ("HOLLARD",)),
+    ("Assupol", ("ASSUPOL",)),
+    ("Clientele", ("CLIENTELE",)),
+    ("Avbob", ("AVBOB",)),
+    ("Brightrock", ("BRIGHTROCK",)),
+    ("King Price", ("KING PRICE", "KINGPRICE")),
+    ("Miway", ("MIWAY",)),
+    ("First for Women", ("FIRST FOR WOMEN",)),
+    ("1st for You", ("1ST FOR YOU",)),
+    ("Auto & General", ("AUTO & GENERAL", "AUTO AND GENERAL")),
+    ("Dialdirect", ("DIALDIRECT", "DIAL DIRECT")),
+    ("Youi", ("YOUI",)),
+    ("PPS", ("PPS INSURANCE", "PPS PREMIUM")),
+    ("Metropolitan", ("METROPOLITAN LIFE", "METLIFE")),
+)
+# Matched with a non-credit direction only, so claim payouts stay out.
+INSURANCE_PHRASES: tuple[str, ...] = (
+    "INSURANCE",
+    "ASSURANCE",
+    "FUNERAL COVER",
+    "FUNERAL PLAN",
+    "FUNERAL POLICY",
+    "LIFE COVER",
+    "LIFE POLICY",
+)
+
+MEDICAL_AID_GROUPS: MerchantGroups = (
+    ("Discovery Health", ("DISCOVERY HEALTH", "DISCOVERY VITALITY")),
+    ("Momentum Health", ("MOMENTUM HEALTH",)),
+    ("Bonitas", ("BONITAS",)),
+    ("Fedhealth", ("FEDHEALTH",)),
+    ("Bestmed", ("BESTMED",)),
+    ("Medihelp", ("MEDIHELP",)),
+    ("Medshield", ("MEDSHIELD",)),
+    ("Profmed", ("PROFMED",)),
+    ("Polmed", ("POLMED",)),
+)
+MEDICAL_AID_PHRASES: tuple[str, ...] = ("MEDICAL AID", "MEDICAL SCHEME")
+
+# Gyms bill a membership every month, so they behave like subscriptions.
+GYM_GROUPS: MerchantGroups = (
+    ("Virgin Active", ("VIRGIN ACTIVE", "VIRGINACTIVE")),
+    ("Planet Fitness", ("PLANET FITNESS",)),
+    ("Anytime Fitness", ("ANYTIME FITNESS",)),
+)
+GYM_PHRASES: tuple[str, ...] = ("GYM MEMBERSHIP", "GYM FEES", "FITNESS CLUB", "HEALTH CLUB")
+
+MORE_SUBSCRIPTION_GROUPS: MerchantGroups = (
+    ("MultiChoice", ("MULTICHOICE",)),
+    ("StarSat", ("STARSAT",)),
+    ("iCloud", ("ICLOUD", "APPLE ICLOUD")),
+    ("Dropbox", ("DROPBOX",)),
+    ("Apple TV", ("APPLE TV",)),
+    ("YouTube", ("YOUTUBE", "GOOGLE YOUTUBE")),
+    ("Google Play", ("GOOGLE PLAY",)),
+    ("Deezer", ("DEEZER",)),
+    ("Tidal", ("TIDAL",)),
+    ("Audible", ("AUDIBLE",)),
+    ("Kindle Unlimited", ("KINDLE UNLIMITED",)),
+    ("LinkedIn Premium", ("LINKEDIN PREMIUM",)),
+    ("Duolingo", ("DUOLINGO",)),
+    ("Headspace", ("HEADSPACE",)),
+    ("GitHub", ("GITHUB",)),
+    ("Notion", ("NOTION",)),
+    ("Squarespace", ("SQUARESPACE",)),
+    ("NordVPN", ("NORDVPN",)),
+    ("ExpressVPN", ("EXPRESSVPN",)),
+    ("Surfshark", ("SURFSHARK",)),
+    ("Proton", ("PROTONVPN", "PROTONMAIL", "PROTON AG")),
+    ("Midjourney", ("MIDJOURNEY",)),
+    ("Claude", ("CLAUDE AI", "ANTHROPIC")),
+    ("Perplexity", ("PERPLEXITY",)),
+    ("Patreon", ("PATREON",)),
+    ("Substack", ("SUBSTACK",)),
+    ("Daily Maverick", ("DAILY MAVERICK",)),
+    ("News24", ("NEWS24",)),
+    ("PlayStation", ("PLAYSTATION", "PSN")),
+    ("Xbox", ("XBOX",)),
+    ("Nintendo", ("NINTENDO",)),
+    ("Twitch", ("TWITCH",)),
+    ("Paramount+", ("PARAMOUNT PLUS",)),
+    ("HBO Max", ("HBO MAX", "HBO")),
+)
+
+# Premium-rated and network-billed content. Never a bank fee.
+PREMIUM_SMS_PHRASES: tuple[str, ...] = (
+    "PREMIUM SMS",
+    "SMS SUBSCRIPTION",
+    "VAS SUBSCRIPTION",
+    "MOBILE SUBSCRIPTION",
+    "MOBILE CONTENT",
+)
+
 # Longer phrases are listed first so "MR D FOOD" wins over "MR D" and
 # "UBER EATS" wins over "UBER". Labels are the canonical merchant keys'
 # display form. Card-purchase recovery uses this list; it is not a new
 # category catalogue.
-_RECOGNISED_MERCHANT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+_RECOGNISED_MERCHANT_GROUPS: MerchantGroups = (
     ("Mr D", ("MR D FOOD", "MRD FOOD", "MR D", "MRD")),
     ("Uber Eats", ("UBER EATS", "UBEREATS", "DLUBER EATS", "DLUBEREATS")),
     ("Pick n Pay", ("PICK N PAY", "PICKNPAY")),
@@ -95,7 +200,7 @@ _RECOGNISED_MERCHANT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Vodacom", ("VODACOM",)),
     ("Cell C", ("CELL C", "CELLC")),
     ("Telkom", ("TELKOM",)),
-)
+) + INSURER_GROUPS + MEDICAL_AID_GROUPS + GYM_GROUPS + MORE_SUBSCRIPTION_GROUPS
 
 _RECOGNISED_MERCHANT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
     sorted(
@@ -136,6 +241,27 @@ def contains_fragment(*fragments: str) -> Callable[[str, str], bool]:
 
 def any_of(*matchers: Callable[[str, str], bool]) -> Callable[[str, str], bool]:
     return lambda description, kind: any(matcher(description, kind) for matcher in matchers)
+
+
+def _outflow(matcher: Callable[[str, str], bool]) -> Callable[[str, str], bool]:
+    """Skip credits: refunds, claim payouts and similar are not charges."""
+    return lambda description, kind: kind != "credit" and matcher(description, kind)
+
+
+def _group_phrases(groups: MerchantGroups) -> tuple[str, ...]:
+    return tuple(phrase for _label, phrases in groups for phrase in phrases)
+
+
+_MOBILE_OPERATORS: tuple[str, ...] = ("MTN", "VODACOM", "CELL C", "TELKOM")
+
+# Bank-specific wording for a debit-order collection.
+DEBIT_ORDER_MARKERS: tuple[str, ...] = (
+    "DEBIT ORDER",
+    "ACB DEBIT",
+    "NAEDO",
+    "DEBICHECK",
+    "MAGTAPE DEBIT",
+)
 
 
 _FEE_ROW = re.compile(r"^FEE(?![A-Z0-9])")
@@ -223,6 +349,65 @@ RULES: tuple[Rule, ...] = (
             "BANK CHARGE",
             "SERVICE CHARGES",
             "SERVICE CHARGE",
+            # Failed or returned debit orders. Wording differs by bank.
+            "UNPAID ITEM FEE",
+            "UNPAID ITEM CHARGE",
+            "UNPAID DEBIT ORDER FEE",
+            "UNPAID DEBIT ORDER CHARGE",
+            "UNPAID DEBIT FEE",
+            "UNPAID FEE",
+            "RETURNED ITEM FEE",
+            "RETURNED DEBIT FEE",
+            "REJECTED DEBIT FEE",
+            "REJECTED DEBIT ORDER FEE",
+            "DISHONOURED ITEM FEE",
+            "DISHONOURED DEBIT FEE",
+            "DISHONOUR FEE",
+            # Account upkeep.
+            "ADMIN FEE",
+            "ADMINISTRATION FEE",
+            "MANAGEMENT FEE",
+            "MAINTENANCE FEE",
+            "ACCOUNT MAINTENANCE",
+            "STATEMENT FEE",
+            "DEBIT ORDER FEE",
+            "INTERNET BANKING FEE",
+            "ONLINE BANKING FEE",
+            "CELLPHONE BANKING FEE",
+            # Cards.
+            "CARD FEE",
+            "ANNUAL FEE",
+            "CREDIT CARD FEE",
+            # Cash and ATM. These must beat the cash-withdrawal rule below.
+            "ATM WITHDRAWAL FEE",
+            "ATM CASH WITHDRAWAL FEE",
+            "ATM CHARGE",
+            "ATM BALANCE ENQUIRY",
+            "ATM BALANCE INQUIRY",
+            "BALANCE ENQUIRY",
+            "BALANCE INQUIRY",
+            "CASH WITHDRAWAL FEE",
+            "CASH WITHDRAWAL CHARGE",
+            "CASH DEPOSIT FEE",
+            "CASH HANDLING FEE",
+            "CASHBACK FEE",
+            "CASH BACK FEE",
+            # Alerts and electronic payments.
+            "SMS ALERT FEE",
+            "SMS FEE",
+            "SMS CHARGE",
+            "NOTIFYME FEE",
+            "EFT FEE",
+            "PAYSHAP FEE",
+            "PAY SHAP FEE",
+            "SEND MONEY FEE",
+            "SENDMONEY FEE",
+            "CASHSEND FEE",
+            "VAS FEE",
+            # Foreign and borrowing costs.
+            "INTERNATIONAL TRANSACTION FEE",
+            "CURRENCY CONVERSION FEE",
+            "INTEREST ON OVERDRAFT",
         ),
         transaction_class="bank_fee",
     ),
@@ -342,6 +527,90 @@ RULES: tuple[Rule, ...] = (
             "RECURRING PAYMENT FROM OPENAI",
         ),
             contains_fragment("SPOTIFYZA"),
+        ),
+    ),
+    # Health cover before insurers so "MOMENTUM HEALTH" is not read as life cover.
+    Rule(
+        "merchant:medical-aid",
+        "Healthcare",
+        0.92,
+        _outflow(
+            contains(
+                *_group_phrases(MEDICAL_AID_GROUPS),
+                *MEDICAL_AID_PHRASES,
+            )
+        ),
+    ),
+    Rule(
+        "merchant:insurer",
+        "Insurance",
+        0.92,
+        _outflow(contains(*_group_phrases(INSURER_GROUPS), *INSURANCE_PHRASES)),
+    ),
+    Rule(
+        "merchant:gym",
+        "Subscriptions",
+        0.88,
+        _outflow(contains(*_group_phrases(GYM_GROUPS), *GYM_PHRASES)),
+    ),
+    Rule(
+        "merchant:subscriptions-extended",
+        "Subscriptions",
+        0.92,
+        _outflow(contains(*_group_phrases(MORE_SUBSCRIPTION_GROUPS))),
+    ),
+    Rule(
+        "description:premium-sms",
+        "Subscriptions",
+        0.88,
+        _outflow(contains(*PREMIUM_SMS_PHRASES)),
+    ),
+    Rule(
+        "description:mobile-network-billing",
+        "Airtime & Data",
+        0.90,
+        lambda description, kind: kind != "credit"
+        and "MOMO" not in description
+        and any(
+            _bounded_phrase(operator).search(description) for operator in _MOBILE_OPERATORS
+        )
+        and any(
+            _bounded_phrase(phrase).search(description)
+            for phrase in (
+                "CONTRACT",
+                "DEBIT ORDER",
+                "MONTHLY BILL",
+                "INVOICE",
+                "BUNDLE",
+                "TOP UP",
+                "TOPUP",
+                "RECHARGE",
+                "VOUCHER",
+                "AIRTIME",
+                "OUT OF BUNDLE",
+            )
+        ),
+    ),
+    Rule(
+        "description:airtime-wording",
+        "Airtime & Data",
+        0.90,
+        _outflow(
+            contains(
+                "AIRTIME",
+                "TALKTIME",
+                "TALK TIME",
+                "PREPAID DATA",
+                "PREPAID VOUCHER",
+                "PREPAID BUNDLE",
+                "DATA TOP UP",
+                "DATA TOPUP",
+                "DATA VOUCHER",
+                "DATA RECHARGE",
+                "SMS BUNDLE",
+                "VOICE BUNDLE",
+                "OUT OF BUNDLE",
+            )
         ),
     ),
     Rule("description:data-bundle", "Airtime & Data", 0.95, contains("DATA BUNDLE")),
@@ -548,5 +817,13 @@ RULES: tuple[Rule, ...] = (
         1.00,
         incoming_contains("SALARY", "PAYROLL", "WAGES", "MONTHLY SALARY"),
         transaction_class="income",
+    ),
+    # Last resort for collections nothing above could name. The class is known
+    # (a recurring outflow someone is entitled to collect); the category is not.
+    Rule(
+        "description:debit-order",
+        "Other",
+        0.88,
+        _outflow(contains(*DEBIT_ORDER_MARKERS)),
     ),
 )
