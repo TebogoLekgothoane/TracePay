@@ -100,7 +100,12 @@ _CONVENIENCE_STORE_PHRASES = (
     "OK EXPRESS",
     "OK MINIMARK",
 )
+# Two collections this close can be one billing cycle collected twice. Monthly
+# mandates move around month-end and weekends, and a mistaken second collection
+# often lands on the next run (25th and the 1st), so monthly cadence allows more.
 DEBIT_ORDER_DUPLICATE_MAX_SHIFT_DAYS = 5
+DEBIT_ORDER_MONTHLY_DUPLICATE_MAX_SHIFT_DAYS = 10
+MONTHLY_CADENCE_MIN_GAP_DAYS = 25
 DEBIT_ORDER_MAX_AMOUNT_VARIANCE = Decimal("25.00")
 DEBIT_ORDER_MAX_VARIANCE_RATIO = Decimal("0.10")
 CASH_WITHDRAWAL_CATEGORIES = {"Cash Withdrawal", "Cash Withdrawals", "ATM Cash Withdrawal"}
@@ -239,9 +244,14 @@ def _amount_trend(transactions: list[FeatureTransaction]) -> AmountTrend | None:
     if average_previous in (None, ZERO):
         return None
     change = latest - average_previous
+    amounts = [amount_of(item) for item in dated]
     return AmountTrend(
-        first_amount=amount_of(dated[0]),
+        first_amount=amounts[0],
         latest_amount=latest,
+        previous_amount=amounts[-2],
+        increase_count=sum(
+            later - earlier > AMOUNT_TOLERANCE for earlier, later in zip(amounts, amounts[1:])
+        ),
         average_previous_amount=average_previous,
         amount_change=change,
         percentage_change=(change / average_previous) * Decimal("100"),
@@ -333,9 +343,41 @@ def _recurrence(transactions: list[FeatureTransaction]) -> RecurrenceFeature:
         feature.recurrence_strength = recurrence_strength_cap_for_interval(
             average_interval, "medium"
         )
+    elif (
+        average_interval <= Decimal("400")
+        and interval_cv <= Decimal("0.35")
+        and _is_stepped_price_rise(amounts)
+    ):
+        # A price that was raised once or twice is still one subscription.
+        feature.recurrence_strength = recurrence_strength_cap_for_interval(
+            average_interval, "medium"
+        )
     else:
         feature.recurrence_strength = "low"
     return feature
+
+
+def _is_stepped_price_rise(amounts: list[Decimal]) -> bool:
+    """True for a charge that only ever steps up and holds each price.
+
+    Every earlier price must have been paid at least twice, so a run of random
+    amounts is not mistaken for a price list. The latest price may be new.
+    """
+    if len(amounts) < 4:
+        return False
+    if any(later < earlier - AMOUNT_TOLERANCE for earlier, later in zip(amounts, amounts[1:])):
+        return False
+    if amounts[-1] - amounts[0] <= AMOUNT_TOLERANCE:
+        return False
+    run_lengths: list[int] = []
+    run = 1
+    for earlier, later in zip(amounts, amounts[1:]):
+        if abs(later - earlier) <= AMOUNT_TOLERANCE:
+            run += 1
+        else:
+            run_lengths.append(run)
+            run = 1
+    return all(length >= 2 for length in run_lengths)
 
 
 def _billing_interval_shift(intervals: list[Decimal]) -> dict[str, Decimal | int] | None:
@@ -413,9 +455,14 @@ def _coffee_total(transactions: list[FeatureTransaction]) -> Decimal:
     return sum((amount_of(item) for item in _coffee_purchases(transactions)), ZERO)
 
 
+_AIRTIME_TOKENS = frozenset({"AIRTIME", "TALKTIME"})
+_DATA_TOKENS = frozenset({"DATA", "BUNDLE", "BUNDLES"})
+
+
 def _is_airtime_transaction(transaction: FeatureTransaction) -> bool:
     text = f"{transaction.merchant_name or ''} {transaction.description}".upper().replace("-", " ")
-    return "AIRTIME" in text.split()
+    tokens = text.split()
+    return bool(_AIRTIME_TOKENS.intersection(tokens)) or "TALK TIME" in text
 
 
 def _airtime_transaction_count(transactions: list[FeatureTransaction]) -> int:
@@ -442,7 +489,7 @@ def _airtime_total(transactions: list[FeatureTransaction]) -> Decimal:
 def _is_data_transaction(transaction: FeatureTransaction) -> bool:
     text = f"{transaction.merchant_name or ''} {transaction.description}".upper().replace("-", " ")
     tokens = text.split()
-    return "DATA" in tokens and "AIRTIME" not in tokens
+    return bool(_DATA_TOKENS.intersection(tokens)) and not _is_airtime_transaction(transaction)
 
 
 def _data_transaction_count(transactions: list[FeatureTransaction]) -> int:
@@ -872,7 +919,10 @@ def _is_failed_purchase_or_fee(transaction: FeatureTransaction) -> bool:
         or "UNSUCCESSFUL" in description
         or "FAILED PURCHASE" in description
         or "FAILED PAYMENT" in description
+        or "UNPAID ITEM" in description
+        or "RETURNED ITEM" in description
         or " FEE" in description
+        or " CHARGE" in description
     )
 
 
@@ -941,11 +991,11 @@ def _fee_subtype(transaction: FeatureTransaction) -> str | None:
         return "vas"
     if "BALANCE ENQUIRY" in description or "BALANCE INQUIRY" in description:
         return "balance_enquiry"
+    tokens = set(description.replace(":", " ").replace("-", " ").split())
     if (
-        "ATM FEE" in description
-        or "ATM CHARGE" in description
-        or "CASH WITHDRAWAL FEE" in description
-        or ("ATM" in description and "WITHDRAWAL" in description and "FEE" in description)
+        "CASH WITHDRAWAL FEE" in description
+        or "CASH WITHDRAWAL CHARGE" in description
+        or ("ATM" in tokens and tokens & {"FEE", "FEES", "CHARGE", "CHARGES"})
     ):
         return "atm"
     if "IMMEDIATE PAYMENT" in description:
@@ -960,6 +1010,7 @@ def _fee_subtype(transaction: FeatureTransaction) -> str | None:
         "INTEREST CHARGED" in description
         or "DEBIT INTEREST" in description
         or "OVERDRAFT INTEREST" in description
+        or "INTEREST ON OVERDRAFT" in description
     ):
         return "interest"
     if "OVERDRAFT FEE" in description or "OVERDRAFT CHARGE" in description:
@@ -983,7 +1034,12 @@ def _fee_subtype(transaction: FeatureTransaction) -> str | None:
         or "BANK CHARGE" in description
     ):
         return "account"
-    if "FOREIGN TRANSACTION FEE" in description:
+    if (
+        "FOREIGN TRANSACTION FEE" in description
+        or "INTERNATIONAL TRANSACTION FEE" in description
+        or "CURRENCY CONVERSION FEE" in description
+        or "FOREIGN EXCHANGE FEE" in description
+    ):
         return "foreign"
     if "TRANSACTION FEE" in description or "PAYMENT FEE" in description:
         return "transaction"
@@ -1529,6 +1585,22 @@ def _debit_order_similar_amount(first: Decimal, second: Decimal) -> bool:
     )
 
 
+def _duplicate_shift_limit(debit_items: list[FeatureTransaction]) -> int:
+    """Widest gap that still counts as the same billing cycle for this mandate.
+
+    Judged from the typical gap between collections: a weekly or fortnightly
+    mandate keeps the short window so its normal cadence is never read as a
+    duplicate, and a monthly one gets the wider window.
+    """
+    dates = sorted(
+        item.transaction_date for item in debit_items if item.transaction_date is not None
+    )
+    gaps = [(later - earlier).days for earlier, later in zip(dates, dates[1:]) if later != earlier]
+    if len(gaps) >= 2 and median(gaps) >= MONTHLY_CADENCE_MIN_GAP_DAYS:
+        return DEBIT_ORDER_MONTHLY_DUPLICATE_MAX_SHIFT_DAYS
+    return DEBIT_ORDER_DUPLICATE_MAX_SHIFT_DAYS
+
+
 def _without_duplicate_debit_order_echos(
     transactions: list[FeatureTransaction],
 ) -> list[FeatureTransaction]:
@@ -1542,6 +1614,7 @@ def _without_duplicate_debit_order_echos(
         return transactions
     merchant = merchant_group_key(debit_items[0]) or ""
     debit_items.sort(key=lambda item: (item.transaction_date, item.transaction_id))
+    shift_limit = _duplicate_shift_limit(debit_items)
     echo_ids: set[str] = set()
     kept_last: FeatureTransaction | None = None
     for item in debit_items:
@@ -1550,7 +1623,7 @@ def _without_duplicate_debit_order_echos(
             continue
         days_apart = (item.transaction_date - kept_last.transaction_date).days
         if (
-            0 <= days_apart <= DEBIT_ORDER_DUPLICATE_MAX_SHIFT_DAYS
+            0 <= days_apart <= shift_limit
             and _debit_order_similar_amount(amount_of(kept_last), amount_of(item))
             and not _has_conflicting_debit_order_mandate([kept_last, item], merchant)
         ):
@@ -1631,6 +1704,7 @@ def _duplicate_candidates(
             and len(debit_items) >= 3
             and months_with_multiple_debits <= 1
         ):
+            shift_limit = _duplicate_shift_limit(debit_items)
             idx = 0
             while idx < len(debit_items) - 1:
                 first = debit_items[idx]
@@ -1645,7 +1719,7 @@ def _duplicate_candidates(
                     continue
                 shift_days = (second.transaction_date - first.transaction_date).days
                 if (
-                    0 <= shift_days <= DEBIT_ORDER_DUPLICATE_MAX_SHIFT_DAYS
+                    0 <= shift_days <= shift_limit
                     and _debit_order_similar_amount(amount_of(first), amount_of(second))
                 ):
                     pair_group = [first, second]

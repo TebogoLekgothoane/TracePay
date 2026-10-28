@@ -71,6 +71,29 @@ export type LeakAnalysisSummary = {
   disclaimer: string;
 };
 
+/** Something the statement rows show outright: a count, an amount, a date. */
+export type LeakConfirmedFact = {
+  text: string;
+  figures: Record<string, unknown>;
+};
+
+/** What the pattern only suggests. `cannot_see` is what a statement cannot show. */
+export type LeakPossibleClaim = {
+  text: string;
+  cannot_see: string[];
+  check: string | null;
+};
+
+/**
+ * Two different claims about one finding. `confirmed` is true of the user's
+ * statements ("You paid this fee 17 times"); `possible` is a hypothesis
+ * ("You may be able to avoid this fee") that statements cannot settle.
+ */
+export type LeakClaims = {
+  confirmed: LeakConfirmedFact[];
+  possible: LeakPossibleClaim[];
+};
+
 export type LeakDetection = {
   leak_id: string;
   fingerprint: string;
@@ -93,6 +116,7 @@ export type LeakDetection = {
   period_start: string | null;
   period_end: string | null;
   analysis?: LeakAnalysis | null;
+  claims?: LeakClaims | null;
 };
 
 export type LeakDetectionResult = {

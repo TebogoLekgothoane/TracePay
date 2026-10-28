@@ -91,6 +91,40 @@ class LeakResultSummary(BaseModel):
     disclaimer: str = ""
 
 
+class ConfirmedFact(BaseModel):
+    """Something the statement rows show outright: a count, an amount, a date.
+
+    Built only from the transactions behind the finding, never from a guess.
+    """
+
+    text: str
+    figures: dict[str, Any] = Field(default_factory=dict)
+
+
+class PossibleLeak(BaseModel):
+    """What the pattern suggests, kept apart from what was observed.
+
+    ``cannot_see`` names what a bank statement does not contain, so the claim is
+    never read as proof. ``check`` is the one thing that would settle it.
+    """
+
+    text: str
+    cannot_see: list[str] = Field(default_factory=list)
+    check: str | None = None
+
+
+class LeakClaims(BaseModel):
+    """Two different claims about one finding.
+
+    ``confirmed`` is true of the user's statements ("You paid this fee 17
+    times"). ``possible`` is a hypothesis ("You may be able to avoid this fee")
+    that the statements cannot settle on their own.
+    """
+
+    confirmed: list[ConfirmedFact] = Field(default_factory=list)
+    possible: list[PossibleLeak] = Field(default_factory=list)
+
+
 class LeakDetection(BaseModel):
     """A deterministic, evidence-backed potential financial leak."""
 
@@ -115,6 +149,7 @@ class LeakDetection(BaseModel):
     period_start: date | None = None
     period_end: date | None = None
     analysis: LeakAnalysisContext | None = None
+    claims: LeakClaims | None = None
 
 
 class LeakDetectionResult(BaseModel):

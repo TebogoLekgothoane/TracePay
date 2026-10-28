@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.financial_features import build_user_consolidated_inputs
 from leak_intelligence.behaviour_engine import analyze_behaviour
+from leak_intelligence.leak_claims import attach_claims
 from leak_intelligence.leak_context import enrich_leaks
 from leak_intelligence.leak_engine import detect_leaks
 from leak_intelligence.leak_evidence import attach_supporting_transactions
@@ -21,8 +22,10 @@ async def build_user_leak_detections(
     """
     inputs = await build_user_consolidated_inputs(user_id, access_token)
     behaviours = analyze_behaviour(inputs.snapshot)
-    detected = attach_supporting_transactions(
-        detect_leaks(inputs.snapshot, behaviours), inputs.transactions
+    detected = attach_claims(
+        attach_supporting_transactions(
+            detect_leaks(inputs.snapshot, behaviours), inputs.transactions
+        )
     )
     return enrich_leaks(
         detected,

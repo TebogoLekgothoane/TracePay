@@ -97,6 +97,10 @@ class ConfidenceSupport(BaseModel):
 class AmountTrend(BaseModel):
     first_amount: Decimal | None = None
     latest_amount: Decimal | None = None
+    # The payment just before the latest one, and how many times the amount
+    # stepped up along the way. A creep shows in these, not in the average.
+    previous_amount: Decimal | None = None
+    increase_count: int = 0
     average_previous_amount: Decimal | None = None
     amount_change: Decimal | None = None
     percentage_change: Decimal | None = None

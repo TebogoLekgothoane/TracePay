@@ -21,7 +21,7 @@ import {
   isConfirmedAmount,
   notCountedInTotalNote,
 } from "./leak-intelligence.format";
-import { parseLeakAnalysis, parseLeakDetectionResult } from "./leak-intelligence.parse";
+import { parseLeakAnalysis, parseLeakClaims, parseLeakDetectionResult } from "./leak-intelligence.parse";
 import { catalogLogoUrl, resolveCatalogLogo } from "../transactions/merchant-logos";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -322,4 +322,34 @@ test("results without analysis keep the old shape", () => {
     leaks: [],
   });
   assert(result.analysis_summary === null, "no summary");
+});
+
+test("claims keep confirmed facts apart from possible leaks", () => {
+  const claims = parseLeakClaims({
+    confirmed: [
+      { text: "You paid the ATM balance enquiry fee 18 times, R63 in all.", figures: { count: 18 } },
+      { text: "   " },
+      { figures: {} },
+    ],
+    possible: [
+      {
+        text: "You may be able to avoid this fee by checking your balance in your banking app.",
+        cannot_see: ["Whether your bank's app shows your balance for free."],
+        check: "Open your banking app.",
+      },
+      { text: "You may be overpaying.", cannot_see: [] },
+      { text: "No limits field at all." },
+    ],
+  });
+  assert(claims !== null, "claims parsed");
+  assert(claims.confirmed.length === 1, "blank and malformed facts dropped");
+  assert(claims.confirmed[0].figures.count === 18, "figures kept");
+  assert(claims.possible.length === 1, "a suggestion with no stated limits is dropped");
+  assert(claims.possible[0].check === "Open your banking app.", "check kept");
+});
+
+test("a missing or malformed claims block is null, never a throw", () => {
+  assert(parseLeakClaims(undefined) === null, "undefined");
+  assert(parseLeakClaims("nope") === null, "string");
+  assert(parseLeakClaims({}) !== null && parseLeakClaims({})!.possible.length === 0, "empty object is empty");
 });

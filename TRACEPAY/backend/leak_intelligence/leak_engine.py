@@ -30,7 +30,11 @@ from .merchant_display import (
     repeated_payments_title,
     spending_increase_title,
 )
-from .engine import RECURRENCE_MIN_OBSERVATIONS
+from .engine import (
+    DEBIT_ORDER_DUPLICATE_MAX_SHIFT_DAYS,
+    DEBIT_ORDER_MONTHLY_DUPLICATE_MAX_SHIFT_DAYS,
+    RECURRENCE_MIN_OBSERVATIONS,
+)
 from .models import (
     CashFeatures,
     ConfidenceSupport,
@@ -496,7 +500,7 @@ def _recurring_leaks(
             (max(candidate.transaction_dates) - min(candidate.transaction_dates)).days == 0
             or (
                 candidate.is_debit_order
-                and 0 <= candidate.billing_date_shift_days <= 5
+                and 0 <= candidate.billing_date_shift_days <= DEBIT_ORDER_MONTHLY_DUPLICATE_MAX_SHIFT_DAYS
                 and candidate.recurring_debit_order_months >= 2
                 and candidate.recurring_debit_order_count >= 3
                 and not candidate.nearby_reversal_or_refund
@@ -537,7 +541,23 @@ def _recurring_leaks(
             interval
         ):
             continue
-        impact = _recurring_monthly_impact(merchant, recurrence=recurrence)
+        price_obs = _matching_recurring_price_observation(
+            price_observations, merchant.merchant_name
+        )
+        # After a price rise the current price is what is being charged now,
+        # not the median of the old and new prices.
+        typical = recurrence.typical_amount or recurrence.average_amount
+        current_price = (
+            recurrence.latest_amount
+            if price_obs is not None
+            and recurrence.latest_amount is not None
+            and typical is not None
+            and recurrence.latest_amount > typical
+            else None
+        )
+        impact = _recurring_monthly_impact(
+            merchant, recurrence=recurrence, amount=current_price
+        )
         if impact is None or impact < MIN_IMPACT:
             continue
         if total_tx > 0 and categories.get("Bank Fees", 0) == total_tx:
@@ -558,7 +578,7 @@ def _recurring_leaks(
             continue
         is_unknown = not categories or set(categories).issubset({"Other"})
         reliable_merchant = is_reliable_merchant_display_name(merchant.merchant_name)
-        average_amount = recurrence.typical_amount or recurrence.average_amount
+        average_amount = current_price or recurrence.typical_amount or recurrence.average_amount
         weak_commitment = (
             not is_subscription
             and not debit_order_review
@@ -634,9 +654,6 @@ def _recurring_leaks(
         )
         if confidence is None:
             continue
-        price_obs = _matching_recurring_price_observation(
-            price_observations, merchant.merchant_name
-        )
         frequency_obs = _matching_observation(
             frequency_observations, merchant.merchant_name
         )
@@ -1640,7 +1657,7 @@ def _duplicate_debit_order_leaks(
         )
         if (
             len(dates) < 2
-            or not (0 <= candidate.billing_date_shift_days <= 5)
+            or not (0 <= candidate.billing_date_shift_days <= DEBIT_ORDER_MONTHLY_DUPLICATE_MAX_SHIFT_DAYS)
             or candidate.amount < Decimal("20")
             or high_confidence_ratio < Decimal("0.60")
             or candidate.nearby_reversal_or_refund
@@ -1675,14 +1692,25 @@ def _duplicate_debit_order_leaks(
             candidate.billing_date_shift_days == 0
             and candidate.amount_variance == Decimal("0")
         )
+        beyond_usual_shift = (
+            candidate.billing_date_shift_days > DEBIT_ORDER_DUPLICATE_MAX_SHIFT_DAYS
+        )
         pattern_strength = Decimal("0.62") if exact_same_day else Decimal("0.54")
         if candidate.shared_reference_tokens:
             pattern_strength = min(Decimal("0.68"), pattern_strength + Decimal("0.04"))
+        if beyond_usual_shift:
+            pattern_strength = min(pattern_strength, Decimal("0.50"))
         confidence = leak_confidence(
             support=support,
             observation_count=candidate.recurring_debit_order_count,
             pattern_strength=pattern_strength,
-            ceiling=Decimal("0.72") if exact_same_day else Decimal("0.66"),
+            ceiling=(
+                Decimal("0.72")
+                if exact_same_day
+                else Decimal("0.60")
+                if beyond_usual_shift
+                else Decimal("0.66")
+            ),
         )
         if confidence is None:
             continue
@@ -1731,6 +1759,7 @@ def _duplicate_debit_order_leaks(
                     "distinct_description_count": candidate.distinct_description_count,
                     "shared_reference_tokens": candidate.shared_reference_tokens,
                     "nearby_reversal_or_refund": candidate.nearby_reversal_or_refund,
+                    "date_gap_beyond_usual_shift": beyond_usual_shift,
                     "potential_not_confirmed_savings": True,
                     "verification_required": True,
                     "finding_kind": "verification_required",
@@ -2546,10 +2575,11 @@ def _recurring_monthly_impact(
     merchant: MerchantFeature,
     *,
     recurrence=None,
+    amount: Decimal | None = None,
 ) -> Decimal | None:
     recurrence = recurrence or merchant.recurrence
     interval = recurrence.median_interval_days or recurrence.average_interval_days
-    amount = recurrence.typical_amount or recurrence.average_amount
+    amount = amount or recurrence.typical_amount or recurrence.average_amount
     if interval in (None, Decimal("0")) or amount is None:
         return None
     # A bill that lands once per calendar month costs its amount per month; the
@@ -2757,6 +2787,9 @@ def _recurring_signal_evidence(
         payload["price_change_focus"] = ev.get("finding_focus")
         payload["previous_average_amount"] = ev.get("average_previous_amount")
         payload["latest_amount"] = ev.get("latest_amount")
+        payload["previous_amount"] = ev.get("previous_amount")
+        payload["first_amount"] = ev.get("first_amount")
+        payload["price_increase_count"] = ev.get("increase_count")
         payload["amount_change"] = ev.get("change_amount")
         payload["amount_change_percentage"] = ev.get("change_percentage")
     if frequency_obs is not None:

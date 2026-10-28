@@ -11,7 +11,7 @@ from .behaviour_models import BehaviourAnalysisResult, BehaviourObservation, Beh
 from .engine import RECURRENCE_MIN_OBSERVATIONS
 from .merchant_display import is_reliable_merchant_display_name
 from .common import ZERO
-from .models import ConfidenceSupport, FinancialFeatureSnapshot, MerchantFeature
+from .models import AmountTrend, ConfidenceSupport, FinancialFeatureSnapshot, MerchantFeature
 from .import_quality import unreliable_quality_affects_months
 from .periods import (
     completed_months,
@@ -26,6 +26,10 @@ MIN_RELATIVE_CHANGE_PERCENT = Decimal("10")
 MIN_ABSOLUTE_CHANGE = Decimal("50")
 # Reject percentage comparisons when the baseline is too small to be meaningful.
 MIN_BASELINE_AMOUNT = Decimal("50")
+# A subscription or insurance premium is a fixed price, so a small rise is a
+# real change rather than noise. Variable bills keep the stricter gate above.
+FIXED_PRICE_MIN_ABSOLUTE_CHANGE = Decimal("5")
+FIXED_PRICE_MIN_RELATIVE_PERCENT = Decimal("5")
 MIN_HIGH_CONFIDENCE_RATIO = Decimal("0.60")
 MIN_OBSERVATION_CONFIDENCE = 0.55
 MIN_WEEKEND_SPENDING_TRANSACTIONS = 10
@@ -274,7 +278,11 @@ def _merchant_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviour
 
         trend = feature.merchant_amount_trend
         if trend and trend.amount_change and trend.amount_change > 0 and trend.percentage_change:
-            if _material_change(trend.amount_change, trend.percentage_change) and _support_ratio(feature.confidence_support) >= MIN_HIGH_CONFIDENCE_RATIO:
+            fixed_price = _subscription_recurring_merchant(feature) or _insurance_recurring_merchant(feature)
+            material = _material_change(trend.amount_change, trend.percentage_change) or (
+                fixed_price and _material_fixed_price_rise(trend)
+            )
+            if material and _support_ratio(feature.confidence_support) >= MIN_HIGH_CONFIDENCE_RATIO:
                 subscription_creep = _subscription_recurring_merchant(feature)
                 insurance_increase = (
                     not subscription_creep and _insurance_recurring_merchant(feature)
@@ -291,6 +299,8 @@ def _merchant_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviour
                     "average_previous_amount": trend.average_previous_amount,
                     "change_amount": trend.amount_change,
                     "change_percentage": trend.percentage_change,
+                    "previous_amount": trend.previous_amount,
+                    "increase_count": trend.increase_count,
                     "observation_count": feature.merchant_transaction_count,
                     "first_observed_date": feature.merchant_first_transaction_date,
                     "last_observed_date": feature.merchant_last_transaction_date,
@@ -1252,6 +1262,32 @@ def _change_observation(
         period_start,
         period_end,
     )
+
+
+def _material_fixed_price_rise(trend: AmountTrend) -> bool:
+    """A fixed price that went up against its last price or its first price.
+
+    The average of earlier payments hides a stepped creep (R29, R59, R79 against
+    an average near R45), so the latest price is also measured against the
+    payment before it and against where the charge started.
+    """
+    if trend.latest_amount is None:
+        return False
+    # A single step needs 5%. Drift added up over many payments needs the same
+    # 10% as any other change, so a few rand of creep is not flagged.
+    for base, minimum_percent in (
+        (trend.previous_amount, FIXED_PRICE_MIN_RELATIVE_PERCENT),
+        (trend.first_amount, MIN_RELATIVE_CHANGE_PERCENT),
+    ):
+        if base is None or base <= 0:
+            continue
+        change = trend.latest_amount - base
+        if (
+            change >= FIXED_PRICE_MIN_ABSOLUTE_CHANGE
+            and change / base * Decimal("100") >= minimum_percent
+        ):
+            return True
+    return False
 
 
 def _material_change(

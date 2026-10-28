@@ -3,6 +3,7 @@ import type {
   LeakAmountStatus,
   LeakAnalysis,
   LeakAnalysisSummary,
+  LeakClaims,
   LeakConfidenceLevel,
   LeakCoverageLimit,
   LeakDetection,
@@ -79,6 +80,34 @@ function parseCoverageLimits(value: unknown): LeakCoverageLimit[] {
       },
     ];
   });
+}
+
+/** Defensive: a missing or malformed block yields null, never throws. */
+export function parseLeakClaims(value: unknown): LeakClaims | null {
+  if (!isRecord(value)) return null;
+  const confirmed = Array.isArray(value.confirmed)
+    ? value.confirmed.flatMap((item): LeakClaims["confirmed"] =>
+        isRecord(item) && typeof item.text === "string" && item.text.trim()
+          ? [{ text: item.text, figures: isRecord(item.figures) ? item.figures : {} }]
+          : [],
+      )
+    : [];
+  // A suggestion with no stated limits would read as proof, so it is dropped.
+  const possible = Array.isArray(value.possible)
+    ? value.possible.flatMap((item): LeakClaims["possible"] => {
+        if (!isRecord(item) || typeof item.text !== "string" || !item.text.trim()) return [];
+        const cannotSee = isStringArray(item.cannot_see) ? item.cannot_see : [];
+        if (cannotSee.length === 0) return [];
+        return [
+          {
+            text: item.text,
+            cannot_see: cannotSee,
+            check: typeof item.check === "string" ? item.check : null,
+          },
+        ];
+      })
+    : [];
+  return { confirmed, possible };
 }
 
 /** Defensive: a missing or malformed block yields null, never throws. */
@@ -204,6 +233,7 @@ function parseLeakDetection(value: unknown): LeakDetection {
     period_start: optionalDate(value.period_start),
     period_end: optionalDate(value.period_end),
     analysis: parseLeakAnalysis(value.analysis),
+    claims: parseLeakClaims(value.claims),
   };
 }
 
