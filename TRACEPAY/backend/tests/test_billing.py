@@ -171,6 +171,35 @@ def test_annual_monitoring_flow_and_expiry(env) -> None:
     assert expired["active"] is False and expired["status"] == "expired"
 
 
+def test_annual_plan_is_created_once_when_no_plan_code_is_configured(env, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(billing.settings, "paystack_plan_code", "")
+    billing._plan_cache.clear()
+    calls: list[tuple[str, str]] = []
+
+    def fake_raw(path: str, *, method: str = "GET", body: Any = None) -> Any:
+        calls.append((method, path.split("?")[0]))
+        return []
+
+    def fake_create(path: str, *, method: str = "GET", body: Any = None) -> dict[str, Any]:
+        calls.append((method, path))
+        return {"plan_code": "PLN_auto"}
+
+    monkeypatch.setattr(billing, "_paystack_raw", fake_raw)
+    monkeypatch.setattr(billing, "_paystack", fake_create)
+    assert billing.products_payload()["annual_monitoring"]["available"] is True
+    assert billing._annual_plan_code() == "PLN_auto"
+    assert billing._annual_plan_code() == "PLN_auto"
+    assert calls == [("GET", "/plan"), ("POST", "/plan")], "looked up and created once, then cached"
+
+
+def test_annual_plan_reuses_an_existing_matching_plan(env, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(billing.settings, "paystack_plan_code", "")
+    billing._plan_cache.clear()
+    existing = [{"name": billing.PLAN_NAME, "amount": 19900, "currency": "ZAR", "plan_code": "PLN_old"}]
+    monkeypatch.setattr(billing, "_paystack_raw", lambda path, **_: existing)
+    assert billing._annual_plan_code() == "PLN_old"
+
+
 def sign(body: bytes) -> str:
     return hmac.new(SECRET.encode(), body, hashlib.sha512).hexdigest()
 

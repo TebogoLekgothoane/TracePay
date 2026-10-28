@@ -74,7 +74,7 @@ def products_payload() -> dict[str, object]:
         "annual_monitoring": {
             "price_cents": settings.monitoring_price_cents,
             "billing": "annual",
-            "available": bool(settings.paystack_plan_code),
+            "available": bool(settings.paystack_plan_code.strip() or settings.paystack_secret_key.strip()),
         },
     }
 
@@ -138,7 +138,7 @@ def _now() -> str:
 # --- Paystack ------------------------------------------------------------------
 
 
-def _paystack(path: str, *, method: str = "GET", body: object | None = None) -> dict[str, Any]:
+def _paystack_raw(path: str, *, method: str = "GET", body: object | None = None) -> Any:
     secret = settings.paystack_secret_key.strip()
     if not secret:
         logger.error("billing_unavailable reason=paystack_not_configured")
@@ -166,8 +166,64 @@ def _paystack(path: str, *, method: str = "GET", body: object | None = None) -> 
         ) from None
     if not isinstance(payload, dict) or payload.get("status") is not True:
         raise HTTPException(status_code=502, detail="The payment provider returned an error.")
-    result = payload.get("data")
+    return payload.get("data")
+
+
+def _paystack(path: str, *, method: str = "GET", body: object | None = None) -> dict[str, Any]:
+    result = _paystack_raw(path, method=method, body=body)
     return result if isinstance(result, dict) else {}
+
+
+PLAN_NAME = "TracePay Annual Monitoring"
+_plan_cache: dict[tuple[int, str], str] = {}
+
+
+def _annual_plan_code() -> str | None:
+    """The Paystack plan for annual monitoring.
+
+    PAYSTACK_PLAN_CODE wins when set. Otherwise the plan is found (or created once) from
+    the configured price, so monitoring works without a hand-made plan.
+    """
+    configured = settings.paystack_plan_code.strip()
+    if configured:
+        return configured
+    if not settings.paystack_secret_key.strip():
+        return None
+
+    amount = settings.monitoring_price_cents
+    key = (amount, settings.paystack_secret_key[-6:])
+    if key in _plan_cache:
+        return _plan_cache[key]
+
+    existing = _paystack_raw("/plan?perPage=100&interval=annually")
+    for plan in existing if isinstance(existing, list) else []:
+        if (
+            isinstance(plan, dict)
+            and plan.get("name") == PLAN_NAME
+            and plan.get("amount") == amount
+            and plan.get("currency") == CURRENCY
+            and plan.get("is_archived") is not True
+            and isinstance(plan.get("plan_code"), str)
+        ):
+            _plan_cache[key] = plan["plan_code"]
+            return plan["plan_code"]
+
+    created = _paystack(
+        "/plan",
+        method="POST",
+        body={
+            "name": PLAN_NAME,
+            "amount": amount,
+            "interval": "annually",
+            "currency": CURRENCY,
+            "description": "Full analysis plus a year of monitoring for new leaks and changes.",
+        },
+    )
+    code = created.get("plan_code")
+    if not isinstance(code, str) or not code:
+        raise HTTPException(status_code=502, detail="The payment provider returned no plan.")
+    _plan_cache[key] = code
+    return code
 
 
 def _fetch_user_email(access_token: str) -> str | None:
@@ -269,8 +325,11 @@ def create_checkout(
     analysis_key = (
         request.analysis_key if request.product == "full_analysis" else DEFAULT_ANALYSIS_KEY
     )
-    if request.product == "annual_monitoring" and not settings.paystack_plan_code:
-        raise HTTPException(status_code=503, detail="Annual monitoring is not available yet.")
+    plan_code: str | None = None
+    if request.product == "annual_monitoring":
+        plan_code = _annual_plan_code()
+        if not plan_code:
+            raise HTTPException(status_code=503, detail="Annual monitoring is not available yet.")
 
     entitlements = load_entitlements(user_id)
     owned = {"status": "already_owned", "reference": None, "authorization_url": None}
@@ -349,7 +408,7 @@ def create_checkout(
         "metadata": {"user_id": user_id, "product": request.product, "analysis_key": analysis_key},
     }
     if request.product == "annual_monitoring":
-        body["plan"] = settings.paystack_plan_code
+        body["plan"] = plan_code
     try:
         init = _paystack("/transaction/initialize", method="POST", body=body)
         url = init.get("authorization_url")

@@ -15,6 +15,11 @@ import { rhythmStartKey, type RhythmSpan } from "../dashboard/spending-rhythm";
 import { previousPeriodRange } from "../insights/insights-report";
 import type { CustomRange, Period } from "../insights/period";
 import { readTransactionRow } from "./transaction.row";
+import {
+  summariseTotalsByAccount,
+  type TotalsRow,
+  type TransactionTotals,
+} from "./transaction.totals";
 import type { TransactionRow } from "./transaction.types";
 
 export {
@@ -264,4 +269,32 @@ export async function loadSpendingRhythmData(
     localDateKey(reference.referenceDate),
   );
   return { rows, referenceDate: reference.referenceDate, isCurrent: reference.isCurrent };
+}
+
+const TOTALS_PAGE_SIZE = 1000;
+
+/** Spent / money-in totals for each account and for all accounts, over every imported row. */
+export async function loadTransactionTotals(): Promise<Record<string, TransactionTotals>> {
+  await requireAuthenticatedUserId();
+  const accounts = await listAccounts();
+  const accountIds = accounts.map((account) => account.id);
+  if (accountIds.length === 0) return summariseTotalsByAccount([]);
+
+  const rows: TotalsRow[] = [];
+  for (let from = 0; ; from += TOTALS_PAGE_SIZE) {
+    const { data, error } = await getSupabase()
+      .from("transactions")
+      .select("account_id,amount,type")
+      .eq("is_duplicate", false)
+      .in("account_id", accountIds)
+      .order("id", { ascending: true })
+      .range(from, from + TOTALS_PAGE_SIZE - 1);
+
+    if (error) throw new Error("Could not work out your totals.");
+    const page = (data ?? []) as TotalsRow[];
+    rows.push(...page);
+    if (page.length < TOTALS_PAGE_SIZE) break;
+  }
+
+  return summariseTotalsByAccount(rows);
 }

@@ -15,7 +15,7 @@ import { COLORS } from "../../src/theme/colors";
 
 const COPY: Record<BillingProduct, { name: string; detail: string; backTo: string }> = {
   full_analysis: {
-    name: "Full analysis",
+    name: "Full money autopsy",
     detail: "Once-off payment",
     backTo: "/upgrade",
   },

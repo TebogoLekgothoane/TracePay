@@ -18,20 +18,23 @@ import {
   DocumentActionsMenu,
   type DocumentActionsMenuAction,
 } from "../../src/components/ui/DocumentActionsMenu";
+import { Skeleton } from "../../src/components/ui/Skeleton";
 import { SkeletonRows } from "../../src/components/ui/SkeletonGroups";
 import {
   ADD_ACCOUNT_HREF,
   accountSetupHref,
 } from "../../src/features/accounts/account.navigation";
-import { colorForAccount } from "../../src/features/accounts/account.validation";
+import { colorForAccount, formatAccountHeading } from "../../src/features/accounts/account.validation";
 import {
   categoryName,
   formatTransactionAmount,
   transactionAccountLabel,
 } from "../../src/features/transactions/transaction.service";
+import { formatRand } from "../../src/features/transactions/transaction.totals";
 import type { TransactionRow } from "../../src/features/transactions/transaction.types";
 import { useAccounts } from "../../src/hooks/useAccounts";
 import { useTransactions } from "../../src/hooks/useTransactions";
+import { useTransactionTotals } from "../../src/hooks/useTransactionTotals";
 import { COLORS, TRACEPAY } from "../../src/theme/colors";
 
 const TRANSACTIONS_RETURN_TO = "/(tabs)/transactions";
@@ -54,6 +57,9 @@ export default function TransactionsScreen() {
   } = useTransactions(selectedAccountId);
 
   const showingAllAccounts = selectedAccountId === null;
+  const { totals, loading: totalsLoading } = useTransactionTotals(selectedAccountId);
+  const selectedAccount = accounts.find((account) => account.id === selectedAccountId);
+  const filterLabel = selectedAccount ? formatAccountHeading(selectedAccount) : "All accounts";
 
   const documentActions = useMemo((): DocumentActionsMenuAction[] => {
     const uploadForAccount = (accountId: string) => {
@@ -138,6 +144,49 @@ export default function TransactionsScreen() {
         selectedAccountId={selectedAccountId}
         onSelect={setSelectedAccountId}
       />
+
+      {accounts.length > 0 ? (
+        <View className="mt-5 rounded-3xl bg-card px-5 py-4">
+          <Text className="text-[12px] font-medium text-muted-foreground" numberOfLines={1}>
+            {filterLabel}
+            {totals ? ` · ${totals.count} transaction${totals.count === 1 ? "" : "s"}` : ""}
+          </Text>
+          <View className="mt-3 flex-row gap-4">
+            <View className="min-w-0 flex-1">
+              <Text className="text-[12px] text-muted-foreground">Total spent</Text>
+              {totalsLoading || !totals ? (
+                <View className="mt-1.5">
+                  <Skeleton width={96} height={24} radius={8} />
+                </View>
+              ) : (
+                <Text
+                  className="mt-0.5 text-[22px] font-bold tracking-[-0.4px] text-foreground"
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+                  {formatRand(totals.spent)}
+                </Text>
+              )}
+            </View>
+            <View className="min-w-0 flex-1">
+              <Text className="text-[12px] text-muted-foreground">Money in</Text>
+              {totalsLoading || !totals ? (
+                <View className="mt-1.5">
+                  <Skeleton width={96} height={24} radius={8} />
+                </View>
+              ) : (
+                <Text
+                  className="mt-0.5 text-[22px] font-bold tracking-[-0.4px] text-green-600"
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+                  {formatRand(totals.income)}
+                </Text>
+              )}
+            </View>
+          </View>
+        </View>
+      ) : null}
 
       <View className="mb-3 mt-7 flex-row items-center justify-between">
         <Text className="text-[17px] font-bold text-foreground">

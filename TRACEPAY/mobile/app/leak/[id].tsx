@@ -8,13 +8,15 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { ForYouSection } from "../../src/components/dashboard/ForYouSection";
 import { FindingReview } from "../../src/components/leaks/FindingReview";
-import { FixActionsList } from "../../src/components/leaks/FixActionsList";
+import { listHiddenLeaks } from "../../src/features/leaks/hidden-leaks";
+import { HiddenLeaksSection } from "../../src/components/leaks/HiddenLeaksSection";
 import { resolveMarkColor } from "../../src/components/leaks/LeakFlowShell";
 import { PeriodTabs } from "../../src/components/insights/PeriodTabs";
 import { BrandLogo } from "../../src/components/ui/BrandLogo";
 import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
-import { InfoSheet, SelectionSheet } from "../../src/components/ui/Modal";
+import { ChoiceMenu } from "../../src/components/ui/ChoiceMenu";
+import { InfoSheet } from "../../src/components/ui/Modal";
 import { SimpleBrandLogo } from "../../src/components/ui/SimpleBrandLogo";
 import type { ActionType } from "../../src/features/guidance/finding-guidance.model";
 import { useForYouCards } from "../../src/features/for-you/for-you.preferences";
@@ -28,7 +30,6 @@ import { useLeakEntitlement } from "../../src/features/leaks/leak-entitlement.st
 import { isLeakLocked } from "../../src/features/leaks/leak-paywall";
 import {
   LEAK_DETAILS,
-  filterFixSections,
   hasTransactionList,
   listLeakTransactions,
   listTransactionFilters,
@@ -36,7 +37,6 @@ import {
 } from "../../src/features/leaks/leak-details";
 import { getPotentialLeak, listPotentialLeaks } from "../../src/features/leaks/potential-leaks";
 import {
-  getFixContent,
   getFixRoute,
   getPrimaryFixActionId,
 } from "../../src/features/leaks/fixContent";
@@ -101,7 +101,6 @@ function LeakDetailContent() {
   );
   const [period, setPeriod] = useState<Period>("This month");
   const [customRange, setCustomRange] = useState<CustomRange>("Last 14 days");
-  const [showCustomSheet, setShowCustomSheet] = useState(false);
   const [showCalc, setShowCalc] = useState(false);
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
@@ -111,7 +110,6 @@ function LeakDetailContent() {
   const detail = leakId ? LEAK_DETAILS[leakId] : undefined;
   const potential = leakId ? getPotentialLeak(leakId) : null;
   const upcomingSubscriptions = useMemo(() => listUpcomingSubscriptions(), []);
-  const fixContent = leakId ? getFixContent(leakId) : null;
   const tone = getImpactToneStyles(scheme, detail?.impact ?? "high");
   const factor = periodFactor(period, customRange);
   const [response, setResponse] = useState<StoredLeakResponse | null>(null);
@@ -189,11 +187,6 @@ function LeakDetailContent() {
     [leakId, savingResponse],
   );
 
-  const handlePeriodChange = (next: Period) => {
-    setPeriod(next);
-    if (next === "Custom") setShowCustomSheet(true);
-  };
-
   const openGuide = (targetLeakId: string) => {
     const actionId = getPrimaryFixActionId(targetLeakId);
     if (!actionId) return;
@@ -235,7 +228,7 @@ function LeakDetailContent() {
     );
   }
 
-  if (!leakId || !detail || !fixContent || !scaledDetail) {
+  if (!leakId || !detail || !scaledDetail) {
     return (
       <SafeAreaView
         className="flex-1 items-center justify-center bg-background px-5"
@@ -252,10 +245,6 @@ function LeakDetailContent() {
   }
 
   const isTransactionList = hasTransactionList(leakId);
-  const fixSections = isTransactionList
-    ? filterFixSections(leakId, txFilter, fixContent.sections)
-    : fixContent.sections;
-  const txFilterLabel = filters.find((filter) => filter.id === txFilter)?.label;
 
   const listTitle =
     detail.listSectionTitle ??
@@ -308,18 +297,18 @@ function LeakDetailContent() {
 
           <PeriodTabs
             active={period}
-            onChange={handlePeriodChange}
+            onChange={setPeriod}
             selectedColor={tone.color}
           />
           {period === "Custom" ? (
-            <Pressable
-              onPress={() => setShowCustomSheet(true)}
-              className="mt-2 self-start rounded-full bg-muted px-3 py-1.5 active:opacity-75"
-            >
-              <Text className="text-[12px] font-medium text-foreground">
-                Range: {customRange}
-              </Text>
-            </Pressable>
+            <View className="mt-2 flex-row">
+              <ChoiceMenu
+                value={customRange}
+                options={CUSTOM_RANGES}
+                onChange={setCustomRange}
+                accessibilityLabel="Custom range"
+              />
+            </View>
           ) : null}
 
           <View className="mt-5 flex-row items-end justify-between gap-3">
@@ -498,18 +487,10 @@ function LeakDetailContent() {
             </View>
           ) : null}
 
-          <Text className="mb-2 mt-8 text-[17px] font-bold text-foreground">
-            How to stop this
-          </Text>
-          <Text className="mb-4 text-[13px] leading-5 text-muted-foreground">
-            {isTransactionList && txFilter !== "all"
-              ? `Ways to cut ${leakId === "debit" ? txFilterLabel : `your ${txFilterLabel?.toLowerCase()}`}. Tap an action to see exactly what to do.`
-              : "Follow the steps for this leak only. Tap an action to see exactly what to do."}
-          </Text>
-          <FixActionsList
-            leakId={leakId}
-            sections={fixSections}
-            impact={fixContent.impact}
+          <HiddenLeaksSection
+            leaks={listHiddenLeaks(leakId)}
+            color={tone.color}
+            onOpenGuide={getPrimaryFixActionId(leakId) ? () => openGuide(leakId) : undefined}
           />
         </View>
       </ScrollView>
@@ -522,17 +503,6 @@ function LeakDetailContent() {
           "We total avoidable charges linked to this leak for the selected period and compare them to your overall leaks."
         }
         onClose={() => setShowCalc(false)}
-      />
-      <SelectionSheet
-        visible={showCustomSheet}
-        title="Custom range"
-        selected={customRange}
-        onSelect={setCustomRange}
-        onClose={() => setShowCustomSheet(false)}
-        options={CUSTOM_RANGES.map((range) => ({
-          value: range,
-          label: range,
-        }))}
       />
     </SafeAreaView>
   );
