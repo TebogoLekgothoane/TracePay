@@ -14,41 +14,54 @@ export function useLeakIntelligenceDebug(enabled = true) {
   const controllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
 
-  const load = useCallback(() => {
-    if (!enabled) {
-      return;
-    }
-    controllerRef.current?.abort();
-    const controller = new AbortController();
-    controllerRef.current = controller;
-    const requestId = ++requestIdRef.current;
-    setLoading(true);
+  // A quiet load refreshes in the background: no spinner, the screen stays as
+  // it is, and a failure leaves the current result in place.
+  const load = useCallback(
+    (quiet: boolean) => {
+      if (!enabled) {
+        return;
+      }
+      controllerRef.current?.abort();
+      const controller = new AbortController();
+      controllerRef.current = controller;
+      const requestId = ++requestIdRef.current;
+      if (!quiet) {
+        setLoading(true);
+      }
 
-    void fetchLeakDetections(controller.signal)
-      .then((next) => {
-        if (requestId !== requestIdRef.current) {
-          return;
-        }
-        setResult(next);
-        setError(null);
-      })
-      .catch((caught: unknown) => {
-        if (requestId !== requestIdRef.current || controller.signal.aborted) {
-          return;
-        }
-        setResult(null);
-        setError(
-          caught instanceof LeakIntelligenceApiError || caught instanceof Error
-            ? caught.message
-            : "Could not analyse your financial activity.",
-        );
-      })
-      .finally(() => {
-        if (requestId === requestIdRef.current) {
-          setLoading(false);
-        }
-      });
-  }, [enabled]);
+      void fetchLeakDetections(controller.signal)
+        .then((next) => {
+          if (requestId !== requestIdRef.current) {
+            return;
+          }
+          setResult(next);
+          setError(null);
+        })
+        .catch((caught: unknown) => {
+          if (requestId !== requestIdRef.current || controller.signal.aborted) {
+            return;
+          }
+          if (quiet) {
+            return;
+          }
+          setResult(null);
+          setError(
+            caught instanceof LeakIntelligenceApiError ||
+              caught instanceof Error
+              ? caught.message
+              : "Could not analyse your financial activity.",
+          );
+        })
+        .finally(() => {
+          if (requestId === requestIdRef.current && !quiet) {
+            setLoading(false);
+          }
+        });
+    },
+    [enabled],
+  );
+  const refresh = useCallback(() => load(false), [load]);
+  const refreshQuietly = useCallback(() => load(true), [load]);
 
   useFocusEffect(
     useCallback(() => {
@@ -56,7 +69,7 @@ export function useLeakIntelligenceDebug(enabled = true) {
         setLoading(false);
         return;
       }
-      load();
+      load(false);
       return () => {
         controllerRef.current?.abort();
       };
@@ -70,5 +83,5 @@ export function useLeakIntelligenceDebug(enabled = true) {
     [],
   );
 
-  return { result, loading, error, refresh: load };
+  return { result, loading, error, refresh, refreshQuietly };
 }

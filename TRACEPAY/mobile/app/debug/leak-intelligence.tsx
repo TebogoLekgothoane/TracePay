@@ -80,6 +80,7 @@ function LeakIntelligenceDebugScreen() {
       : "Run a synthetic scenario before opening this view."
     : live.error;
   const refresh = live.refresh;
+  const refreshQuietly = live.refreshQuietly;
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -157,7 +158,7 @@ function LeakIntelligenceDebugScreen() {
           {result && !loading ? (
             <ResultContent
               result={result}
-              onQuestionHandled={synthetic.active ? undefined : refresh}
+              onQuestionHandled={synthetic.active ? undefined : refreshQuietly}
             />
           ) : null}
           {result && loading ? (
@@ -224,21 +225,33 @@ function ResultContent({
   onQuestionHandled?: () => void;
 }) {
   const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
-  const questions = onQuestionHandled ? result.questions ?? [] : [];
+  // Questions the user just dealt with disappear at once; the background
+  // refresh then brings in any follow-up and the updated findings.
+  const [handled, setHandled] = useState<string[]>([]);
+  useEffect(() => {
+    setHandled([]);
+  }, [result.questions]);
+  const questions = onQuestionHandled
+    ? (result.questions ?? []).filter((item) => !handled.includes(item.question_key))
+    : [];
+  const done = (question: FindingQuestion) => {
+    setHandled((current) => [...current, question.question_key]);
+    onQuestionHandled?.();
+  };
   const answer = async (question: FindingQuestion, value: string) => {
     await answerFindingQuestion({
       questionKey: question.question_key,
       answer: value,
       signature: question.signature,
     });
-    onQuestionHandled?.();
+    done(question);
   };
   const skip = async (question: FindingQuestion) => {
     await skipFindingQuestion({
       questionKey: question.question_key,
       signature: question.signature,
     });
-    onQuestionHandled?.();
+    done(question);
   };
   return (
     <View className="mt-6">
