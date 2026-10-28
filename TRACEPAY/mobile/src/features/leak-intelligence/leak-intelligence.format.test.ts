@@ -21,7 +21,12 @@ import {
   isConfirmedAmount,
   notCountedInTotalNote,
 } from "./leak-intelligence.format";
-import { parseLeakAnalysis, parseLeakClaims, parseLeakDetectionResult } from "./leak-intelligence.parse";
+import {
+  parseFindingQuestions,
+  parseLeakAnalysis,
+  parseLeakClaims,
+  parseLeakDetectionResult,
+} from "./leak-intelligence.parse";
 import { catalogLogoUrl, resolveCatalogLogo } from "../transactions/merchant-logos";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -352,4 +357,67 @@ test("a missing or malformed claims block is null, never a throw", () => {
   assert(parseLeakClaims(undefined) === null, "undefined");
   assert(parseLeakClaims("nope") === null, "string");
   assert(parseLeakClaims({}) !== null && parseLeakClaims({})!.possible.length === 0, "empty object is empty");
+});
+
+test("claims keep what the user said apart from the statements and an unknown effect never counts", () => {
+  const claims = parseLeakClaims({
+    confirmed: [{ text: "You paid Netflix 8 times.", figures: {} }],
+    reported: [
+      { text: "You told us you rarely use this.", question_kind: "subscription_usage", answer: "rarely" },
+      { text: "  " },
+    ],
+    possible: [],
+    user_effect: "definitely-a-leak",
+  });
+  assert(claims !== null, "claims parsed");
+  assert(claims.reported.length === 1, "blank reported fact dropped");
+  assert(claims.reported[0].answer === "rarely", "answer kept");
+  assert(claims.user_effect === "none", "unknown effect falls back to none");
+  assert(parseLeakClaims({ confirmed: [], possible: [], user_effect: "resolves" })!.user_effect === "resolves", "known effect kept");
+});
+
+test("questions need a prompt and a real choice, and always carry their signature", () => {
+  const questions = parseFindingQuestions([
+    {
+      question_key: "subscription_usage:netflix",
+      kind: "subscription_usage",
+      leak_id: "a",
+      leak_type: "subscription_leak",
+      subject: "Netflix",
+      prompt: "You paid R99 to Netflix. Do you still use it?",
+      why_asked: "Your answer shows whether this is worth reviewing.",
+      context: ["You paid Netflix 8 times."],
+      options: [
+        { value: "still_use", label: "Still use it" },
+        { value: "not_sure", label: "Not sure" },
+        { value: 1 },
+      ],
+      priority: 91.5,
+      signature: "amt=99",
+    },
+    { question_key: "x:y", kind: "made_up", prompt: "Nope", options: [] },
+    {
+      question_key: "data_usage:data",
+      kind: "data_usage",
+      prompt: "One option is not a choice",
+      options: [{ value: "a", label: "A" }],
+    },
+    { question_key: "duplicate_expected:gym", kind: "duplicate_expected", prompt: " ", options: [] },
+  ]);
+  assert(questions.length === 1, "only the well-formed question survives");
+  assert(questions[0].options.length === 2, "malformed option dropped");
+  assert(questions[0].signature === "amt=99", "signature kept");
+  assert(questions[0].can_skip === true, "skip allowed by default");
+  assert(parseFindingQuestions(undefined).length === 0, "missing questions is empty");
+});
+
+test("a result without questions still parses and has none to ask", () => {
+  const result = parseLeakDetectionResult({
+    user_id: "u",
+    transaction_count: 0,
+    detector_version: "v",
+    leaks: [],
+  });
+  assert(result.questions.length === 0, "no questions");
+  assert(result.questions_not_shown === 0, "none held back");
 });

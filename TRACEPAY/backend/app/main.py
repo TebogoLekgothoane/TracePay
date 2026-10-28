@@ -26,6 +26,13 @@ from app.finding_actions import (
     load_finding_guidance,
     save_finding_action,
 )
+from app.finding_answers import (
+    FindingAnswerRequest,
+    FindingSkipRequest,
+    answer_payload,
+    save_finding_answer,
+    skip_finding_question,
+)
 from app.finding_registry import reconcile_findings_after_import
 from app.subscription_usage import (
     SubscriptionUsageRequest,
@@ -515,6 +522,36 @@ async def save_subscription_usage_answer(
         confirmed_at=datetime.now(timezone.utc),
     )
     return usage_payload(stored)
+
+
+@app.post("/finding-questions/answer")
+async def answer_finding_question(
+    body: FindingAnswerRequest,
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Record what the user told us. Statement facts and detector confidence are untouched."""
+    enforce_rate_limit(f"finding-question:{_user_id}", 40, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    stored = save_finding_answer(
+        _user_id, access_token, body, answered_at=datetime.now(timezone.utc)
+    )
+    return answer_payload(stored)
+
+
+@app.post("/finding-questions/skip")
+async def skip_finding_question_endpoint(
+    body: FindingSkipRequest,
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Remember a skip so the question is not asked again until the finding changes."""
+    enforce_rate_limit(f"finding-question:{_user_id}", 40, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    stored = skip_finding_question(
+        _user_id, access_token, body, answered_at=datetime.now(timezone.utc)
+    )
+    return answer_payload(stored)
 
 
 @app.post("/finding-registry/{finding_id}/actions")

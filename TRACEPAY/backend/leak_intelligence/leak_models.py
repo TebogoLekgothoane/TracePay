@@ -113,16 +113,64 @@ class PossibleLeak(BaseModel):
     check: str | None = None
 
 
+class ReportedFact(BaseModel):
+    """Something the user told us. Neither proven by a statement nor a guess."""
+
+    text: str
+    question_kind: str
+    answer: str
+
+
+UserEffect = Literal["none", "strengthens", "weakens", "resolves"]
+
+
 class LeakClaims(BaseModel):
-    """Two different claims about one finding.
+    """Three different kinds of claim about one finding.
 
     ``confirmed`` is true of the user's statements ("You paid this fee 17
-    times"). ``possible`` is a hypothesis ("You may be able to avoid this fee")
-    that the statements cannot settle on their own.
+    times"). ``reported`` is what the user told us ("You said you rarely use
+    this"). ``possible`` is a hypothesis ("You may be able to avoid this fee")
+    that neither of the others settles. ``user_effect`` is what the user's
+    answer did to the finding: it never changes the statement facts.
     """
 
     confirmed: list[ConfirmedFact] = Field(default_factory=list)
+    reported: list[ReportedFact] = Field(default_factory=list)
     possible: list[PossibleLeak] = Field(default_factory=list)
+    user_effect: UserEffect = "none"
+
+
+QuestionKind = Literal[
+    "subscription_usage",
+    "cancelled_in",
+    "duplicate_expected",
+    "data_usage",
+    "insurance_cover",
+    "bank_account",
+]
+
+
+class QuestionOption(BaseModel):
+    value: str
+    label: str
+
+
+class FindingQuestion(BaseModel):
+    """One targeted question, asked because the answer could change a finding."""
+
+    question_key: str = Field(min_length=3, max_length=120)
+    kind: QuestionKind
+    leak_id: str
+    leak_type: str
+    subject: str
+    prompt: str
+    why_asked: str
+    context: list[str] = Field(default_factory=list)
+    options: list[QuestionOption]
+    can_skip: bool = True
+    priority: float = 0
+    # Echoed back with the answer so a later change to the finding can reopen it.
+    signature: str = ""
 
 
 class LeakDetection(BaseModel):
@@ -162,3 +210,5 @@ class LeakDetectionResult(BaseModel):
     detector_version: str
     leaks: list[LeakDetection] = Field(default_factory=list)
     analysis_summary: LeakResultSummary | None = None
+    questions: list[FindingQuestion] = Field(default_factory=list)
+    questions_not_shown: int = 0

@@ -91,7 +91,49 @@ export type LeakPossibleClaim = {
  */
 export type LeakClaims = {
   confirmed: LeakConfirmedFact[];
+  /** What the user told us. Not proven by a statement, and not a guess. */
+  reported: LeakReportedFact[];
   possible: LeakPossibleClaim[];
+  /** What the user's answer did to the finding. It never changes the confirmed facts. */
+  user_effect: LeakUserEffect;
+};
+
+export type LeakReportedFact = {
+  text: string;
+  question_kind: string;
+  answer: string;
+};
+
+export type LeakUserEffect = "none" | "strengthens" | "weakens" | "resolves";
+
+export type FindingQuestionKind =
+  | "subscription_usage"
+  | "cancelled_in"
+  | "duplicate_expected"
+  | "data_usage"
+  | "insurance_cover"
+  | "bank_account";
+
+export type FindingQuestionOption = {
+  value: string;
+  label: string;
+};
+
+/** A question TracePay asks because the answer could change a finding. */
+export type FindingQuestion = {
+  question_key: string;
+  kind: FindingQuestionKind;
+  leak_id: string;
+  leak_type: string;
+  subject: string;
+  prompt: string;
+  why_asked: string;
+  context: string[];
+  options: FindingQuestionOption[];
+  can_skip: boolean;
+  priority: number;
+  /** Sent back with the answer so a materially changed finding can reopen it. */
+  signature: string;
 };
 
 export type LeakDetection = {
@@ -127,4 +169,6 @@ export type LeakDetectionResult = {
   detector_version: string;
   leaks: LeakDetection[];
   analysis_summary?: LeakAnalysisSummary | null;
+  questions: FindingQuestion[];
+  questions_not_shown: number;
 };

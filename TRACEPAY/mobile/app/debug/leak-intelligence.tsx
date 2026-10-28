@@ -25,7 +25,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { IconButton } from "../../src/components/ui/IconButton";
 import { Button } from "../../src/components/ui/Button";
+import { FindingQuestionCard } from "../../src/components/leaks/FindingQuestionCard";
+import { LeakClaimsSection } from "../../src/components/leaks/LeakClaimsSection";
 import { LeakEvidenceSection } from "../../src/components/leaks/LeakEvidenceSection";
+import { answerFindingQuestion, skipFindingQuestion } from "../../src/api/finding-questions.api";
 import { AnthropicAnalysisSection } from "../../src/components/ui/AnthropicAnalysisCard";
 import { SyntheticSourceNote } from "../../src/features/synthetic-intelligence/SyntheticSourceNote";
 import { scenarioLabel } from "../../src/features/synthetic-intelligence/synthetic-intelligence.parse";
@@ -41,6 +44,7 @@ import {
   recognisedCategoryKey,
 } from "../../src/features/leak-intelligence/leak-intelligence.format";
 import type {
+  FindingQuestion,
   LeakDetection,
   SupportingTransaction,
 } from "../../src/features/leak-intelligence/leak-intelligence.types";
@@ -150,7 +154,12 @@ function LeakIntelligenceDebugScreen() {
 
           {loading && !result ? <LoadingState /> : null}
           {error ? <ErrorState message={error} onRetry={refresh} /> : null}
-          {result && !loading ? <ResultContent result={result} /> : null}
+          {result && !loading ? (
+            <ResultContent
+              result={result}
+              onQuestionHandled={synthetic.active ? undefined : refresh}
+            />
+          ) : null}
           {result && loading ? (
             <Text className="mt-3 text-center text-[13px] text-muted-foreground">
               Updating analysis…
@@ -200,6 +209,7 @@ function ErrorState({
 
 function ResultContent({
   result,
+  onQuestionHandled,
 }: {
   result: {
     transaction_count: number;
@@ -207,11 +217,48 @@ function ResultContent({
     period_end: string | null;
     detector_version: string;
     leaks: LeakDetection[];
+    questions?: FindingQuestion[];
+    questions_not_shown?: number;
   };
+  /** Reloads the analysis after an answer. Omitted where answers are not saved. */
+  onQuestionHandled?: () => void;
 }) {
   const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
+  const questions = onQuestionHandled ? result.questions ?? [] : [];
+  const answer = async (question: FindingQuestion, value: string) => {
+    await answerFindingQuestion({
+      questionKey: question.question_key,
+      answer: value,
+      signature: question.signature,
+    });
+    onQuestionHandled?.();
+  };
+  const skip = async (question: FindingQuestion) => {
+    await skipFindingQuestion({
+      questionKey: question.question_key,
+      signature: question.signature,
+    });
+    onQuestionHandled?.();
+  };
   return (
     <View className="mt-6">
+      {questions.length ? (
+        <View className="mb-6 gap-3">
+          {questions.map((question) => (
+            <FindingQuestionCard
+              key={question.question_key}
+              question={question}
+              onAnswer={answer}
+              onSkip={skip}
+            />
+          ))}
+          {result.questions_not_shown ? (
+            <Text className="text-center text-[12px] text-muted-foreground">
+              {result.questions_not_shown} more {result.questions_not_shown === 1 ? "question" : "questions"} later, once these are done.
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
       <View className="flex-row gap-3">
         <Metric label="Potential patterns" value={String(result.leaks.length)} />
         <Metric label="Transactions" value={String(result.transaction_count)} />
@@ -344,6 +391,8 @@ function LeakCard({
           <ChevronDown color={palette.placeholder} size={18} strokeWidth={2} />
         </Pressable>
       ) : null}
+
+      <LeakClaimsSection claims={leak.claims} />
 
       <Text className={`${irregular && !expanded ? "mt-4" : "mt-5"} text-[13px] font-semibold uppercase tracking-[0.7px] text-muted-foreground`}>
         Evidence

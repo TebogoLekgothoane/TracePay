@@ -703,6 +703,7 @@ def _recurring_leaks(
                     "first_observed_date": merchant.merchant_first_transaction_date,
                     "last_observed_date": merchant.merchant_last_transaction_date,
                     "classification_support_ratio": support_ratio(merchant.confidence_support),
+                    "merchant_category": max(categories, key=categories.get) if categories else None,
                     "finding_kind": "potential_leak",
                     **(
                         {"finding_focus": "subscription_review"}

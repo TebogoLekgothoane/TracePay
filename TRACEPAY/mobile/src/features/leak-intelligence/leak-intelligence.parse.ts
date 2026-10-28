@@ -3,7 +3,10 @@ import type {
   LeakAmountStatus,
   LeakAnalysis,
   LeakAnalysisSummary,
+  FindingQuestion,
+  FindingQuestionKind,
   LeakClaims,
+  LeakUserEffect,
   LeakConfidenceLevel,
   LeakCoverageLimit,
   LeakDetection,
@@ -49,7 +52,64 @@ export function parseLeakDetectionResult(payload: unknown): LeakDetectionResult 
     detector_version: payload.detector_version,
     leaks,
     analysis_summary: parseAnalysisSummary(payload.analysis_summary),
+    questions: parseFindingQuestions(payload.questions),
+    questions_not_shown:
+      isFiniteNumber(payload.questions_not_shown) && payload.questions_not_shown > 0
+        ? Math.floor(payload.questions_not_shown)
+        : 0,
   };
+}
+
+const QUESTION_KINDS: readonly FindingQuestionKind[] = [
+  "subscription_usage",
+  "cancelled_in",
+  "duplicate_expected",
+  "data_usage",
+  "insurance_cover",
+  "bank_account",
+];
+
+/**
+ * Defensive: a malformed question is dropped, never thrown. A question needs a
+ * prompt and at least two answers, so the user always has a real choice.
+ */
+export function parseFindingQuestions(value: unknown): FindingQuestion[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): FindingQuestion[] => {
+    if (
+      !isRecord(item) ||
+      typeof item.question_key !== "string" ||
+      typeof item.prompt !== "string" ||
+      !item.prompt.trim() ||
+      !QUESTION_KINDS.includes(item.kind as FindingQuestionKind)
+    ) {
+      return [];
+    }
+    const options = Array.isArray(item.options)
+      ? item.options.flatMap((option): FindingQuestion["options"] =>
+          isRecord(option) && typeof option.value === "string" && typeof option.label === "string"
+            ? [{ value: option.value, label: option.label }]
+            : [],
+        )
+      : [];
+    if (options.length < 2) return [];
+    return [
+      {
+        question_key: item.question_key,
+        kind: item.kind as FindingQuestionKind,
+        leak_id: typeof item.leak_id === "string" ? item.leak_id : "",
+        leak_type: typeof item.leak_type === "string" ? item.leak_type : "",
+        subject: typeof item.subject === "string" ? item.subject : "",
+        prompt: item.prompt,
+        why_asked: typeof item.why_asked === "string" ? item.why_asked : "",
+        context: isStringArray(item.context) ? item.context : [],
+        options,
+        can_skip: item.can_skip !== false,
+        priority: isFiniteNumber(item.priority) ? item.priority : 0,
+        signature: typeof item.signature === "string" ? item.signature : "",
+      },
+    ];
+  });
 }
 
 const ACCOUNT_PATTERNS: readonly LeakAccountPattern[] = [
@@ -107,7 +167,26 @@ export function parseLeakClaims(value: unknown): LeakClaims | null {
         ];
       })
     : [];
-  return { confirmed, possible };
+  const reported = Array.isArray(value.reported)
+    ? value.reported.flatMap((item): LeakClaims["reported"] =>
+        isRecord(item) && typeof item.text === "string" && item.text.trim()
+          ? [
+              {
+                text: item.text,
+                question_kind: typeof item.question_kind === "string" ? item.question_kind : "",
+                answer: typeof item.answer === "string" ? item.answer : "",
+              },
+            ]
+          : [],
+      )
+    : [];
+  const effect: LeakUserEffect =
+    value.user_effect === "strengthens" ||
+    value.user_effect === "weakens" ||
+    value.user_effect === "resolves"
+      ? value.user_effect
+      : "none"; // an unknown effect must never read as one
+  return { confirmed, reported, possible, user_effect: effect };
 }
 
 /** Defensive: a missing or malformed block yields null, never throws. */
