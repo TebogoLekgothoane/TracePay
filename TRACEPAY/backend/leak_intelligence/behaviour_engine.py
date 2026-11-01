@@ -6,6 +6,7 @@ import hashlib
 import re
 from datetime import date
 from decimal import Decimal
+from typing import Any
 
 from .behaviour_models import BehaviourAnalysisResult, BehaviourObservation, BehaviorType
 from .engine import RECURRENCE_MIN_OBSERVATIONS
@@ -278,7 +279,11 @@ def _merchant_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviour
 
         trend = feature.merchant_amount_trend
         if trend and trend.amount_change and trend.amount_change > 0 and trend.percentage_change:
-            fixed_price = _subscription_recurring_merchant(feature) or _insurance_recurring_merchant(feature)
+            fixed_price = (
+                _subscription_recurring_merchant(feature)
+                or _insurance_recurring_merchant(feature)
+                or _recurring_bill_merchant(feature)
+            )
             material = _material_change(trend.amount_change, trend.percentage_change) or (
                 fixed_price and _material_fixed_price_rise(trend)
             )
@@ -292,6 +297,12 @@ def _merchant_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviour
                     and not insurance_increase
                     and _debit_order_recurring_merchant(feature)
                 )
+                bill_increase = (
+                    not subscription_creep
+                    and not insurance_increase
+                    and not debit_order_increase
+                    and _recurring_bill_merchant(feature)
+                )
                 evidence: dict[str, object] = {
                     "merchant_key": feature.merchant_name,
                     "first_amount": trend.first_amount,
@@ -301,6 +312,9 @@ def _merchant_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviour
                     "change_percentage": trend.percentage_change,
                     "previous_amount": trend.previous_amount,
                     "increase_count": trend.increase_count,
+                    "first_increase_date": trend.first_increase_date,
+                    "additional_paid_to_date": trend.additional_paid_to_date,
+                    "promotional_start_possible": trend.promotional_start_possible,
                     "observation_count": feature.merchant_transaction_count,
                     "first_observed_date": feature.merchant_first_transaction_date,
                     "last_observed_date": feature.merchant_last_transaction_date,
@@ -335,6 +349,16 @@ def _merchant_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviour
                         "amount than the prior observed average. This reflects observed "
                         "transaction amounts only and does not establish an official price "
                         "change, an incorrect debit, or overcharging."
+                    )
+                elif bill_increase:
+                    evidence["finding_focus"] = "recurring_bill_price_increase"
+                    evidence["average_interval_days"] = feature.recurrence.average_interval_days
+                    title = f"Recurring bill increased at {feature.merchant_name}"
+                    description = (
+                        "A bill that is paid on a regular cycle (utilities, rent or levies, "
+                        "school fees or medical cover) is higher than before. This reflects "
+                        "observed amounts only and does not establish whether the increase "
+                        "was agreed, contractual or an error."
                     )
                 else:
                     evidence["finding_focus"] = "merchant_price_increase"
@@ -554,6 +578,29 @@ def _insurance_recurring_merchant(feature: MerchantFeature) -> bool:
     )
 
 
+# Bills that arrive on a cycle and are repriced by their provider, not chosen
+# one purchase at a time.
+RECURRING_BILL_CATEGORIES = frozenset({"Utilities", "Housing", "Education", "Healthcare"})
+
+
+def _recurring_bill_merchant(feature: MerchantFeature) -> bool:
+    """A stable, regular payment in a category of provider-priced bills."""
+    categories = feature.merchant_category_transaction_count
+    bill_tx = sum(categories.get(name, 0) for name in RECURRING_BILL_CATEGORIES)
+    if not (
+        bill_tx >= 3
+        and bill_tx * 2 >= feature.merchant_transaction_count
+        and is_reliable_merchant_display_name(feature.merchant_name)
+    ):
+        return False
+    recurrence = feature.recurrence
+    return (
+        recurrence.recurrence_strength in {"medium", "high"}
+        and recurrence.observation_count >= 3
+        and matches_plausible_recurring_interval(recurrence.average_interval_days)
+    )
+
+
 def _debit_order_recurring_merchant(feature: MerchantFeature) -> bool:
     total_tx = feature.merchant_transaction_count
     debit_orders = feature.debit_order_transaction_count
@@ -633,6 +680,19 @@ def _recurring_observations(snapshot: FinancialFeatureSnapshot) -> list[Behaviou
                     **(
                         {"finding_focus": "repeated_payments_detected"}
                         if weak_commitment
+                        else {}
+                    ),
+                    # Separate mandates are a recurring commitment, reported here
+                    # as a total and never as an amount lost.
+                    **(
+                        {
+                            "parallel_mandate_count": len(feature.parallel_mandate_amounts),
+                            "parallel_mandate_amounts": feature.parallel_mandate_amounts,
+                            "combined_monthly_commitment": sum(
+                                feature.parallel_mandate_amounts, Decimal("0")
+                            ),
+                        }
+                        if feature.parallel_mandate_amounts
                         else {}
                     ),
                 },
@@ -1273,11 +1333,17 @@ def _material_fixed_price_rise(trend: AmountTrend) -> bool:
     """
     if trend.latest_amount is None:
         return False
-    # A single step needs 5%. Drift added up over many payments needs the same
-    # 10% as any other change, so a few rand of creep is not flagged.
+    # A single step needs 5%, whether it is the latest payment or happened a few
+    # payments ago and has held since. Drift added up over several increases needs
+    # the same 10% as any other change, so a few rand of creep is not flagged.
+    first_minimum = (
+        FIXED_PRICE_MIN_RELATIVE_PERCENT
+        if trend.increase_count == 1
+        else MIN_RELATIVE_CHANGE_PERCENT
+    )
     for base, minimum_percent in (
         (trend.previous_amount, FIXED_PRICE_MIN_RELATIVE_PERCENT),
-        (trend.first_amount, MIN_RELATIVE_CHANGE_PERCENT),
+        (trend.first_amount, first_minimum),
     ):
         if base is None or base <= 0:
             continue

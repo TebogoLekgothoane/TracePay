@@ -1,6 +1,6 @@
 """Regression tests for leak detection precision and presentation quality."""
 
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 
 from leak_intelligence.behaviour_engine import analyze_behaviour
@@ -117,8 +117,8 @@ def test_subscription_requires_subscription_category_not_frequency_alone() -> No
 
 def test_duplicate_leak_is_verification_candidate_with_one_time_impact_label() -> None:
     duplicate = [
-        _transaction("coffee-1", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants"),
-        _transaction("coffee-2", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants"),
+        _transaction("coffee-1", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants", transaction_time=time(10, 0)),
+        _transaction("coffee-2", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants", transaction_time=time(10, 2)),
         _transaction("later", "100", date(2026, 9, 30), merchant="OTHER", category="Shopping"),
     ]
     leak = next(item for item in _detect(duplicate).leaks if item.leak_type == "duplicate_payment_leak")
@@ -136,8 +136,8 @@ def test_duplicate_leak_is_verification_candidate_with_one_time_impact_label() -
 
 def test_leak_report_uses_potential_amount_for_one_time_only() -> None:
     duplicate = [
-        _transaction("coffee-1", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants"),
-        _transaction("coffee-2", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants"),
+        _transaction("coffee-1", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants", transaction_time=time(10, 0)),
+        _transaction("coffee-2", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants", transaction_time=time(10, 2)),
         _transaction("later", "100", date(2026, 9, 30), merchant="OTHER", category="Shopping"),
     ]
     report = render_leak_report(_detect(duplicate))

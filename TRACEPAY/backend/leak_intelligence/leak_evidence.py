@@ -9,16 +9,18 @@ Descriptions are redacted; reference numbers never leave the API.
 from __future__ import annotations
 
 import re
+from decimal import Decimal
 
 from categorisation.normalize import merchant_key as normalise_merchant_key
 from categorisation.normalize import normalize_for_matching
 from categorisation.rules import recognised_merchant_label
 from categorisation.sanitizer import sanitize_for_ai
 
-from .common import amount_of, is_purchase_reversal, merchant_group_key
-from .engine import _fee_subtype
+from .common import amount_of, is_purchase_reversal, merchant_group_key, month_key
+from .engine import _fee_subtype, _is_cash_withdrawal, _purchase_outflow
 from .leak_models import LeakDetection, LeakDetectionResult, SupportingTransaction
 from .models import FeatureTransaction
+from .payee_candidates import unidentified_signature
 
 MAX_SUPPORTING_TRANSACTIONS = 200
 
@@ -48,6 +50,9 @@ _MERCHANT_LEAKS = frozenset(
         "duplicate_streaming_leak",
         "coffee_spending_leak",
         "convenience_store_leak",
+        "overlapping_cover_leak",
+        "gambling_spending_leak",
+        "high_cost_credit_leak",
     }
 )
 
@@ -66,7 +71,13 @@ def attach_supporting_transactions(
 
 
 def _with_support(leak: LeakDetection, transactions: list[FeatureTransaction]) -> LeakDetection:
-    selected = _select(leak, transactions)
+    evidence_update: dict[str, object] = {}
+    if leak.leak_type == "spending_escalation_leak":
+        selected, evidence_update = _escalation_rows(leak, transactions)
+    elif _is_period_growth(leak):
+        selected, evidence_update = _category_growth_rows(leak, transactions)
+    else:
+        selected = _select(leak, transactions)
     selected.sort(key=lambda row: (row[0].transaction_date, row[0].transaction_id))
     rows = [
         SupportingTransaction(
@@ -79,12 +90,150 @@ def _with_support(leak: LeakDetection, transactions: list[FeatureTransaction]) -
         )
         for item, role in selected[:MAX_SUPPORTING_TRANSACTIONS]
     ]
-    return leak.model_copy(
-        update={
-            "supporting_transactions": rows,
-            "supporting_transaction_count": len(selected),
-        }
+    # Every finding says whether transactions back it. Where none can be tied to
+    # it, it says so, so an empty list is never mistaken for missing data.
+    evidence_update = {
+        **evidence_update,
+        "transaction_evidence": "attached" if rows else "insufficient",
+        **(
+            {}
+            if rows
+            else {
+                "transaction_evidence_reason": (
+                    "No individual transactions could be tied to this finding from the statement "
+                    "data, so none are shown."
+                )
+            }
+        ),
+    }
+    update: dict[str, object] = {
+        "supporting_transactions": rows,
+        "supporting_transaction_count": len(selected),
+        "evidence": {**leak.evidence, **evidence_update},
+    }
+    return leak.model_copy(update=update)
+
+
+_AMOUNT_TOLERANCE = Decimal("0.01")
+
+
+def _is_period_growth(leak: LeakDetection) -> bool:
+    """A category finding built from a current month against baseline months."""
+    evidence = leak.evidence
+    return (
+        isinstance(evidence.get("category_name"), str)
+        and isinstance(evidence.get("current_period"), str)
+        and bool(evidence.get("baseline_months"))
     )
+
+
+def _increase_rows(
+    current_rows: list[FeatureTransaction], increase: Decimal
+) -> list[FeatureTransaction]:
+    """The latest current rows that together cover the increase."""
+    covered, picked = Decimal("0"), []
+    for item in reversed(current_rows):
+        picked.append(item)
+        covered += amount_of(item)
+        if covered >= increase - _AMOUNT_TOLERANCE:
+            break
+    return list(reversed(picked))
+
+
+def _category_growth_rows(
+    leak: LeakDetection, transactions: list[FeatureTransaction]
+) -> tuple[Selected, dict[str, object]]:
+    """Rows behind a category's growth: its baseline and current months only."""
+    evidence = leak.evidence
+    category = str(evidence["category_name"])
+    current = str(evidence["current_period"])
+    baseline = {str(item) for item in evidence.get("baseline_months") or []}
+    try:
+        increase = Decimal(str(evidence.get("change_amount")))
+    except Exception:  # noqa: BLE001 - an unreadable figure means no attribution
+        return [], {}
+    months = baseline | {current}
+    rows = [
+        (item, role)
+        for item, role in _category_rows(category, transactions, with_vas_fees=False)
+        if role == "payment" and month_key(item) in months
+    ]
+    latest = sorted(
+        (item for item, _ in rows if month_key(item) == current),
+        key=lambda item: (item.transaction_date, item.transaction_id),
+    )
+    picked = _increase_rows(latest, increase)
+    return rows, (
+        {
+            "increase_rows": [
+                {
+                    "category": category,
+                    "date": item.transaction_date.isoformat(),
+                    "amount": amount_of(item),
+                }
+                for item in picked
+            ]
+        }
+        if picked
+        else {}
+    )
+
+
+def _escalation_rows(
+    leak: LeakDetection, transactions: list[FeatureTransaction]
+) -> tuple[Selected, dict[str, object]]:
+    """The rows behind an overall spending increase, taken only from what the finding named.
+
+    For each merchant whose own spend rose, the rows in the baseline months and in
+    the current month are attached. The ``increase_rows`` are the latest current
+    rows that together cover that merchant's increase, so a duplicate charge shows
+    up as the repeat. Nothing is attached when no merchant could be tied to the
+    increase, and no row is ever made up.
+    """
+    evidence = leak.evidence
+    current = evidence.get("current_period")
+    baseline = {str(item) for item in evidence.get("baseline_months") or []}
+    contributors = evidence.get("top_merchant_contributors") or []
+    if not isinstance(current, str) or not baseline or not isinstance(contributors, list):
+        return [], {}
+    months = baseline | {current}
+    selected: Selected = []
+    increase_rows: list[dict[str, object]] = []
+    for contributor in contributors:
+        if not isinstance(contributor, dict):
+            continue
+        key = contributor.get("merchant_key")
+        try:
+            increase = Decimal(str(contributor.get("change_amount")))
+        except Exception:  # noqa: BLE001 - an unreadable figure means no attribution
+            continue
+        if not isinstance(key, str):
+            continue
+        wanted = key.casefold()
+        rows = [
+            item
+            for item in transactions
+            if _purchase_outflow(item)
+            and not is_purchase_reversal(item)
+            and month_key(item) in months
+            and (merchant := merchant_group_key(item)) is not None
+            and merchant.casefold() == wanted
+        ]
+        earlier = [item for item in rows if month_key(item) in baseline]
+        latest = sorted(
+            (item for item in rows if month_key(item) == current),
+            key=lambda item: (item.transaction_date, item.transaction_id),
+        )
+        selected.extend((item, "payment") for item in [*earlier, *latest])
+        increase_rows.extend(
+            {
+                "merchant": key,
+                "date": item.transaction_date.isoformat(),
+                "amount": amount_of(item),
+            }
+            for item in _increase_rows(latest, increase)
+        )
+    return selected, ({"increase_rows": increase_rows} if increase_rows else {})
 
 
 def _select(leak: LeakDetection, transactions: list[FeatureTransaction]) -> Selected:
@@ -94,7 +243,36 @@ def _select(leak: LeakDetection, transactions: list[FeatureTransaction]) -> Sele
     if leak.leak_type == "irregular_transaction_leak":
         target = evidence.get("transaction_id")
         return [(item, "payment") for item in transactions if item.transaction_id == target]
+    if isinstance(evidence.get("description_signature"), str) and not isinstance(
+        evidence.get("merchant_key"), str
+    ):
+        # A payee that is not a recognised merchant: its rows are those whose
+        # description carries the same distinctive words.
+        signature = evidence.get("description_signature")
+        return [
+            (item, "payment")
+            for item in transactions
+            if signature is not None and unidentified_signature(item) == signature
+        ]
+    combined = _COMBINED_MERCHANT_KEY.get(leak.leak_type)
+    if combined is not None and isinstance(evidence.get(combined), list):
+        # A combined finding: the payments of each service or provider it lists.
+        rows: Selected = []
+        for service in evidence[combined]:
+            if isinstance(service, str):
+                rows.extend(_merchant_rows(service, transactions))
+        return rows
+    if leak.leak_type == "cash_usage_leak":
+        return _cash_rows(transactions)
     key = evidence.get("merchant_key")
+    if leak.leak_type in _MERCHANT_LEAKS and not isinstance(key, str):
+        # The finding withholds an unreliable merchant name, but the rows it was
+        # built from are still the ones in its own feature reference.
+        for reference in leak.supporting_feature_references:
+            match = _MERCHANT_REFERENCE.search(reference)
+            if match:
+                key = match.group(1)
+                break
     if leak.leak_type in _MERCHANT_LEAKS and isinstance(key, str):
         return _merchant_rows(key, transactions)
     category = evidence.get("category_name")
@@ -113,6 +291,31 @@ def _select(leak: LeakDetection, transactions: list[FeatureTransaction]) -> Sele
             ]
         return rows
     return []
+
+
+# Evidence key listing the merchants a combined finding is built from.
+_COMBINED_MERCHANT_KEY = {
+    "duplicate_streaming_leak": "streaming_merchants",
+    "overlapping_cover_leak": "combined_merchants",
+    "high_cost_credit_leak": "combined_merchants",
+    "gambling_spending_leak": "gambling_merchants",
+}
+
+_MERCHANT_REFERENCE = re.compile(r"merchants\[(.+?)\]")
+
+
+def _cash_rows(transactions: list[FeatureTransaction]) -> Selected:
+    """Cash withdrawals and the ATM fees charged on them."""
+    rows: Selected = []
+    for item in transactions:
+        if is_purchase_reversal(item):
+            continue
+        if item.categorisation.transaction_class == "bank_fee":
+            if _fee_subtype(item) == "atm":
+                rows.append((item, "fee"))
+        elif _is_cash_withdrawal(item) and item.transaction_type in {"debit", None}:
+            rows.append((item, "payment"))
+    return rows
 
 
 def _fee_rows(focus: object, transactions: list[FeatureTransaction]) -> Selected:

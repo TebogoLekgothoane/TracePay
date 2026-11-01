@@ -438,19 +438,63 @@ export async function deleteAccount(accountId: string): Promise<void> {
   const supabase = getSupabase();
   const mutationId = ++mutationCounter;
 
+  const fail = (step: string, cause: { code?: string; message?: string } | null) => {
+    console.warn("[TracePay][accounts] delete_failed", {
+      step,
+      accountId,
+      code: cause?.code ?? null,
+      message: cause?.message ?? "no rows deleted",
+    });
+    return new AccountError("Could not remove your account. Please try again.");
+  };
+
   const { data: statements, error: statementsError } = await supabase
     .from("statement_imports")
-    .select("file_path")
+    .select("id, file_path")
     .eq("account_id", accountId)
     .eq("user_id", userId);
 
-  if (statementsError) {
-    throw new AccountError("Could not remove your account. Please try again.");
-  }
+  if (statementsError) throw fail("list_statements", statementsError);
 
+  const statementIds = (statements ?? []).map((row) => row.id as string);
   const filePaths = (statements ?? [])
     .map((row) => (typeof row.file_path === "string" ? row.file_path : null))
     .filter((path): path is string => typeof path === "string" && path.length > 0);
+
+  // A large statement's cascade can time out in a single delete, so clear the
+  // transactions in batches first, then the statements, then the account.
+  const clearTransactions = async (column: "account_id" | "statement_id", values: string[]) => {
+    for (const value of values) {
+      for (;;) {
+        const { data: batch, error: listError } = await supabase
+          .from("transactions")
+          .select("id")
+          .eq(column, value)
+          .eq("user_id", userId)
+          .limit(500);
+        if (listError) throw fail(`list_${column}_transactions`, listError);
+        if (!batch || batch.length === 0) break;
+
+        const { error: batchError } = await supabase
+          .from("transactions")
+          .delete()
+          .in("id", batch.map((row) => row.id as string));
+        if (batchError) throw fail(`delete_${column}_transactions`, batchError);
+      }
+    }
+  };
+
+  await clearTransactions("account_id", [accountId]);
+  await clearTransactions("statement_id", statementIds);
+
+  if (statementIds.length > 0) {
+    const { error: importsError } = await supabase
+      .from("statement_imports")
+      .delete()
+      .in("id", statementIds)
+      .eq("user_id", userId);
+    if (importsError) throw fail("delete_statements", importsError);
+  }
 
   const { data: deletedRows, error } = await supabase
     .from("accounts")
@@ -459,9 +503,7 @@ export async function deleteAccount(accountId: string): Promise<void> {
     .eq("user_id", userId)
     .select("id");
 
-  if (error || !deletedRows || deletedRows.length === 0) {
-    throw new AccountError("Could not remove your account. Please try again.");
-  }
+  if (error || !deletedRows || deletedRows.length === 0) throw fail("delete_account", error);
   invalidateQueries();
 
   if (filePaths.length > 0) {

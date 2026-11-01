@@ -208,8 +208,21 @@ def _table_pdf() -> bytes:
     return source.getvalue()
 
 
-def test_extracted_kfc_pair_stays_a_verification_candidate(extracted) -> None:
+def test_extracted_date_only_kfc_pair_is_a_candidate_but_not_a_finding(extracted) -> None:
     transactions = [_feature_row(index, item) for index, item in enumerate(extracted.transactions)]
+    snapshot = build_financial_features(_USER_ID, transactions)
+    leaks = detect_leaks(snapshot, analyze_behaviour(snapshot))
+
+    assert len(snapshot.duplicate_candidates) == 1
+    assert "duplicate_payment_leak" not in {item.leak_type for item in leaks.leaks}
+
+
+def test_extracted_kfc_pair_stays_a_verification_candidate(extracted) -> None:
+    kfc_times = iter(("13:00:00", "13:01:00"))
+    transactions = [
+        _feature_row(index, item, next(kfc_times) if item.description == "KFC" else None)
+        for index, item in enumerate(extracted.transactions)
+    ]
     snapshot = build_financial_features(_USER_ID, transactions)
     behaviours = analyze_behaviour(snapshot)
     leaks = detect_leaks(snapshot, behaviours)
@@ -239,10 +252,11 @@ def test_extracted_kfc_pair_stays_a_verification_candidate(extracted) -> None:
     assert "has not confirmed" in recommendation.explanation
 
 
-def _feature_row(index: int, item):
+def _feature_row(index: int, item, transaction_time: str | None = None):
     return feature_transaction_from_row(
         {
             "id": f"pdf-{index}",
+            "transaction_time": transaction_time,
             "user_id": _USER_ID,
             "date": item.date.isoformat(),
             "description": item.description,

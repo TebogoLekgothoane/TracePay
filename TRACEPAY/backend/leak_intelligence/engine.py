@@ -40,6 +40,12 @@ from .models import (
     WeekendSpendingFeatures,
 )
 from .consolidation import order_chronologically
+from .payee_candidates import (
+    UNIDENTIFIED_GROUP_PREFIX,
+    trial_conversion_candidates,
+    unidentified_recurring_candidates,
+    unidentified_signature,
+)
 from .subscription_detection import detect_subscriptions
 from .subscription_llm import label_subscription_groups, merchant_resolver
 from .recurrence_rules import (
@@ -60,8 +66,10 @@ _REFERENCE_TOKEN = re.compile(
     r"\b(?:REF|REFERENCE|AUTH|TRN|TXN)[\s:#-]*([A-Z0-9-]{4,})\b",
     re.IGNORECASE,
 )
+# Longer keywords first: "POL" would otherwise match inside "POLICY" and read
+# the tail of the word ("ICY") as the policy number.
 _MANDATE_TOKEN = re.compile(
-    r"\b(?:POL|POLICY|CONTRACT|MANDATE|ACC|ACCOUNT|LOAN|PLAN|MEM|MEMBER)[\s:#-]*([A-Z0-9-]{2,})\b",
+    r"\b(?:POLICY|POL|CONTRACT|MANDATE|ACCOUNT|ACC|LOAN|PLAN|MEMBER|MEM)[\s:#-]*([A-Z0-9-]{2,})\b",
     re.IGNORECASE,
 )
 _DEBIT_ORDER_MARKERS = ("DEBIT ORDER", "ACB DEBIT", "NAEDO", "DEBICHECK", "MAGTAPE DEBIT")
@@ -166,6 +174,8 @@ def build_financial_features(
         income=_income_features(active),
         duplicate_candidates=_duplicate_candidates(active),
         irregular_candidates=_irregular_candidates(active),
+        trial_conversion_candidates=trial_conversion_candidates(active),
+        unidentified_recurring_candidates=unidentified_recurring_candidates(active),
         statement_import_quality=qualities,
         import_ids_by_month=import_ids_by_month,
         account_observation_end=dict(account_observation_end or {}),
@@ -210,6 +220,66 @@ def _intervals(transactions: list[FeatureTransaction]) -> list[Decimal]:
     return [Decimal((later - earlier).days) for earlier, later in zip(dates, dates[1:])]
 
 
+MAX_MISSED_CYCLES_PER_GAP = 3
+
+
+def _fill_missed_cycles(intervals: list[Decimal]) -> tuple[list[Decimal], int]:
+    """Read a gap of whole billing cycles as the cycles it spans, not as one slow payment.
+
+    A missing statement month leaves a gap of two cycles (61 days between monthly
+    payments), which would otherwise look like an unstable cadence. A gap is split
+    only when it is close to a whole multiple of the usual interval, the usual
+    interval is itself billing-like, and the series would stay mostly observed.
+    """
+    if len(intervals) < 3:
+        return intervals, 0
+    base = Decimal(str(median(intervals)))
+    if base <= ZERO or not matches_plausible_recurring_interval(base):
+        return intervals, 0
+    filled: list[Decimal] = []
+    missed = 0
+    for gap in intervals:
+        cycles = int((gap / base).to_integral_value())
+        if (
+            2 <= cycles <= MAX_MISSED_CYCLES_PER_GAP + 1
+            and abs(gap - base * cycles) <= max(Decimal("4"), base * cycles * Decimal("0.15"))
+        ):
+            filled.extend([gap / cycles] * cycles)
+            missed += cycles - 1
+        else:
+            filled.append(gap)
+    # Many missing cycles means the data is too thin to call the series regular.
+    if missed == 0 or missed > max(1, len(intervals) // 3):
+        return intervals, 0
+    # Filling must explain the gaps, not smooth a genuinely irregular series: every
+    # other interval has to sit near the usual one too.
+    tolerance = max(Decimal("5"), base * Decimal("0.20"))
+    if any(abs(value - base) > tolerance for value in filled):
+        return intervals, 0
+    return filled, missed
+
+
+INTRODUCTORY_MAX_SHARE = Decimal("0.60")
+INTRODUCTORY_MIN_FOLLOWING = 3
+INTRODUCTORY_FOLLOWING_CV = Decimal("0.10")
+
+
+def _introductory_amount(amounts: list[Decimal]) -> Decimal | None:
+    """A first payment far below a steady price that follows it (an introductory offer)."""
+    if len(amounts) < INTRODUCTORY_MIN_FOLLOWING + 1:
+        return None
+    first, later = amounts[0], amounts[1:]
+    typical = Decimal(str(median(later)))
+    if typical <= ZERO or first >= typical * INTRODUCTORY_MAX_SHARE:
+        return None
+    average = _average(later)
+    if average in (None, ZERO):
+        return None
+    if (_variance(later) or ZERO).sqrt() / average > INTRODUCTORY_FOLLOWING_CV:
+        return None
+    return first
+
+
 def _frequency(transactions: list[FeatureTransaction]) -> Decimal | None:
     dates = [item.transaction_date for item in transactions if item.transaction_date is not None]
     if len(dates) < 2:
@@ -229,6 +299,15 @@ def _monthly_amounts(
     return dict(totals), dict(counts)
 
 
+def _monthly_max_amounts(transactions: list[FeatureTransaction]) -> dict[str, Decimal]:
+    largest: dict[str, Decimal] = {}
+    for item in transactions:
+        month = month_key(item)
+        if month is not None:
+            largest[month] = max(largest.get(month, ZERO), amount_of(item))
+    return largest
+
+
 def _amount_trend(transactions: list[FeatureTransaction]) -> AmountTrend | None:
     dated = sorted(
         _without_same_day_amount_duplicates(
@@ -245,12 +324,43 @@ def _amount_trend(transactions: list[FeatureTransaction]) -> AmountTrend | None:
         return None
     change = latest - average_previous
     amounts = [amount_of(item) for item in dated]
+    step_indexes = [
+        index
+        for index in range(1, len(amounts))
+        if amounts[index] - amounts[index - 1] > AMOUNT_TOLERANCE
+    ]
+    first_increase_index = next(
+        (
+            index
+            for index in range(1, len(amounts))
+            if amounts[index] - amounts[0] > AMOUNT_TOLERANCE
+        ),
+        None,
+    )
+    additional_paid = (
+        sum(
+            (max(amount - amounts[0], ZERO) for amount in amounts[first_increase_index:]),
+            ZERO,
+        )
+        if first_increase_index is not None
+        else None
+    )
     return AmountTrend(
         first_amount=amounts[0],
         latest_amount=latest,
         previous_amount=amounts[-2],
-        increase_count=sum(
-            later - earlier > AMOUNT_TOLERANCE for earlier, later in zip(amounts, amounts[1:])
+        increase_count=len(step_indexes),
+        first_increase_date=(
+            dated[first_increase_index].transaction_date
+            if first_increase_index is not None
+            else None
+        ),
+        additional_paid_to_date=additional_paid,
+        promotional_start_possible=(
+            len(step_indexes) == 1
+            and first_increase_index is not None
+            and first_increase_index <= 2
+            and amounts[first_increase_index] >= amounts[0] * Decimal("1.5")
         ),
         average_previous_amount=average_previous,
         amount_change=change,
@@ -288,9 +398,12 @@ def _recurrence(transactions: list[FeatureTransaction]) -> RecurrenceFeature:
         key=lambda item: item.transaction_date,
     )
     amounts = [amount_of(item) for item in dated_transactions]
-    intervals = _intervals(dated_transactions)
+    intervals, missed_cycles = _fill_missed_cycles(_intervals(dated_transactions))
+    introductory = _introductory_amount(amounts)
     observed_amounts = sorted(set(amounts))
     feature = RecurrenceFeature(
+        missed_cycle_count=missed_cycles,
+        introductory_amount=introductory,
         observation_count=len(dated_transactions),
         average_interval_days=_average(intervals, minimum=1),
         median_interval_days=Decimal(str(median(intervals))) if intervals else None,
@@ -316,6 +429,13 @@ def _recurrence(transactions: list[FeatureTransaction]) -> RecurrenceFeature:
         return feature
     interval_cv = (feature.interval_variance or ZERO).sqrt() / average_interval
     amount_cv = (feature.amount_variance or ZERO).sqrt() / average_amount
+    if introductory is not None:
+        # The introductory payment is judged apart: the price that followed is what
+        # must be stable.
+        later = amounts[1:]
+        later_average = _average(later)
+        if later_average not in (None, ZERO):
+            amount_cv = (_variance(later) or ZERO).sqrt() / later_average
     if len(dated_transactions) == 2:
         if (
             matches_plausible_recurring_interval(feature.median_interval_days)
@@ -674,6 +794,10 @@ def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantF
             continue
         if _excluded_from_purchase_spending(item):
             continue
+        # A zero-value row (a trial record) is not a payment and must not
+        # distort the amount or interval of the payments that follow it.
+        if amount_of(item) == ZERO:
+            continue
         if (key := merchant_group_key(item)) is not None:
             groups[key].append(item)
     features = []
@@ -738,6 +862,7 @@ def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantF
                     {amount_of(item) for item in failed_attempts.get(merchant, [])}
                 ),
                 debit_order_transaction_count=debit_order_count,
+                parallel_mandate_amounts=_parallel_mandate_amounts(items, merchant),
                 insurance_transaction_count=insurance_count,
                 coffee_transaction_count=coffee_count,
                 coffee_total_amount=coffee_total,
@@ -783,6 +908,7 @@ def _category_features(transactions: list[FeatureTransaction]) -> list[CategoryF
                 category_average_amount=_average(amounts) or ZERO,
                 category_monthly_total=monthly_totals,
                 category_monthly_transaction_count=monthly_counts,
+                category_monthly_max_amount=_monthly_max_amounts(items),
                 category_trend=_monthly_trend(monthly_totals),
                 confidence_support=_confidence_support(items),
                 airtime_transaction_count=_airtime_transaction_count(items),
@@ -1011,6 +1137,10 @@ def _fee_subtype(transaction: FeatureTransaction) -> str | None:
         or "DEBIT INTEREST" in description
         or "OVERDRAFT INTEREST" in description
         or "INTEREST ON OVERDRAFT" in description
+        or "CREDIT CARD INTEREST" in description
+        or "INTEREST ON CREDIT CARD" in description
+        or "INTEREST DEBIT" in description
+        or "INTEREST CHARGE" in description
     ):
         return "interest"
     if "OVERDRAFT FEE" in description or "OVERDRAFT CHARGE" in description:
@@ -1534,6 +1664,30 @@ def _debit_order_qualifier_words(description: str | None, merchant: str) -> set[
     }
 
 
+def _parallel_mandate_amounts(
+    transactions: list[FeatureTransaction], merchant: str
+) -> list[Decimal]:
+    """Typical amount per mandate when a merchant debits several at once.
+
+    A mandate counts only when it recurs on its own (two or more payments), so a
+    reference that changes with every payment is not read as separate mandates.
+    """
+    groups: defaultdict[frozenset[str], list[Decimal]] = defaultdict(list)
+    for item in transactions:
+        if not _is_debit_order_transaction(item):
+            continue
+        signature = frozenset(
+            _mandate_tokens(item.description)
+            or _debit_order_qualifier_words(item.description, merchant)
+        )
+        if signature:
+            groups[signature].append(amount_of(item))
+    recurring = [amounts for amounts in groups.values() if len(amounts) >= 2]
+    if len(recurring) < 2:
+        return []
+    return sorted(Decimal(str(median(amounts))) for amounts in recurring)
+
+
 def _has_conflicting_debit_order_mandate(
     transactions: list[FeatureTransaction], merchant: str
 ) -> bool:
@@ -1646,8 +1800,14 @@ def _duplicate_candidates(
             or is_purchase_reversal(item)
         ):
             continue
-        if item.transaction_date is not None and (merchant := merchant_group_key(item)) is not None:
+        if item.transaction_date is None:
+            continue
+        if (merchant := merchant_group_key(item)) is not None:
             groups[merchant].append(item)
+        elif (signature := unidentified_signature(item)) is not None:
+            # An unfamiliar payee still gets duplicate checking, grouped by what its
+            # description says; no merchant is named.
+            groups[UNIDENTIFIED_GROUP_PREFIX + signature].append(item)
     candidates: list[DuplicateCandidate] = []
     for merchant, items in groups.items():
         items.sort(key=lambda item: (item.transaction_date, item.transaction_id))
@@ -1700,7 +1860,8 @@ def _duplicate_candidates(
                 emitted_tx_ids.update(cand.transaction_ids)
 
         if (
-            len(debit_months) >= 2
+            not merchant.startswith(UNIDENTIFIED_GROUP_PREFIX)
+            and len(debit_months) >= 2
             and len(debit_items) >= 3
             and months_with_multiple_debits <= 1
         ):
@@ -1836,7 +1997,10 @@ def _maybe_build_candidate(
 ) -> DuplicateCandidate | None:
     if _is_overlapping_statement_import_copy(transactions):
         return None
+    unidentified = merchant.startswith(UNIDENTIFIED_GROUP_PREFIX)
     is_debit_order = all(_is_debit_order_transaction(item) for item in transactions)
+    if unidentified and is_debit_order:
+        return None
     if is_debit_order:
         if months_with_multiple_debits >= 2:
             return None
@@ -1898,7 +2062,18 @@ def _maybe_build_candidate(
     if min_time_gap is not None and min_time_gap <= 15:
         match_basis.append("close_timestamp")
     representative_amount = max(amounts) if amounts else ZERO
+    all_timed = all(item.transaction_time is not None for item in transactions)
+    categories = {
+        (item.categorisation.category_name or "").strip()
+        for item in transactions
+        if (item.categorisation.category_name or "").strip()
+    }
     return DuplicateCandidate(
+        description_signature=(
+            merchant.removeprefix(UNIDENTIFIED_GROUP_PREFIX) if unidentified else None
+        ),
+        max_time_gap_minutes=_max_time_gap_minutes(transactions) if all_timed else None,
+        category_name=next(iter(categories)) if len(categories) == 1 else None,
         group_key=f"{merchant}:{dates[0].isoformat()}:{representative_amount}",
         merchant_name=merchant,
         amount=representative_amount,
@@ -1919,6 +2094,19 @@ def _maybe_build_candidate(
         billing_date_shift_days=shift_days,
         amount_variance=amount_variance,
     )
+
+
+def _max_time_gap_minutes(transactions: list[FeatureTransaction]) -> int | None:
+    times = sorted(
+        item.transaction_time.hour * 3600
+        + item.transaction_time.minute * 60
+        + item.transaction_time.second
+        for item in transactions
+        if item.transaction_time is not None
+    )
+    if len(times) < 2:
+        return None
+    return max((times[idx + 1] - times[idx]) // 60 for idx in range(len(times) - 1))
 
 
 def _min_time_gap_minutes(transactions: list[FeatureTransaction]) -> int | None:

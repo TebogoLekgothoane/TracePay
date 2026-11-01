@@ -7,6 +7,11 @@ import logging
 from app.financial_features import build_user_consolidated_inputs
 from app.finding_answers import load_finding_answers
 from leak_intelligence.behaviour_engine import analyze_behaviour
+from leak_intelligence.finding_overlap import (
+    mark_explained_findings,
+    split_for_display,
+    summarise_impact,
+)
 from leak_intelligence.finding_questions import attach_questions
 from leak_intelligence.leak_claims import attach_claims
 from leak_intelligence.leak_context import enrich_leaks
@@ -34,8 +39,10 @@ async def build_user_leak_detections(
     inputs = await build_user_consolidated_inputs(user_id, access_token)
     behaviours = analyze_behaviour(inputs.snapshot)
     detected = attach_claims(
-        attach_supporting_transactions(
-            detect_leaks(inputs.snapshot, behaviours), inputs.transactions
+        mark_explained_findings(
+            attach_supporting_transactions(
+                detect_leaks(inputs.snapshot, behaviours), inputs.transactions
+            )
         )
     )
     enriched = enrich_leaks(
@@ -44,7 +51,10 @@ async def build_user_leak_detections(
         coverage=inputs.coverage,
         accounts=inputs.accounts,
     )
-    return _with_user_answers(enriched, user_id, access_token)
+    # Totals see every finding, so an explained one is counted once; the customer
+    # list then leaves out findings another finding already accounts for.
+    enriched = enriched.model_copy(update={"impact_summary": summarise_impact(enriched.leaks)})
+    return _with_user_answers(split_for_display(enriched), user_id, access_token)
 
 
 def _with_user_answers(

@@ -104,6 +104,13 @@ class AmountTrend(BaseModel):
     average_previous_amount: Decimal | None = None
     amount_change: Decimal | None = None
     percentage_change: Decimal | None = None
+    # When the amount first stepped above the opening amount, and what was paid
+    # above that opening amount from then on (an actual figure, not a projection).
+    first_increase_date: date | None = None
+    additional_paid_to_date: Decimal | None = None
+    # A single early step (within the first two payments) is more likely an
+    # introductory price ending than a price rise.
+    promotional_start_possible: bool = False
 
 
 class RecurrenceFeature(BaseModel):
@@ -122,6 +129,12 @@ class RecurrenceFeature(BaseModel):
     interval_change_days: Decimal | None = None
     baseline_interval_count: int = 0
     current_interval_count: int = 0
+    # Whole billing cycles with no payment in the data (a missing statement month or
+    # a skipped payment). Intervals are measured as if those cycles had been seen,
+    # and the count is kept so the gap is never hidden.
+    missed_cycle_count: int = 0
+    # A first payment well below the price that followed (an introductory offer).
+    introductory_amount: Decimal | None = None
 
 
 class MerchantFeature(BaseModel):
@@ -152,6 +165,9 @@ class MerchantFeature(BaseModel):
     failed_payment_attempt_count: int = 0
     failed_payment_attempt_amounts: list[Decimal] = Field(default_factory=list)
     debit_order_transaction_count: int = 0
+    # Typical amount of each separate mandate or policy when the merchant is
+    # debited under two or more of them, each recurring on its own.
+    parallel_mandate_amounts: list[Decimal] = Field(default_factory=list)
     insurance_transaction_count: int = 0
     coffee_transaction_count: int = 0
     coffee_total_amount: Decimal = Decimal("0")
@@ -178,6 +194,9 @@ class CategoryFeature(BaseModel):
     category_average_amount: Decimal
     category_monthly_total: dict[str, Decimal] = Field(default_factory=dict)
     category_monthly_transaction_count: dict[str, int] = Field(default_factory=dict)
+    # The single largest purchase in each month, so a rise caused by one purchase
+    # can be told apart from a broad rise in spending.
+    category_monthly_max_amount: dict[str, Decimal] = Field(default_factory=dict)
     category_trend: Decimal | None = None
     confidence_support: ConfidenceSupport
     airtime_transaction_count: int = 0
@@ -322,12 +341,49 @@ class DuplicateCandidate(BaseModel):
     shared_reference_tokens: bool = False
     nearby_reversal_or_refund: bool = False
     min_time_gap_minutes: int | None = None
+    # Set when the payee is not a recognised merchant: rows are grouped by the
+    # distinctive words of their description, and no merchant identity is claimed.
+    description_signature: str | None = None
+    # Widest gap between neighbouring rows; None unless every row has a time.
+    max_time_gap_minutes: int | None = None
+    category_name: str | None = None
     match_basis: list[str] = Field(default_factory=list)
     is_debit_order: bool = False
     recurring_debit_order_count: int = 0
     recurring_debit_order_months: int = 0
     billing_date_shift_days: int = 0
     amount_variance: Decimal = Decimal("0")
+
+
+class TrialConversionCandidate(BaseModel):
+    """A subscription whose first paid charge follows a recorded trial.
+
+    Built only from rows that exist: a zero-value record or trial wording in a
+    description. Without one of those no candidate is produced.
+    """
+
+    merchant_name: str
+    trial_evidence: Literal["zero_value_record", "trial_wording"]
+    trial_dates: list[date]
+    trial_transaction_ids: list[str]
+    paid_dates: list[date]
+    paid_amounts: list[Decimal]
+    paid_transaction_ids: list[str]
+    days_from_trial_to_first_paid: int
+    amount_stable: bool
+    subscription_category: bool
+
+
+class UnidentifiedRecurringCandidate(BaseModel):
+    """Repeated payments to a payee the engine could not identify."""
+
+    description_signature: str
+    transaction_ids: list[str]
+    dates: list[date]
+    amounts: list[Decimal]
+    median_interval_days: Decimal
+    cadence: Literal["weekly", "fortnightly", "monthly", "bimonthly", "quarterly"]
+    high_confidence_transaction_count: int = 0
 
 
 class IrregularCandidate(BaseModel):
@@ -420,6 +476,10 @@ class FinancialFeatureSnapshot(BaseModel):
     income: IncomeFeatures
     duplicate_candidates: list[DuplicateCandidate] = Field(default_factory=list)
     irregular_candidates: list[IrregularCandidate] = Field(default_factory=list)
+    trial_conversion_candidates: list[TrialConversionCandidate] = Field(default_factory=list)
+    unidentified_recurring_candidates: list[UnidentifiedRecurringCandidate] = Field(
+        default_factory=list
+    )
     # Sanitised statement-import quality; never includes file content or descriptions.
     statement_import_quality: list[StatementImportQuality] = Field(default_factory=list)
     import_ids_by_month: dict[str, list[str]] = Field(default_factory=dict)

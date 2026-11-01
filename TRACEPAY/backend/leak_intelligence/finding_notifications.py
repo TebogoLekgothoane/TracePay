@@ -42,6 +42,9 @@ _LABELS = {
     "convenience_store_leak": "Convenience-store spending",
     "weekend_spending_leak": "Weekend spending spike",
     "payday_spending_leak": "Payday spending pattern",
+    "overlapping_cover_leak": "Overlapping funeral or life cover",
+    "gambling_spending_leak": "Betting and lottery spending",
+    "high_cost_credit_leak": "Credit repayments",
 }
 _NOT_SAVED = "This is not money already saved."
 

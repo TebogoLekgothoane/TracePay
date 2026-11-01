@@ -27,6 +27,8 @@ _RECURRING = frozenset(
         "unknown_recurring_payment",
         "inactive_recurring_payment_leak",
         "duplicate_streaming_leak",
+        "overlapping_cover_leak",
+        "high_cost_credit_leak",
     }
 )
 _CATEGORY = frozenset(
@@ -45,6 +47,7 @@ _FEE_OR_SPENDING = frozenset(
         "convenience_store_leak",
         "weekend_spending_leak",
         "payday_spending_leak",
+        "gambling_spending_leak",
         *_CATEGORY,
     }
 )
@@ -245,6 +248,29 @@ def subject_for_leak(leak: LeakDetection) -> str:
         category = leak.evidence.get("category_name") or leak.evidence.get("category")
         if isinstance(category, str) and category.strip():
             return subject_key(category)
+    # These two sit beside another finding for the same merchant (the plain
+    # subscription review) or have no merchant at all, so they need their own
+    # identity or the registry would merge or collide them.
+    focus_value = leak.evidence.get("finding_focus")
+    trial_merchant = leak.evidence.get("merchant_key")
+    if focus_value == "trial_conversion" and isinstance(trial_merchant, str) and trial_merchant.strip():
+        return f"{subject_key(trial_merchant)}-trial-conversion"
+    signature = leak.evidence.get("description_signature")
+    if (
+        isinstance(signature, str)
+        and signature.strip()
+        and not isinstance(trial_merchant, str)
+        and focus_value in {"unidentified_recurring_merchant", "duplicate_merchant_payment"}
+    ):
+        return f"unidentified-{subject_key(signature)}"
+    if focus_value == "overlapping_cover":
+        return "funeral-life-cover-overlap"
+    if focus_value == "credit_stacking":
+        return "credit-repayment-stacking"
+    if leak.leak_type == "gambling_spending_leak":
+        if isinstance(trial_merchant, str) and trial_merchant.strip():
+            return subject_key(trial_merchant)
+        return "gambling-spending"
     if leak.leak_type in _RECURRING or leak.leak_type in {
         "duplicate_payment_leak",
         "duplicate_debit_order_leak",

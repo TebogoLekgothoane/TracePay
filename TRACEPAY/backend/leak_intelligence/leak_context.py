@@ -25,6 +25,7 @@ from .leak_models import (
     LeakResultSummary,
     SourceAccount,
 )
+from .finding_overlap import _is_aggregate, escalation_increase_ids
 from .models import FeatureTransaction
 
 _DUPLICATE_TYPES = frozenset(
@@ -39,6 +40,8 @@ _MERCHANT_SERIES_TYPES = frozenset(
         "duplicate_payment_leak",
         "duplicate_debit_order_leak",
         "duplicate_streaming_leak",
+        "overlapping_cover_leak",
+        "high_cost_credit_leak",
     }
 )
 _ESTIMATED_TYPES = frozenset({"inactive_recurring_payment_leak"})
@@ -108,6 +111,18 @@ RULE_WINDOWS: dict[str, str] = {
     "unknown_recurring_payment": (
         "An unidentified merchant charged at a regular interval, from the actual dates of the "
         "charges."
+    ),
+    "overlapping_cover_leak": (
+        "Funeral or life cover paid to two or more providers in the same months, from the actual "
+        "charge dates. Policies may be billed to different accounts."
+    ),
+    "gambling_spending_leak": (
+        "Payments to betting and lottery operators by completed calendar month across accounts. "
+        "Winnings and withdrawals are not netted."
+    ),
+    "high_cost_credit_leak": (
+        "Repayments to credit providers in the same months, from the actual charge dates, across "
+        "accounts. Interest rates and balances are not on the statement."
     ),
 }
 
@@ -203,7 +218,13 @@ def enrich_leaks(
         rows.sort(key=lambda pair: chronological_key(pair[0]))
         context = _context(leak, rows, coverage, account_map)
         contexts[leak.leak_id] = context
-        id_sets[leak.leak_id] = {item.transaction_id for item, _ in rows}
+        # A spending increase rests on the rows that make up the increase, not on
+        # the baseline rows it is compared with.
+        id_sets[leak.leak_id] = (
+            escalation_increase_ids(leak)
+            if _is_aggregate(leak)
+            else {item.transaction_id for item, _ in rows}
+        )
 
     # Relationship between findings that rest on the same transactions.
     for leak in result.leaks:
@@ -328,6 +349,10 @@ def _context(
             extra = leak.estimated_monthly_impact
             how = "Amount is the estimated monthly cost of the overlapping service."
         amount, status = extra, "potentially_duplicated"
+    elif _is_aggregate(leak):
+        # The amount is the computed increase; the attached rows include its baseline.
+        amount, status = leak.estimated_monthly_impact, "estimated"
+        how = str(leak.evidence.get("increase_calculation") or "Amount is the computed increase.")
     elif leak.leak_type in _ESTIMATED_TYPES or leak.impact_kind == "estimated" or not rows:
         amount = amount_total if rows and leak.leak_type not in _ESTIMATED_TYPES else leak.estimated_monthly_impact
         status = "estimated"

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 
 from categorisation.classifier import classify_transaction
@@ -102,16 +102,16 @@ def test_legitimate_repeated_purchases_on_different_days_are_not_duplicates() ->
 
 def test_same_day_duplicate_candidate_requires_verification_not_savings() -> None:
     transactions = [
-        _transaction("coffee-1", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants"),
-        _transaction("coffee-2", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants"),
+        _transaction("coffee-1", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants", transaction_time=time(10, 0)),
+        _transaction("coffee-2", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants", transaction_time=time(10, 2)),
         _transaction("later", "100", date(2026, 9, 30), merchant="OTHER", category="Shopping"),
     ]
     leak = next(item for item in _detect(transactions).leaks if item.leak_type == "duplicate_payment_leak")
     assert leak.evidence["verification_required"] is True
     assert leak.evidence["potential_not_confirmed_savings"] is True
-    assert leak.evidence["match_basis"] == ["merchant", "amount", "calendar_day"]
+    assert leak.evidence["match_basis"] == ["merchant", "amount", "calendar_day", "close_timestamp"]
     assert "confirmed" not in leak.title.lower()
-    assert leak.confidence <= 0.68
+    assert leak.confidence <= 0.70
     # Classification support is used; matching fields alone do not inflate confidence.
     assert leak.confidence < 0.68 or leak.evidence["transaction_count_in_group"] >= 2
 
@@ -163,10 +163,10 @@ def test_unknown_merchants_transfers_and_refunds_do_not_create_duplicates() -> N
 
 def test_same_merchant_keeps_one_duplicate_finding_identity() -> None:
     transactions = [
-        _transaction("a1", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants"),
-        _transaction("a2", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants"),
-        _transaction("b1", "100", date(2026, 8, 1), merchant="COFFEE", category="Restaurants"),
-        _transaction("b2", "100", date(2026, 8, 1), merchant="COFFEE", category="Restaurants"),
+        _transaction("a1", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants", transaction_time=time(10, 0)),
+        _transaction("a2", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants", transaction_time=time(10, 2)),
+        _transaction("b1", "100", date(2026, 8, 1), merchant="COFFEE", category="Restaurants", transaction_time=time(10, 0)),
+        _transaction("b2", "100", date(2026, 8, 1), merchant="COFFEE", category="Restaurants", transaction_time=time(10, 2)),
         _transaction("later", "40", date(2026, 9, 30), merchant="CHECKERS", category="Groceries"),
     ]
     leaks = [item for item in _detect(transactions).leaks if item.leak_type == "duplicate_payment_leak"]

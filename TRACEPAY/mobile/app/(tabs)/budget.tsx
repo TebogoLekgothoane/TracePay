@@ -1,7 +1,8 @@
 import { router } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useMemo, useState, type ReactNode } from "react";
-import { Text, View } from "react-native";
+import { Receipt } from "lucide-react-native";
+import { Pressable, Text, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -192,7 +193,18 @@ export default function InsightsScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <TabScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
         <View className="px-5 pt-2">
-          <Text className="text-[30px] font-bold tracking-[-0.6px] text-foreground">Insights</Text>
+          <View className="flex-row items-center justify-between gap-3">
+            <Text className="text-[30px] font-bold tracking-[-0.6px] text-foreground">Insights</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="View transactions"
+              onPress={() => router.push("/transactions-list")}
+              className="flex-row items-center gap-1.5 rounded-full bg-muted px-3.5 py-2 active:opacity-75"
+            >
+              <Receipt color={palette.foreground} size={15} strokeWidth={2.2} />
+              <Text className="text-[13px] font-semibold text-foreground">Transactions</Text>
+            </Pressable>
+          </View>
           <Text className="mt-1 text-[14px] text-muted-foreground">{periodSubtitle(range)}</Text>
 
           <View className="mt-5">

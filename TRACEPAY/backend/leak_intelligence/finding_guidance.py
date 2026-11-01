@@ -52,6 +52,8 @@ _RECURRING = frozenset(
         "unknown_recurring_payment",
         "inactive_recurring_payment_leak",
         "duplicate_streaming_leak",
+        "overlapping_cover_leak",
+        "high_cost_credit_leak",
     }
 )
 _SPENDING = frozenset(
@@ -65,6 +67,7 @@ _SPENDING = frozenset(
         "convenience_store_leak",
         "weekend_spending_leak",
         "payday_spending_leak",
+        "gambling_spending_leak",
     }
 )
 _LABELS = {
@@ -86,6 +89,9 @@ _LABELS = {
     "convenience_store_leak": "Convenience-store spending",
     "weekend_spending_leak": "Weekend spending spike",
     "payday_spending_leak": "Payday spending pattern",
+    "overlapping_cover_leak": "Overlapping funeral or life cover",
+    "gambling_spending_leak": "Betting and lottery spending",
+    "high_cost_credit_leak": "Credit repayments",
 }
 _STATUS_LABELS = {
     "open": "Open",
@@ -122,6 +128,10 @@ _SPENDING_FOCUS = {
     "convenience_store_spending": "Convenience-store visits",
     "weekend_spending_spike": "Weekend discretionary spending",
     "payday_spending_pattern": "Post-payday discretionary spending",
+    "overlapping_cover": "Funeral and life cover",
+    "gambling_spending": "Betting and lottery payments",
+    "credit_stacking": "Credit repayments",
+    "high_cost_lender_repayments": "Loan repayments",
 }
 _ANALYSIS = {
     "supported": (

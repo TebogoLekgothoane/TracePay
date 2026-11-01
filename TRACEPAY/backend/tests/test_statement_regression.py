@@ -64,6 +64,11 @@ def _rows() -> list[tuple[CategorisableTransaction, date]]:
     return dated
 
 
+# The KFC pair carries timestamps (as a card feed would); a date-only pair of
+# fast-food rows is deliberately not reported as a duplicate.
+_ROW_TIMES = {"kfc-1": "13:00:00", "kfc-2": "13:01:00"}
+
+
 @pytest.fixture(name="statement")
 def statement_pipeline(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", False)
@@ -83,6 +88,7 @@ def statement_pipeline(monkeypatch: pytest.MonkeyPatch):
                 "amount": str(item.amount),
                 "type": item.transaction_type,
                 "is_duplicate": False,
+                "transaction_time": _ROW_TIMES.get(item.transaction_id),
                 "merchant_name": classified[item.transaction_id].merchant_name,
                 "category_confidence": classified[item.transaction_id].category_confidence,
                 "category_rule": classified[item.transaction_id].rule,

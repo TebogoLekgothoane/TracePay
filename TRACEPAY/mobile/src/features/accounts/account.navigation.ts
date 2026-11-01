@@ -6,7 +6,7 @@ export const LINKED_ACCOUNTS_HREF = "/settings/accounts" as const;
 const ALLOWED_RETURN_TO = new Set<string>([
   FINANCIAL_ACCOUNTS_SETUP_HREF,
   "/(tabs)",
-  "/(tabs)/transactions",
+  "/transactions-list",
   LINKED_ACCOUNTS_HREF,
   ADD_ACCOUNT_HREF,
 ]);

@@ -24,9 +24,7 @@ from leak_intelligence.common import (
 from leak_intelligence.engine import (
     AMOUNT_TOLERANCE,
     DUPLICATE_DATE_WINDOW_DAYS,
-    HIGH_CONFIDENCE,
     _has_reliable_irregular_category,
-    _irregular_candidates,
     build_financial_features,
 )
 from leak_intelligence.leak_engine import (

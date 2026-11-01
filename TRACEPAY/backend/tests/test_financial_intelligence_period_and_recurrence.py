@@ -340,18 +340,18 @@ def test_duplicate_candidates_with_divergent_descriptions_are_filtered() -> None
     matching = [
         _transaction(
             "a",
-            "50",
+            "250",
             date(2026, 7, 1),
             merchant="COFFEE",
-            category="Restaurants",
+            category="Shopping",
             description="COFFEE SHOP",
         ),
         _transaction(
             "b",
-            "50",
+            "250",
             date(2026, 7, 1),
             merchant="COFFEE",
-            category="Restaurants",
+            category="Shopping",
             description="COFFEE SHOP",
         ),
         _transaction("later", "100", date(2026, 9, 30), merchant="OTHER", category="Shopping"),

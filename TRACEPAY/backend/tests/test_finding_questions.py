@@ -1,14 +1,12 @@
 """Targeted questions: asked only when an answer could change a finding, then applied honestly."""
 
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
 
 import pytest
 from fastapi import HTTPException
 
 from app import finding_answers, finding_registry, leak_detection
 from leak_intelligence.finding_questions import (
-    MAX_PENDING,
     MAX_PER_KIND,
     StoredAnswer,
     apply_answers,
@@ -21,7 +19,7 @@ from leak_intelligence.finding_questions import (
 from leak_intelligence.leak_claims import attach_claims
 from leak_intelligence.leak_evidence import attach_supporting_transactions
 from leak_intelligence.leak_models import LeakDetectionResult
-from tests.test_detection_rules_and_claims import _gym_with_second_collection, _monthly, _run, _statement
+from tests.test_detection_rules_and_claims import _gym_with_second_collection, _monthly, _statement
 
 NOW = datetime(2026, 10, 28, 9, 0, tzinfo=timezone.utc)
 

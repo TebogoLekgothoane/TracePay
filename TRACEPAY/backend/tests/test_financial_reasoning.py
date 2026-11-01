@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 
 import pytest
@@ -33,12 +33,14 @@ def _transaction(
     confidence: float = 0.95,
     description: str | None = None,
     user_id: str = "user-a",
+    transaction_time: time | None = None,
 ) -> FeatureTransaction:
     return FeatureTransaction(
         transaction_id=transaction_id,
         user_id=user_id,
         amount=Decimal(amount),
         transaction_date=when,
+        transaction_time=transaction_time,
         merchant_name=merchant,
         description=description or merchant,
         transaction_type="debit",
@@ -335,8 +337,8 @@ def test_bank_fee_reasoning_uses_only_identified_subtypes() -> None:
 
 def test_duplicate_reasoning_is_one_time_and_requires_verification() -> None:
     transactions = [
-        _transaction("dup-1", "50", date(2026, 7, 1), merchant="COFFEE"),
-        _transaction("dup-2", "50", date(2026, 7, 1), merchant="COFFEE"),
+        _transaction("dup-1", "50", date(2026, 7, 1), merchant="COFFEE", transaction_time=time(9, 0)),
+        _transaction("dup-2", "50", date(2026, 7, 1), merchant="COFFEE", transaction_time=time(9, 3)),
         _transaction("history", "100", date(2026, 9, 30), merchant="SHOP"),
     ]
     pipeline = _pipeline(transactions)
@@ -375,6 +377,7 @@ def test_same_day_kfc_repeat_stays_a_verification_candidate() -> None:
                 user_id="user-a",
                 amount=Decimal("89.90") if description == "KFC" else Decimal("50"),
                 transaction_date=when,
+                transaction_time={"kfc-a": time(13, 0), "kfc-b": time(13, 1)}.get(transaction_id),
                 merchant_name="KFC" if description == "KFC" else "CHECKERS",
                 description=description,
                 transaction_type="debit",
@@ -479,8 +482,8 @@ def test_reasoning_rejects_cross_user_inputs() -> None:
 def test_reasoning_report_separates_detected_and_recoverable_impact() -> None:
     pipeline = _pipeline(
         [
-            _transaction("dup-1", "50", date(2026, 7, 1), merchant="COFFEE"),
-            _transaction("dup-2", "50", date(2026, 7, 1), merchant="COFFEE"),
+            _transaction("dup-1", "50", date(2026, 7, 1), merchant="COFFEE", transaction_time=time(9, 0)),
+            _transaction("dup-2", "50", date(2026, 7, 1), merchant="COFFEE", transaction_time=time(9, 3)),
             _transaction("history", "100", date(2026, 9, 30), merchant="SHOP"),
         ]
     )

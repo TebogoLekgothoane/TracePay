@@ -13,6 +13,8 @@ _RECURRING_TYPES = frozenset(
         "recurring_payment_leak",
         "unknown_recurring_payment",
         "duplicate_streaming_leak",
+        "overlapping_cover_leak",
+        "high_cost_credit_leak",
         "bank_fee_leak",
         "cash_usage_leak",
     }
@@ -27,6 +29,7 @@ _ESCALATION_TYPES = frozenset(
         "convenience_store_leak",
         "weekend_spending_leak",
         "payday_spending_leak",
+        "gambling_spending_leak",
     }
 )
 
@@ -124,5 +127,8 @@ def _public_title(leak_type: str, fallback: str) -> str:
         "convenience_store_leak": "Repeated convenience-store spending",
         "weekend_spending_leak": "Discretionary weekend spending spike",
         "payday_spending_leak": "Post-payday discretionary spending concentration",
+        "overlapping_cover_leak": "Funeral or life cover with several providers",
+        "gambling_spending_leak": "Regular betting or lottery payments",
+        "high_cost_credit_leak": "Credit repayments to review",
     }
     return generic.get(leak_type, "Potential spending pattern")

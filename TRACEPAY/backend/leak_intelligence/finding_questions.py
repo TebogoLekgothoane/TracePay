@@ -28,7 +28,7 @@ from typing import Any, Iterable, Literal
 
 from pydantic import BaseModel
 
-from .leak_claims import _as_date, _dec, _day, _money
+from .leak_claims import _dec, _day, _money
 from .leak_keys import subject_key
 from .leak_models import (
     ConfirmedFact,

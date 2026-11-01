@@ -57,7 +57,9 @@ _HABIT_AND_PATTERN_LEAK_TYPES = {
     "convenience_store_leak",
     "weekend_spending_leak",
     "payday_spending_leak",
+    "gambling_spending_leak",
 }
+_COMMITMENT_STACK_LEAK_TYPES = {"overlapping_cover_leak", "high_cost_credit_leak"}
 
 
 @dataclass
@@ -124,6 +126,8 @@ def _reason_about_leak(
         draft = _duplicate_debit_order_reasoning(leak)
     elif leak.leak_type == "duplicate_streaming_leak":
         draft = _duplicate_streaming_reasoning(leak)
+    elif leak.leak_type in _COMMITMENT_STACK_LEAK_TYPES:
+        draft = _commitment_reasoning(leak)
     elif leak.leak_type in _RECURRING_LEAK_TYPES:
         draft = _recurring_reasoning(snapshot, leak, related)
     elif leak.leak_type == "inactive_recurring_payment_leak":
@@ -837,6 +841,45 @@ def _duplicate_streaming_reasoning(leak: LeakDetection) -> _Draft:
     )
 
 
+def _commitment_reasoning(leak: LeakDetection) -> _Draft:
+    """Overlapping cover and credit repayments: facts from the statement, no verdict."""
+    evidence = {
+        key: value
+        for key, value in {
+            "finding_focus": leak.evidence.get("finding_focus"),
+            "provider_count": _integer(leak.evidence.get("provider_count")),
+            "provider_names": leak.evidence.get("provider_names"),
+            "combined_merchants": leak.evidence.get("combined_merchants"),
+            "overlapping_months": leak.evidence.get("overlapping_months"),
+            "overlapping_month_count": _integer(leak.evidence.get("overlapping_month_count")),
+            "merchant_key": leak.evidence.get("merchant_key"),
+            "verification_required": True,
+        }.items()
+        if value is not None
+    }
+    if leak.leak_type == "overlapping_cover_leak":
+        explanation = (
+            "Funeral or life cover was paid to more than one provider across overlapping "
+            "months. The statement shows the premiums but not who or what each policy "
+            "covers, so it cannot say whether the cover is deliberate or overlaps."
+        )
+    else:
+        explanation = (
+            "Repayments to credit providers were running at the same time, or went to a "
+            "lender in the short-term credit category. The statement shows the repayments "
+            "but not the interest rate or the balance, so it cannot say what the credit costs."
+        )
+    return _Draft(
+        root_cause_type="recurring_commitment",
+        title=leak.title,
+        explanation=explanation,
+        evidence=evidence,
+        persistence="persistent",
+        analysis_status="verification_required",
+        evidence_strength=Decimal("0.66"),
+    )
+
+
 def _habit_or_pattern_reasoning(
     snapshot: FinancialFeatureSnapshot,
     leak: LeakDetection,
@@ -856,6 +899,12 @@ def _habit_or_pattern_reasoning(
         explanation = (
             "Repeated convenience-store and forecourt quick-stop visits accumulated "
             "into a material monthly spend total across the observed period."
+        )
+    elif leak.leak_type == "gambling_spending_leak":
+        explanation = (
+            "Payments to betting and lottery operators repeated across several months and "
+            "added up to a measurable monthly outlay. The statement shows what was paid in, "
+            "not winnings or withdrawals."
         )
     elif leak.leak_type == "weekend_spending_leak":
         explanation = (

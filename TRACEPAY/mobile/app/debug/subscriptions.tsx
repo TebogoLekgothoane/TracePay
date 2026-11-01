@@ -1,43 +1,32 @@
 import { Redirect, router } from "expo-router";
-import { ChevronLeft, CreditCard, Repeat } from "lucide-react-native";
+import { ChevronDown, ChevronLeft, Repeat, RefreshCw } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Button } from "../../src/components/ui/Button";
-import { AnthropicAnalysisSection } from "../../src/components/ui/AnthropicAnalysisCard";
 import { IconButton } from "../../src/components/ui/IconButton";
 import { SimpleBrandLogo } from "../../src/components/ui/SimpleBrandLogo";
 import { resolveBrandIcon } from "../../src/features/brands/simple-brand-icons";
 import {
   formatIntervalDays,
   formatMonthlyEstimate,
-  formatObservedRange,
-  formatRecurrenceStrength,
-  formatSubscriptionSource,
   formatSubscriptionsSummary,
 } from "../../src/features/subscriptions-debug/subscriptions.format";
 import { subscriptionsFromLeakDetections } from "../../src/features/subscriptions-debug/subscriptions.parse";
 import type { DetectedSubscription } from "../../src/features/subscriptions-debug/subscriptions.types";
 import { SyntheticSourceNote } from "../../src/features/synthetic-intelligence/SyntheticSourceNote";
 import { scenarioLabel } from "../../src/features/synthetic-intelligence/synthetic-intelligence.parse";
-import {
-  catalogLogoUrl,
-  resolveCatalogLogo,
-} from "../../src/features/transactions/merchant-logos";
-import { useAnthropicAnalysisOnDemand } from "../../src/hooks/useAnthropicAnalysisOnDemand";
+import { catalogLogoUrl, resolveCatalogLogo } from "../../src/features/transactions/merchant-logos";
 import { useStoredSyntheticAnalysis } from "../../src/hooks/useStoredSyntheticAnalysis";
 import { useSubscriptionsDebug } from "../../src/hooks/useSubscriptionsDebug";
 import { COLORS } from "../../src/theme/colors";
 
+/**
+ * Your subscriptions, as the subscriptions list would show them: what each costs,
+ * when it is next due, and whether the last payment went through.
+ */
 export default function SubscriptionsDebugRoute() {
   if (!__DEV__) {
     return <Redirect href="/(tabs)" />;
@@ -45,12 +34,18 @@ export default function SubscriptionsDebugRoute() {
   return <SubscriptionsDebugScreen />;
 }
 
+const STATUS_CHIPS: Record<string, { label: string; container: string; text: string }> = {
+  active: { label: "Active", container: "bg-primary/10", text: "text-primary" },
+  late: { label: "Late", container: "bg-muted", text: "text-muted-foreground" },
+  failed_recently: { label: "Payment failed", container: "bg-destructive/10", text: "text-destructive" },
+  ended: { label: "Ended", container: "bg-muted", text: "text-muted-foreground" },
+};
+
 function SubscriptionsDebugScreen() {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const synthetic = useStoredSyntheticAnalysis();
   const live = useSubscriptionsDebug(!synthetic.active);
-  const ai = useAnthropicAnalysisOnDemand();
   const result = useMemo(() => {
     if (synthetic.active) {
       return synthetic.analysis?.leaks
@@ -65,7 +60,6 @@ function SubscriptionsDebugScreen() {
       ? null
       : "Run a synthetic scenario before opening this view."
     : live.error;
-  const refresh = live.refresh;
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -76,76 +70,79 @@ function SubscriptionsDebugScreen() {
       >
         <View className="px-5 pt-1">
           <View className="flex-row items-center gap-3">
-            <IconButton
-              accessibilityLabel="Go back"
-              variant="ghost"
-              onPress={() => router.back()}
-            >
+            <IconButton accessibilityLabel="Go back" variant="ghost" onPress={() => router.back()}>
               <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
             </IconButton>
             <View className="min-w-0 flex-1">
-              <Text className="text-[24px] font-bold text-foreground">
-                Subscriptions
-              </Text>
-              <Text className="mt-0.5 text-[14px] text-muted-foreground">
-                Detected from your bank statements
-              </Text>
+              <Text className="text-[24px] font-bold text-foreground">Subscriptions</Text>
+              {result ? (
+                <Text className="mt-0.5 text-[14px] text-muted-foreground">
+                  {formatSubscriptionsSummary(result.subscriptions.length, result.monthlyTotal)}
+                </Text>
+              ) : null}
             </View>
+            {synthetic.active ? null : (
+              <IconButton accessibilityLabel="Refresh" variant="ghost" onPress={live.refresh}>
+                <RefreshCw color={palette.foreground} size={20} strokeWidth={2} />
+              </IconButton>
+            )}
           </View>
 
           {synthetic.active && synthetic.analysis ? (
-            <SyntheticSourceNote
-              scenarioName={scenarioLabel(synthetic.analysis.scenario)}
-            />
-          ) : (
-            <View className="mt-5 rounded-3xl bg-card px-4 py-4">
-              <View className="flex-row items-center gap-3">
-                <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary/10">
-                  <Repeat color={palette.primary} size={20} strokeWidth={2.2} />
-                </View>
-                <View className="min-w-0 flex-1">
-                  <Text className="text-[15px] font-semibold text-foreground">
-                    Statement-derived recurring payments
-                  </Text>
-                  <Text className="mt-0.5 text-[13px] leading-5 text-muted-foreground">
-                    Built from imported transactions with a subscription category or
-                    stable recurring cadence. This does not confirm active usage or
-                    cancel anything.
-                  </Text>
-                </View>
-              </View>
-            </View>
-          )}
+            <SyntheticSourceNote scenarioName={scenarioLabel(synthetic.analysis.scenario)} />
+          ) : null}
 
-          {synthetic.active ? null : (
-            <View className="mt-4">
-              <Button
-                accessibilityLabel="Refresh subscriptions"
-                loading={loading}
-                onPress={refresh}
-              >
-                Refresh
+          {loading && !result ? (
+            <View className="mt-8 items-center rounded-3xl bg-card px-5 py-10">
+              <ActivityIndicator size="large" />
+              <Text className="mt-4 text-center text-[15px] font-semibold text-foreground">
+                Finding your subscriptions…
+              </Text>
+            </View>
+          ) : null}
+          {error ? (
+            <View className="mt-6 rounded-3xl bg-card px-5 py-5">
+              <Text className="text-[16px] font-semibold text-destructive">
+                Subscriptions unavailable
+              </Text>
+              <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">{error}</Text>
+              <Button className="mt-4 self-start" variant="outline" onPress={live.refresh}>
+                Try again
               </Button>
             </View>
-          )}
+          ) : null}
 
-          {synthetic.active ? null : (
-            <AnthropicAnalysisSection
-              mode="subscriptions"
-              analysis={ai.analysis}
-              loading={ai.loading}
-              error={ai.error}
-              onRun={ai.run}
-            />
-          )}
-
-          {loading && !result ? <LoadingState /> : null}
-          {error ? <ErrorState message={error} onRetry={refresh} /> : null}
-          {result && !loading ? <ResultContent result={result} /> : null}
-          {result && loading ? (
-            <Text className="mt-3 text-center text-[13px] text-muted-foreground">
-              Updating subscriptions…
-            </Text>
+          {result ? (
+            <View className="mt-6">
+              {result.subscriptions.length === 0 ? (
+                <View className="rounded-3xl bg-card px-5 py-6">
+                  <Text className="text-[16px] font-semibold text-foreground">
+                    No subscriptions found yet
+                  </Text>
+                  <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">
+                    Add more statement history and we will list what you pay for every month.
+                  </Text>
+                </View>
+              ) : (
+                <View className="gap-3">
+                  {result.subscriptions.map((subscription) => (
+                    <SubscriptionCard
+                      key={`${subscription.productKey ?? subscription.merchantKey}:${subscription.source}`}
+                      subscription={subscription}
+                    />
+                  ))}
+                </View>
+              )}
+              {loading ? (
+                <Text className="mt-3 text-center text-[13px] text-muted-foreground">Updating…</Text>
+              ) : null}
+              {result.subscriptions.length > 0 ? (
+                <Text className="mt-5 text-[12px] leading-5 text-muted-foreground">
+                  TracePay only shows what your statements contain. It does not cancel or change
+                  anything.
+                </Text>
+              ) : null}
+            </View>
           ) : null}
         </View>
       </ScrollView>
@@ -153,217 +150,86 @@ function SubscriptionsDebugScreen() {
   );
 }
 
-function LoadingState() {
-  return (
-    <View className="mt-8 items-center rounded-3xl bg-card px-5 py-10">
-      <ActivityIndicator size="large" />
-      <Text className="mt-4 text-center text-[15px] font-semibold text-foreground">
-        Finding subscriptions…
-      </Text>
-      <Text className="mt-2 text-center text-[13px] leading-5 text-muted-foreground">
-        TracePay is reviewing recurring payments in your imported statements.
-      </Text>
-    </View>
-  );
-}
-
-function ErrorState({
-  message,
-  onRetry,
-}: {
-  message: string;
-  onRetry: () => void;
-}) {
-  return (
-    <View className="mt-6 rounded-3xl bg-card px-5 py-5">
-      <Text className="text-[16px] font-semibold text-destructive">
-        Subscriptions unavailable
-      </Text>
-      <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">
-        {message}
-      </Text>
-      <Button className="mt-4 self-start" variant="outline" onPress={onRetry}>
-        Try again
-      </Button>
-    </View>
-  );
-}
-
-function ResultContent({
-  result,
-}: {
-  result: {
-    transactionCount: number;
-    periodStart: string | null;
-    periodEnd: string | null;
-    subscriptions: DetectedSubscription[];
-    monthlyTotal: number;
-  };
-}) {
-  return (
-    <View className="mt-6">
-      <View className="flex-row gap-3">
-        <Metric label="Detected" value={String(result.subscriptions.length)} />
-        <Metric
-          label="Est. monthly"
-          value={formatMonthlyEstimate(result.monthlyTotal)}
-        />
-      </View>
-      <Text className="mt-3 text-[13px] text-muted-foreground">
-        {formatSubscriptionsSummary(
-          result.subscriptions.length,
-          result.monthlyTotal,
-        )}
-      </Text>
-      <Text className="mt-1 text-[13px] text-muted-foreground">
-        Period: {formatPeriod(result.periodStart, result.periodEnd)} ·{" "}
-        {result.transactionCount} transactions analysed
-      </Text>
-
-      {result.subscriptions.length === 0 ? <EmptyState /> : null}
-      <View className="mt-5 gap-4">
-        {result.subscriptions.map((subscription) => (
-          <SubscriptionCard
-            key={`${subscription.productKey ?? subscription.merchantKey}:${subscription.source}`}
-            subscription={subscription}
-          />
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <View className="min-w-0 flex-1 rounded-2xl bg-card px-4 py-3">
-      <Text className="text-[12px] font-medium text-muted-foreground">{label}</Text>
-      <Text className="mt-1 text-[20px] font-bold text-foreground" numberOfLines={1}>
-        {value}
-      </Text>
-    </View>
-  );
-}
-
-function EmptyState() {
-  return (
-    <View className="mt-5 rounded-3xl bg-card px-5 py-6">
-      <Text className="text-[16px] font-semibold text-foreground">
-        No subscriptions detected yet
-      </Text>
-      <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">
-        Import more statement history, or check that subscription merchants are
-        categorised. Occasional purchases are not listed here.
-      </Text>
-    </View>
-  );
-}
-
 function SubscriptionCard({ subscription }: { subscription: DetectedSubscription }) {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
-  const [expanded, setExpanded] = useState(false);
+  const [open, setOpen] = useState(false);
+  const chip = subscription.status ? STATUS_CHIPS[subscription.status] : undefined;
+  const history = subscription.amountHistory?.length
+    ? subscription.amountHistory
+    : subscription.observedAmounts;
+  const priceChanged = new Set(history.map((amount) => amount.toFixed(2))).size > 1;
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ expanded }}
-      className="rounded-3xl bg-card px-5 py-5 active:opacity-90"
-      onPress={() => setExpanded((current) => !current)}
-    >
-      <View className="flex-row items-start gap-3">
-        <MerchantMark displayName={subscription.displayName} />
-        <View className="min-w-0 flex-1">
-          <Text className="text-[12px] font-semibold uppercase tracking-[0.7px] text-muted-foreground">
-            {formatSubscriptionSource(subscription.source)}
-          </Text>
-          <Text className="mt-1 text-[18px] font-bold text-foreground">
-            {subscription.displayName}
-          </Text>
-          <Text className="mt-1 text-[14px] text-muted-foreground">
-            {formatMonthlyEstimate(subscription.monthlyEstimate)} / month ·{" "}
-            {formatIntervalDays(subscription.averageIntervalDays)}
-          </Text>
-        </View>
-        <View className="rounded-full bg-primary/10 px-3 py-1.5">
-          <Text className="text-[12px] font-semibold text-primary">
-            {formatRecurrenceStrength(subscription.recurrenceStrength)}
-          </Text>
-        </View>
-      </View>
-
-      {expanded ? (
-        <View className="mt-4 gap-2 border-t border-border/60 pt-4">
-          {subscription.status ? (
-            <DetailRow label="Status" value={subscription.status.replaceAll("_", " ")} />
-          ) : null}
-          {subscription.currentAmount != null ? (
-            <DetailRow label="Latest successful charge" value={formatMoney(subscription.currentAmount)} />
-          ) : null}
-          {subscription.expectedDayOfMonth ? (
-            <DetailRow label="Usual payment day" value={`Around the ${subscription.expectedDayOfMonth}${ordinal(subscription.expectedDayOfMonth)} of the month`} />
-          ) : null}
-          {subscription.lastSuccessfulCharge ? (
-            <DetailRow label="Last successful payment" value={subscription.lastSuccessfulCharge} />
-          ) : null}
-          {subscription.nextExpectedDate ? (
-            <DetailRow label="Next expected" value={subscription.nextExpectedDate} />
-          ) : null}
-          <DetailRow
-            label="Observations"
-            value={String(subscription.observationCount)}
-          />
-          <DetailRow
-            label="Successful amount history"
-            value={(subscription.amountHistory?.length ? subscription.amountHistory : subscription.observedAmounts).map(formatMoney).join(" · ") || "Not available"}
-          />
-          {subscription.failedPaymentAttemptCount > 0 ? (
-            <DetailRow label="Failed attempts / fees" value={`${subscription.failedPaymentAttemptCount} · ${formatMoney(subscription.totalFailureFees ?? 0)}`} />
-          ) : null}
-          <DetailRow
-            label="Observed range"
-            value={formatObservedRange(
-              subscription.firstObservedDate,
-              subscription.lastObservedDate,
-            )}
-          />
-          {subscription.category ? (
-            <DetailRow label="Category" value={subscription.category} />
-          ) : null}
-          {subscription.observations?.length ? (
-            <View className="mt-2 gap-2">
-              <Text className="text-[13px] font-semibold text-foreground">Payment observations</Text>
-              {subscription.observations.map((observation) => (
-                <DetailRow
-                  key={observation.transactionId}
-                  label={`${observation.date ?? "Date unavailable"} · ${observation.outcome === "failed" ? "Failed attempt" : "Successful"}`}
-                  value={formatMoney(observation.outcome === "failed" ? observation.feeAmount ?? observation.amount : observation.amount)}
-                />
-              ))}
+    <View className="rounded-3xl bg-card px-5 py-5">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        className="active:opacity-90"
+        onPress={() => setOpen((current) => !current)}
+      >
+        <View className="flex-row items-center gap-3">
+          <MerchantMark displayName={subscription.displayName} />
+          <View className="min-w-0 flex-1">
+            <Text className="text-[17px] font-bold text-foreground">
+              {subscription.displayName}
+            </Text>
+            <Text className="mt-0.5 text-[14px] text-muted-foreground">
+              {formatMonthlyEstimate(subscription.monthlyEstimate)} a month ·{" "}
+              {formatIntervalDays(subscription.averageIntervalDays).toLowerCase()}
+            </Text>
+          </View>
+          {chip ? (
+            <View className={`rounded-full px-3 py-1.5 ${chip.container}`}>
+              <Text className={`text-[12px] font-semibold ${chip.text}`}>{chip.label}</Text>
             </View>
           ) : null}
-          {subscription.debitOrderCount > 0 ? (
+        </View>
+
+        {subscription.nextExpectedDate ? (
+          <Text className="mt-3 text-[13px] text-muted-foreground">
+            Next payment around {subscription.nextExpectedDate}
+          </Text>
+        ) : null}
+        {priceChanged ? (
+          <Text className="mt-1 text-[13px] text-muted-foreground">
+            The amount has changed over time.
+          </Text>
+        ) : null}
+        <View className="mt-3 flex-row items-center justify-between">
+          <Text className="text-[13px] font-semibold text-foreground">
+            {open ? "Hide payments" : "See payments"}
+          </Text>
+          <ChevronDown color={palette.placeholder} size={18} strokeWidth={2} />
+        </View>
+      </Pressable>
+
+      {open ? (
+        <View className="mt-3 gap-2">
+          {subscription.lastSuccessfulCharge ? (
+            <DetailRow label="Last payment" value={subscription.lastSuccessfulCharge} />
+          ) : null}
+          {subscription.currentAmount != null ? (
+            <DetailRow label="Latest amount" value={formatMoney(subscription.currentAmount)} />
+          ) : null}
+          {subscription.expectedDayOfMonth ? (
             <DetailRow
-              label="Debit-order txs"
-              value={String(subscription.debitOrderCount)}
+              label="Usually paid"
+              value={`Around the ${subscription.expectedDayOfMonth}${ordinal(subscription.expectedDayOfMonth)}`}
             />
           ) : null}
-          <Text className="mt-2 text-[12px] leading-5 text-muted-foreground">
-            Detection only — TracePay does not cancel, pause, or contact the
-            merchant.
-          </Text>
+          {history.length > 0 ? (
+            <DetailRow label="Amounts paid" value={history.map(formatMoney).join(" · ")} />
+          ) : null}
+          {subscription.failedPaymentAttemptCount > 0 ? (
+            <DetailRow
+              label="Failed payments"
+              value={`${subscription.failedPaymentAttemptCount} · fees ${formatMoney(subscription.totalFailureFees ?? 0)}`}
+            />
+          ) : null}
         </View>
-      ) : (
-        <Text className="mt-3 text-[12px] text-muted-foreground">
-          Tap for observation details
-        </Text>
-      )}
-      <View className="mt-2 flex-row items-center gap-1.5">
-        <CreditCard color={palette.placeholder} size={14} strokeWidth={2} />
-        <Text className="text-[12px] text-muted-foreground">
-          From statement history
-        </Text>
-      </View>
-    </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -389,14 +255,7 @@ function MerchantMark({ displayName }: { displayName: string }) {
   if (logo && !logoFailed) {
     const bundled = resolveBrandIcon(logo.brandId) ?? resolveBrandIcon(logo.domain);
     if (bundled) {
-      return (
-        <SimpleBrandLogo
-          brandId={logo.brandId}
-          name={displayName}
-          shape="circle"
-          size={40}
-        />
-      );
+      return <SimpleBrandLogo brandId={logo.brandId} name={displayName} shape="circle" size={40} />;
     }
     const uri = catalogLogoUrl(logo.domain);
     if (uri) {
@@ -417,10 +276,6 @@ function MerchantMark({ displayName }: { displayName: string }) {
       <Repeat color="#64748B" size={18} strokeWidth={2.2} />
     </View>
   );
-}
-
-function formatPeriod(start: string | null, end: string | null): string {
-  return start && end ? `${start} to ${end}` : "Not available";
 }
 
 function formatMoney(value: number): string {

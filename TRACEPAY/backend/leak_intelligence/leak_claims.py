@@ -37,6 +37,7 @@ _RECURRING_TYPES = frozenset(
         "subscription_leak",
         "recurring_payment_leak",
         "unknown_recurring_payment",
+        "high_cost_credit_leak",
     }
 )
 _CATEGORY_TYPES = frozenset(
@@ -329,6 +330,14 @@ class _Recurring(_Builder):
                     figures={"first_amount": str(first), "latest_amount": str(latest)},
                 )
             )
+            extra_paid = _dec(evidence.get("additional_paid_to_date"))
+            if extra_paid is not None and extra_paid > 0:
+                facts.append(
+                    ConfirmedFact(
+                        text=f"You have paid {_money(extra_paid)} more than the original amount since the first increase.",
+                        figures={"additional_paid_to_date": str(extra_paid)},
+                    )
+                )
         failed = evidence.get("failed_payment_attempt_count")
         if isinstance(failed, int) and failed > 0:
             facts.append(

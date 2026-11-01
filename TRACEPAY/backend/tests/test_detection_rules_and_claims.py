@@ -120,7 +120,10 @@ def test_a_stepped_subscription_price_rise_is_found_and_costed_at_the_new_price(
         for item in behaviours.observations
     )
     leak = next(item for item in leaks if item.leak_type == "subscription_leak")
-    assert leak.estimated_monthly_impact == Decimal("79.00")
+    # The impact is the rise (79 - 29); the service is still costed at the new price.
+    assert leak.estimated_monthly_impact == Decimal("50.00")
+    assert leak.evidence["service_cost_monthly"] == Decimal("79.00")
+    assert leak.evidence["headline_impact_basis"] == "price_increase"
     assert leak.evidence["first_amount"] == Decimal("29")
     assert leak.evidence["latest_amount"] == Decimal("79")
     assert leak.evidence["price_increase_count"] == 2
@@ -135,7 +138,8 @@ def test_a_ten_percent_insurance_premium_rise_is_found() -> None:
     )
     assert observation.evidence["finding_focus"] == "insurance_premium_increase"
     leak = next(item for item in leaks if item.evidence.get("finding_focus") == "debit_order_review")
-    assert leak.estimated_monthly_impact == Decimal("412.00")
+    assert leak.estimated_monthly_impact == Decimal("71.00")
+    assert leak.evidence["service_cost_monthly"] == Decimal("412.00")
 
 
 def test_a_small_cumulative_subscription_drift_is_still_ignored() -> None:

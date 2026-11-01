@@ -1,5 +1,5 @@
 import { Redirect, router } from "expo-router";
-import { ChevronLeft, FlaskConical } from "lucide-react-native";
+import { ChevronLeft } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -15,18 +15,30 @@ import type {
 import { useSyntheticIntelligenceDebug } from "../../src/hooks/useSyntheticIntelligenceDebug";
 import { COLORS } from "../../src/theme/colors";
 
-const GROUPS: { kind: ScenarioCaseKind; title: string }[] = [
-  { kind: "positive", title: "Positive" },
-  { kind: "negative", title: "Negative" },
-  { kind: "edge", title: "Edge" },
-];
-
+/**
+ * Try the engine on a made-up customer. Pick a scenario, run it, see whether the
+ * engine found what was expected, then open the same screens a real customer sees,
+ * filled with that scenario. Nothing is saved to your account.
+ */
 export default function SyntheticIntelligenceDebugRoute() {
   if (!__DEV__) {
     return <Redirect href="/(tabs)" />;
   }
   return <SyntheticIntelligenceDebugScreen />;
 }
+
+const GROUPS: { kind: ScenarioCaseKind; title: string }[] = [
+  { kind: "positive", title: "Should be found" },
+  { kind: "negative", title: "Should not be found" },
+  { kind: "edge", title: "Borderline" },
+];
+
+const SCREENS: { label: string; pathname: string }[] = [
+  { label: "Potential leaks", pathname: "/debug/leak-intelligence" },
+  { label: "Why it happened", pathname: "/debug/financial-reasoning" },
+  { label: "Next steps", pathname: "/debug/financial-recommendations" },
+  { label: "Subscriptions", pathname: "/debug/subscriptions" },
+];
 
 function SyntheticIntelligenceDebugScreen() {
   const { colorScheme } = useColorScheme();
@@ -52,59 +64,54 @@ function SyntheticIntelligenceDebugScreen() {
       >
         <View className="px-5 pt-1">
           <View className="flex-row items-center gap-3">
-            <IconButton
-              accessibilityLabel="Go back"
-              variant="ghost"
-              onPress={() => router.back()}
-            >
+            <IconButton accessibilityLabel="Go back" variant="ghost" onPress={() => router.back()}>
               <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
             </IconButton>
             <View className="min-w-0 flex-1">
-              <Text className="text-[24px] font-bold text-foreground">
-                Synthetic Intelligence Testing
-              </Text>
+              <Text className="text-[24px] font-bold text-foreground">Test scenarios</Text>
               <Text className="mt-0.5 text-[14px] text-muted-foreground">
-                Development validation view
+                Made-up customers. Nothing is saved to your account.
               </Text>
             </View>
           </View>
 
-          <View className="mt-5 rounded-3xl bg-card px-4 py-4">
-            <View className="flex-row items-center gap-3">
-              <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary/10">
-                <FlaskConical color={palette.primary} size={20} strokeWidth={2.2} />
-              </View>
-              <View className="min-w-0 flex-1">
-                <Text className="text-[15px] font-semibold text-foreground">
-                  Synthetic Dataset
-                </Text>
-                <Text className="mt-0.5 text-[13px] leading-5 text-muted-foreground">
-                  {catalog?.dataset ?? "Synthetic Intelligence Dataset"}. Results stay
-                  out of your account and are not written to the database.
-                </Text>
-              </View>
+          {loadingCatalog && !catalog ? (
+            <View className="mt-8 items-center rounded-3xl bg-card px-5 py-10">
+              <ActivityIndicator size="large" />
+              <Text className="mt-4 text-center text-[15px] font-semibold text-foreground">
+                Loading scenarios…
+              </Text>
             </View>
-          </View>
-
-          {loadingCatalog && !catalog ? <LoadingState label="Loading scenarios..." /> : null}
-          {error && !analysis ? (
-            <ErrorState
-              title={catalog ? "Analysis failed" : "Synthetic testing unavailable"}
-              message={error}
-              onRetry={catalog ? runAnalysis : refreshCatalog}
-            />
           ) : null}
-          {catalog && catalog.scenarios.length === 0 ? <EmptyState /> : null}
+          {error && !analysis ? (
+            <View className="mt-6 rounded-3xl bg-card px-5 py-5">
+              <Text className="text-[16px] font-semibold text-destructive">
+                {catalog ? "Run failed" : "Scenarios unavailable"}
+              </Text>
+              <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">{error}</Text>
+              <Button
+                className="mt-4 self-start"
+                variant="outline"
+                onPress={catalog ? runAnalysis : refreshCatalog}
+              >
+                Try again
+              </Button>
+            </View>
+          ) : null}
+
+          {catalog && catalog.scenarios.length === 0 ? (
+            <View className="mt-5 rounded-3xl bg-card px-5 py-6">
+              <Text className="text-[16px] font-semibold text-foreground">
+                No scenarios available
+              </Text>
+            </View>
+          ) : null}
 
           {catalog && catalog.scenarios.length > 0 ? (
             <View className="mt-5">
               {GROUPS.map((group) => {
-                const items = catalog.scenarios.filter(
-                  (item) => item.case_kind === group.kind,
-                );
-                if (items.length === 0) {
-                  return null;
-                }
+                const items = catalog.scenarios.filter((item) => item.case_kind === group.kind);
+                if (items.length === 0) return null;
                 return (
                   <View key={group.kind} className="mb-4">
                     <Text className="mb-2 text-[12px] font-semibold uppercase tracking-[0.7px] text-muted-foreground">
@@ -126,20 +133,30 @@ function SyntheticIntelligenceDebugScreen() {
             </View>
           ) : null}
 
-          {selected ? <ScenarioDetails scenario={selected} /> : null}
+          {selected ? (
+            <View className="rounded-3xl bg-card px-5 py-5">
+              <Text className="text-[17px] font-bold text-foreground">{scenarioLabel(selected)}</Text>
+              <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">
+                {selected.summary}
+              </Text>
+              <Text className="mt-3 text-[13px] font-semibold text-foreground">
+                {expectationText(selected)}
+              </Text>
+            </View>
+          ) : null}
 
           <View className="mt-4">
             <Button
-              accessibilityLabel="Run analysis"
+              accessibilityLabel="Run scenario"
               disabled={!selected}
               loading={running}
               onPress={runAnalysis}
             >
-              Run analysis
+              Run scenario
             </Button>
           </View>
 
-          {analysis ? <AnalysisSummary analysis={analysis} /> : null}
+          {analysis ? <Outcome analysis={analysis} /> : null}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -162,208 +179,95 @@ function ScenarioRow({
       className={`rounded-2xl bg-card px-4 py-3 ${selected ? "border-2 border-primary" : ""}`}
       onPress={onPress}
     >
-      <Text className="text-[15px] font-semibold text-foreground">
-        {scenarioLabel(scenario)}
-      </Text>
-      <Text className="mt-0.5 text-[12px] uppercase tracking-[0.6px] text-muted-foreground">
-        {scenario.case_kind}
-      </Text>
+      <Text className="text-[15px] font-semibold text-foreground">{scenarioLabel(scenario)}</Text>
     </Pressable>
   );
 }
 
-function ScenarioDetails({ scenario }: { scenario: SyntheticScenario }) {
-  return (
-    <View className="rounded-3xl bg-card px-4 py-4">
-      <Text className="text-[13px] font-semibold uppercase tracking-[0.7px] text-muted-foreground">
-        Scenario
-      </Text>
-      <Detail label="FI ID" value={scenario.fi_id ?? "Not assigned"} />
-      <Detail label="Name" value={scenario.name} />
-      <Detail label="Case" value={scenario.case_kind} />
-      <Text className="mt-3 text-[14px] leading-5 text-muted-foreground">
-        {scenario.summary}
-      </Text>
-      <Text className="mt-3 text-[13px] text-foreground">{expectedText(scenario)}</Text>
-    </View>
-  );
-}
-
-function AnalysisSummary({ analysis }: { analysis: SyntheticScenarioAnalysis }) {
+function Outcome({ analysis }: { analysis: SyntheticScenarioAnalysis }) {
+  const result = verdict(analysis);
+  const leaks = analysis.leaks.leaks;
   return (
     <View className="mt-6">
-      <Text className="text-[18px] font-bold text-foreground">Analysis</Text>
-      <View className="mt-3 flex-row gap-3">
-        <Metric label="Transactions" value={String(analysis.features.transaction_count)} />
-        <Metric
-          label="Behaviours"
-          value={String(analysis.behaviour.observations.length)}
-        />
-      </View>
-      <View className="mt-3 flex-row gap-3">
-        <Metric label="Leaks" value={String(analysis.leaks.leaks.length)} />
-        <Metric label="Reasoning" value={String(analysis.reasoning.analyses.length)} />
-      </View>
-      <View className="mt-3">
-        <Metric
-          label="Recommendations"
-          value={String(analysis.recommendations.recommendation_count)}
-        />
+      <View
+        className={`rounded-3xl px-5 py-5 ${result.matches ? "bg-primary/10" : "bg-destructive/10"}`}
+      >
+        <Text
+          className={`text-[16px] font-bold ${result.matches ? "text-primary" : "text-destructive"}`}
+        >
+          {result.matches ? "As expected" : "Not as expected"}
+        </Text>
+        <Text className="mt-1 text-[14px] leading-5 text-foreground">{result.detail}</Text>
       </View>
 
-      <ResultList
-        title="Behaviour"
-        items={analysis.behaviour.observations.map((item) => item.title)}
-        empty="No behaviour observations."
-      />
-      <ResultList
-        title="Leaks"
-        items={analysis.leaks.leaks.map((item) => item.title)}
-        empty="No leaks detected."
-      />
-      <ResultList
-        title="Recommendations"
-        items={analysis.recommendations.recommendations.map((item) => item.title)}
-        empty="No recommendations."
-      />
-
-      <View className="mt-5 gap-3">
-        <Button
-          accessibilityLabel="Open leak intelligence"
-          variant="outline"
-          onPress={() =>
-            router.push({
-              pathname: "/debug/leak-intelligence",
-              params: { source: "synthetic" },
-            })
-          }
-        >
-          Open leak intelligence
-        </Button>
-        <Button
-          accessibilityLabel="Open financial reasoning"
-          variant="outline"
-          onPress={() =>
-            router.push({
-              pathname: "/debug/financial-reasoning",
-              params: { source: "synthetic" },
-            })
-          }
-        >
-          Open financial reasoning
-        </Button>
-        <Button
-          accessibilityLabel="Open recommendations"
-          variant="outline"
-          onPress={() =>
-            router.push({
-              pathname: "/debug/financial-recommendations",
-              params: { source: "synthetic" },
-            })
-          }
-        >
-          Open recommendations
-        </Button>
-      </View>
-    </View>
-  );
-}
-
-function ResultList({
-  title,
-  items,
-  empty,
-}: {
-  title: string;
-  items: string[];
-  empty: string;
-}) {
-  return (
-    <View className="mt-5">
-      <Text className="text-[13px] font-semibold uppercase tracking-[0.7px] text-muted-foreground">
-        {title}
+      <Text className="mt-5 text-[13px] font-semibold uppercase tracking-[0.7px] text-muted-foreground">
+        Found ({leaks.length})
       </Text>
-      {items.length === 0 ? (
-        <Text className="mt-2 text-[14px] text-muted-foreground">{empty}</Text>
+      {leaks.length === 0 ? (
+        <Text className="mt-2 text-[14px] text-muted-foreground">No potential leaks.</Text>
       ) : (
         <View className="mt-2 gap-2">
-          {items.map((item, index) => (
-            <View key={`${title}-${index}`} className="rounded-2xl bg-card px-4 py-3">
-              <Text className="text-[14px] text-foreground">{item}</Text>
+          {leaks.map((leak) => (
+            <View key={leak.fingerprint} className="rounded-2xl bg-card px-4 py-3">
+              <Text className="text-[14px] font-semibold text-foreground">{leak.title}</Text>
             </View>
           ))}
         </View>
       )}
-    </View>
-  );
-}
 
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <View className="mt-2 flex-row items-center justify-between gap-4">
-      <Text className="text-[13px] text-muted-foreground">{label}</Text>
-      <Text className="text-right text-[13px] font-semibold capitalize text-foreground">
-        {value}
+      <Text className="mt-6 text-[13px] font-semibold uppercase tracking-[0.7px] text-muted-foreground">
+        See it as a customer would
       </Text>
+      <View className="mt-2 gap-2">
+        {SCREENS.map((screen) => (
+          <Button
+            key={screen.pathname}
+            accessibilityLabel={`Open ${screen.label}`}
+            variant="outline"
+            onPress={() =>
+              router.push({ pathname: screen.pathname as never, params: { source: "synthetic" } })
+            }
+          >
+            {screen.label}
+          </Button>
+        ))}
+      </View>
     </View>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <View className="min-w-0 flex-1 rounded-2xl bg-card px-4 py-3">
-      <Text className="text-[12px] font-medium text-muted-foreground">{label}</Text>
-      <Text className="mt-1 text-[22px] font-bold text-foreground">{value}</Text>
-    </View>
-  );
+/** Did the engine find what the scenario says it should (or leave alone what it should)? */
+function verdict(analysis: SyntheticScenarioAnalysis): { matches: boolean; detail: string } {
+  const expected = analysis.scenario.expected;
+  const found = new Set(analysis.leaks.leaks.map((leak) => leak.leak_type));
+  const behaviours = new Set(analysis.behaviour.observations.map((item) => item.behavior_type));
+  const targets = expected.leak_types.length
+    ? expected.leak_types
+    : expected.leak_type
+      ? [expected.leak_type]
+      : [];
+  const present =
+    targets.some((target) => found.has(target)) ||
+    (expected.behavior_type !== null && behaviours.has(expected.behavior_type));
+  const label = targets.length ? targets.map(humanize).join(", ") : humanize(expected.behavior_type ?? "a finding");
+  if (expected.detected) {
+    return present
+      ? { matches: true, detail: `Found ${label}.` }
+      : { matches: false, detail: `Expected ${label}, but it was not found.` };
+  }
+  return present
+    ? { matches: false, detail: `${label} was found, but should not have been.` }
+    : { matches: true, detail: `${label} was correctly left out.` };
 }
 
-function LoadingState({ label }: { label: string }) {
-  return (
-    <View className="mt-8 items-center rounded-3xl bg-card px-5 py-10">
-      <ActivityIndicator size="large" />
-      <Text className="mt-4 text-center text-[15px] font-semibold text-foreground">
-        {label}
-      </Text>
-    </View>
-  );
+function expectationText(scenario: SyntheticScenario): string {
+  const { expected } = scenario;
+  const target = expected.leak_types.length
+    ? expected.leak_types.map(humanize).join(", ")
+    : humanize(expected.leak_type ?? expected.behavior_type ?? "a finding");
+  return expected.detected ? `Should find: ${target}` : `Should not find: ${target}`;
 }
 
-function EmptyState() {
-  return (
-    <View className="mt-5 rounded-3xl bg-card px-5 py-6">
-      <Text className="text-[16px] font-semibold text-foreground">
-        No synthetic scenarios are available.
-      </Text>
-    </View>
-  );
-}
-
-function ErrorState({
-  title,
-  message,
-  onRetry,
-}: {
-  title: string;
-  message: string;
-  onRetry: () => void;
-}) {
-  return (
-    <View className="mt-6 rounded-3xl bg-card px-5 py-5">
-      <Text className="text-[16px] font-semibold text-destructive">{title}</Text>
-      <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">{message}</Text>
-      <Button className="mt-4 self-start" variant="outline" onPress={onRetry}>
-        Try again
-      </Button>
-    </View>
-  );
-}
-
-function expectedText(scenario: SyntheticScenario): string {
-  const expected = scenario.expected;
-  const target =
-    expected.leak_type ??
-    expected.behavior_type ??
-    (expected.leak_types.length ? expected.leak_types.join(", ") : "a finding");
-  return expected.detected ? `Expected: ${target}` : `Expected absent: ${target}`;
+function humanize(value: string): string {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }

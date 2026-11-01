@@ -29,6 +29,9 @@ LeakType = Literal[
     "weekend_spending_leak",
     "payday_spending_leak",
     "unknown_recurring_payment",
+    "overlapping_cover_leak",
+    "gambling_spending_leak",
+    "high_cost_credit_leak",
 ]
 LeakSeverity = Literal["low", "medium", "high"]
 LeakStatus = Literal["active", "monitoring", "resolved", "dismissed"]
@@ -200,6 +203,55 @@ class LeakDetection(BaseModel):
     claims: LeakClaims | None = None
 
 
+Bucket = Literal["recurring_monthly", "one_time"]
+EvidenceStatusName = Literal["confirmed", "likely", "possible"]
+
+
+class FindingOverlap(BaseModel):
+    leak_ids: list[str]
+    # A count, not the ids: the rows themselves are listed on each finding.
+    shared_transaction_count: int = 0
+    shared_merchants: list[str] = Field(default_factory=list)
+    relation: str
+
+
+class FindingImpact(BaseModel):
+    leak_id: str
+    bucket: Bucket
+    basis: str
+    evidence_status: EvidenceStatusName
+    amount: Decimal
+    observed_amount: Decimal | None = None
+    group_id: int
+    counted_in_total: bool
+    overlaps_with: list[str] = Field(default_factory=list)
+    # Findings whose own rows already account for this one, and whether it is
+    # worth showing the customer as well.
+    explained_by: list[str] = Field(default_factory=list)
+    display: bool = True
+
+
+class ImpactSummary(BaseModel):
+    """Totals that do not count one financial event twice.
+
+    The recurring and one-time potentials are estimates that need verification.
+    ``observed_total_paid`` is money actually paid, taken only from findings that
+    report a historical figure.
+    """
+
+    recurring_monthly_potential: Decimal = Decimal("0")
+    recurring_monthly_before_dedupe: Decimal = Decimal("0")
+    one_time_potential: Decimal = Decimal("0")
+    one_time_before_dedupe: Decimal = Decimal("0")
+    double_counting_prevented: Decimal = Decimal("0")
+    observed_total_paid: Decimal = Decimal("0")
+    recurring_monthly_by_status: dict[str, Decimal] = Field(default_factory=dict)
+    findings_without_observed_amount: list[str] = Field(default_factory=list)
+    overlaps: list[FindingOverlap] = Field(default_factory=list)
+    findings: list[FindingImpact] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
 class LeakDetectionResult(BaseModel):
     """Leak detections for a single user and a single snapshot period."""
 
@@ -210,5 +262,10 @@ class LeakDetectionResult(BaseModel):
     detector_version: str
     leaks: list[LeakDetection] = Field(default_factory=list)
     analysis_summary: LeakResultSummary | None = None
+    # Totals that never count one event twice; see finding_overlap.summarise_impact.
+    impact_summary: ImpactSummary | None = None
+    # Findings kept for the investigation history but not shown as separate
+    # findings because another finding's transactions already explain them.
+    explained_leaks: list[LeakDetection] = Field(default_factory=list)
     questions: list[FindingQuestion] = Field(default_factory=list)
     questions_not_shown: int = 0

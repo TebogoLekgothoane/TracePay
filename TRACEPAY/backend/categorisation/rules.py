@@ -125,6 +125,41 @@ MORE_SUBSCRIPTION_GROUPS: MerchantGroups = (
     ("HBO Max", ("HBO MAX", "HBO")),
 )
 
+# Betting and lottery operators. Matched on outflows only, so a payout stays out.
+GAMBLING_GROUPS: MerchantGroups = (
+    ("Hollywoodbets", ("HOLLYWOODBETS", "HOLLYWOOD BETS")),
+    ("Betway", ("BETWAY",)),
+    ("Supabets", ("SUPABETS",)),
+    ("Sportingbet", ("SPORTINGBET", "SPORTING BET")),
+    ("Sunbet", ("SUNBET", "SUN BET")),
+    ("Yesplay", ("YESPLAY", "YES PLAY")),
+    ("WSB", ("WSB", "WORLD SPORTS BETTING")),
+    ("10bet", ("10BET",)),
+    ("Lulabet", ("LULABET",)),
+    ("Betwinner", ("BETWINNER",)),
+    ("Playabets", ("PLAYABETS",)),
+    ("Gbets", ("GBETS",)),
+    ("Lottostar", ("LOTTOSTAR",)),
+    ("National Lottery", ("NATIONAL LOTTERY", "POWERBALL", "PICK 3", "LOTTO")),
+    ("Bet365", ("BET365",)),
+    ("Casino", ("CASINO",)),
+)
+
+# Credit providers whose repayments leave the account on a schedule. Generic
+# loan wording is left out: a home loan or vehicle finance is not this category.
+CREDIT_GROUPS: MerchantGroups = (
+    ("Payflex", ("PAYFLEX",)),
+    ("Mobicred", ("MOBICRED",)),
+    ("PayJustNow", ("PAYJUSTNOW", "PAY JUSTNOW")),
+    ("Lewis Stores", ("LEWIS STORES",)),
+    ("Bayport", ("BAYPORT",)),
+    ("Finbond", ("FINBOND",)),
+    ("Direct Axis", ("DIRECT AXIS",)),
+    ("Moneyline", ("MONEYLINE",)),
+    ("Jumo", ("JUMO",)),
+    ("Cash Converters", ("CASH CONVERTERS",)),
+)
+
 # Premium-rated and network-billed content. Never a bank fee.
 PREMIUM_SMS_PHRASES: tuple[str, ...] = (
     "PREMIUM SMS",
@@ -200,7 +235,14 @@ _RECOGNISED_MERCHANT_GROUPS: MerchantGroups = (
     ("Vodacom", ("VODACOM",)),
     ("Cell C", ("CELL C", "CELLC")),
     ("Telkom", ("TELKOM",)),
-) + INSURER_GROUPS + MEDICAL_AID_GROUPS + GYM_GROUPS + MORE_SUBSCRIPTION_GROUPS
+) + (
+    INSURER_GROUPS
+    + MEDICAL_AID_GROUPS
+    + GYM_GROUPS
+    + MORE_SUBSCRIPTION_GROUPS
+    + GAMBLING_GROUPS
+    + CREDIT_GROUPS
+)
 
 _RECOGNISED_MERCHANT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
     sorted(
@@ -409,6 +451,9 @@ RULES: tuple[Rule, ...] = (
             "INTERNATIONAL TRANSACTION FEE",
             "CURRENCY CONVERSION FEE",
             "INTEREST ON OVERDRAFT",
+            "CREDIT CARD INTEREST",
+            "INTEREST ON CREDIT CARD",
+            "INTEREST DEBIT",
         ),
         transaction_class="bank_fee",
     ),
@@ -547,6 +592,18 @@ RULES: tuple[Rule, ...] = (
         "Insurance",
         0.92,
         _outflow(contains(*_group_phrases(INSURER_GROUPS), *INSURANCE_PHRASES)),
+    ),
+    Rule(
+        "merchant:gambling",
+        "Gambling",
+        0.92,
+        _outflow(contains(*_group_phrases(GAMBLING_GROUPS))),
+    ),
+    Rule(
+        "merchant:credit-provider",
+        "Loans & Credit",
+        0.90,
+        _outflow(contains(*_group_phrases(CREDIT_GROUPS))),
     ),
     Rule(
         "merchant:gym",

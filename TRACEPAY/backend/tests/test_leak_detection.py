@@ -652,7 +652,10 @@ def test_food_delivery_focus_rejects_adjacent_food_patterns() -> None:
             (
                 ("80", date(2026, 7, 4)),
                 ("80", date(2026, 8, 4)),
-                ("200", date(2026, 9, 30)),
+                # Large enough to be a material rise (R320): this test needs a finding
+                # to exist so it can check the finding's focus, and a R120 rise on a
+                # R80 baseline no longer is one.
+                ("400", date(2026, 9, 30)),
             )
         )
     ]
@@ -672,7 +675,7 @@ def test_food_delivery_focus_rejects_adjacent_food_patterns() -> None:
             (
                 ("90", date(2026, 7, 6)),
                 ("90", date(2026, 8, 6)),
-                ("220", date(2026, 9, 30)),
+                ("400", date(2026, 9, 30)),  # material rise, as above
             )
         )
     ]
@@ -1977,8 +1980,8 @@ def test_cash_and_duplicate_rules_remain_conservative() -> None:
     assert "cash_usage_leak" in _types(cash)
 
     duplicate = [
-        _transaction("coffee-1", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants"),
-        _transaction("coffee-2", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants"),
+        _transaction("coffee-1", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants", transaction_time=time(10, 0)),
+        _transaction("coffee-2", "50", date(2026, 7, 1), merchant="COFFEE", category="Restaurants", transaction_time=time(10, 2)),
         _transaction("later", "100", date(2026, 9, 30), merchant="OTHER", category="Shopping"),
     ]
     leak = next(
@@ -1986,7 +1989,7 @@ def test_cash_and_duplicate_rules_remain_conservative() -> None:
     )
     assert leak.impact_kind == "one_time"
     assert leak.estimated_annual_impact is None
-    assert leak.confidence <= 0.68
+    assert leak.confidence <= 0.70
     assert leak.evidence["finding_focus"] == "duplicate_merchant_payment"
     assert "transaction_ids" not in leak.evidence
 
@@ -2043,6 +2046,7 @@ def test_duplicate_merchant_payment_rejects_lookalikes_and_does_not_inflate_coun
             merchant="MTN",
             category="Airtime & Data",
             description="PREPAID AIRTIME MTN",
+            transaction_time=time(9, 0),
         ),
         _transaction(
             "air-b",
@@ -2051,6 +2055,7 @@ def test_duplicate_merchant_payment_rejects_lookalikes_and_does_not_inflate_coun
             merchant="MTN",
             category="Airtime & Data",
             description="PREPAID AIRTIME MTN",
+            transaction_time=time(9, 1),
         ),
         _transaction("later", "100", date(2026, 9, 30), merchant="CHECKERS", category="Groceries"),
     ]

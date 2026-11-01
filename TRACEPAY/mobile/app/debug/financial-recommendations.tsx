@@ -1,35 +1,33 @@
 import { Redirect, router } from "expo-router";
-import { ChevronLeft, ListChecks } from "lucide-react-native";
+import { ChevronLeft, RefreshCw } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
-import { SyntheticSourceNote } from "../../src/features/synthetic-intelligence/SyntheticSourceNote";
-import { scenarioLabel } from "../../src/features/synthetic-intelligence/synthetic-intelligence.parse";
 import {
   formatExpectedSavings,
-  formatFindingScope,
   formatImpactDetail,
   formatImpactHeading,
   formatImpactValue,
   formatNonAdditiveNotice,
   formatPriority,
-  formatRecommendationConfidence,
   formatRecommendedAction,
-  formatRootCauseType,
   isVerificationRequired,
   RECOMMENDATION_DISCLAIMER,
 } from "../../src/features/financial-recommendations/financial-recommendations.format";
-import type {
-  FinancialRecommendationResult,
-  Recommendation,
-} from "../../src/features/financial-recommendations/financial-recommendations.types";
+import type { Recommendation } from "../../src/features/financial-recommendations/financial-recommendations.types";
+import { SyntheticSourceNote } from "../../src/features/synthetic-intelligence/SyntheticSourceNote";
+import { scenarioLabel } from "../../src/features/synthetic-intelligence/synthetic-intelligence.parse";
 import { useFinancialRecommendationsDebug } from "../../src/hooks/useFinancialRecommendationsDebug";
 import { useStoredSyntheticAnalysis } from "../../src/hooks/useStoredSyntheticAnalysis";
 import { COLORS } from "../../src/theme/colors";
 
+/**
+ * What to do next, as the action list of a finding would read: the step, what it
+ * is worth, and how urgent it is. Nothing here moves money or contacts anyone.
+ */
 export default function FinancialRecommendationsDebugRoute() {
   if (!__DEV__) {
     return <Redirect href="/(tabs)" />;
@@ -37,21 +35,25 @@ export default function FinancialRecommendationsDebugRoute() {
   return <FinancialRecommendationsDebugScreen />;
 }
 
+const PRIORITY_CHIPS: Record<string, { container: string; text: string }> = {
+  high: { container: "bg-destructive/10", text: "text-destructive" },
+  medium: { container: "bg-primary/10", text: "text-primary" },
+  low: { container: "bg-muted", text: "text-muted-foreground" },
+};
+
 function FinancialRecommendationsDebugScreen() {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const synthetic = useStoredSyntheticAnalysis();
   const live = useFinancialRecommendationsDebug(!synthetic.active);
-  const result = synthetic.active
-    ? synthetic.analysis?.recommendations ?? null
-    : live.result;
+  const result = synthetic.active ? synthetic.analysis?.recommendations ?? null : live.result;
   const loading = synthetic.active ? false : live.loading;
   const error = synthetic.active
     ? synthetic.analysis
       ? null
       : "Run a synthetic scenario before opening this view."
     : live.error;
-  const refresh = live.refresh;
+  const notice = result ? formatNonAdditiveNotice(result) : null;
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -62,69 +64,78 @@ function FinancialRecommendationsDebugScreen() {
       >
         <View className="px-5 pt-1">
           <View className="flex-row items-center gap-3">
-            <IconButton
-              accessibilityLabel="Go back"
-              variant="ghost"
-              onPress={() => router.back()}
-            >
+            <IconButton accessibilityLabel="Go back" variant="ghost" onPress={() => router.back()}>
               <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
             </IconButton>
             <View className="min-w-0 flex-1">
-              <Text className="text-[24px] font-bold text-foreground">
-                Recommendation & Action
-              </Text>
-              <Text className="mt-0.5 text-[14px] text-muted-foreground">
-                Development validation view
-              </Text>
+              <Text className="text-[24px] font-bold text-foreground">Next steps</Text>
+              {result?.period_start && result.period_end ? (
+                <Text className="mt-0.5 text-[14px] text-muted-foreground">
+                  {result.period_start} to {result.period_end}
+                </Text>
+              ) : null}
             </View>
+            {synthetic.active ? null : (
+              <IconButton accessibilityLabel="Refresh" variant="ghost" onPress={live.refresh}>
+                <RefreshCw color={palette.foreground} size={20} strokeWidth={2} />
+              </IconButton>
+            )}
           </View>
 
           {synthetic.active && synthetic.analysis ? (
-            <SyntheticSourceNote
-              scenarioName={scenarioLabel(synthetic.analysis.scenario)}
-            />
-          ) : (
-            <View className="mt-5 rounded-3xl bg-card px-4 py-4">
-              <View className="flex-row items-center gap-3">
-                <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary/10">
-                  <ListChecks color={palette.primary} size={20} strokeWidth={2.2} />
-                </View>
-                <View className="min-w-0 flex-1">
-                  <Text className="text-[15px] font-semibold text-foreground">
-                    Authenticated backend recommendations
-                  </Text>
-                  <Text className="mt-0.5 text-[13px] leading-5 text-muted-foreground">
-                    Next steps come from the server. This screen does not calculate
-                    savings, priority, or confidence.
-                  </Text>
-                </View>
-              </View>
+            <SyntheticSourceNote scenarioName={scenarioLabel(synthetic.analysis.scenario)} />
+          ) : null}
+
+          {loading && !result ? (
+            <View className="mt-8 items-center rounded-3xl bg-card px-5 py-10">
+              <ActivityIndicator size="large" />
+              <Text className="mt-4 text-center text-[15px] font-semibold text-foreground">
+                Preparing your next steps…
+              </Text>
             </View>
-          )}
-
-          <Text className="mt-4 text-[13px] leading-5 text-muted-foreground">
-            {RECOMMENDATION_DISCLAIMER}
-          </Text>
-
-          {synthetic.active ? null : (
-            <View className="mt-4">
-              <Button
-                accessibilityLabel="Refresh recommendations"
-                loading={loading}
-                onPress={refresh}
-              >
-                Refresh recommendations
+          ) : null}
+          {error ? (
+            <View className="mt-6 rounded-3xl bg-card px-5 py-5">
+              <Text className="text-[16px] font-semibold text-destructive">
+                Next steps unavailable
+              </Text>
+              <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">{error}</Text>
+              <Button className="mt-4 self-start" variant="outline" onPress={live.refresh}>
+                Try again
               </Button>
             </View>
-          )}
+          ) : null}
 
-          {loading && !result ? <LoadingState /> : null}
-          {error ? <ErrorState message={error} onRetry={refresh} /> : null}
-          {result && !loading ? <ResultContent result={result} /> : null}
-          {result && loading ? (
-            <Text className="mt-3 text-center text-[13px] text-muted-foreground">
-              Preparing your recommended actions…
-            </Text>
+          {result ? (
+            <View className="mt-6">
+              {notice ? (
+                <View className="mb-3 rounded-2xl bg-muted/40 px-4 py-3">
+                  <Text className="text-[13px] leading-5 text-foreground">{notice}</Text>
+                </View>
+              ) : null}
+              <View className="gap-3">
+                {result.recommendations.length === 0 ? (
+                  <View className="rounded-3xl bg-card px-5 py-6">
+                    <Text className="text-[16px] font-semibold text-foreground">
+                      Nothing to do right now
+                    </Text>
+                    <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">
+                      Next steps appear here when a finding needs your attention.
+                    </Text>
+                  </View>
+                ) : (
+                  result.recommendations.map((item) => (
+                    <StepCard key={item.recommendation_id} recommendation={item} />
+                  ))
+                )}
+              </View>
+              {loading ? (
+                <Text className="mt-3 text-center text-[13px] text-muted-foreground">Updating…</Text>
+              ) : null}
+              <Text className="mt-5 text-[12px] leading-5 text-muted-foreground">
+                {RECOMMENDATION_DISCLAIMER}
+              </Text>
+            </View>
           ) : null}
         </View>
       </ScrollView>
@@ -132,160 +143,57 @@ function FinancialRecommendationsDebugScreen() {
   );
 }
 
-function LoadingState() {
-  return (
-    <View className="mt-8 items-center rounded-3xl bg-card px-5 py-10">
-      <ActivityIndicator size="large" />
-      <Text className="mt-4 text-center text-[15px] font-semibold text-foreground">
-        Preparing your recommended actions…
-      </Text>
-    </View>
-  );
-}
-
-function ErrorState({
-  message,
-  onRetry,
-}: {
-  message: string;
-  onRetry: () => void;
-}) {
-  return (
-    <View className="mt-6 rounded-3xl bg-card px-5 py-5">
-      <Text className="text-[16px] font-semibold text-destructive">
-        Recommendations unavailable
-      </Text>
-      <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">
-        {message}
-      </Text>
-      <Button className="mt-4 self-start" variant="outline" onPress={onRetry}>
-        Try again
-      </Button>
-    </View>
-  );
-}
-
-function ResultContent({ result }: { result: FinancialRecommendationResult }) {
-  const notice = formatNonAdditiveNotice(result);
-  return (
-    <View className="mt-6">
-      <Text className="text-[13px] text-muted-foreground">
-        Recommendations: {result.recommendation_count}
-      </Text>
-      <Text className="mt-1 text-[13px] text-muted-foreground">
-        Period: {formatPeriod(result.period_start, result.period_end)}
-      </Text>
-      <Text className="mt-1 text-[13px] text-muted-foreground">
-        Reasoning {result.reasoning_version} · Recommendations{" "}
-        {result.recommendation_version}
-      </Text>
-      {notice ? (
-        <View className="mt-4 rounded-2xl bg-muted/40 px-4 py-3">
-          <Text className="text-[13px] leading-5 text-foreground">{notice}</Text>
-        </View>
-      ) : null}
-      {result.recommendations.length === 0 ? <EmptyState /> : null}
-      <View className="mt-5 gap-4">
-        {result.recommendations.map((item) => (
-          <RecommendationCard key={item.recommendation_id} recommendation={item} />
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function EmptyState() {
-  return (
-    <View className="mt-5 rounded-3xl bg-card px-5 py-6">
-      <Text className="text-[16px] font-semibold text-foreground">
-        No recommendations are available yet.
-      </Text>
-    </View>
-  );
-}
-
-function RecommendationCard({ recommendation }: { recommendation: Recommendation }) {
+function StepCard({ recommendation }: { recommendation: Recommendation }) {
   const verification = isVerificationRequired(recommendation);
-  const impactDetail = formatImpactDetail(recommendation);
+  const detail = formatImpactDetail(recommendation);
+  const chip = PRIORITY_CHIPS[recommendation.priority];
 
   return (
     <View className="rounded-3xl bg-card px-5 py-5">
-      <Text className="text-[18px] font-bold text-foreground">
-        {recommendation.title}
-      </Text>
+      <View className="flex-row items-start justify-between gap-3">
+        <Text className="min-w-0 flex-1 text-[17px] font-bold text-foreground">
+          {recommendation.title}
+        </Text>
+        {chip ? (
+          <View className={`rounded-full px-3 py-1.5 ${chip.container}`}>
+            <Text className={`text-[12px] font-semibold ${chip.text}`}>
+              {formatPriority(recommendation.priority)}
+            </Text>
+          </View>
+        ) : null}
+      </View>
 
-      <SectionLabel>Explanation</SectionLabel>
-      <Text className="mt-1 text-[14px] leading-5 text-muted-foreground">
+      <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">
         {recommendation.explanation}
       </Text>
 
-      <SectionLabel>Recommended action</SectionLabel>
-      <Text className="mt-1 text-[14px] leading-5 text-muted-foreground">
-        {formatRecommendedAction(recommendation)}
-      </Text>
+      <View className="mt-4 rounded-2xl bg-primary/5 px-4 py-3">
+        <Text className="text-[13px] font-semibold text-primary">What to do</Text>
+        <Text className="mt-1 text-[14px] leading-5 text-foreground">
+          {formatRecommendedAction(recommendation)}
+        </Text>
+      </View>
 
-      <View className="mt-4">
-        <Text className="text-[13px] font-semibold uppercase tracking-[0.7px] text-muted-foreground">
+      <View className="mt-3 rounded-2xl bg-muted/40 px-4 py-3">
+        <Text className="text-[12px] font-medium text-muted-foreground">
           {formatImpactHeading(recommendation)}
         </Text>
-        <Text className="mt-1 text-[15px] font-semibold text-foreground">
+        <Text className="mt-1 text-[16px] font-bold text-foreground">
           {formatImpactValue(recommendation)}
-          {impactDetail ? ` · ${impactDetail}` : ""}
+          {detail ? ` · ${detail}` : ""}
         </Text>
-        <Text className="mt-2 text-[13px] text-muted-foreground">
-          Expected savings: {formatExpectedSavings(recommendation.expected_savings_amount)}
-        </Text>
-      </View>
-
-      <View className="mt-4 flex-row gap-3">
-        <Metric label="Priority" value={formatPriority(recommendation.priority)} />
-        <Metric
-          label="Recommendation confidence"
-          value={formatRecommendationConfidence(recommendation.recommendation_confidence)}
-        />
-      </View>
-      <View className="mt-3 flex-row gap-3">
-        <Metric
-          label="Root cause"
-          value={formatRootCauseType(recommendation.source_root_cause_type)}
-        />
-        <Metric
-          label="Finding scope"
-          value={formatFindingScope(recommendation.finding_scope)}
-        />
+        {recommendation.expected_savings_amount !== null ? (
+          <Text className="mt-1 text-[13px] text-muted-foreground">
+            Expected savings: {formatExpectedSavings(recommendation.expected_savings_amount)}
+          </Text>
+        ) : null}
       </View>
 
       {verification ? (
-        <View className="mt-3 rounded-2xl bg-primary/5 px-4 py-3">
-          <Text className="text-[13px] font-semibold text-primary">
-            Verification required
-          </Text>
-          <Text className="mt-1 text-[13px] leading-5 text-muted-foreground">
-            TracePay has not confirmed this as a duplicate or an error.
-          </Text>
-        </View>
+        <Text className="mt-3 text-[13px] leading-5 text-muted-foreground">
+          We have not confirmed this as a duplicate or an error.
+        </Text>
       ) : null}
     </View>
   );
-}
-
-function SectionLabel({ children }: { children: string }) {
-  return (
-    <Text className="mt-4 text-[13px] font-semibold uppercase tracking-[0.7px] text-muted-foreground">
-      {children}
-    </Text>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <View className="min-w-0 flex-1 rounded-2xl bg-muted/40 px-4 py-3">
-      <Text className="text-[12px] font-medium text-muted-foreground">{label}</Text>
-      <Text className="mt-1 text-[16px] font-bold text-foreground">{value}</Text>
-    </View>
-  );
-}
-
-function formatPeriod(start: string | null, end: string | null): string {
-  return start && end ? `${start} to ${end}` : "Not available";
 }
