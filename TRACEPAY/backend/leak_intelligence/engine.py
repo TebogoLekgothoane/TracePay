@@ -43,6 +43,7 @@ from .consolidation import order_chronologically
 from .payee_candidates import (
     UNIDENTIFIED_GROUP_PREFIX,
     penalty_fee_candidates,
+    person_payment_candidates,
     trial_conversion_candidates,
     unidentified_recurring_candidates,
     unidentified_signature,
@@ -178,6 +179,7 @@ def build_financial_features(
         trial_conversion_candidates=trial_conversion_candidates(active),
         unidentified_recurring_candidates=unidentified_recurring_candidates(active),
         penalty_fee_candidates=penalty_fee_candidates(active),
+        person_payment_candidates=person_payment_candidates(active),
         statement_import_quality=qualities,
         import_ids_by_month=import_ids_by_month,
         account_observation_end=dict(account_observation_end or {}),

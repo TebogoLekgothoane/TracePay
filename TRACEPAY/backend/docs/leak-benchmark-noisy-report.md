@@ -18,7 +18,7 @@ Customers: 11. Expected findings are defined in `tests/benchmark/noisy_customers
 | Double-counting rate (total above expected) | 0/0 |
 | Idempotent runs | 11/11 |
 | Classification accuracy (gold set) | 20/22 |
-| Processing time (all customers, twice each) | 0.28s |
+| Processing time (all customers, twice each) | 0.26s |
 
 ## Results by leak category
 

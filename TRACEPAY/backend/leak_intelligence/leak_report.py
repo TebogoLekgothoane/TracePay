@@ -15,6 +15,7 @@ _RECURRING_TYPES = frozenset(
         "duplicate_streaming_leak",
         "overlapping_cover_leak",
         "high_cost_credit_leak",
+        "recurring_transfer_leak",
         "bank_fee_leak",
         "cash_usage_leak",
     }
@@ -131,5 +132,6 @@ def _public_title(leak_type: str, fallback: str) -> str:
         "gambling_spending_leak": "Regular betting or lottery payments",
         "high_cost_credit_leak": "Credit repayments to review",
         "penalty_fee_leak": "Late or penalty fees charged",
+        "recurring_transfer_leak": "Regular payments to the same recipient",
     }
     return generic.get(leak_type, "Potential spending pattern")

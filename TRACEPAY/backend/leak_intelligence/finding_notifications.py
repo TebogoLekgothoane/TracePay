@@ -46,6 +46,7 @@ _LABELS = {
     "gambling_spending_leak": "Betting and lottery spending",
     "high_cost_credit_leak": "Credit repayments",
     "penalty_fee_leak": "Late or penalty fees",
+    "recurring_transfer_leak": "Regular payments to a person",
 }
 _NOT_SAVED = "This is not money already saved."
 

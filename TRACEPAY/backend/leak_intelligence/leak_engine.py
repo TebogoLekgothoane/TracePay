@@ -77,6 +77,7 @@ def detect_leaks(
         *_gambling_spending_leaks(snapshot, observations),
         *_high_cost_credit_leaks(snapshot, observations),
         *_penalty_fee_leaks(snapshot),
+        *_recurring_transfer_leaks(snapshot),
         *_inactive_recurring_leaks(snapshot),
         *_irregular_transaction_leaks(snapshot),
         *_spending_escalation_leaks(snapshot, observations),
@@ -2690,6 +2691,80 @@ def _high_cost_credit_leaks(
                 },
                 behaviour_ids=[],
                 feature_refs=[f"merchants[{name}]"],
+            )
+        )
+    return findings
+
+
+def _recurring_transfer_leaks(snapshot: FinancialFeatureSnapshot) -> list[LeakDetection]:
+    """Regular payments to the same person: a commitment worth naming, not a loss.
+
+    Rent, family support, a stokvel and an informal loan all look like this. The
+    statement cannot tell them apart, so the customer is asked what it is.
+    """
+    findings: list[LeakDetection] = []
+    for candidate in snapshot.person_payment_candidates:
+        amounts = candidate.amounts
+        typical = Decimal(str(sorted(amounts)[len(amounts) // 2]))
+        interval = candidate.median_interval_days
+        monthly = (
+            typical
+            if _is_monthly_billing_interval(interval)
+            else (typical * Decimal("30") / interval).quantize(Decimal("0.01"))
+        )
+        if monthly < MIN_IMPACT:
+            continue
+        confidence = leak_confidence(
+            support=None,
+            observation_count=len(amounts),
+            pattern_strength=Decimal("0.75") if candidate.amount_stable else Decimal("0.60"),
+            ceiling=Decimal("0.70"),
+        )
+        if confidence is None:
+            continue
+        findings.append(
+            _leak(
+                snapshot=snapshot,
+                leak_type="recurring_transfer_leak",
+                subject=f"person-{candidate.recipient_key}",
+                title=f"Regular payments to the same recipient ({candidate.cadence})",
+                description=(
+                    f"{len(amounts)} payments of about {format_zar(typical)} went to "
+                    f"{candidate.recipient_label}, repeating {candidate.cadence}. Regular "
+                    "payments to a person are often deliberate, such as rent, family support, "
+                    "a stokvel or a loan. The statement does not show what they are for, so "
+                    "this is not a confirmed loss."
+                ),
+                monthly_impact=monthly,
+                annual_impact=None,
+                impact_kind="estimated",
+                confidence=confidence,
+                severity=severity_for_impact(monthly, persistent=False, confidence=confidence),
+                evidence={
+                    "finding_focus": "recurring_person_payments",
+                    "finding_kind": "verification_required",
+                    "merchant_key": None,
+                    "recipient_key": candidate.recipient_key,
+                    "recipient_label": candidate.recipient_label,
+                    "recipient_transaction_ids": candidate.transaction_ids,
+                    "cadence": candidate.cadence,
+                    "payment_count": len(amounts),
+                    "payment_dates": [item.isoformat() for item in candidate.dates],
+                    "payment_amounts": amounts,
+                    "typical_amount": typical,
+                    "amount_stable": candidate.amount_stable,
+                    "median_interval_days": interval,
+                    "observed_total_paid": sum(amounts, Decimal("0")),
+                    "observation_count": len(amounts),
+                    "first_observed_date": candidate.dates[0],
+                    "last_observed_date": candidate.dates[-1],
+                    "verification_prompt": (
+                        "What are these regular payments for, and are they still needed? "
+                        "For example rent, family support, a stokvel or a loan."
+                    ),
+                },
+                behaviour_ids=[],
+                feature_refs=["person_payment_candidates"],
             )
         )
     return findings

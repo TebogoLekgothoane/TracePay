@@ -1,24 +1,24 @@
 # TracePay leak engine benchmark
 
-Customers: 28. Expected findings are defined in `tests/benchmark/customers.py` before the engine runs and are not adjusted to its output. Findings are scored as the customer sees them; 4 finding(s) kept internally as explained by another finding are not counted.
+Customers: 30. Expected findings are defined in `tests/benchmark/customers.py` before the engine runs and are not adjusted to its output. Findings are scored as the customer sees them; 4 finding(s) kept internally as explained by another finding are not counted.
 
 ## Summary
 
 | Metric | Result |
 |---|---|
-| True positives | 25 |
+| True positives | 26 |
 | False positives | 0 |
 | False negatives | 0 |
 | Precision | 100.0% |
 | Recall | 100.0% |
-| Monthly amount accuracy | 23/23 |
-| Observed-total accuracy | 7/7 |
-| Evidence-status accuracy | 11/11 |
+| Monthly amount accuracy | 24/24 |
+| Observed-total accuracy | 8/8 |
+| Evidence-status accuracy | 12/12 |
 | Deduplicated total correct | 5/5 |
 | Double-counting rate (total above expected) | 0/5 |
-| Idempotent runs | 28/28 |
+| Idempotent runs | 30/30 |
 | Classification accuracy (gold set) | 20/22 |
-| Processing time (all customers, twice each) | 0.36s |
+| Processing time (all customers, twice each) | 0.37s |
 
 ## Results by leak category
 
@@ -32,6 +32,7 @@ Customers: 28. Expected findings are defined in `tests/benchmark/customers.py` b
 | overlapping_cover_leak | 1 | 0 | 0 | 100.0% | 100.0% |
 | penalty_fee_leak | 2 | 0 | 0 | 100.0% | 100.0% |
 | recurring_payment_leak | 6 | 0 | 0 | 100.0% | 100.0% |
+| recurring_transfer_leak | 1 | 0 | 0 | 100.0% | 100.0% |
 | subscription_leak | 7 | 0 | 0 | 100.0% | 100.0% |
 | unknown_recurring_payment | 1 | 0 | 0 | 100.0% | 100.0% |
 
@@ -195,6 +196,16 @@ Actual: recurring_payment_leak/* (R699.00, likely); penalty_fee_leak/penalty_fee
 
 Expected: penalty_fee_leak/penalty_fees
 Actual: penalty_fee_leak/penalty_fees (R360.00, confirmed)
+
+### 29-regular-payments-to-a-person (Extra: monthly payments to the same person)
+
+Expected: recurring_transfer_leak/recurring_person_payments
+Actual: recurring_transfer_leak/recurring_person_payments (R1500.00, possible)
+
+### 30-one-off-payments-to-a-friend (Extra: scattered payments to a friend)
+
+Expected: no findings
+Actual: no findings
 
 ## Classification misses
 

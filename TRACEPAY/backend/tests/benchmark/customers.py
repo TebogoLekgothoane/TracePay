@@ -544,4 +544,37 @@ def build_customers() -> list[Customer]:
         )
     )
 
+    # 29. Monthly payments to the same person.
+    customers.append(
+        Customer(
+            "29-regular-payments-to-a-person",
+            "Extra: monthly payments to the same person",
+            [
+                _transaction(f"t{index}", "1500", date(2026, 4 + index, 1), merchant=None, category="Transfers",
+                             transaction_class="person_to_person", description="SENDMONEY JANE DOE")
+                for index in range(6)
+            ],
+            [Expected("recurring_transfer_leak", "recurring_person_payments", None,
+                      monthly_impact=D("1500.00"), evidence_status="possible",
+                      observed_total=D("9000"))],
+        )
+    )
+
+    # 30. A few one-off payments to a friend are not a regular commitment.
+    customers.append(
+        Customer(
+            "30-one-off-payments-to-a-friend",
+            "Extra: scattered payments to a friend",
+            [
+                _transaction(f"f{index}", str(amount), when, merchant=None, category="Transfers",
+                             transaction_class="person_to_person", description="SENDMONEY SIPHO NKOSI")
+                for index, (when, amount) in enumerate(
+                    [(date(2026, 4, 3), 400), (date(2026, 4, 19), 150), (date(2026, 7, 2), 900),
+                     (date(2026, 9, 5), 250)]
+                )
+            ],
+            [],
+        )
+    )
+
     return customers

@@ -59,7 +59,11 @@ _HABIT_AND_PATTERN_LEAK_TYPES = {
     "payday_spending_leak",
     "gambling_spending_leak",
 }
-_COMMITMENT_STACK_LEAK_TYPES = {"overlapping_cover_leak", "high_cost_credit_leak"}
+_COMMITMENT_STACK_LEAK_TYPES = {
+    "overlapping_cover_leak",
+    "high_cost_credit_leak",
+    "recurring_transfer_leak",
+}
 
 
 @dataclass
@@ -895,6 +899,12 @@ def _commitment_reasoning(leak: LeakDetection) -> _Draft:
             "Funeral or life cover was paid to more than one provider across overlapping "
             "months. The statement shows the premiums but not who or what each policy "
             "covers, so it cannot say whether the cover is deliberate or overlaps."
+        )
+    elif leak.leak_type == "recurring_transfer_leak":
+        explanation = (
+            "Payments of a similar amount went to the same recipient on a regular cadence. "
+            "The statement does not show what they are for, so it cannot say whether they are "
+            "a deliberate commitment such as rent, support, a stokvel or a loan."
         )
     else:
         explanation = (

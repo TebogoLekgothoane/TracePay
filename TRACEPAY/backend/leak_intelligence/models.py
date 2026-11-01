@@ -386,6 +386,23 @@ class UnidentifiedRecurringCandidate(BaseModel):
     high_confidence_transaction_count: int = 0
 
 
+class PersonPaymentCandidate(BaseModel):
+    """Regular payments from the customer to the same recipient.
+
+    The recipient is a one-way hash of the name and number tail the statement
+    shows, plus a masked label, so the finding never carries the person's details.
+    """
+
+    recipient_key: str
+    recipient_label: str
+    transaction_ids: list[str]
+    dates: list[date]
+    amounts: list[Decimal]
+    median_interval_days: Decimal
+    cadence: Literal["weekly", "fortnightly", "monthly", "bimonthly", "quarterly"]
+    amount_stable: bool
+
+
 class PenaltyFeeCandidate(BaseModel):
     """Penalty charges a provider (not the bank) put on the statement.
 
@@ -497,6 +514,7 @@ class FinancialFeatureSnapshot(BaseModel):
         default_factory=list
     )
     penalty_fee_candidates: list[PenaltyFeeCandidate] = Field(default_factory=list)
+    person_payment_candidates: list[PersonPaymentCandidate] = Field(default_factory=list)
     # Sanitised statement-import quality; never includes file content or descriptions.
     statement_import_quality: list[StatementImportQuality] = Field(default_factory=list)
     import_ids_by_month: dict[str, list[str]] = Field(default_factory=dict)

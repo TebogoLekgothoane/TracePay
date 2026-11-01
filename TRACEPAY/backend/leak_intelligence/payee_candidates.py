@@ -6,8 +6,10 @@ identity or cause is inferred beyond what a row or its description states.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections import defaultdict
+from datetime import date
 from decimal import Decimal
 from statistics import median
 
@@ -15,6 +17,7 @@ from .common import ZERO, amount_of, is_purchase_reversal, merchant_group_key
 from .models import (
     FeatureTransaction,
     PenaltyFeeCandidate,
+    PersonPaymentCandidate,
     TrialConversionCandidate,
     UnidentifiedRecurringCandidate,
 )
@@ -135,6 +138,30 @@ _CADENCES: tuple[tuple[str, int, int], ...] = (
 _UNKNOWN_CATEGORIES = frozenset({"", "other", "uncategorised", "uncategorized", "unknown"})
 
 
+def _regular_cadence(dates: list[date]) -> tuple[str, Decimal] | None:
+    """``(cadence name, median gap in days)`` when the dates repeat on a usual cadence.
+
+    Billing dates drift with weekends and holidays, so most gaps must still sit
+    near the usual cadence rather than every one matching it exactly.
+    """
+    gaps = [(later - earlier).days for earlier, later in zip(dates, dates[1:])]
+    if not gaps:
+        return None
+    centre = Decimal(str(median(gaps)))
+    match = next(
+        ((name, days) for name, days, tolerance in _CADENCES if abs(centre - days) <= tolerance),
+        None,
+    )
+    if match is None:
+        return None
+    cadence, days = match
+    window = max(3, round(days * 0.2))
+    near = sum(abs(gap - days) <= window for gap in gaps)
+    if near / len(gaps) < 0.8:
+        return None
+    return cadence, centre
+
+
 def unidentified_signature(item: FeatureTransaction) -> str | None:
     """A stable name for a payee the engine could not identify, or None.
 
@@ -177,28 +204,10 @@ def unidentified_recurring_candidates(
             continue
         if (max(amounts) - min(amounts)) > typical * UNIDENTIFIED_AMOUNT_SPREAD:
             continue
-        gaps = [
-            (later.transaction_date - earlier.transaction_date).days
-            for earlier, later in zip(items, items[1:])
-        ]
-        centre = Decimal(str(median(gaps)))
-        match = next(
-            (
-                (name, days)
-                for name, days, tolerance in _CADENCES
-                if abs(centre - days) <= tolerance
-            ),
-            None,
-        )
-        if match is None:
+        regular = _regular_cadence([row.transaction_date for row in items])
+        if regular is None:
             continue
-        cadence, days = match
-        # Billing dates drift with weekends and holidays; most gaps must still
-        # sit near the usual cadence.
-        window = max(3, round(days * 0.2))
-        near = sum(abs(gap - days) <= window for gap in gaps)
-        if near / len(gaps) < 0.8:
-            continue
+        cadence, centre = regular
         candidates.append(
             UnidentifiedRecurringCandidate(
                 description_signature=signature,
@@ -264,6 +273,106 @@ def penalty_fee_candidates(
                 transaction_ids=[item.transaction_id for item, _ in rows],
                 dates=[item.transaction_date for item, _ in rows],
                 amounts=[amount_of(item) for item, _ in rows],
+            )
+        )
+    return candidates
+
+
+# ------------------------------------------------------- regular person payments
+
+_RECIPIENT_LEAD = re.compile(
+    r"(?:PAYMENT\s+TO|PAY\s+BENEFICIARY|SEND\s*MONEY(?:\s+TO)?|CASH\s+SENT\s+TO|"
+    r"TRANSFERRED\s+OUT\s+TO|PAYSHAP(?:\s+PAYMENT)?(?:\s+TO)?|IMMEDIATE\s+PAYMENT|"
+    r"EFT(?:\s+PAYMENT)?(?:\s+TO)?|CAPITEC\s+PAY|TRANSFER\s+TO)\s+(?P<rest>.+)",
+    re.IGNORECASE,
+)
+# Words that say which bank or reference, not who was paid.
+_RECIPIENT_NOISE = frozenset(
+    {
+        "CAPITEC", "FNB", "ABSA", "NEDBANK", "STANDARD", "BANK", "TYME", "TYMEBANK", "GOTYME",
+        "DISCOVERY", "AFRICAN", "INVESTEC", "MOBILE", "NO", "NUMBER", "ACCOUNT", "ACC", "REF",
+        "REFERENCE", "PAYMENT", "FROM", "THE", "AND", "FOR",
+    }
+)
+MIN_PERSON_PAYMENTS = 3
+MIN_PERSON_PAYMENT_AMOUNT = Decimal("100")
+# Payments to one person rarely match to the rand; they must still sit near the
+# usual amount, or they are several unrelated payments to the same person.
+PERSON_AMOUNT_BAND = Decimal("0.5")
+PERSON_STABLE_SPREAD = Decimal("0.15")
+
+
+def person_recipient(item: FeatureTransaction) -> tuple[str, str] | None:
+    """``(hashed key, masked label)`` for who a transfer went to, or None.
+
+    The key comes from the name words and the last four digits of any number the
+    description shows. Neither is kept: only their hash and a masked label.
+    """
+    match = _RECIPIENT_LEAD.search(re.sub(r"[•*]+", " ", item.description or ""))
+    if match is None:
+        return None
+    rest = match.group("rest").upper()
+    digits = re.findall(r"\d{4,}", rest)
+    tail = digits[0][-4:] if digits else None
+    words = [
+        word.strip(".'-")
+        for word in re.findall(r"[A-Z][A-Z'.-]*", rest.split(",")[0])
+        if word.strip(".'-") and word.strip(".'-") not in _RECIPIENT_NOISE
+    ][:3]
+    if not words and tail is None:
+        return None
+    key = f"{' '.join(words)}|{tail or ''}"
+    label = (
+        f"a recipient ending {tail}"
+        if tail
+        else f"a recipient ({' '.join(word[0] + '.' for word in words)})"
+    )
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:12], label
+
+
+def person_payment_candidates(
+    transactions: list[FeatureTransaction],
+) -> list[PersonPaymentCandidate]:
+    """Recipients paid on a regular cadence, at a similar amount, in at least three payments."""
+    groups: defaultdict[str, list[FeatureTransaction]] = defaultdict(list)
+    labels: dict[str, str] = {}
+    for item in transactions:
+        if item.transaction_date is None or item.transaction_type not in {"debit", None}:
+            continue
+        if item.categorisation.transaction_class != "person_to_person":
+            continue
+        if (recipient := person_recipient(item)) is None:
+            continue
+        key, label = recipient
+        labels[key] = label
+        groups[key].append(item)
+    candidates: list[PersonPaymentCandidate] = []
+    for key, items in sorted(groups.items()):
+        items.sort(key=lambda row: (row.transaction_date, row.transaction_id))
+        # One payment per day: a retry or a split payment is not a second cycle.
+        dated = list({row.transaction_date: row for row in items}.values())
+        if len(dated) < MIN_PERSON_PAYMENTS:
+            continue
+        amounts = [amount_of(row) for row in dated]
+        typical = Decimal(str(median(amounts)))
+        if typical < MIN_PERSON_PAYMENT_AMOUNT:
+            continue
+        if any(abs(amount - typical) > typical * PERSON_AMOUNT_BAND for amount in amounts):
+            continue
+        regular = _regular_cadence([row.transaction_date for row in dated])
+        if regular is None:
+            continue
+        cadence, centre = regular
+        candidates.append(
+            PersonPaymentCandidate(
+                recipient_key=key,
+                recipient_label=labels[key],
+                transaction_ids=[row.transaction_id for row in dated],
+                dates=[row.transaction_date for row in dated],
+                amounts=amounts,
+                median_interval_days=centre,
+                cadence=cadence,  # type: ignore[arg-type]
+                amount_stable=(max(amounts) - min(amounts)) <= typical * PERSON_STABLE_SPREAD,
             )
         )
     return candidates

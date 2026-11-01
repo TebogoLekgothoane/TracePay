@@ -33,6 +33,7 @@ LeakType = Literal[
     "gambling_spending_leak",
     "high_cost_credit_leak",
     "penalty_fee_leak",
+    "recurring_transfer_leak",
 ]
 LeakSeverity = Literal["low", "medium", "high"]
 LeakStatus = Literal["active", "monitoring", "resolved", "dismissed"]

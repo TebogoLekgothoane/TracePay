@@ -257,6 +257,7 @@ const KIND_LABELS: Record<string, string> = {
   gambling_spending_leak: "Habit",
   high_cost_credit_leak: "Credit",
   penalty_fee_leak: "Penalty fees",
+  recurring_transfer_leak: "Regular transfers",
 };
 
 const STATUS_CHIPS: Record<string, { label: string; container: string; text: string }> = {

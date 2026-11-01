@@ -29,6 +29,7 @@ _RECURRING = frozenset(
         "duplicate_streaming_leak",
         "overlapping_cover_leak",
         "high_cost_credit_leak",
+        "recurring_transfer_leak",
     }
 )
 _CATEGORY = frozenset(
@@ -268,6 +269,10 @@ def subject_for_leak(leak: LeakDetection) -> str:
         return "funeral-life-cover-overlap"
     if focus_value == "credit_stacking":
         return "credit-repayment-stacking"
+    if leak.leak_type == "recurring_transfer_leak":
+        recipient = leak.evidence.get("recipient_key")
+        if isinstance(recipient, str) and recipient.strip():
+            return f"person-{subject_key(recipient)}"
     if leak.leak_type == "penalty_fee_leak":
         payee = leak.evidence.get("payee")
         return f"penalty-{subject_key(payee)}" if isinstance(payee, str) and payee.strip() else "penalty-fees"

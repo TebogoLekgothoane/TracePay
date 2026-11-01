@@ -120,6 +120,10 @@ RULE_WINDOWS: dict[str, str] = {
         "Payments to betting and lottery operators by completed calendar month across accounts. "
         "Winnings and withdrawals are not netted."
     ),
+    "recurring_transfer_leak": (
+        "Transfers to the same recipient, matched by the name and number tail on the statement and "
+        "ordered by date, across accounts. The recipient's details are not kept, only a hash."
+    ),
     "penalty_fee_leak": (
         "Charges whose description names a late-payment, reconnection, reinstatement, arrears or "
         "penalty fee, taken from the actual rows across accounts. Bank-owned fees are reported "
