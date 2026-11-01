@@ -40,9 +40,9 @@ const BAR_HEIGHTS = [36, 56, 80, 106] as const;
 const BAR_BASELINE = HEIGHT - 30;
 
 // Muted violet: the bars and line sit quietly behind the content instead of glowing.
-const VIOLET = "#8B5CF6";
-const BAR_TOP = "rgba(139,92,246,0.42)";
-const BAR_BOTTOM = "rgba(139,92,246,0.08)";
+const VIOLET = "#6D3FE0";
+const BAR_TOP = "rgba(109,63,224,0.42)";
+const BAR_BOTTOM = "rgba(109,63,224,0.08)";
 
 type Tile = {
   key: string;
@@ -132,7 +132,7 @@ export function FinancialInsightsIllustration({ total }: Props) {
         {/* Trend line. */}
         <Path path={path} style="stroke" strokeWidth={2} strokeCap="round" end={line} color={VIOLET} opacity={0.75} />
         <Group opacity={line}>
-          <Circle cx={end.x} cy={end.y} r={6} color="rgba(139,92,246,0.18)" />
+          <Circle cx={end.x} cy={end.y} r={6} color="rgba(109,63,224,0.18)" />
           <Circle cx={end.x} cy={end.y} r={3.5} color={VIOLET} />
         </Group>
 

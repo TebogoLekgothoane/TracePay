@@ -488,7 +488,7 @@ function SupportingTransactions({
         <Text className="text-[13px] font-semibold text-foreground">
           {open ? "Hide" : "Show"} supporting transactions ({total})
         </Text>
-        <ChevronDown color="#8B5CF6" size={18} strokeWidth={2} />
+        <ChevronDown color="#6D3FE0" size={18} strokeWidth={2} />
       </Pressable>
       {open ? (
         <View className="mt-2 gap-2">
@@ -614,7 +614,7 @@ function FindingMark({
       className="items-center justify-center rounded-full bg-muted"
       style={{ width: 40, height: 40 }}
     >
-      <CategoryIcon color="#8B5CF6" size={18} strokeWidth={2.2} />
+      <CategoryIcon color="#6D3FE0" size={18} strokeWidth={2.2} />
     </View>
   );
 }

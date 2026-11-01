@@ -1,5 +1,5 @@
 import { Redirect, router, useLocalSearchParams } from "expo-router";
-import { Calendar, ChevronLeft, ChevronRight, HelpCircle, Lightbulb } from "lucide-react-native";
+import { ChevronLeft, ChevronRight, HelpCircle, Lightbulb } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
@@ -26,6 +26,7 @@ import {
   type StoredLeakResponse,
 } from "../../src/features/leaks/leak-response.store";
 import { useLeakEntitlement } from "../../src/features/leaks/leak-entitlement.store";
+import { SegmentToggle } from "../../src/components/ui/SegmentToggle";
 import { isLeakLocked } from "../../src/features/leaks/leak-paywall";
 import {
   LEAK_DETAILS,
@@ -67,6 +68,9 @@ const LEAK_CALC_COPY: Record<string, string> = {
     "We total cash withdrawals and paid balance enquiries, especially at other banks’ ATMs where fees are highest.",
 };
 
+const SUBS_TABS = ["Subscriptions", "Upcoming"] as const;
+type SubsTab = (typeof SUBS_TABS)[number];
+
 function daysUntilLabel(days: number): string {
   if (days === 0) return "Today";
   if (days === 1) return "Tomorrow";
@@ -91,6 +95,8 @@ function LeakDetailContent() {
   const [period, setPeriod] = useState<Period>("This month");
   const [customRange, setCustomRange] = useState<CustomRange>("Last 14 days");
   const [showCalc, setShowCalc] = useState(false);
+  const { unlocked } = useLeakEntitlement();
+  const [subsTab, setSubsTab] = useState<SubsTab>("Subscriptions");
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === "dark" ? "dark" : "light";
@@ -241,6 +247,8 @@ function LeakDetailContent() {
     detail.listSectionTitle ??
     (leakId === "debit" ? "Your debit orders" : "Your subscriptions");
 
+  const openUpgrade = () => router.push("/upgrade");
+
   const openLineItem = (itemId: string) => {
     const query = `period=${encodeURIComponent(period)}&range=${encodeURIComponent(customRange)}`;
     router.push(`/leak/${leakId}/item/${itemId}?${query}` as never);
@@ -338,6 +346,8 @@ function LeakDetailContent() {
             leaks={hiddenLeaks}
             color={tone.color}
             onOpenGuide={getPrimaryFixActionId(leakId) ? () => openGuide(leakId) : undefined}
+            locked={!unlocked}
+            onUnlock={openUpgrade}
           />
 
           {scaledDetail.variant === "breakdown" && scaledDetail.breakdown ? (
@@ -392,9 +402,16 @@ function LeakDetailContent() {
 
           {scaledDetail.variant === "subscriptions" && scaledDetail.subscriptions ? (
             <>
-              <Text className="mb-3 mt-7 text-[17px] font-bold text-foreground">
-                {listTitle} ({scaledDetail.subscriptions.length})
-              </Text>
+              <View className="mb-3 mt-7 flex-row items-center justify-between gap-3">
+                {leakId === "subs" ? (
+                  <SegmentToggle value={subsTab} options={SUBS_TABS} onChange={setSubsTab} />
+                ) : (
+                  <Text className="text-[17px] font-bold text-foreground">
+                    {listTitle} ({scaledDetail.subscriptions.length})
+                  </Text>
+                )}
+              </View>
+              {leakId !== "subs" || subsTab === "Subscriptions" ? (
               <View className="gap-2">
                 {scaledDetail.subscriptions.map((item) => (
                   <Pressable
@@ -462,7 +479,8 @@ function LeakDetailContent() {
                   </Pressable>
                 ))}
               </View>
-              {leakId === "subs" ? (
+              ) : null}
+              {leakId === "subs" && subsTab === "Upcoming" ? (
                 <UpcomingSubscriptionsSection
                   items={upcomingSubscriptions}
                   palette={palette}
@@ -549,16 +567,7 @@ function UpcomingSubscriptionsSection({
 }) {
   if (items.length === 0) return null;
   return (
-    <View className="mt-7">
-      <View className="mb-3 flex-row items-end justify-between">
-        <View>
-          <Text className="text-[17px] font-bold text-foreground">Upcoming charges</Text>
-          <Text className="mt-1 text-[12px] text-muted-foreground">
-            Your next subscription payments
-          </Text>
-        </View>
-        <Calendar color={palette.primary} size={18} strokeWidth={2.2} />
-      </View>
+    <View>
       <View className="gap-2">
         {items.map((item) => {
           const markColor = resolveMarkColor(palette, item.markColor);

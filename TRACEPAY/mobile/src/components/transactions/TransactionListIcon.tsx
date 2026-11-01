@@ -39,8 +39,8 @@ const CATEGORY_STYLES: Record<string, CategoryStyle> = {
 
 const TRANSFER_OUT: CategoryStyle = {
   Icon: ArrowUpRight,
-  tint: "#8B5CF6",
-  tintBg: "rgba(139, 92, 246, 0.14)",
+  tint: "#6D3FE0",
+  tintBg: "rgba(109, 63, 224, 0.14)",
 };
 
 const TRANSFER_IN: CategoryStyle = {
@@ -57,8 +57,8 @@ const TRANSFER_BANK: CategoryStyle = {
 
 const DEFAULT_STYLE: CategoryStyle = {
   Icon: Wallet,
-  tint: "#8B5CF6",
-  tintBg: "rgba(139, 92, 246, 0.14)",
+  tint: "#6D3FE0",
+  tintBg: "rgba(109, 63, 224, 0.14)",
 };
 
 function styleForTransaction(input: {

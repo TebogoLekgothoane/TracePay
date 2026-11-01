@@ -27,7 +27,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
-import TracePayIcon from "../../../assets/icons/assembled TracePay icon.svg";
+import { TracePayMark as TracePayIcon } from "../ui/TracePayMark";
 import { PIN_LENGTH } from "../../features/security/security.constants";
 import type { BiometricKind } from "../../features/security/security.types";
 import { COLORS } from "../../theme/colors";

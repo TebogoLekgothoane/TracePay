@@ -5,7 +5,8 @@ import { useColorScheme } from "nativewind";
 import type { PotentialLeak } from "../../features/leaks/potential-leaks";
 import { COLORS, withAlpha } from "../../theme/colors";
 import { REVIEW_STATUS_LABEL } from "../../features/leaks/potential-leaks";
-import { ReviewIconTile, reviewIconColor, statusColor } from "./ReviewVisuals";
+import { LeakAmount } from "./LeakAmount";
+import { statusColor } from "./ReviewVisuals";
 
 type Props = {
   leak: PotentialLeak;
@@ -17,7 +18,6 @@ export function PotentialLeakCard({ leak, onPress }: Props) {
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
   const badgeColor = statusColor(scheme, leak.status);
-  const iconColor = reviewIconColor(scheme, leak.icon);
 
   return (
     <Pressable
@@ -26,13 +26,6 @@ export function PotentialLeakCard({ leak, onPress }: Props) {
       onPress={() => onPress(leak.id)}
       className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-2.5 active:opacity-80"
     >
-      <View
-        className="rounded-2xl"
-        style={{ backgroundColor: withAlpha(iconColor, 0.14) }}
-      >
-        <ReviewIconTile icon={leak.icon} color={iconColor} size={40} />
-      </View>
-
       <View className="min-w-0 flex-1">
         <View className="flex-row items-center justify-between gap-2">
           <Text numberOfLines={1} className="flex-1 text-[15px] font-semibold text-foreground">
@@ -47,10 +40,7 @@ export function PotentialLeakCard({ leak, onPress }: Props) {
             </Text>
           </View>
         </View>
-        <Text className="mt-0.5 text-[17px] font-bold text-foreground">
-          {leak.listAmount ?? leak.amount}
-        </Text>
-        <Text numberOfLines={1} className="text-[12px] leading-[17px] text-muted-foreground">
+        <Text numberOfLines={1} className="mt-0.5 text-[12px] leading-[17px] text-muted-foreground">
           {leak.description}
         </Text>
         {/^\d/.test(leak.nextCharge) ? (
@@ -60,6 +50,7 @@ export function PotentialLeakCard({ leak, onPress }: Props) {
         ) : null}
       </View>
 
+      <LeakAmount amount={leak.listAmount ?? leak.amount} />
       <ChevronRight color={palette.mutedForeground} size={18} />
     </Pressable>
   );

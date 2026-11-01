@@ -15,8 +15,9 @@ import Animated, {
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import AssembledTracePayIcon from "../../../assets/icons/assembled TracePay icon.svg";
-import PayWordmark from "../../../assets/wordmark/PAY.svg";
+import PayWordmark from "../../../assets/wordmark/pay-mono.svg";
+import { TracePayMark as AssembledTracePayIcon } from "../ui/TracePayMark";
+import { PAY_VIEWBOX, TRACE_VIEWBOX, wordmarkLayout } from "../wordmarkLayout";
 import TraceWordmark from "../../../assets/wordmark/trace white wordmark.svg";
 import { continueAfterAuth } from "../../features/auth/auth.navigation";
 import { getPendingPhone } from "../../features/auth/auth.service";
@@ -42,8 +43,7 @@ function usePalette() {
 
 function WelcomeWordmark({ width }: { width: number }) {
   const palette = usePalette();
-  const height = width * (632 / 1897);
-  const columnWidth = (width - 8) / 2;
+  const { height, traceWidth, payWidth, payLeft } = wordmarkLayout(width);
 
   return (
     <View
@@ -51,21 +51,24 @@ function WelcomeWordmark({ width }: { width: number }) {
       className="relative mt-2"
       style={{ width, height }}
     >
-      <View className="absolute left-0 top-0" style={{ width: columnWidth, height }}>
+      <View className="absolute left-0 top-0" style={{ width: traceWidth, height }}>
         <TraceWordmark
-          width={columnWidth}
+          width={traceWidth}
           height={height}
           color={palette.foreground}
+          viewBox={TRACE_VIEWBOX}
           preserveAspectRatio="xMidYMid meet"
         />
       </View>
       <View
         className="absolute top-0"
-        style={{ left: columnWidth - 12, width: columnWidth, height }}
+        style={{ left: payLeft, width: payWidth, height }}
       >
         <PayWordmark
-          width={columnWidth}
+          width={payWidth}
           height={height}
+          color={palette.foreground}
+          viewBox={PAY_VIEWBOX}
           preserveAspectRatio="xMidYMid meet"
         />
       </View>
@@ -97,7 +100,7 @@ function WelcomeLogo({
           ...(isDark
             ? {}
             : {
-                shadowColor: palette.accent,
+                shadowColor: palette.primary,
                 shadowOffset: { width: 0, height: 0 },
                 shadowOpacity: 0.28,
                 shadowRadius: size > 100 ? 28 : 14,

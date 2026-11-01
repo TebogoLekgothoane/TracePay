@@ -6,7 +6,7 @@ import { useCallback, useState } from "react";
 import { Platform, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import TracePayIcon from "../../assets/icons/assembled TracePay icon.svg";
+import { TracePayMark as TracePayIcon } from "../../src/components/ui/TracePayMark";
 import { Button } from "../../src/components/ui/Button";
 import { resolveAuthenticatedHomeHref } from "../../src/features/auth/auth.navigation";
 import { useAppLock } from "../../src/features/security/AppLockProvider";

@@ -12,7 +12,7 @@ export const LEAK_CATEGORIES: LeakPreview[] = [
     changeDirection: "up",
     Icon: Landmark,
     iconTone: "solid",
-    tint: "#8B5CF6",
+    tint: "#6D3FE0",
     tintBg: "transparent",
     merchants: [],
   },

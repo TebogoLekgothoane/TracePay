@@ -1,6 +1,6 @@
 import { View } from "react-native";
 
-import TracePayIcon from "../../../assets/icons/assembled TracePay icon.svg";
+import { TracePayMark as TracePayIcon } from "../ui/TracePayMark";
 
 export function SetupBrandHeader() {
   return (

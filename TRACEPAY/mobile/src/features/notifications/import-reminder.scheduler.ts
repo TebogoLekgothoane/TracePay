@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Notifications from "expo-notifications";
 
 import {
   loadImportReminderPreference,
@@ -16,7 +15,15 @@ const FREQUENCY_DAYS: Record<ReminderFrequency, number> = {
   "1 month": 30,
 };
 
-async function ensurePermission(): Promise<boolean> {
+// Loaded lazily: the native module is missing from dev builds made before
+// expo-notifications was added, and a top-level import would crash the app.
+function loadNotifications(): typeof import("expo-notifications") {
+  return require("expo-notifications");
+}
+
+async function ensurePermission(
+  Notifications: typeof import("expo-notifications"),
+): Promise<boolean> {
   const current = await Notifications.getPermissionsAsync();
   if (current.granted) return true;
   if (!current.canAskAgain) return false;
@@ -29,6 +36,7 @@ async function ensurePermission(): Promise<boolean> {
  */
 export async function syncImportReminder(): Promise<void> {
   try {
+    const Notifications = loadNotifications();
     await Notifications.cancelScheduledNotificationAsync(NOTIFICATION_ID);
 
     const preference = await loadImportReminderPreference();
@@ -39,7 +47,7 @@ export async function syncImportReminder(): Promise<void> {
 
     const fireAt = lastImport + FREQUENCY_DAYS[preference.frequency] * DAY_MS;
     if (fireAt <= Date.now()) return;
-    if (!(await ensurePermission())) return;
+    if (!(await ensurePermission(Notifications))) return;
 
     await Notifications.scheduleNotificationAsync({
       identifier: NOTIFICATION_ID,

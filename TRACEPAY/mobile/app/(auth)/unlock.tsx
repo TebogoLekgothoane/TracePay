@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import TracePayIcon from "../../assets/icons/assembled TracePay icon.svg";
+import { TracePayMark as TracePayIcon } from "../../src/components/ui/TracePayMark";
 import { PinEntryScreen } from "../../src/components/auth/PinEntryScreen";
 import { Button } from "../../src/components/ui/Button";
 import { FALLBACK_PROFILE_NAME } from "../../src/features/auth/auth.constants";

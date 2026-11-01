@@ -81,7 +81,7 @@ function PatternCard({
           <Pressable
             accessibilityRole="button"
             className="mt-3 self-start active:opacity-70"
-            onPress={() => router.push("/(tabs)/transactions")}
+            onPress={() => router.push("/transactions-list")}
           >
             <Text className="text-[13px] font-semibold text-primary">{insight.action}</Text>
           </Pressable>

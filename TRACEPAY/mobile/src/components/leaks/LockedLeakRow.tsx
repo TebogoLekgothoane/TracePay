@@ -1,18 +1,25 @@
 import { ChevronRight, Lock } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import type { LockedLeak } from "../../features/leaks/leak-paywall";
 import { COLORS } from "../../theme/colors";
+import { LeakAmount } from "./LeakAmount";
+import { Smudge, usePulse } from "./Smudge";
 
 type Props = {
   leak: LockedLeak;
   onPress: () => void;
 };
 
+/**
+ * Same layout as PotentialLeakCard (text, amount, chevron) with the hidden
+ * text blurred. The real name and description are never passed in.
+ */
 export function LockedLeakRow({ leak, onPress }: Props) {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
+  const pulse = usePulse();
 
   return (
     <Pressable
@@ -21,20 +28,15 @@ export function LockedLeakRow({ leak, onPress }: Props) {
       onPress={onPress}
       className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-2.5 active:opacity-80"
     >
-      <View className="h-10 w-10 items-center justify-center rounded-2xl bg-muted">
-        <Lock color={palette.mutedForeground} size={18} strokeWidth={2.2} />
+      <View className="min-w-0 flex-1 gap-2">
+        <View className="flex-row items-center justify-between gap-2">
+          <Smudge width={96} height={11} color={palette.foreground} pulse={pulse} />
+          <Lock color={palette.mutedForeground} size={14} strokeWidth={2.4} />
+        </View>
+        <Smudge width={132} height={9} color={palette.mutedForeground} pulse={pulse} />
       </View>
 
-      {/* Stand-ins for the hidden leak name; the real name is never passed to this row. */}
-      <View className="min-w-0 flex-1 gap-1.5">
-        <View className="h-2.5 w-24 rounded-full bg-muted-foreground/25" />
-        <View className="h-2.5 w-16 rounded-full bg-muted-foreground/15" />
-      </View>
-
-      <Text className="text-[15px] font-bold text-foreground">
-        {leak.monthlyAmount}
-        <Text className="text-[13px] font-normal text-muted-foreground"> / mo</Text>
-      </Text>
+      <LeakAmount amount={leak.monthlyAmount} />
       <ChevronRight color={palette.mutedForeground} size={18} />
     </Pressable>
   );
