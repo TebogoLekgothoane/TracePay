@@ -48,6 +48,7 @@ _FEE_OR_SPENDING = frozenset(
         "weekend_spending_leak",
         "payday_spending_leak",
         "gambling_spending_leak",
+        "penalty_fee_leak",
         *_CATEGORY,
     }
 )
@@ -267,6 +268,9 @@ def subject_for_leak(leak: LeakDetection) -> str:
         return "funeral-life-cover-overlap"
     if focus_value == "credit_stacking":
         return "credit-repayment-stacking"
+    if leak.leak_type == "penalty_fee_leak":
+        payee = leak.evidence.get("payee")
+        return f"penalty-{subject_key(payee)}" if isinstance(payee, str) and payee.strip() else "penalty-fees"
     if leak.leak_type == "gambling_spending_leak":
         if isinstance(trial_merchant, str) and trial_merchant.strip():
             return subject_key(trial_merchant)

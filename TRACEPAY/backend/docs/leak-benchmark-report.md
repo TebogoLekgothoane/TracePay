@@ -1,24 +1,24 @@
 # TracePay leak engine benchmark
 
-Customers: 26. Expected findings are defined in `tests/benchmark/customers.py` before the engine runs and are not adjusted to its output. Findings are scored as the customer sees them; 2 finding(s) kept internally as explained by another finding are not counted.
+Customers: 28. Expected findings are defined in `tests/benchmark/customers.py` before the engine runs and are not adjusted to its output. Findings are scored as the customer sees them; 4 finding(s) kept internally as explained by another finding are not counted.
 
 ## Summary
 
 | Metric | Result |
 |---|---|
-| True positives | 22 |
+| True positives | 25 |
 | False positives | 0 |
 | False negatives | 0 |
 | Precision | 100.0% |
 | Recall | 100.0% |
-| Monthly amount accuracy | 20/20 |
-| Observed-total accuracy | 5/5 |
-| Evidence-status accuracy | 9/9 |
+| Monthly amount accuracy | 23/23 |
+| Observed-total accuracy | 7/7 |
+| Evidence-status accuracy | 11/11 |
 | Deduplicated total correct | 5/5 |
 | Double-counting rate (total above expected) | 0/5 |
-| Idempotent runs | 26/26 |
+| Idempotent runs | 28/28 |
 | Classification accuracy (gold set) | 20/22 |
-| Processing time (all customers, twice each) | 0.39s |
+| Processing time (all customers, twice each) | 0.36s |
 
 ## Results by leak category
 
@@ -30,7 +30,8 @@ Customers: 26. Expected findings are defined in `tests/benchmark/customers.py` b
 | gambling_spending_leak | 1 | 0 | 0 | 100.0% | 100.0% |
 | high_cost_credit_leak | 2 | 0 | 0 | 100.0% | 100.0% |
 | overlapping_cover_leak | 1 | 0 | 0 | 100.0% | 100.0% |
-| recurring_payment_leak | 5 | 0 | 0 | 100.0% | 100.0% |
+| penalty_fee_leak | 2 | 0 | 0 | 100.0% | 100.0% |
+| recurring_payment_leak | 6 | 0 | 0 | 100.0% | 100.0% |
 | subscription_leak | 7 | 0 | 0 | 100.0% | 100.0% |
 | unknown_recurring_payment | 1 | 0 | 0 | 100.0% | 100.0% |
 
@@ -182,6 +183,18 @@ Actual: recurring_payment_leak/debit_order_review (R150.00, likely)
 
 Expected: recurring_payment_leak/*
 Actual: recurring_payment_leak/* (R300.00, likely)
+
+### 27-single-late-fee (Extra: one late-payment fee)
+
+The late fee is a separate one-off charge on top of the contract payment.
+
+Expected: penalty_fee_leak/penalty_fees; recurring_payment_leak/*
+Actual: recurring_payment_leak/* (R699.00, likely); penalty_fee_leak/penalty_fees (R125.00, confirmed)
+
+### 28-repeated-penalties-not-bank-fee (Extra: repeated provider penalties, one bank fee)
+
+Expected: penalty_fee_leak/penalty_fees
+Actual: penalty_fee_leak/penalty_fees (R360.00, confirmed)
 
 ## Classification misses
 

@@ -53,6 +53,12 @@ def evidence_status_for(
             "possible",
             "The pattern needs the customer to verify it; the transactions alone do not settle it.",
         )
+    if leak_type == "penalty_fee_leak":
+        return (
+            "confirmed",
+            "The statement lists these penalty charges explicitly. Whether they were avoidable "
+            "is not established.",
+        )
     if leak_type == "bank_fee_leak":
         if focus in _EXPLICIT_FEE_FOCUS:
             return (

@@ -256,6 +256,7 @@ const KIND_LABELS: Record<string, string> = {
   overlapping_cover_leak: "Overlapping cover",
   gambling_spending_leak: "Habit",
   high_cost_credit_leak: "Credit",
+  penalty_fee_leak: "Penalty fees",
 };
 
 const STATUS_CHIPS: Record<string, { label: string; container: string; text: string }> = {

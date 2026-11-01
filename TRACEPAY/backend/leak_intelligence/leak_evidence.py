@@ -240,6 +240,10 @@ def _select(leak: LeakDetection, transactions: list[FeatureTransaction]) -> Sele
     evidence = leak.evidence
     if leak.leak_type == "bank_fee_leak":
         return _fee_rows(evidence.get("finding_focus"), transactions)
+    if leak.leak_type == "penalty_fee_leak":
+        wanted = evidence.get("penalty_transaction_ids")
+        ids = {str(item) for item in wanted} if isinstance(wanted, list) else set()
+        return [(item, "fee") for item in transactions if item.transaction_id in ids]
     if leak.leak_type == "irregular_transaction_leak":
         target = evidence.get("transaction_id")
         return [(item, "payment") for item in transactions if item.transaction_id == target]

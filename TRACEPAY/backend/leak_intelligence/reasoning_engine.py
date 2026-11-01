@@ -126,6 +126,8 @@ def _reason_about_leak(
         draft = _duplicate_debit_order_reasoning(leak)
     elif leak.leak_type == "duplicate_streaming_leak":
         draft = _duplicate_streaming_reasoning(leak)
+    elif leak.leak_type == "penalty_fee_leak":
+        draft = _penalty_reasoning(leak)
     elif leak.leak_type in _COMMITMENT_STACK_LEAK_TYPES:
         draft = _commitment_reasoning(leak)
     elif leak.leak_type in _RECURRING_LEAK_TYPES:
@@ -838,6 +840,37 @@ def _duplicate_streaming_reasoning(leak: LeakDetection) -> _Draft:
         persistence="persistent",
         analysis_status="supported",
         evidence_strength=Decimal("0.78"),
+    )
+
+
+def _penalty_reasoning(leak: LeakDetection) -> _Draft:
+    evidence = {
+        key: value
+        for key, value in {
+            "finding_focus": leak.evidence.get("finding_focus"),
+            "merchant_key": leak.evidence.get("merchant_key"),
+            "penalty_wording": leak.evidence.get("penalty_wording"),
+            "penalty_count": _integer(leak.evidence.get("penalty_count")),
+            "penalty_months": leak.evidence.get("penalty_months"),
+            "observed_total_paid": _decimal(leak.evidence.get("observed_total_paid")),
+        }.items()
+        if value is not None
+    }
+    repeated = bool(leak.evidence.get("repeated_across_months"))
+    return _Draft(
+        root_cause_type="fee_accumulation",
+        title=leak.title,
+        explanation=(
+            "Penalty charges were applied by a provider in more than one month. The statement "
+            "shows the charges but not why the payments were late."
+            if repeated
+            else "A penalty charge was applied by a provider. The statement shows the charge but "
+            "not why the payment was late."
+        ),
+        evidence=evidence,
+        persistence="persistent" if repeated else "new",
+        analysis_status="supported",
+        evidence_strength=Decimal("0.80"),
     )
 
 

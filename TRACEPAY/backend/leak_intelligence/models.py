@@ -386,6 +386,22 @@ class UnidentifiedRecurringCandidate(BaseModel):
     high_confidence_transaction_count: int = 0
 
 
+class PenaltyFeeCandidate(BaseModel):
+    """Penalty charges a provider (not the bank) put on the statement.
+
+    Built only from descriptions that say so: late-payment, reconnection,
+    reinstatement or arrears wording. Why the payment was late is not known.
+    """
+
+    payee: str
+    # True when the payee is a recognised merchant rather than a description signature.
+    payee_is_merchant: bool
+    wording: list[str]
+    transaction_ids: list[str]
+    dates: list[date]
+    amounts: list[Decimal]
+
+
 class IrregularCandidate(BaseModel):
     """A transaction that is unusual relative to the user's own history."""
 
@@ -480,6 +496,7 @@ class FinancialFeatureSnapshot(BaseModel):
     unidentified_recurring_candidates: list[UnidentifiedRecurringCandidate] = Field(
         default_factory=list
     )
+    penalty_fee_candidates: list[PenaltyFeeCandidate] = Field(default_factory=list)
     # Sanitised statement-import quality; never includes file content or descriptions.
     statement_import_quality: list[StatementImportQuality] = Field(default_factory=list)
     import_ids_by_month: dict[str, list[str]] = Field(default_factory=dict)

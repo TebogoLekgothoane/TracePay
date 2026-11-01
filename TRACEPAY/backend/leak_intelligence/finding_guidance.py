@@ -92,6 +92,7 @@ _LABELS = {
     "overlapping_cover_leak": "Overlapping funeral or life cover",
     "gambling_spending_leak": "Betting and lottery spending",
     "high_cost_credit_leak": "Credit repayments",
+    "penalty_fee_leak": "Late or penalty fees",
 }
 _STATUS_LABELS = {
     "open": "Open",

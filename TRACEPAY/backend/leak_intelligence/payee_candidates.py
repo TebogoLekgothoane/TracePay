@@ -12,7 +12,12 @@ from decimal import Decimal
 from statistics import median
 
 from .common import ZERO, amount_of, is_purchase_reversal, merchant_group_key
-from .models import FeatureTransaction, TrialConversionCandidate, UnidentifiedRecurringCandidate
+from .models import (
+    FeatureTransaction,
+    PenaltyFeeCandidate,
+    TrialConversionCandidate,
+    UnidentifiedRecurringCandidate,
+)
 
 # Mirrors engine.HIGH_CONFIDENCE (engine imports this module, so it cannot be imported here).
 _HIGH_CONFIDENCE = 0.85
@@ -206,6 +211,59 @@ def unidentified_recurring_candidates(
                     row.categorisation.classification_confidence >= _HIGH_CONFIDENCE
                     for row in items
                 ),
+            )
+        )
+    return candidates
+
+
+# ------------------------------------------------------------ penalty fees
+
+_PENALTY_WORDING = re.compile(
+    r"\bLATE\s+(?:PAYMENT|PAY|FEE|CHARGE|PENALTY|SETTLEMENT)\b"
+    r"|\bPENALT(?:Y|IES)\b"
+    r"|\b(?:RECONNECTION|RECONNECT|DISCONNECTION|REINSTATEMENT)\s+(?:FEE|CHARGE)\b"
+    r"|\bOVERDUE\s+(?:FEE|CHARGE|INTEREST)\b"
+    r"|\bARREARS?\s+(?:FEE|INTEREST|CHARGE)\b",
+    re.IGNORECASE,
+)
+MIN_PENALTY_AMOUNT = Decimal("10")
+
+
+def penalty_fee_candidates(
+    transactions: list[FeatureTransaction],
+) -> list[PenaltyFeeCandidate]:
+    """Provider-charged penalties, grouped by who charged them.
+
+    Bank-owned charges are left to the bank-fee findings, and a reversal is not a
+    charge, so neither is counted here.
+    """
+    groups: defaultdict[str, list[tuple[FeatureTransaction, str]]] = defaultdict(list)
+    merchants: dict[str, bool] = {}
+    for item in transactions:
+        if item.transaction_date is None or is_purchase_reversal(item):
+            continue
+        if item.transaction_type not in {"debit", None}:
+            continue
+        if (item.categorisation.transaction_class or "unknown") not in {"spending", "unknown"}:
+            continue
+        match = _PENALTY_WORDING.search(item.description or "")
+        if match is None or amount_of(item) < MIN_PENALTY_AMOUNT:
+            continue
+        key = merchant_group_key(item)
+        payee = key or unidentified_signature(item) or "UNNAMED PAYEE"
+        merchants[payee] = key is not None
+        groups[payee].append((item, " ".join(match.group(0).upper().split())))
+    candidates: list[PenaltyFeeCandidate] = []
+    for payee, rows in sorted(groups.items()):
+        rows.sort(key=lambda pair: (pair[0].transaction_date, pair[0].transaction_id))
+        candidates.append(
+            PenaltyFeeCandidate(
+                payee=payee,
+                payee_is_merchant=merchants[payee],
+                wording=sorted({wording for _, wording in rows}),
+                transaction_ids=[item.transaction_id for item, _ in rows],
+                dates=[item.transaction_date for item, _ in rows],
+                amounts=[amount_of(item) for item, _ in rows],
             )
         )
     return candidates

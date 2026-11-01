@@ -507,4 +507,41 @@ def build_customers() -> list[Customer]:
         )
     )
 
+    # 27. A late-payment fee from a provider, once.
+    customers.append(
+        Customer(
+            "27-single-late-fee",
+            "Extra: one late-payment fee",
+            [
+                *_monthly("v", [699, 699, 699, 699], "VODACOM", category="Airtime & Data", day=3,
+                          start=5),
+                _transaction("late", "125", date(2026, 7, 19), merchant="VODACOM", category="Airtime & Data",
+                             description="VODACOM LATE PAYMENT FEE"),
+            ],
+            [
+                Expected("penalty_fee_leak", "penalty_fees", "VODACOM", monthly_impact=D("125.00"),
+                         evidence_status="confirmed", observed_total=D("125")),
+                Expected("recurring_payment_leak", None, "VODACOM", monthly_impact=D("699.00")),
+            ],
+            note="The late fee is a separate one-off charge on top of the contract payment.",
+        )
+    )
+
+    # 28. Reconnection fees in two months, and a bank fee that is not a provider penalty.
+    customers.append(
+        Customer(
+            "28-repeated-penalties-not-bank-fee",
+            "Extra: repeated provider penalties, one bank fee",
+            [
+                _transaction("r1", "180", date(2026, 5, 14), merchant="CITY POWER", category="Utilities",
+                             description="CITY POWER RECONNECTION FEE"),
+                _transaction("r2", "180", date(2026, 8, 9), merchant="CITY POWER", category="Utilities",
+                             description="CITY POWER RECONNECTION FEE"),
+                _fee("bf", 69, date(2026, 6, 2), "UNPAID DEBIT ORDER FEE"),
+            ],
+            [Expected("penalty_fee_leak", "penalty_fees", "CITY POWER", monthly_impact=D("360.00"),
+                      evidence_status="confirmed", observed_total=D("360"))],
+        )
+    )
+
     return customers

@@ -185,6 +185,7 @@ _SPECIFICITY = {
     "trial_conversion_cost": 3,
     "price_increase": 3,
     "gambling_spend": 2,
+    "penalty_fees": 2,
     "fees": 2,
     "unverified_recurring_payee": 2,
     "service_cost": 1,
@@ -208,6 +209,8 @@ def _basis(leak: LeakDetection) -> str:
         return "trial_conversion_cost"
     if leak.leak_type == "gambling_spending_leak":
         return "gambling_spend"
+    if leak.leak_type == "penalty_fee_leak":
+        return "penalty_fees"
     if evidence.get("finding_focus") == "unidentified_recurring_merchant":
         return "unverified_recurring_payee"
     if leak.leak_type == "bank_fee_leak":
@@ -289,7 +292,13 @@ def _is_aggregate(leak: LeakDetection) -> bool:
 # Findings about one specific event. An aggregate increase made only of the rows
 # of such a finding adds nothing a customer needs to see separately.
 _SPECIFIC_BASES = frozenset(
-    {"duplicate_extra_charge", "trial_conversion_cost", "price_increase", "gambling_spend"}
+    {
+        "duplicate_extra_charge",
+        "trial_conversion_cost",
+        "price_increase",
+        "gambling_spend",
+        "penalty_fees",
+    }
 )
 
 

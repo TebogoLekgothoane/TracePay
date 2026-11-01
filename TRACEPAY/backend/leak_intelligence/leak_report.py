@@ -130,5 +130,6 @@ def _public_title(leak_type: str, fallback: str) -> str:
         "overlapping_cover_leak": "Funeral or life cover with several providers",
         "gambling_spending_leak": "Regular betting or lottery payments",
         "high_cost_credit_leak": "Credit repayments to review",
+        "penalty_fee_leak": "Late or penalty fees charged",
     }
     return generic.get(leak_type, "Potential spending pattern")

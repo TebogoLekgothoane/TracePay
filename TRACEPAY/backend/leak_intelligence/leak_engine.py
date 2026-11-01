@@ -76,6 +76,7 @@ def detect_leaks(
         *_overlapping_cover_leaks(snapshot, observations),
         *_gambling_spending_leaks(snapshot, observations),
         *_high_cost_credit_leaks(snapshot, observations),
+        *_penalty_fee_leaks(snapshot),
         *_inactive_recurring_leaks(snapshot),
         *_irregular_transaction_leaks(snapshot),
         *_spending_escalation_leaks(snapshot, observations),
@@ -2689,6 +2690,79 @@ def _high_cost_credit_leaks(
                 },
                 behaviour_ids=[],
                 feature_refs=[f"merchants[{name}]"],
+            )
+        )
+    return findings
+
+
+def _penalty_fee_leaks(snapshot: FinancialFeatureSnapshot) -> list[LeakDetection]:
+    """Late-payment and similar penalties a provider charged, as money already paid.
+
+    The statement shows the charge, not why the payment was late, so nothing is
+    said about avoidability beyond naming what was charged.
+    """
+    findings: list[LeakDetection] = []
+    for candidate in snapshot.penalty_fee_candidates:
+        total = sum(candidate.amounts, Decimal("0"))
+        if total < MIN_IMPACT:
+            continue
+        months = sorted({item.strftime("%Y-%m") for item in candidate.dates})
+        repeated = len(months) >= 2
+        confidence = leak_confidence(
+            support=None,
+            observation_count=len(candidate.amounts),
+            pattern_strength=Decimal("0.80") if repeated else Decimal("0.70"),
+            ceiling=Decimal("0.80"),
+        )
+        if confidence is None:
+            continue
+        display = (
+            merchant_display_name_for(candidate.payee) if candidate.payee_is_merchant else None
+        )
+        who = display or "a provider"
+        count = len(candidate.amounts)
+        findings.append(
+            _leak(
+                snapshot=snapshot,
+                leak_type="penalty_fee_leak",
+                subject=candidate.payee,
+                title=(
+                    f"Penalty fees charged by {who}"
+                    if repeated
+                    else f"Late or penalty fee charged by {who}"
+                ),
+                description=(
+                    f"{count} charge{'s' if count != 1 else ''} described as "
+                    f"{' / '.join(item.lower() for item in candidate.wording)} "
+                    f"totalled {format_zar(total)}"
+                    + (f" across {len(months)} months" if repeated else "")
+                    + ". The statement shows the charge but not why it was applied, so it "
+                    "does not say whether it could have been avoided."
+                ),
+                monthly_impact=total,
+                annual_impact=None,
+                impact_kind="one_time",
+                confidence=confidence,
+                severity=severity_for_impact(total, persistent=repeated, confidence=confidence),
+                evidence={
+                    "finding_focus": "penalty_fees",
+                    "finding_kind": "potential_leak",
+                    "merchant_key": candidate.payee if candidate.payee_is_merchant else None,
+                    "payee": candidate.payee,
+                    "penalty_wording": candidate.wording,
+                    "penalty_transaction_ids": candidate.transaction_ids,
+                    "penalty_dates": [item.isoformat() for item in candidate.dates],
+                    "penalty_amounts": candidate.amounts,
+                    "penalty_count": count,
+                    "penalty_months": months,
+                    "repeated_across_months": repeated,
+                    "observed_total_paid": total,
+                    "observation_count": count,
+                    "first_observed_date": candidate.dates[0],
+                    "last_observed_date": candidate.dates[-1],
+                },
+                behaviour_ids=[],
+                feature_refs=["penalty_fee_candidates"],
             )
         )
     return findings
