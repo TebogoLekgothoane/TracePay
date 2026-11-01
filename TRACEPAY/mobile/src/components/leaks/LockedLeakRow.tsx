@@ -19,7 +19,7 @@ export function LockedLeakRow({ leak, onPress }: Props) {
       accessibilityRole="button"
       accessibilityLabel={`Locked leak, ${leak.monthlyAmount} per month. Unlock to see this leak.`}
       onPress={onPress}
-      className="flex-row items-center gap-3 rounded-3xl bg-card px-4 py-3.5 active:opacity-80"
+      className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-2.5 active:opacity-80"
     >
       <View className="h-10 w-10 items-center justify-center rounded-2xl bg-muted">
         <Lock color={palette.mutedForeground} size={18} strokeWidth={2.2} />

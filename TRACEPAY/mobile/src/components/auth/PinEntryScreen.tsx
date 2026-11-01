@@ -43,6 +43,8 @@ type Props = {
   errorMessage?: string | null;
   resetKey?: number;
   isBusy?: boolean;
+  /** Blocks input without the busy spinner, e.g. while the PIN is locked out. */
+  disabled?: boolean;
   footer?: ReactNode;
   useSystemKeyboard?: boolean;
   showLockIcon?: boolean;
@@ -105,6 +107,7 @@ export function PinEntryScreen({
   errorMessage,
   resetKey = 0,
   isBusy = false,
+  disabled = false,
   footer,
   useSystemKeyboard = false,
   showLockIcon = false,
@@ -189,7 +192,7 @@ export function PinEntryScreen({
   };
 
   const addDigit = (digit: number) => {
-    if (isBusy || submittingRef.current || digits.length >= PIN_LENGTH) {
+    if (disabled || isBusy || submittingRef.current || digits.length >= PIN_LENGTH) {
       return;
     }
 
@@ -211,7 +214,7 @@ export function PinEntryScreen({
   };
 
   const removeDigit = () => {
-    if (isBusy || submittingRef.current || digits.length === 0) {
+    if (disabled || isBusy || submittingRef.current || digits.length === 0) {
       return;
     }
 
@@ -361,7 +364,11 @@ export function PinEntryScreen({
         </Pressable>
 
         {!useSystemKeyboard ? (
-          <View className="mt-auto w-full max-w-[330px] flex-row flex-wrap justify-center">
+          <View
+            className={`mt-auto w-full max-w-[330px] flex-row flex-wrap justify-center ${
+              disabled ? "opacity-40" : ""
+            }`}
+          >
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => (
               <Pressable
                 accessibilityRole="button"

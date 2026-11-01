@@ -1,5 +1,8 @@
 /**
- * Mock "leak found" insights for each money-leak category on the home page.
+ * Mock "leak found" insights for each money-leak category.
+ * Only leaks that can be worked out from a bank statement belong here: charges, amounts, dates
+ * and how they repeat. Anything that needs outside data (cancellations, free-trial sign-ups,
+ * app usage, the bank's product pricing) cannot be detected yet and must not be listed.
  * These are the charges people rarely spot on their own. Replace with analysis output
  * once the backend returns per-category findings.
  */
@@ -24,14 +27,6 @@ export const HIDDEN_LEAKS: Record<string, HiddenLeak[]> = {
       evidence: "Unpaid item fee · 3 times since March",
     },
     {
-      id: "premium-tier",
-      title: "You are on a premium account you do not benefit from",
-      detail:
-        "Your R165 tier only pays off with a high monthly balance, which yours never reaches. The standard tier would give you the same features for R69.",
-      monthly: 96,
-      evidence: "Account fee R165 every month for 14 months",
-    },
-    {
       id: "till-cashback",
       title: "A fee every time you take cash back at a till",
       detail:
@@ -42,26 +37,10 @@ export const HIDDEN_LEAKS: Record<string, HiddenLeak[]> = {
   ],
   subs: [
     {
-      id: "cancelled-still-billing",
-      title: "A subscription that kept billing after you cancelled",
-      detail:
-        "A streaming service you cancelled in January is still charging a second card that the cancellation did not cover. You have paid R693 for a service you cannot open.",
-      monthly: 99,
-      evidence: "R99 on the 14th, every month since February",
-    },
-    {
-      id: "trial-converted",
-      title: "A free trial that quietly became a paid plan",
-      detail:
-        "A 7-day trial for a fitness app rolled into a R149 monthly plan. There has been no activity on it since the first week.",
-      monthly: 149,
-      evidence: "First charge 8 days after sign-up",
-    },
-    {
       id: "price-creep",
-      title: "A price that crept up without a notice",
+      title: "A price that crept up over time",
       detail:
-        "Your cloud storage went from R29 to R59 to R79 over 14 months. The extra storage you are paying for is 94% empty.",
+        "A recurring charge went from R29 to R59 to R79 over 14 months. Each step is small, but together the same service now costs almost three times as much.",
       monthly: 50,
       evidence: "Three increases, last one in August",
     },
@@ -69,9 +48,9 @@ export const HIDDEN_LEAKS: Record<string, HiddenLeak[]> = {
   debit: [
     {
       id: "unknown-policy",
-      title: "A policy you do not remember taking out",
+      title: "A debit order under a name you may not recognise",
       detail:
-        "A R189 monthly debit order is going to an insurance administrator under a different trading name. It has been running for over three years and there is no policy on your profile.",
+        "A R189 monthly debit order goes to a payee whose name does not match any merchant you pay elsewhere. It has been collected every month for over three years, so it is worth checking it is one you chose.",
       monthly: 189,
       evidence: "Debit order since June 2022 · 40 payments",
     },
@@ -97,23 +76,23 @@ export const HIDDEN_LEAKS: Record<string, HiddenLeak[]> = {
       id: "out-of-bundle",
       title: "Out-of-bundle rates after the bundle ran out",
       detail:
-        "Once your data bundle ends you are billed at about R2 a megabyte. That cost you R186 this month, where a 1GB top-up would have been R29.",
+        "Charges for data used after your bundle ran out appear on your statement on 9 days this month and add up to R186. Topping up before the bundle ends avoids them.",
       monthly: 157,
       evidence: "Out-of-bundle charges on 9 days in September",
     },
     {
       id: "auto-renew-bundle",
-      title: "A bundle that renews itself and mostly goes unused",
+      title: "A bundle that renews itself every week",
       detail:
-        "A R99 weekly bundle auto-renews every Friday. Your usage shows you finish about 12% of it before the next one starts.",
+        "A R99 bundle is charged every Friday, nine weeks running. If you do not need a fresh bundle that often, switching off auto-renew stops the weekly charge.",
       monthly: 396,
       evidence: "R99 every Friday for 9 weeks",
     },
     {
       id: "premium-sms",
-      title: "A premium SMS service from a competition entry",
+      title: "A small charge that repeats every day",
       detail:
-        "A R7 per day 'daily tips' subscription was started when you entered an online competition. It has billed your airtime balance quietly ever since.",
+        "A R7 charge for a premium SMS service is taken from your airtime balance every day. Small daily amounts are easy to miss, but this one adds up to about R210 a month.",
       monthly: 210,
       evidence: "R7 daily since 2 April",
     },

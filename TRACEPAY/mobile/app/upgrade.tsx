@@ -1,4 +1,4 @@
-import { Redirect, router } from "expo-router";
+import { Redirect, router, useLocalSearchParams } from "expo-router";
 import {
   Bell,
   Check,
@@ -8,16 +8,18 @@ import {
   type LucideIcon,
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { FinancialInsightsIllustration } from "../src/components/billing/FinancialInsightsIllustration";
 import { ErrorNote, goBackOr } from "../src/components/billing/BillingShell";
+import { FinancialInsightsIllustration } from "../src/components/billing/FinancialInsightsIllustration";
 import { Button } from "../src/components/ui/Button";
 import { IconButton } from "../src/components/ui/IconButton";
 import { Skeleton } from "../src/components/ui/Skeleton";
-import { formatWholeRand } from "../src/features/billing/billing.format";
+import { Input } from "../src/components/ui/Input";
+import { formatCents, formatWholeRand } from "../src/features/billing/billing.format";
+import { usePaymentFlow } from "../src/hooks/usePaymentFlow";
 import { useBilling } from "../src/features/billing/billing.store";
 import type { BillingProduct } from "../src/features/billing/billing.types";
 import { totalMonthlyLeaks } from "../src/features/leaks/leak-paywall";
@@ -55,9 +57,30 @@ export default function UpgradeScreen() {
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const { products, entitlements, hydrated, error, refresh } = useBilling();
   const total = useMemo(() => totalMonthlyLeaks(listPotentialLeaks()), []);
-  const [selected, setSelected] = useState<BillingProduct>("full_analysis");
-
+  const params = useLocalSearchParams<{ product?: string; resume?: string }>();
   const unlocked = Boolean(entitlements?.fullAnalysis.unlocked);
+  const [selected, setSelected] = useState<BillingProduct>(
+    params.product === "annual_monitoring" ? "annual_monitoring" : "full_analysis",
+  );
+  const [email, setEmail] = useState("");
+
+  // Once the full analysis is owned, the only thing left to buy is monitoring.
+  const product: BillingProduct = unlocked ? "annual_monitoring" : selected;
+  const flow = usePaymentFlow(product);
+
+  // Returning from Paystack's callback link, or reopening after an interrupted payment.
+  const pending = entitlements?.pending.find((entry) => entry.product === product);
+  useEffect(() => {
+    if (params.resume === "1" && pending) void flow.resume(pending.reference);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.resume, pending?.reference]);
+
+  useEffect(() => {
+    if (flow.phase === "success") {
+      router.replace(`/billing/success?product=${product}`);
+    }
+  }, [flow.phase, product]);
+
   if (unlocked && entitlements?.monitoring.active) {
     return <Redirect href={"/monitoring" as never} />;
   }
@@ -94,6 +117,10 @@ export default function UpgradeScreen() {
 
   const active = plans.find((plan) => plan.product === selected) ?? plans[0];
   const canContinue = active.product === "full_analysis" || monitoringAvailable;
+  const busy = flow.phase === "starting" || flow.phase === "verifying";
+  const waiting = flow.phase === "awaiting" || flow.phase === "delayed";
+  const needsEmail = flow.phase === "needs_email";
+  const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email.trim());
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
@@ -118,7 +145,7 @@ export default function UpgradeScreen() {
             "Keep TracePay working for you"
           ) : (
             <>
-              Unlock your{"\n"}full <Text className="text-primary">money analysis</Text>
+              Unlock your{"\n"}full money analysis
             </>
           )}
         </Text>
@@ -143,25 +170,10 @@ export default function UpgradeScreen() {
                 onPress={() => setSelected(plan.product)}
                 className="min-w-0 flex-1 rounded-3xl bg-card p-4 active:opacity-90"
                 style={{
-                  borderWidth: isSelected ? 1.5 : 1,
-                  borderColor: isSelected ? palette.primary : palette.border,
+                  borderWidth: 1,
+                  borderColor: isSelected ? withAlpha(palette.primary, 0.7) : palette.border,
                 }}
               >
-                {isSelected ? (
-                  <View
-                    className="absolute h-[36px] w-[36px] items-center justify-center rounded-full"
-                    style={{
-                      right: 12,
-                      top: -18,
-                      backgroundColor: palette.primary,
-                      borderWidth: 2,
-                      borderColor: palette.background,
-                    }}
-                  >
-                    <Check color="#FFFFFF" size={20} strokeWidth={3} />
-                  </View>
-                ) : null}
-
                 <Text className="mt-1 text-[15px] font-semibold text-foreground">{plan.title}</Text>
                 {plan.priceCents !== null ? (
                   <Text className="mt-1 text-[30px] font-bold tracking-[-0.6px] text-foreground">
@@ -182,10 +194,10 @@ export default function UpgradeScreen() {
                     <View key={feature} className="flex-row items-start gap-2">
                       <View
                         className="mt-px h-[18px] w-[18px] items-center justify-center rounded-full"
-                        style={{ backgroundColor: isSelected ? palette.primary : withAlpha(palette.foreground, 0.16) }}
+                        style={{ backgroundColor: withAlpha(isSelected ? palette.primary : palette.foreground, 0.14) }}
                       >
                         <Check
-                          color={isSelected ? "#FFFFFF" : palette.mutedForeground}
+                          color={isSelected ? palette.primary : palette.mutedForeground}
                           size={11}
                           strokeWidth={3.2}
                         />
@@ -216,6 +228,39 @@ export default function UpgradeScreen() {
           </View>
         ) : null}
 
+        {needsEmail ? (
+          <View className="mt-4 rounded-2xl bg-card p-4">
+            <Text className="mb-3 text-[13px] leading-5 text-muted-foreground">
+              Paystack sends your receipt by email. Your account was set up with a phone number, so
+              enter an email to use for this payment.
+            </Text>
+            <Input
+              label="Email address"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="you@example.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              autoCorrect={false}
+              returnKeyType="done"
+              error={flow.message}
+            />
+          </View>
+        ) : null}
+
+        {flow.message && !needsEmail ? (
+          <View className="mt-4">
+            {flow.phase === "delayed" ? (
+              <View className="rounded-2xl bg-card p-4">
+                <Text className="text-[14px] leading-5 text-foreground">{flow.message}</Text>
+              </View>
+            ) : (
+              <ErrorNote message={flow.message} />
+            )}
+          </View>
+        ) : null}
+
         <View className="mt-5 flex-row items-start justify-center gap-2">
           <Lock color={palette.mutedForeground} size={13} strokeWidth={2.2} />
           <Text className="min-w-0 flex-1 text-[11px] leading-4 text-muted-foreground">
@@ -226,14 +271,33 @@ export default function UpgradeScreen() {
       </ScrollView>
 
       <View className="px-5 pb-2 pt-2">
-        <Button
-          arrow
-          disabled={!canContinue}
-          style={{ minHeight: 44 }}
-          onPress={() => router.push(`/billing/checkout?product=${active.product}`)}
-        >
-          Continue
-        </Button>
+        {waiting ? (
+          <Button loading={busy} style={{ minHeight: 44 }} onPress={() => void flow.verify()}>
+            I have paid — check status
+          </Button>
+        ) : needsEmail ? (
+          <Button
+            disabled={!emailValid}
+            style={{ minHeight: 44 }}
+            onPress={() => void flow.start(email.trim())}
+          >
+            Continue to payment
+          </Button>
+        ) : (
+          <Button
+            arrow
+            disabled={!canContinue}
+            loading={busy}
+            style={{ minHeight: 44 }}
+            onPress={() => void flow.start()}
+          >
+            {flow.phase === "failed" || flow.phase === "error"
+              ? "Try again"
+              : active.priceCents
+                ? `Pay ${formatCents(active.priceCents)} securely`
+                : "Pay securely"}
+          </Button>
+        )}
       </View>
     </SafeAreaView>
   );

@@ -2,10 +2,11 @@ import { router, useFocusEffect } from "expo-router";
 import { Download } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useCallback, useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { LeaksSummaryCard } from "../../src/components/leaks/LeaksSummaryCard";
+
+import { LeakCategoryCard } from "../../src/components/leaks/LeakCategoryCards";
 import { LockedLeakRow } from "../../src/components/leaks/LockedLeakRow";
 import { PotentialLeakCard } from "../../src/components/leaks/PotentialLeakCard";
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
@@ -13,12 +14,12 @@ import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
 import { InfoSheet } from "../../src/components/ui/Modal";
 import { Skeleton } from "../../src/components/ui/Skeleton";
-import { SkeletonCard, SkeletonRows } from "../../src/components/ui/SkeletonGroups";
+import { SkeletonRows, SkeletonTile } from "../../src/components/ui/SkeletonGroups";
 import { formatWholeRand } from "../../src/features/billing/billing.format";
 import { useBilling } from "../../src/features/billing/billing.store";
 import { useLeakEntitlement } from "../../src/features/leaks/leak-entitlement.store";
+import { LEAK_CATEGORIES } from "../../src/features/leaks/leak-categories";
 import {
-  FREE_LEAK_COUNT,
   splitLeaksForPaywall,
   totalMonthlyLeaks,
 } from "../../src/features/leaks/leak-paywall";
@@ -36,7 +37,7 @@ export default function LeaksScreen() {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const leaks = useMemo(() => listPotentialLeaks(), []);
-  const total = useMemo(() => totalMonthlyLeaks(leaks), [leaks]);
+  const findingsTotal = useMemo(() => totalMonthlyLeaks(leaks), [leaks]);
   const paywall = useMemo(() => splitLeaksForPaywall(leaks), [leaks]);
   const { unlocked, hydrated } = useLeakEntitlement();
   const { products, entitlements, refresh } = useBilling();
@@ -57,8 +58,8 @@ export default function LeaksScreen() {
   const openUpgrade = useCallback(() => {
     router.push("/upgrade");
   }, []);
-  const openLockedSummary = useCallback(() => {
-    router.push("/billing/locked");
+  const openCategory = useCallback((item: { id: string }) => {
+    router.push(`/leak/${item.id}` as never);
   }, []);
 
   return (
@@ -68,14 +69,11 @@ export default function LeaksScreen() {
         contentContainerStyle={{ paddingBottom: 120 }}
         showsVerticalScrollIndicator={false}
       >
-        <View className="px-5 pt-1">
+        <View className="px-5 pt-">
           <View className="mb-1 flex-row items-start justify-between">
             <View className="flex-1 pr-4">
               <Text className="text-[30px] font-bold tracking-[-0.6px] text-foreground">
                 Leaks
-              </Text>
-              <Text className="mt-1 text-[14px] leading-5 text-muted-foreground">
-                We found areas where you&apos;re losing money.
               </Text>
             </View>
 
@@ -88,27 +86,56 @@ export default function LeaksScreen() {
             </IconButton>
           </View>
 
-          <View className="mt-5">
-            {hydrated ? (
-              <LeaksSummaryCard
-                label={unlocked ? undefined : "Estimated total leaked this month"}
-                total={total}
-                changeLabel="↑ 18% vs last month"
-              />
-            ) : (
-              <SkeletonCard height={110} />
-            )}
-          </View>
+
 
           {!hydrated ? (
-            <View className="mt-7 gap-3">
-              <Skeleton width="45%" height={22} />
-              <Skeleton width="80%" height={14} />
-              <View className="mt-1">
-                <SkeletonRows count={4} />
+            <View className="mt-7">
+              <View className="gap-2.5">
+                <Skeleton width="45%" height={22} />
+                <Skeleton width="70%" height={14} />
+              </View>
+              <ScrollView
+                horizontal
+                scrollEnabled={false}
+                showsHorizontalScrollIndicator={false}
+                className="-mx-5 mt-4"
+                contentContainerStyle={{ gap: 12, paddingHorizontal: 20 }}
+              >
+                {[0, 1, 2, 3].map((index) => (
+                  <SkeletonTile key={index} />
+                ))}
+              </ScrollView>
+
+              <View className="mt-7 gap-2.5">
+                <Skeleton width="50%" height={22} />
+                <Skeleton width="85%" height={14} />
+              </View>
+              <View className="mt-4">
+                <SkeletonRows count={5} compact />
               </View>
             </View>
-          ) : unlocked ? (
+          ) : (
+            <>
+              <Text className="mb-1 mt-7 text-[22px] font-bold tracking-[-0.3px] text-foreground">
+                Leak breakdown
+              </Text>
+              <Text className="text-[14px] leading-5 text-muted-foreground">
+                Areas where we found potential money leaks.
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                className="-mx-5 mt-4"
+                contentContainerStyle={{ gap: 12, paddingHorizontal: 20 }}
+              >
+                {LEAK_CATEGORIES.map((item) => (
+                  <LeakCategoryCard key={item.id} item={item} onPress={openCategory} />
+                ))}
+              </ScrollView>
+            </>
+          )}
+
+          {!hydrated ? null : unlocked ? (
             <>
               <Text className="mb-1 mt-7 text-[22px] font-bold tracking-[-0.3px] text-foreground">
                 Potential leaks
@@ -129,14 +156,12 @@ export default function LeaksScreen() {
                       onPress={() => setFilter((current) => (current === status ? "all" : status))}
                       className="rounded-full px-4 py-2.5 active:opacity-80"
                       style={{
-                        backgroundColor: selected ? palette.foreground : palette.card,
-                        borderWidth: 0,
-                        borderColor: palette.border,
+                        backgroundColor: selected ? palette.primary : palette.card,
                       }}
                     >
                       <Text
                         className="text-[13px] font-semibold"
-                        style={{ color: selected ? palette.background : palette.foreground }}
+                        style={{ color: selected ? "#FFFFFF" : palette.foreground }}
                       >
                         {REVIEW_STATUS_LABEL[status]} ({count})
                       </Text>
@@ -184,36 +209,30 @@ export default function LeaksScreen() {
           ) : (
             <>
               <Text className="mb-1 mt-7 text-[22px] font-bold tracking-[-0.3px] text-foreground">
-                Biggest leaks
+                Biggest findings
               </Text>
               <Text className="text-[14px] leading-5 text-muted-foreground">
-                {leaks.length} potential {leaks.length === 1 ? "leak" : "leaks"} · {total} estimated
-                monthly impact
-                {FREE_LEAK_COUNT < leaks.length ? `. Showing the top ${FREE_LEAK_COUNT}.` : ""}
+                {leaks.length} potential {leaks.length === 1 ? "finding" : "findings"} ·{" "}
+                {findingsTotal} estimated monthly impact
               </Text>
 
-              <View className="mt-4 gap-3">
+              <View className="mt-4 gap-2">
                 {paywall.preview.map((leak) => (
                   <PotentialLeakCard key={leak.id} leak={leak} onPress={openLeak} />
+                ))}
+                {paywall.locked.map((leak) => (
+                  <LockedLeakRow key={leak.id} leak={leak} onPress={openUpgrade} />
                 ))}
               </View>
 
               {paywall.locked.length > 0 ? (
                 <>
-                  <Text className="mb-1 mt-7 text-[22px] font-bold tracking-[-0.3px] text-foreground">
-                    {paywall.locked.length} more {paywall.locked.length === 1 ? "leak" : "leaks"} detected
-                  </Text>
-                  <Text className="text-[14px] leading-5 text-muted-foreground">
-                    See the full breakdown and steps to investigate.
+                  <Text className="mt-5 text-center text-[13px] leading-5 text-muted-foreground">
+                    Unlock your complete analysis to see all {leaks.length} findings, evidence and
+                    next steps.
                   </Text>
 
-                  <View className="mt-4 gap-2">
-                    {paywall.locked.map((leak) => (
-                      <LockedLeakRow key={leak.id} leak={leak} onPress={openLockedSummary} />
-                    ))}
-                  </View>
-
-                  <View className="mt-5">
+                  <View className="mt-3">
                     <Button onPress={openUpgrade} arrow style={{ minHeight: 44 }}>
                       {unlockLabel}
                     </Button>

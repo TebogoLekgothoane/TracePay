@@ -21,7 +21,7 @@ export function WeekdayBars({ days, colors, height = 150 }: Props) {
           y: Math.round(day.average),
           color: day.weekday === top.weekday && day.average > 0 ? colors.highlight : colors.bar,
         }))}
-        barStyle={{ cornerRadius: 6 }}
+        barStyle={{ cornerRadius: 3 }}
         showGrid
       />
     </Host>

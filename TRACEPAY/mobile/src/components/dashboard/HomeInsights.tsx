@@ -4,19 +4,18 @@ import { Pressable, Text, View } from "react-native";
 
 import type { SpendingPatternInsight } from "../../features/insights/spending-patterns";
 import { SkeletonRows } from "../ui/SkeletonGroups";
-import { COLORS, withAlpha } from "../../theme/colors";
+import { COLORS } from "../../theme/colors";
 
 type Props = {
   insights: SpendingPatternInsight[];
   loading: boolean;
   /** True when there are no transactions at all. */
   noData: boolean;
-  onPress: () => void;
   onSeeAll: () => void;
 };
 
 /** "Insights for you" from the user's real recent spending. */
-export function HomeInsights({ insights, loading, noData, onPress, onSeeAll }: Props) {
+export function HomeInsights({ insights, loading, noData, onSeeAll }: Props) {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
 
@@ -37,17 +36,11 @@ export function HomeInsights({ insights, loading, noData, onPress, onSeeAll }: P
       {insights.length > 0 ? (
         <View className="gap-3">
           {insights.map((insight) => (
-            <Pressable
+            <View
               key={insight.id}
-              accessibilityRole="button"
-              accessibilityLabel={insight.title}
-              className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-75"
-              onPress={onPress}
+              className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5"
             >
-              <View
-                className="h-10 w-10 items-center justify-center rounded-full"
-                style={{ backgroundColor: withAlpha(palette.primary, 0.14) }}
-              >
+              <View className="h-10 w-10 items-center justify-center">
                 <Lightbulb color={palette.primary} size={19} strokeWidth={2.2} />
               </View>
               <View className="min-w-0 flex-1">
@@ -61,8 +54,7 @@ export function HomeInsights({ insights, loading, noData, onPress, onSeeAll }: P
                   {insight.detail}
                 </Text>
               </View>
-              <ChevronRight color={palette.mutedForeground} size={18} strokeWidth={2} />
-            </Pressable>
+            </View>
           ))}
         </View>
       ) : loading ? (

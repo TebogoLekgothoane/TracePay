@@ -3,6 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect } from "expo-router";
 import type { LucideIcon } from "lucide-react-native";
 import {
+  Receipt,
   Bell,
   ChevronRight,
   FileText,
@@ -44,6 +45,7 @@ const SECURITY_HREF = "/settings/security";
 const PRIVACY_HREF = "/settings/privacy";
 const LANGUAGE_HREF = "/settings/language";
 const STATEMENT_COVERAGE_HREF = "/statements/coverage";
+const TRANSACTIONS_HREF = "/(tabs)/transactions";
 const HELP_HREF = "/settings/help";
 const SYNTHETIC_INTELLIGENCE_DEBUG_HREF = "/debug/synthetic-intelligence";
 const LEAK_INTELLIGENCE_DEBUG_HREF = "/debug/leak-intelligence";
@@ -73,6 +75,12 @@ const ACCOUNT_ROWS: SettingsRow[] = [
     label: "My accounts",
     Icon: Wallet,
     href: LINKED_ACCOUNTS_HREF,
+  },
+  {
+    id: "transactions",
+    label: "Transactions",
+    Icon: Receipt,
+    href: TRANSACTIONS_HREF,
   },
   {
     id: "statement-coverage",

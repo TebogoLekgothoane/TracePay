@@ -278,9 +278,15 @@ module.exports = function withTracePayAndroidIngestion(config) {
       return mod;
     }
     if (!mod.modResults.contents.includes("TracePayIngestionPackage")) {
+      if (!mod.modResults.contents.includes("PackageList(this).packages")) {
+        throw new Error(
+          "withTracePayAndroidIngestion: could not find PackageList(this).packages in MainApplication.kt; update the plugin for this template."
+        );
+      }
+      // Anchor the import on the package line so it works whatever else is imported.
       mod.modResults.contents = mod.modResults.contents.replace(
-        "import com.facebook.react.defaults.DefaultReactNativeHost",
-        "import com.facebook.react.defaults.DefaultReactNativeHost\\nimport com.tracepay.mobile.ingestion.TracePayIngestionPackage"
+        /^(package [^\n]+\n)/m,
+        "$1\nimport com.tracepay.mobile.ingestion.TracePayIngestionPackage\n"
       );
       mod.modResults.contents = mod.modResults.contents.replace(
         "PackageList(this).packages",

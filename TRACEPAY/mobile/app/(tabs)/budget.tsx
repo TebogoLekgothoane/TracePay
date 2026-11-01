@@ -7,12 +7,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AnimatedBar } from "../../src/components/charts/AnimatedBar";
 import { CalendarHeat } from "../../src/components/charts/CalendarHeat";
-import { Donut } from "../../src/components/charts/Donut";
+import { ChartBoundary } from "../../src/components/charts/ChartBoundary";
+import { ShareBar } from "../../src/components/charts/ShareBar";
 import { PaceChart } from "../../src/components/charts/PaceChart";
 import { RankedBars, type RankedBarItem } from "../../src/components/charts/RankedBars";
 import { TrendBars } from "../../src/components/charts/TrendBars";
 import { WeekdayBars } from "../../src/components/charts/WeekdayBars";
 import { formatRandWhole } from "../../src/components/charts/chart-utils";
+import { SpendingRhythmCard } from "../../src/components/dashboard/SpendingRhythmCard";
 import { PeriodTabs } from "../../src/components/insights/PeriodTabs";
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
 import { Button } from "../../src/components/ui/Button";
@@ -33,8 +35,12 @@ import {
 } from "../../src/features/insights/insights-analytics";
 import type { TrendGrain } from "../../src/features/insights/insights-report";
 import { CUSTOM_RANGES, type CustomRange, type Period } from "../../src/features/insights/period";
+import { buildLeakStats } from "../../src/features/leak-intelligence/leak-stats";
 import { useCountUp } from "../../src/hooks/useCountUp";
+import { useLeakIntelligenceDebug } from "../../src/hooks/useLeakIntelligenceDebug";
 import { useInsightsReport } from "../../src/hooks/useInsightsReport";
+import { useSpendingRhythm } from "../../src/hooks/useSpendingRhythm";
+import type { RhythmSpan } from "../../src/features/dashboard/spending-rhythm";
 import { COLORS, withAlpha } from "../../src/theme/colors";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -78,6 +84,8 @@ export default function InsightsScreen() {
   const [trendIndex, setTrendIndex] = useState<number | null>(null);
   const [calendarKey, setCalendarKey] = useState<string | null>(null);
   const [categoryKey, setCategoryKey] = useState<string | null>(null);
+  const [rhythmSpan, setRhythmSpan] = useState<RhythmSpan>("6 months");
+  const rhythm = useSpendingRhythm(rhythmSpan);
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
 
@@ -89,6 +97,8 @@ export default function InsightsScreen() {
   );
 
   const animatedTotal = useCountUp(report?.total ?? 0);
+  const leakDetections = useLeakIntelligenceDebug(true);
+  const leakStats = useMemo(() => buildLeakStats(leakDetections.result), [leakDetections.result]);
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const range = data?.range ?? null;
   const hasData = Boolean(range) && (report?.total ?? 0) > 0;
@@ -124,9 +134,10 @@ export default function InsightsScreen() {
     [analytics, report],
   );
 
-  const categoryColors = [palette.primary, palette.blue, palette.accent, palette.success, palette.warning, palette.mutedForeground];
+  // One hue in steps, biggest first: a rainbow of unrelated colours reads as decoration, not data.
+  const categoryColors = [1, 0.78, 0.6, 0.46, 0.34, 0.24].map((alpha) => withAlpha(palette.primary, alpha));
   const barColors = { up: palette.destructive, down: palette.success, neutral: palette.mutedForeground };
-  const gridColor = withAlpha(palette.mutedForeground, 0.18);
+  const gridColor = withAlpha(palette.mutedForeground, 0.12);
   const slices = breakdown?.slices ?? [];
 
   const categoryItems: RankedBarItem[] = slices.map((slice, index) => {
@@ -290,6 +301,79 @@ export default function InsightsScreen() {
                 ) : null}
               </Card>
 
+              {leakStats ? (
+                <Card title="Your leaks" order={1}>
+                  <View className="flex-row">
+                    <View className="flex-1">
+                      <Text className="text-[12px] text-muted-foreground">Leaking a month</Text>
+                      <Text className="mt-0.5 text-[20px] font-bold tracking-[-0.4px] text-foreground">
+                        {formatRandWhole(leakStats.monthly)}
+                      </Text>
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-[12px] text-muted-foreground">A year, at this rate</Text>
+                      <Text className="mt-0.5 text-[20px] font-bold tracking-[-0.4px] text-foreground">
+                        {formatRandWhole(leakStats.yearly)}
+                      </Text>
+                    </View>
+                    <View className="w-[64px]">
+                      <Text className="text-[12px] text-muted-foreground">Findings</Text>
+                      <Text className="mt-0.5 text-[20px] font-bold tracking-[-0.4px] text-foreground">
+                        {leakStats.count}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {report && report.total > 0 ? (
+                    <Text className="mt-3 text-[13px] leading-5 text-muted-foreground">
+                      That is{" "}
+                      <Text className="font-semibold text-foreground">
+                        {Math.min(100, Math.round((leakStats.monthly / report.total) * 100))}%
+                      </Text>{" "}
+                      of what you spent in this period.
+                    </Text>
+                  ) : null}
+
+                  <View className="mt-4 border-t border-border/60 pt-4">
+                    <ChartBoundary>
+                      <RankedBars
+                        items={leakStats.byType.slice(0, 5).map((entry, index) => ({
+                          key: entry.key,
+                          label: entry.label,
+                          value: formatRandWhole(entry.amount),
+                          caption: `${entry.count} ${entry.count === 1 ? "finding" : "findings"}`,
+                          ratio: entry.amount / (leakStats.byType[0]?.amount || 1),
+                          color: categoryColors[index % categoryColors.length],
+                        }))}
+                        track={gridColor}
+                        colors={barColors}
+                      />
+                    </ChartBoundary>
+                  </View>
+
+                  {leakStats.largest ? (
+                    <Text className="mt-4 text-[13px] leading-5 text-muted-foreground">
+                      Biggest single leak:{" "}
+                      <Text className="font-semibold text-foreground">{leakStats.largest.title}</Text>
+                      {", "}
+                      {formatRandWhole(leakStats.largest.amount)} a month.
+                    </Text>
+                  ) : null}
+                </Card>
+              ) : null}
+              <Animated.View className="mt-6" entering={FadeInDown.delay(70).duration(420)}>
+                <SpendingRhythmCard
+                  span={rhythmSpan}
+                  onSpanChange={setRhythmSpan}
+                  rhythm={rhythm.rhythm}
+                  loading={rhythm.loading}
+                  error={rhythm.error}
+                  onRetry={rhythm.retry}
+                  isCurrent={rhythm.data?.isCurrent ?? true}
+                  referenceDate={rhythm.data?.referenceDate ?? null}
+                />
+              </Animated.View>
+
               {highlights.length > 0 ? (
                 <Card title="Worth knowing" order={1}>
                   <View className="gap-3.5">
@@ -347,18 +431,15 @@ export default function InsightsScreen() {
               ) : null}
 
               <Card title="Where it went" order={3} action={<SegmentToggle value={spendView} options={SPEND_VIEWS} onChange={setSpendView} />}>
+                <ChartBoundary key={spendView}>
                 {spendView === "Categories" && slices.length > 0 ? (
                   <>
-                    <View className="items-center">
-                      <Donut
-                        segments={slices.map((slice, index) => ({ color: categoryColors[index % categoryColors.length], value: slice.amount }))}
-                        centerLabel="Total"
-                        centerValue={formatRandWhole(breakdown?.total ?? 0)}
-                        track={gridColor}
-                        background={palette.card}
-                        highlight={categoryKey ? slices.findIndex((slice) => slice.name === categoryKey) : null}
-                      />
-                    </View>
+                    <ShareBar
+                      segments={slices.map((slice, index) => ({ color: categoryColors[index % categoryColors.length], value: slice.amount }))}
+                      label="Total"
+                      total={formatRandWhole(breakdown?.total ?? 0)}
+                      highlight={categoryKey && slices.some((slice) => slice.name === categoryKey) ? slices.findIndex((slice) => slice.name === categoryKey) : null}
+                    />
                     <View className="mt-5">
                       <RankedBars
                         items={categoryItems}
@@ -374,10 +455,12 @@ export default function InsightsScreen() {
                 ) : (
                   <Text className="text-[13px] leading-5 text-muted-foreground">Nothing to show for this view yet.</Text>
                 )}
+                </ChartBoundary>
               </Card>
 
               {analytics.calendar.length > 1 ? (
                 <Card title="When you spend" order={4} action={<SegmentToggle value={timeView} options={TIME_VIEWS} onChange={setTimeView} />}>
+                  <ChartBoundary key={timeView}>
                   {timeView === "Calendar" ? (
                     <>
                       <Text className="mb-3 text-[13px] text-muted-foreground">
@@ -405,6 +488,7 @@ export default function InsightsScreen() {
                       <WeekdayBars days={analytics.weekdays} colors={{ bar: withAlpha(palette.primary, 0.3), highlight: palette.primary, grid: gridColor, label: palette.mutedForeground }} />
                     </>
                   )}
+                  </ChartBoundary>
                 </Card>
               ) : null}
 
@@ -429,6 +513,7 @@ export default function InsightsScreen() {
                       ? `${trendSelected.label}: ${formatRandWhole(trendSelected.current)} against ${formatRandWhole(trendSelected.previous)} before`
                       : "Each bar is compared with the same stretch before it."}
                   </Text>
+                  <ChartBoundary key={trendGrain}>
                   <TrendBars
                     points={trendPoints}
                     selected={trendIndex}
@@ -440,6 +525,7 @@ export default function InsightsScreen() {
                       label: palette.mutedForeground,
                     }}
                   />
+                  </ChartBoundary>
                 </Card>
               ) : null}
             </View>

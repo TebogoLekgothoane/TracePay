@@ -8,7 +8,7 @@ import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import TracePayIcon from "../../assets/icons/assembled TracePay icon.svg";
-import { PinUnlockSheet } from "../../src/components/auth/PinUnlockSheet";
+import { PinEntryScreen } from "../../src/components/auth/PinEntryScreen";
 import { Button } from "../../src/components/ui/Button";
 import { FALLBACK_PROFILE_NAME } from "../../src/features/auth/auth.constants";
 import { useAppLock } from "../../src/features/security/AppLockProvider";
@@ -197,6 +197,25 @@ export default function UnlockScreen() {
     </Pressable>
   );
 
+  if (sheetVisible) {
+    return (
+      <PinEntryScreen
+        biometricKind={biometricKind}
+        disabled={lockoutMessage !== null}
+        errorMessage={lockoutMessage ?? state.pinError}
+        footer={resetLink}
+        isBusy={state.phase === "verifying"}
+        onBiometricPress={
+          canUseBiometrics ? () => dispatch({ type: "REQUEST_BIOMETRIC" }) : undefined
+        }
+        onClearError={() => dispatch({ type: "CLEAR_PIN_ERROR" })}
+        onComplete={async (pin) => handlePin(pin)}
+        resetKey={state.pinErrorId}
+        subtitle="Enter your 4-digit PIN to continue."
+        title={`${greeting}.`}
+      />
+    );
+  }
   const BiometricIcon = biometricKind === "face" ? ScanFace : Fingerprint;
 
   return (
@@ -246,23 +265,6 @@ export default function UnlockScreen() {
           </View>
         </View>
       </SafeAreaView>
-
-      <PinUnlockSheet
-        biometricKind={biometricKind}
-        biometricLabel={biometricLabel}
-        enabled={state.phase === "pin"}
-        errorId={state.pinErrorId}
-        errorMessage={state.pinError}
-        footer={resetLink}
-        isVerifying={state.phase === "verifying"}
-        lockoutMessage={lockoutMessage}
-        onBiometricPress={
-          canUseBiometrics ? () => dispatch({ type: "REQUEST_BIOMETRIC" }) : undefined
-        }
-        onClearError={() => dispatch({ type: "CLEAR_PIN_ERROR" })}
-        onComplete={handlePin}
-        visible={sheetVisible}
-      />
     </View>
   );
 }

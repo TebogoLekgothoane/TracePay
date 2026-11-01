@@ -1,4 +1,4 @@
-import { View } from "react-native";
+import { Text, View } from "react-native";
 import { BarChart } from "react-native-gifted-charts";
 
 import type { WeekdayAverage } from "../../features/insights/insights-analytics";
@@ -19,7 +19,7 @@ export function WeekdayBars({ days, colors, height = 170 }: Props) {
   const top = days.reduce((best, day) => (day.average > best.average ? day : best), days[0]);
   const chartWidth = Math.max(width - Y_AXIS_WIDTH - 8, 0);
   const slot = chartWidth / days.length;
-  const barWidth = Math.max(Math.min(slot * 0.55, 28), 8);
+  const barWidth = Math.max(Math.min(slot * 0.42, 20), 8);
 
   return (
     <View onLayout={onLayout}>
@@ -30,6 +30,14 @@ export function WeekdayBars({ days, colors, height = 170 }: Props) {
             label: day.label,
             frontColor: day.weekday === top.weekday && day.average > 0 ? colors.highlight : colors.bar,
             labelTextStyle: { color: colors.label, fontSize: 10 },
+            topLabelComponent:
+              day.weekday === top.weekday && day.average > 0
+                ? () => (
+                    <Text style={{ color: colors.highlight, fontSize: 10, fontWeight: "700", marginBottom: 3, width: 44, textAlign: "center" }}>
+                      {formatAxisRand(day.average)}
+                    </Text>
+                  )
+                : undefined,
           }))}
           width={chartWidth}
           height={height - 28}
@@ -39,8 +47,8 @@ export function WeekdayBars({ days, colors, height = 170 }: Props) {
           spacing={slot - barWidth}
           initialSpacing={(slot - barWidth) / 2}
           endSpacing={0}
-          barBorderTopLeftRadius={6}
-          barBorderTopRightRadius={6}
+          barBorderTopLeftRadius={3}
+          barBorderTopRightRadius={3}
           yAxisLabelWidth={Y_AXIS_WIDTH}
           formatYLabel={(label: string) => formatAxisRand(Number(label))}
           yAxisTextStyle={{ color: colors.label, fontSize: 10 }}

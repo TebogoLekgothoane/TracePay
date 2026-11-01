@@ -10,7 +10,6 @@ import Svg, {
   Line,
   LinearGradient,
   Path,
-  Rect,
   Stop,
   Text as SvgText,
 } from "react-native-svg";
@@ -41,25 +40,13 @@ type Props = {
 const HEIGHT = 176;
 const PAD = { left: 42, right: 14, top: 30, bottom: 26 };
 
-/** Smooth line through the points (Catmull-Rom converted to cubic Béziers). */
-function smoothPath(points: { x: number; y: number }[]): string {
+/** Straight segments between points: months are separate totals, so nothing is drawn between them. */
+function linePath(points: { x: number; y: number }[]): string {
   if (points.length === 0) return "";
-  if (points.length === 1) return `M${points[0].x} ${points[0].y}`;
-  let path = `M${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const p0 = points[index - 1] ?? points[index];
-    const p1 = points[index];
-    const p2 = points[index + 1];
-    const p3 = points[index + 2] ?? p2;
-    const c1x = p1.x + (p2.x - p0.x) / 6;
-    const c1y = p1.y + (p2.y - p0.y) / 6;
-    const c2x = p2.x - (p3.x - p1.x) / 6;
-    const c2y = p2.y - (p3.y - p1.y) / 6;
-    path += ` C${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
-  }
-  return path;
+  return points
+    .map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
+    .join(" ");
 }
-
 function Chart({
   rhythm,
   selected,
@@ -91,7 +78,7 @@ function Chart({
   const anchor = geometry.current[selected] ?? geometry.current[geometry.current.length - 1];
   const tipWidth = 92;
   const tipX = Math.min(Math.max(anchor.x - tipWidth / 2, PAD.left - 30), width - tipWidth - 4);
-  const areaPath = `${smoothPath(geometry.current)} L${geometry.current[geometry.current.length - 1].x.toFixed(1)} ${(PAD.top + plotHeight).toFixed(1)} L${geometry.current[0].x.toFixed(1)} ${(PAD.top + plotHeight).toFixed(1)} Z`;
+  const areaPath = `${linePath(geometry.current)} L${geometry.current[geometry.current.length - 1].x.toFixed(1)} ${(PAD.top + plotHeight).toFixed(1)} L${geometry.current[0].x.toFixed(1)} ${(PAD.top + plotHeight).toFixed(1)} Z`;
 
   return (
     <Pressable
@@ -111,7 +98,7 @@ function Chart({
       <Svg width="100%" height={HEIGHT} viewBox={`0 0 ${width} ${HEIGHT}`}>
         <Defs>
           <LinearGradient id="rhythmArea" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={palette.primary} stopOpacity={0.22} />
+            <Stop offset="0" stopColor={palette.primary} stopOpacity={0.1} />
             <Stop offset="1" stopColor={palette.primary} stopOpacity={0} />
           </LinearGradient>
         </Defs>
@@ -143,16 +130,17 @@ function Chart({
 
         <Path d={areaPath} fill="url(#rhythmArea)" />
         <Path
-          d={smoothPath(geometry.previous)}
-          stroke={withAlpha(palette.mutedForeground, 0.7)}
-          strokeWidth={2}
+          d={linePath(geometry.previous)}
+          stroke={withAlpha(palette.mutedForeground, 0.6)}
+          strokeWidth={1.5}
+          strokeDasharray="4 4"
           fill="none"
           strokeLinecap="round"
         />
         <Path
-          d={smoothPath(geometry.current)}
+          d={linePath(geometry.current)}
           stroke={palette.primary}
-          strokeWidth={2.5}
+          strokeWidth={2}
           fill="none"
           strokeLinecap="round"
         />
@@ -162,10 +150,10 @@ function Chart({
             key={points[index].monthKey}
             cx={point.x}
             cy={point.y}
-            r={index === selected ? 6 : 3.5}
-            fill={index === selected ? palette.primary : palette.card}
-            stroke={palette.primary}
-            strokeWidth={2}
+            r={index === selected ? 4.5 : 2.5}
+            fill={palette.primary}
+            stroke={index === selected ? palette.card : "none"}
+            strokeWidth={index === selected ? 2 : 0}
           />
         ))}
 
@@ -192,21 +180,13 @@ function Chart({
           strokeWidth={1}
           strokeDasharray="3 3"
         />
-        <Rect
-          x={tipX}
-          y={2}
-          width={tipWidth}
-          height={34}
-          rx={10}
-          fill={palette.foreground}
-        />
+
         <SvgText
           x={tipX + tipWidth / 2}
           y={15}
           fontSize={10}
-          fill={palette.background}
+          fill={palette.mutedForeground}
           textAnchor="middle"
-          opacity={0.75}
         >
           {chosen.label} {chosen.monthKey.slice(0, 4)}
         </SvgText>
@@ -215,7 +195,7 @@ function Chart({
           y={29}
           fontSize={12}
           fontWeight="700"
-          fill={palette.background}
+          fill={palette.foreground}
           textAnchor="middle"
         >
           {formatRandAmount(chosen.current)}

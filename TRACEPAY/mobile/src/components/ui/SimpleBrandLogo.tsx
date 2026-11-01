@@ -3,6 +3,7 @@ import Svg, { Path } from "react-native-svg";
 
 import {
   brandHex,
+  isDarkBrandColor,
   resolveBrandIcon,
 } from "../../features/brands/simple-brand-icons";
 
@@ -49,11 +50,18 @@ export function SimpleBrandLogo({
   }
 
   const fill = useBrandColor ? brandHex(icon) : "#0F172A";
+  // Near-black glyphs (Cursor, X, GitHub) disappear on dark cards, so sit them on a light tile.
+  const needsTile = useBrandColor && isDarkBrandColor(icon);
+  const radius = shape === "circle" ? size / 2 : Math.round(size * 0.35);
 
   return (
     <View
       className="items-center justify-center"
-      style={{ width: size, height: size }}
+      style={{
+        width: size,
+        height: size,
+        ...(needsTile ? { backgroundColor: "#FFFFFF", borderRadius: radius } : null),
+      }}
       accessibilityLabel={`${name} logo`}
     >
       <Svg width={glyphSize} height={glyphSize} viewBox="0 0 24 24">

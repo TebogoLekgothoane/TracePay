@@ -1,16 +1,11 @@
 import {
-  BackdropBlur,
-  Blur,
   Canvas,
   Circle,
   Group,
   LinearGradient,
   Path,
   RoundedRect,
-  Shadow,
   Skia,
-  rect,
-  rrect,
   vec,
 } from "@shopify/react-native-skia";
 import { CircleAlert, FileText, Landmark, Settings, ShoppingCart, type LucideIcon } from "lucide-react-native";
@@ -35,7 +30,7 @@ const SIDE_GUTTER = 40;
 
 const TILE_W = 78;
 const TILE_H = 68;
-const TILE_R = 20;
+const TILE_R = 18;
 const PILL_W = 176;
 const PILL_H = 50;
 
@@ -44,9 +39,10 @@ const BAR_GAP = 10;
 const BAR_HEIGHTS = [36, 56, 80, 106] as const;
 const BAR_BASELINE = HEIGHT - 30;
 
-const VIOLET_TOP = "#8B5CF6";
-const VIOLET_BOTTOM = "#1B0F40";
-const VIOLET_LINE = "#C4B0FF";
+// Muted violet: the bars and line sit quietly behind the content instead of glowing.
+const VIOLET = "#8B5CF6";
+const BAR_TOP = "rgba(139,92,246,0.42)";
+const BAR_BOTTOM = "rgba(139,92,246,0.08)";
 
 type Tile = {
   key: string;
@@ -63,57 +59,6 @@ const TILES: Tile[] = [
   { key: "subs", Icon: ShoppingCart, label: "Subscriptions", x: () => 0, y: 88 },
   { key: "recurring", Icon: Settings, label: "Recurring payments", x: (w) => w - TILE_W, y: 84 },
 ];
-
-/** Frosted glass surface: blurs whatever is drawn beneath it, with a lit edge and soft shadow. */
-function Glass({
-  x,
-  y,
-  width,
-  height,
-  radius,
-  isDark,
-}: {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  radius: number;
-  isDark: boolean;
-}) {
-  const shape = rrect(rect(x, y, width, height), radius, radius);
-  // Dark: violet-tinted smoked glass. Light: frosted white with a lilac cast. Both keep a
-  // clearly visible edge, because a white edge on a light page (or none on a dark one) vanishes.
-  const body = isDark
-    ? ["rgba(150,112,255,0.22)", "rgba(34,22,78,0.42)"]
-    : ["rgba(255,255,255,0.94)", "rgba(238,230,255,0.80)"];
-  const sheen = isDark ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.85)";
-  const edge = isDark
-    ? ["rgba(196,176,255,0.50)", "rgba(139,92,246,0.10)", "rgba(139,92,246,0.34)"]
-    : ["rgba(124,92,230,0.38)", "rgba(124,92,230,0.12)", "rgba(124,92,230,0.28)"];
-
-  return (
-    <>
-      <BackdropBlur blur={18} clip={shape}>
-        <RoundedRect x={x} y={y} width={width} height={height} r={radius}>
-          <LinearGradient start={vec(x, y)} end={vec(x + width, y + height)} colors={body} />
-        </RoundedRect>
-      </BackdropBlur>
-      {/* Soft sheen across the top. */}
-      <Group clip={shape}>
-        <RoundedRect x={x} y={y} width={width} height={height * 0.45} r={radius}>
-          <LinearGradient
-            start={vec(x, y)}
-            end={vec(x, y + height * 0.45)}
-            colors={[sheen, "rgba(255,255,255,0)"]}
-          />
-        </RoundedRect>
-      </Group>
-      <RoundedRect x={x + 0.5} y={y + 0.5} width={width - 1} height={height - 1} r={radius} style="stroke" strokeWidth={1}>
-        <LinearGradient start={vec(x, y)} end={vec(x + width, y + height)} colors={edge} positions={[0, 0.55, 1]} />
-      </RoundedRect>
-    </>
-  );
-}
 
 function trendPath(centreX: number) {
   const left = centreX - (BAR_HEIGHTS.length * BAR_W + (BAR_HEIGHTS.length - 1) * BAR_GAP) / 2;
@@ -138,9 +83,8 @@ type Props = {
 };
 
 /**
- * Paywall illustration drawn with Skia: dark gradient bars and a trend line, with frosted-glass
- * tiles and a pill that genuinely blur the artwork behind them. Icons and text sit on top as
- * regular views so they stay crisp and accessible.
+ * Paywall illustration drawn with Skia: soft violet bars and a trend line behind flat,
+ * bordered tiles and a pill. Icons and text sit on top as regular views so they stay crisp.
  */
 export function FinancialInsightsIllustration({ total }: Props) {
   const { colorScheme } = useColorScheme();
@@ -178,44 +122,28 @@ export function FinancialInsightsIllustration({ total }: Props) {
             const x = left + index * (BAR_W + BAR_GAP);
             const y = BAR_BASELINE - height;
             return (
-              <Group key={height}>
-                <RoundedRect x={x} y={y} width={BAR_W} height={height} r={9}>
-                  <LinearGradient start={vec(x, y)} end={vec(x, BAR_BASELINE)} colors={[VIOLET_TOP, VIOLET_BOTTOM]} />
-                  <Shadow dx={0} dy={4} blur={10} color="rgba(139,92,246,0.55)" />
-                </RoundedRect>
-                <RoundedRect x={x + 0.5} y={y + 0.5} width={BAR_W - 1} height={height - 1} r={9} style="stroke" strokeWidth={1}>
-                  <LinearGradient
-                    start={vec(x, y)}
-                    end={vec(x, y + height)}
-                    colors={["rgba(255,255,255,0.55)", "rgba(255,255,255,0)"]}
-                  />
-                </RoundedRect>
-              </Group>
+              <RoundedRect key={height} x={x} y={y} width={BAR_W} height={height} r={9}>
+                <LinearGradient start={vec(x, y)} end={vec(x, BAR_BASELINE)} colors={[BAR_TOP, BAR_BOTTOM]} />
+              </RoundedRect>
             );
           })}
         </Group>
 
-        {/* Trend line: a blurred copy for glow, then the crisp stroke. */}
-        <Path path={path} style="stroke" strokeWidth={5} strokeCap="round" end={line} opacity={0.7}>
-          <LinearGradient start={vec(left, 0)} end={vec(end.x, 0)} colors={["#8B5CF6", VIOLET_LINE]} />
-          <Blur blur={5} />
-        </Path>
-        <Path path={path} style="stroke" strokeWidth={2.4} strokeCap="round" end={line}>
-          <LinearGradient start={vec(left, 0)} end={vec(end.x, 0)} colors={["#A78BFA", "#FFFFFF"]} />
-        </Path>
+        {/* Trend line. */}
+        <Path path={path} style="stroke" strokeWidth={2} strokeCap="round" end={line} color={VIOLET} opacity={0.75} />
         <Group opacity={line}>
-          <Circle cx={end.x} cy={end.y} r={7} color="rgba(196,176,255,0.35)" />
-          <Circle cx={end.x} cy={end.y} r={4} color="#FFFFFF" />
+          <Circle cx={end.x} cy={end.y} r={6} color="rgba(139,92,246,0.18)" />
+          <Circle cx={end.x} cy={end.y} r={3.5} color={VIOLET} />
         </Group>
 
-        {/* Glass. */}
+        {/* Flat tiles and pill. */}
         {TILES.map((tile) => (
-          <Glass key={tile.key} x={tile.x(width)} y={tile.y} width={TILE_W} height={TILE_H} radius={TILE_R} isDark={isDark} />
+          <Surface key={tile.key} x={tile.x(width)} y={tile.y} width={TILE_W} height={TILE_H} radius={TILE_R} fill={palette.card} stroke={palette.border} />
         ))}
-        <Glass x={pillX} y={pillY} width={PILL_W} height={PILL_H} radius={PILL_H / 2} isDark={isDark} />
+        <Surface x={pillX} y={pillY} width={PILL_W} height={PILL_H} radius={PILL_H / 2} fill={palette.card} stroke={palette.border} />
       </Canvas>
 
-      {/* Content over the glass. */}
+      {/* Content over the surfaces. */}
       {TILES.map(({ key, Icon, label, badge, x, y }) => (
         <View
           key={key}
@@ -223,7 +151,7 @@ export function FinancialInsightsIllustration({ total }: Props) {
           className="absolute items-center justify-center"
           style={{ left: x(width), top: y, width: TILE_W, height: TILE_H, gap: 5 }}
         >
-          <Icon color={palette.foreground} size={20} strokeWidth={1.7} />
+          <Icon color={palette.mutedForeground} size={20} strokeWidth={1.7} />
           <Text
             className="px-1.5 text-center text-[9.5px] font-semibold leading-[11px] text-foreground"
             numberOfLines={2}
@@ -252,5 +180,40 @@ export function FinancialInsightsIllustration({ total }: Props) {
         </View>
       </View>
     </Animated.View>
+  );
+}
+
+/** A flat card surface with a hairline border. */
+function Surface({
+  x,
+  y,
+  width,
+  height,
+  radius,
+  fill,
+  stroke,
+}: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  radius: number;
+  fill: string;
+  stroke: string;
+}) {
+  return (
+    <>
+      <RoundedRect x={x} y={y} width={width} height={height} r={radius} color={fill} />
+      <RoundedRect
+        x={x + 0.5}
+        y={y + 0.5}
+        width={width - 1}
+        height={height - 1}
+        r={radius}
+        style="stroke"
+        strokeWidth={1}
+        color={stroke}
+      />
+    </>
   );
 }

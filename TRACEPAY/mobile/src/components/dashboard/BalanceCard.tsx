@@ -9,6 +9,7 @@ import { Skeleton } from "../ui/Skeleton";
 import type { AccountPreview } from "./AccountsCard";
 
 type Props = {
+  heading: string;
   balance: string;
   metaLabel: string;
   accounts: AccountPreview[];
@@ -96,6 +97,7 @@ function AccountChips({
 }
 
 export function BalanceCard({
+  heading,
   balance,
   metaLabel,
   accounts,
@@ -106,11 +108,6 @@ export function BalanceCard({
   onViewAccounts,
   onAddAccount,
 }: Props) {
-  const heading =
-    accounts.length > 0
-      ? `Total balance (${accounts.length} ${accounts.length === 1 ? "account" : "accounts"})`
-      : "Total balance";
-
   return (
     <LinearGradient
       colors={[...TRACEPAY.light.summaryGradient]}
@@ -143,6 +140,7 @@ export function BalanceCard({
           </View>
         )}
 
+        <View className="items-end gap-3">
         <View className="flex-row gap-2">
           <Pressable
             accessibilityRole="button"
@@ -167,30 +165,25 @@ export function BalanceCard({
             )}
           </Pressable>
         </View>
+
+        {loading ? (
+          <Skeleton onDark width={34} height={34} circle />
+        ) : accounts.length > 0 ? (
+          <AccountChips accounts={accounts} onAddAccount={onAddAccount ?? onImportStatement} />
+        ) : null}
+        </View>
       </View>
 
-      <View className="mt-5 flex-row items-center justify-between gap-3">
-        {loading ? (
-          <>
-            <Skeleton onDark width={160} height={56} radius={28} />
-            <View className="flex-row">
-              <Skeleton onDark width={34} height={34} circle />
-            </View>
-          </>
-        ) : accounts.length > 0 ? (
-          <>
-          
-            <AccountChips accounts={accounts} onAddAccount={onAddAccount ?? onImportStatement} />
-          </>
-        ) : (
+      {!loading && accounts.length === 0 ? (
+        <View className="mt-5 flex-row items-center">
           <Button className="flex-1" onPress={onImportStatement}>
             <>
               <Upload color="#FFFFFF" size={17} strokeWidth={2.2} />
               <Text className="text-[14px] font-semibold text-white">Add a statement</Text>
             </>
           </Button>
-        )}
-      </View>
+        </View>
+      ) : null}
     </LinearGradient>
   );
 }

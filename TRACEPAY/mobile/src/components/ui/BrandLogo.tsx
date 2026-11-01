@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Image, Text, View } from "react-native";
 
 import { hunterLogoUrl } from "../../features/accounts/account.constants";
 import { resolveBrandIcon } from "../../features/brands/simple-brand-icons";
 import { SimpleBrandLogo } from "./SimpleBrandLogo";
+
+const FAVICON_BASE = "https://www.google.com/s2/favicons";
 
 type Props = {
   name: string;
@@ -51,13 +53,22 @@ function HunterBrandLogo({
   fallbackColor = "#94A3B8",
   shape = "circle",
 }: Props) {
-  const [failed, setFailed] = useState(false);
-  const uri = hunterLogoUrl(logoDomain);
+  // Hunter first, then the site's own favicon, then the initial.
+  const sources = useMemo(() => {
+    const domain = logoDomain.trim().toLowerCase();
+    const list = [hunterLogoUrl(domain)];
+    if (!domain.endsWith(".tracepay")) {
+      list.push(`${FAVICON_BASE}?domain=${encodeURIComponent(domain)}&sz=128`);
+    }
+    return list;
+  }, [logoDomain]);
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const uri = sources[sourceIndex];
   const radius = shape === "circle" ? size / 2 : Math.round(size * 0.35);
 
   useEffect(() => {
-    setFailed(false);
-  }, [uri]);
+    setSourceIndex(0);
+  }, [sources]);
 
   return (
     <View
@@ -69,12 +80,12 @@ function HunterBrandLogo({
       }}
       accessibilityLabel={`${name} logo`}
     >
-      {!failed ? (
+      {uri ? (
         <Image
           source={{ uri }}
           style={{ width: size, height: size, borderRadius: radius }}
           resizeMode="contain"
-          onError={() => setFailed(true)}
+          onError={() => setSourceIndex((index) => index + 1)}
         />
       ) : (
         <Text

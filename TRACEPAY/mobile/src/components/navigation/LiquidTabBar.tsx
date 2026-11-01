@@ -10,7 +10,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Droplets, Home, Lightbulb, User } from "lucide-react-native";
 
 import { COLORS } from "../../theme/colors";
-import { GradientTabIcon } from "./GradientTabIcon";
 
 type LiquidTabBarProps = {
   state: {
@@ -33,9 +32,6 @@ const PAD_X = 12;
 const INNER_WIDTH = BAR_WIDTH - PAD_X * 2;
 const SLOT = INNER_WIDTH / TAB_ITEMS.length;
 const BLOB = 44;
-
-const GRADIENT_LIGHT = ["#F651C2", "#8B5CF6", "#327DFC"] as const;
-const GRADIENT_DARK = ["#F651C2", "#9A6CFF", "#327DFC"] as const;
 
 export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
   const insets = useSafeAreaInsets();
@@ -77,7 +73,7 @@ export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
       style={{ paddingBottom: Math.max(insets.bottom, 14) }}
     >
       <View
-        className="overflow-hidden rounded-full border border-border/50 bg-card/95"
+        className="overflow-hidden rounded-full border border-border bg-card"
         style={{
           width: BAR_WIDTH,
           height: BAR_HEIGHT,
@@ -98,9 +94,7 @@ export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
               width: BLOB,
               height: BLOB,
               borderRadius: BLOB / 2,
-              backgroundColor: isDark
-                ? "rgba(154, 108, 255, 0.14)"
-                : "rgba(139, 92, 246, 0.1)",
+              backgroundColor: palette.surfaceSoft,
             },
             blobStyle,
           ]}
@@ -146,11 +140,9 @@ export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
                     borderRadius: BLOB / 2,
                   }}
                 >
-                  <GradientTabIcon
-                    Icon={item.Icon}
-                    focused={focused}
-                    inactiveColor={palette.mutedForeground}
-                    colors={isDark ? GRADIENT_DARK : GRADIENT_LIGHT}
+                  <item.Icon
+                    color={focused ? palette.primary : palette.mutedForeground}
+                    size={24}
                     strokeWidth={focused ? 2.4 : 2}
                   />
                 </Pressable>

@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { ChevronRight } from "lucide-react-native";
+import { ChevronLeft, ChevronRight } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -18,6 +18,7 @@ import {
   DocumentActionsMenu,
   type DocumentActionsMenuAction,
 } from "../../src/components/ui/DocumentActionsMenu";
+import { IconButton } from "../../src/components/ui/IconButton";
 import { Skeleton } from "../../src/components/ui/Skeleton";
 import { SkeletonRows } from "../../src/components/ui/SkeletonGroups";
 import {
@@ -123,6 +124,14 @@ export default function TransactionsScreen() {
   const listHeader = (
     <View className="px-5 pt-1">
       <View className="flex-row items-start justify-between gap-3">
+        <IconButton
+          accessibilityLabel="Go back"
+          className="mt-1"
+          variant="muted"
+          onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)"))}
+        >
+          <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
+        </IconButton>
         <View className="min-w-0 flex-1">
           <Text className="text-[30px] font-bold tracking-[-0.6px] text-foreground">
             Transactions

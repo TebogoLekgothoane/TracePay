@@ -1,6 +1,5 @@
 import { Redirect, router, useLocalSearchParams } from "expo-router";
-import { Calendar, ChevronLeft, ChevronRight, HelpCircle } from "lucide-react-native";
-import type { LucideIcon } from "lucide-react-native";
+import { Calendar, ChevronLeft, ChevronRight, HelpCircle, Lightbulb } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
@@ -8,7 +7,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { ForYouSection } from "../../src/components/dashboard/ForYouSection";
 import { FindingReview } from "../../src/components/leaks/FindingReview";
-import { listHiddenLeaks } from "../../src/features/leaks/hidden-leaks";
+import { listHiddenLeaks, yearlyCost } from "../../src/features/leaks/hidden-leaks";
 import { HiddenLeaksSection } from "../../src/components/leaks/HiddenLeaksSection";
 import { resolveMarkColor } from "../../src/components/leaks/LeakFlowShell";
 import { PeriodTabs } from "../../src/components/insights/PeriodTabs";
@@ -30,10 +29,6 @@ import { useLeakEntitlement } from "../../src/features/leaks/leak-entitlement.st
 import { isLeakLocked } from "../../src/features/leaks/leak-paywall";
 import {
   LEAK_DETAILS,
-  hasTransactionList,
-  listLeakTransactions,
-  listTransactionFilters,
-  type TransactionFilter,
 } from "../../src/features/leaks/leak-details";
 import { getPotentialLeak, listPotentialLeaks } from "../../src/features/leaks/potential-leaks";
 import {
@@ -57,7 +52,6 @@ import {
 import {
   COLORS,
   getImpactToneStyles,
-  withAlpha,
 } from "../../src/theme/colors";
 
 const LEAK_CALC_COPY: Record<string, string> = {
@@ -94,11 +88,6 @@ export default function LeakDetailScreen() {
 function LeakDetailContent() {
   const params = useLocalSearchParams<{ id: string; view?: string; filter?: string }>();
   const leakId = Array.isArray(params.id) ? params.id[0] : params.id;
-  const filterParam = Array.isArray(params.filter) ? params.filter[0] : params.filter;
-  const filters = useMemo(() => (leakId ? listTransactionFilters(leakId) : []), [leakId]);
-  const [txFilter, setTxFilter] = useState<string>(
-    filters.some((filter) => filter.id === filterParam) ? (filterParam as string) : "all",
-  );
   const [period, setPeriod] = useState<Period>("This month");
   const [customRange, setCustomRange] = useState<CustomRange>("Last 14 days");
   const [showCalc, setShowCalc] = useState(false);
@@ -244,7 +233,9 @@ function LeakDetailContent() {
     );
   }
 
-  const isTransactionList = hasTransactionList(leakId);
+  const hiddenLeaks = listHiddenLeaks(leakId);
+  const yearlyAtThisRate = parseRandAmount(detail.amount) * 12;
+  const avoidableYearly = hiddenLeaks.reduce((sum, leak) => sum + yearlyCost(leak), 0);
 
   const listTitle =
     detail.listSectionTitle ??
@@ -311,44 +302,48 @@ function LeakDetailContent() {
             </View>
           ) : null}
 
-          <View className="mt-5 flex-row items-end justify-between gap-3">
-            <View className="min-w-0 flex-1">
-              <Text className="text-[13px] text-muted-foreground">
-                {scaledDetail.variant === "subscriptions" ? "You're paying" : "Total"}
-              </Text>
-              <Text className="mt-1 text-[28px] font-bold tracking-[-0.5px] text-foreground">
-                {scaledDetail.amount}
-              </Text>
-              <Text className="mt-1 text-[13px] text-muted-foreground">
-                {scaledDetail.onLabel}
-              </Text>
-            </View>
-            <View
-              className="mb-1 rounded-full px-3 py-1.5"
-              style={{ backgroundColor: withAlpha(tone.color, 0.14) }}
-            >
-              <Text className="text-[12px] font-semibold" style={{ color: tone.color }}>
-                {scaledDetail.changeLabel}
-              </Text>
+          {/* The answer first: what this category costs, where it is heading, what is avoidable. */}
+          <View className="mt-5 rounded-3xl bg-card p-5">
+            <Text className="text-[13px] text-muted-foreground">
+              Lost {scaledDetail.onLabel} · {period.toLowerCase()}
+            </Text>
+            <Text className="mt-1.5 text-[34px] font-bold tracking-[-0.8px] text-foreground">
+              {scaledDetail.amount}
+            </Text>
+            <Text className="mt-1 text-[13px] font-semibold" style={{ color: tone.color }}>
+              {scaledDetail.changeLabel}
+            </Text>
+
+            <View className="mt-4 flex-row border-t border-border/60 pt-4">
+              <View className="flex-1">
+                <Text className="text-[12px] text-muted-foreground">At this rate, a year</Text>
+                <Text className="mt-0.5 text-[17px] font-bold text-foreground">
+                  {formatRandAmount(yearlyAtThisRate)}
+                </Text>
+              </View>
+              <View className="flex-1">
+                <Text className="text-[12px] text-muted-foreground">
+                  {avoidableYearly > 0 ? "Could be avoided" : "Findings"}
+                </Text>
+                <Text className="mt-0.5 text-[17px] font-bold text-foreground">
+                  {avoidableYearly > 0
+                    ? `${formatRandAmount(avoidableYearly)} a year`
+                    : String(scaledDetail.breakdown?.length ?? scaledDetail.subscriptions?.length ?? 0)}
+                </Text>
+              </View>
             </View>
           </View>
 
-          {isTransactionList ? (
-            <LeakTransactionsSection
-              leakId={leakId}
-              filters={filters}
-              filter={txFilter}
-              onFilterChange={setTxFilter}
-              factor={factor}
-              toneColor={tone.color}
-              palette={palette}
-            />
-          ) : null}
+          <HiddenLeaksSection
+            leaks={hiddenLeaks}
+            color={tone.color}
+            onOpenGuide={getPrimaryFixActionId(leakId) ? () => openGuide(leakId) : undefined}
+          />
 
-          {!isTransactionList && scaledDetail.variant === "breakdown" && scaledDetail.breakdown ? (
+          {scaledDetail.variant === "breakdown" && scaledDetail.breakdown ? (
             <>
               <Text className="mb-3 mt-7 text-[17px] font-bold text-foreground">
-                Where it comes from
+                Where it goes
               </Text>
               <View className="gap-2">
                 {scaledDetail.breakdown.map((item) => (
@@ -367,15 +362,24 @@ function LeakDetailContent() {
                       <Text className="mt-0.5 text-[12px] text-muted-foreground">
                         {item.description}
                       </Text>
+                      <View
+                        className="mt-2 h-1 overflow-hidden rounded-full"
+                        style={{ backgroundColor: palette.surfaceSoft }}
+                      >
+                        <View
+                          className="h-1 rounded-full"
+                          style={{
+                            width: `${Math.min(100, Math.max(4, Number.parseFloat(item.percent) || 0))}%`,
+                            backgroundColor: tone.color,
+                          }}
+                        />
+                      </View>
                     </View>
                     <View className="items-end">
                       <Text className="text-[14px] font-bold text-foreground">
                         {item.amount}
                       </Text>
-                      <Text
-                        className="mt-0.5 text-[11px] font-semibold"
-                        style={{ color: tone.color }}
-                      >
+                      <Text className="mt-0.5 text-[11px] font-medium text-muted-foreground">
                         {item.percent}
                       </Text>
                     </View>
@@ -383,23 +387,13 @@ function LeakDetailContent() {
                   </Pressable>
                 ))}
               </View>
-              {scaledDetail.didYouKnow ? (
-                <View
-                  className="mt-4 rounded-3xl p-4"
-                  style={{ backgroundColor: palette.surfaceSoft }}
-                >
-                  <Text className="text-[13px] leading-5 text-foreground">
-                    {scaledDetail.didYouKnow}
-                  </Text>
-                </View>
-              ) : null}
             </>
           ) : null}
 
-          {!isTransactionList && scaledDetail.variant === "subscriptions" && scaledDetail.subscriptions ? (
+          {scaledDetail.variant === "subscriptions" && scaledDetail.subscriptions ? (
             <>
               <Text className="mb-3 mt-7 text-[17px] font-bold text-foreground">
-                {listTitle}
+                {listTitle} ({scaledDetail.subscriptions.length})
               </Text>
               <View className="gap-2">
                 {scaledDetail.subscriptions.map((item) => (
@@ -477,6 +471,19 @@ function LeakDetailContent() {
             </>
           ) : null}
 
+          <ReduceTipCard
+            title="Stop the drain"
+            body={
+              scaledDetail.didYouKnow ??
+              `You're paying ${scaledDetail.amount} ${scaledDetail.onLabel}. Review the items above and stop what you don't need.`
+            }
+            color={tone.color}
+            palette={palette}
+            onPress={getPrimaryFixActionId(leakId) ? () => openGuide(leakId) : undefined}
+          />
+
+
+
           {leakId === "subs" && forYouCards.length > 0 ? (
             <View className="mt-7">
               <ForYouSection
@@ -486,12 +493,6 @@ function LeakDetailContent() {
               />
             </View>
           ) : null}
-
-          <HiddenLeaksSection
-            leaks={listHiddenLeaks(leakId)}
-            color={tone.color}
-            onOpenGuide={getPrimaryFixActionId(leakId) ? () => openGuide(leakId) : undefined}
-          />
         </View>
       </ScrollView>
 
@@ -508,122 +509,34 @@ function LeakDetailContent() {
   );
 }
 
-function LeakTransactionsSection({
-  leakId,
-  filters,
-  filter,
-  onFilterChange,
-  factor,
-  toneColor,
-  palette,
-}: {
-  leakId: string;
-  filters: TransactionFilter[];
-  filter: string;
-  onFilterChange: (filter: string) => void;
-  factor: number;
-  toneColor: string;
-  palette: typeof COLORS.light | typeof COLORS.dark;
-}) {
-  const transactions = useMemo(
-    () => listLeakTransactions(leakId, filter),
-    [leakId, filter],
-  );
-  const total = transactions.reduce(
-    (sum, transaction) => sum + parseRandAmount(transaction.amount),
-    0,
-  );
-
-  return (
-    <>
-      <Text className="mb-3 mt-7 text-[17px] font-bold text-foreground">Transactions</Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        className="-mx-5"
-        contentContainerStyle={{ gap: 8, paddingHorizontal: 20 }}
-      >
-        {filters.map((option) => {
-          const selected = option.id === filter;
-          return (
-            <Pressable
-              key={option.id}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              onPress={() => onFilterChange(option.id)}
-              className="rounded-full px-3.5 py-2 active:opacity-75"
-              style={{
-                backgroundColor: selected ? toneColor : palette.surfaceSoft,
-              }}
-            >
-              <Text
-                className={`text-[12px] ${selected ? "font-semibold" : "font-medium text-foreground"}`}
-                style={selected ? { color: "#FFFFFF" } : undefined}
-              >
-                {option.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      <View className="mb-2 mt-4 flex-row items-center justify-between">
-        <Text className="text-[13px] text-muted-foreground">
-          {transactions.length} {transactions.length === 1 ? "charge" : "charges"}
-        </Text>
-        <Text className="text-[13px] font-semibold text-foreground">
-          {formatRandAmount(total * factor)}
-        </Text>
-      </View>
-
-      {transactions.length > 0 ? (
-        <View className="gap-2">
-          {transactions.map((transaction) => (
-            <TransactionRow
-              key={transaction.id}
-              Icon={transaction.Icon}
-              title={transaction.description}
-              subtitle={`${transaction.date} · ${transaction.categoryTitle}`}
-              amount={`-${scaleRandAmount(transaction.amount, factor)}`}
-              toneColor={toneColor}
-            />
-          ))}
-        </View>
-      ) : (
-        <View className="rounded-2xl bg-card px-4 py-5">
-          <Text className="text-center text-[13px] text-muted-foreground">
-            No transactions found for this period.
-          </Text>
-        </View>
-      )}
-    </>
-  );
-}
-
-function TransactionRow({
-  Icon,
+function ReduceTipCard({
   title,
-  subtitle,
-  amount,
-  toneColor,
+  body,
+  color,
+  palette,
+  onPress,
 }: {
-  Icon: LucideIcon;
   title: string;
-  subtitle: string;
-  amount: string;
-  toneColor: string;
+  body: string;
+  color: string;
+  palette: typeof COLORS.light | typeof COLORS.dark;
+  onPress?: () => void;
 }) {
   return (
-    <View className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5">
-      <View className="h-10 w-10 items-center justify-center">
-        <Icon color={toneColor} size={18} strokeWidth={2.2} />
-      </View>
+    <Pressable
+      accessibilityRole={onPress ? "button" : undefined}
+      disabled={!onPress}
+      onPress={onPress}
+      className="mt-5 flex-row items-center gap-3 rounded-2xl px-4 py-3.5 active:opacity-80"
+      style={{ backgroundColor: palette.surfaceSoft }}
+    >
+      <Lightbulb color={color} size={22} strokeWidth={2.2} />
       <View className="min-w-0 flex-1">
-        <Text className="text-[14px] font-semibold text-foreground">{title}</Text>
-        <Text className="mt-0.5 text-[12px] text-muted-foreground">{subtitle}</Text>
+        <Text className="text-[14px] font-bold text-foreground">{title}</Text>
+        <Text className="mt-0.5 text-[12px] leading-[17px] text-muted-foreground">{body}</Text>
       </View>
-      <Text className="text-[14px] font-bold text-foreground">{amount}</Text>
-    </View>
+      {onPress ? <ChevronRight color={palette.placeholder} size={16} strokeWidth={2} /> : null}
+    </Pressable>
   );
 }
 

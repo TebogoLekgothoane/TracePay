@@ -20,7 +20,7 @@ export default function BillingReturnScreen() {
   if (fresh) {
     const pending = entitlements?.pending[0];
     if (pending) {
-      return <Redirect href={`/billing/checkout?product=${pending.product}&resume=1`} />;
+      return <Redirect href={`/upgrade?product=${pending.product}&resume=1`} />;
     }
     return <Redirect href="/(tabs)/leaks" />;
   }

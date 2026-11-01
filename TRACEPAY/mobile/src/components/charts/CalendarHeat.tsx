@@ -52,7 +52,7 @@ export function CalendarHeat({ days, selectedKey, onSelect, colors }: Props) {
                   accessibilityRole="button"
                   accessibilityLabel={`${day.day}, spent ${Math.round(day.amount)} rand`}
                   onPress={() => onSelect(isSelected ? null : day.key)}
-                  className="h-9 flex-1 items-center justify-center rounded-lg"
+                  className="h-9 flex-1 items-center justify-center rounded-md"
                   style={{
                     backgroundColor: day.amount > 0 ? mix(colors.hot, intensity) : colors.empty,
                     opacity: selectedKey && !isSelected ? 0.45 : 1,

@@ -24,13 +24,13 @@ export function PotentialLeakCard({ leak, onPress }: Props) {
       accessibilityRole="button"
       accessibilityLabel={`${leak.title}, ${leak.listAmount ?? leak.amount}, ${leak.description}`}
       onPress={() => onPress(leak.id)}
-      className="flex-row items-center gap-3 rounded-3xl bg-card px-4 py-4 active:opacity-80"
+      className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-2.5 active:opacity-80"
     >
       <View
         className="rounded-2xl"
         style={{ backgroundColor: withAlpha(iconColor, 0.14) }}
       >
-        <ReviewIconTile icon={leak.icon} color={iconColor} size={48} />
+        <ReviewIconTile icon={leak.icon} color={iconColor} size={40} />
       </View>
 
       <View className="min-w-0 flex-1">
@@ -50,12 +50,14 @@ export function PotentialLeakCard({ leak, onPress }: Props) {
         <Text className="mt-0.5 text-[17px] font-bold text-foreground">
           {leak.listAmount ?? leak.amount}
         </Text>
-        <Text numberOfLines={2} className="mt-0.5 text-[13px] leading-[18px] text-muted-foreground">
+        <Text numberOfLines={1} className="text-[12px] leading-[17px] text-muted-foreground">
           {leak.description}
         </Text>
-        <Text className="mt-1 text-[12px] font-medium text-muted-foreground">
-          {/^\d/.test(leak.nextCharge) ? `Next charge · ${leak.nextCharge}` : leak.nextCharge}
-        </Text>
+        {/^\d/.test(leak.nextCharge) ? (
+          <Text className="mt-0.5 text-[12px] font-medium text-muted-foreground">
+            Next charge · {leak.nextCharge}
+          </Text>
+        ) : null}
       </View>
 
       <ChevronRight color={palette.mutedForeground} size={18} />

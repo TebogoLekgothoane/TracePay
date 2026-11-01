@@ -182,6 +182,10 @@ test("catalogue logos match reliable names and reject arbitrary text", () => {
     "validated hunter url",
   );
   assert(resolveCatalogLogo("North Cafe") === null, "unknown merchant");
+  assert(resolveCatalogLogo("Cursor")?.domain === "cursor.com", "cursor logo");
+  assert(resolveCatalogLogo("Cursor usage")?.brandId === "cursor", "cursor usage logo");
+  assert(resolveCatalogLogo("CURSOR, AI POWERED IDE")?.brandId === "cursor", "cursor statement logo");
+  assert(resolveCatalogLogo("Apple Music")?.brandId === "applemusic", "apple music not generic apple");
   assert(catalogLogoUrl("Woolworths") === null, "display name is not a domain");
   assert(catalogLogoUrl("https://evil.example/woolworths.co.za") === null, "rejects url");
   assert(catalogLogoUrl("not-a-catalog.example") === null, "rejects unknown domain");
