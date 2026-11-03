@@ -50,6 +50,14 @@ export function FinancialInsightShowcase() {
             onKeyDown={(e) => onKeyDown(e, i)}
           >
             {s.tab}
+            {active === i ? (
+              <motion.span
+                aria-hidden="true"
+                className="tab-indicator"
+                layoutId="active-showcase-tab"
+                transition={{ duration: reduce ? 0 : 0.24, ease: [0.25, 0.1, 0.25, 1] }}
+              />
+            ) : null}
           </button>
         ))}
       </div>
@@ -61,16 +69,31 @@ export function FinancialInsightShowcase() {
         tabIndex={0}
         className="sc-panel"
       >
-        <div className="sc-tx">
-          <div className="cap">TRANSACTIONS · SAMPLE DATA</div>
-          {item.transactions.map((t, i) => (
-            <div key={`${active}-${i}`} className={t.highlight ? "tx tx-hl" : "tx"}>
-              <span>{t.date}</span>
-              <b>{t.merchant}</b>
-              <span>{t.amount}</span>
-            </div>
-          ))}
-        </div>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={`transactions-${active}`}
+            className="sc-tx"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: reduce ? 0 : 0.18 }}
+          >
+            <div className="cap">TRANSACTIONS · SAMPLE DATA</div>
+            {item.transactions.map((t, i) => (
+              <motion.div
+                key={`${active}-${i}`}
+                className={t.highlight ? "tx tx-hl" : "tx"}
+                initial={{ opacity: 0, x: reduce ? 0 : -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: reduce ? 0 : 0.28, delay: reduce ? 0 : i * 0.045 }}
+              >
+                <span>{t.date}</span>
+                <b>{t.merchant}</b>
+                <span>{t.amount}</span>
+              </motion.div>
+            ))}
+          </motion.div>
+        </AnimatePresence>
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={active}

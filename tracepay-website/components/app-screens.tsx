@@ -1,33 +1,62 @@
+"use client";
+
+import { motion, useReducedMotion } from "framer-motion";
+
+type PhoneFrameProps = {
+  children: React.ReactNode;
+  className?: string;
+  label: string;
+  delay: number;
+};
+
+function PhoneFrame({ children, className = "", label, delay }: PhoneFrameProps) {
+  const reduce = useReducedMotion();
+
+  return (
+    <motion.div
+      className={`phone ${className}`}
+      role="img"
+      aria-label={label}
+      initial={{ opacity: 0, y: reduce ? 0 : 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.25 }}
+      transition={{ duration: reduce ? 0 : 0.55, delay: reduce ? 0 : delay, ease: [0.25, 0.1, 0.25, 1] }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 export function AppScreens() {
   return (
     <div>
       <div className="phones-row" role="group" aria-label="Illustrative TracePay app screens">
-        <div className="phone" role="img" aria-label="Illustrative leaks screen with a monthly total and a list of potential leaks">
+        <PhoneFrame delay={0} label="Illustrative leaks screen with a monthly total and a list of potential leaks">
           <div className="pill" />
           <div className="ph-h">Leaks</div>
-          <div className="ph-s">We found areas where you’re losing money.</div>
+          <div className="ph-s">We found payments worth a closer look.</div>
           <div className="ph-card ph-hero">
-            <div className="ph-m">Total leaked this month</div>
+            <div className="ph-m">Potential leaks to review</div>
             <div className="ph-big">R1,820.40</div>
             <span className="ph-tag">↑ 18% vs last month</span>
           </div>
           <div className="ph-card">
             <div className="ph-row"><b>Possible duplicate payment</b><span className="ph-tag">New</span></div>
             <div style={{ fontWeight: 600, marginTop: 2 }}>R420</div>
-            <div className="ph-m">Two similar payments to one merchant</div>
+            <div className="ph-m">Two identical payments to one merchant on the same day</div>
           </div>
           <div className="ph-card">
-            <div className="ph-row"><b>Unused subscription</b><span className="ph-tag">New</span></div>
+            <div className="ph-row"><b>Recurring subscription</b><span className="ph-tag">New</span></div>
             <div style={{ fontWeight: 600, marginTop: 2 }}>R199 / month</div>
-            <div className="ph-m">Not used in 3+ months</div>
+            <div className="ph-m">Worth reviewing: do you still use it?</div>
           </div>
           <div className="ph-card">
             <div className="ph-row"><b>Higher than usual bank fee</b><span className="ph-tag">Unchanged</span></div>
             <div style={{ fontWeight: 600, marginTop: 2 }}>R145</div>
           </div>
-        </div>
+        </PhoneFrame>
 
-        <div className="phone phone-offset" role="img" aria-label="Illustrative upcoming charges screen">
+        <PhoneFrame className="phone-offset" delay={0.1} label="Illustrative upcoming charges screen">
           <div className="pill" />
           <div className="ph-h">Upcoming charges</div>
           <div className="ph-s">Your next subscription payments</div>
@@ -45,9 +74,9 @@ export function AppScreens() {
               <span className="ph-tag" style={{ padding: "5px 12px" }}>Ignore</span>
             </div>
           </div>
-        </div>
+        </PhoneFrame>
 
-        <div className="phone" role="img" aria-label="Illustrative spending patterns screen">
+        <PhoneFrame delay={0.2} label="Illustrative spending patterns screen">
           <div className="pill" />
           <div className="ph-h">Your Spending Patterns</div>
           <div className="ph-s">Clear signals from your recent transactions.</div>
@@ -67,7 +96,7 @@ export function AppScreens() {
             <b style={{ fontSize: 13 }}>Small purchase appears often</b>
             <div className="ph-m" style={{ marginTop: 3 }}>You paid this merchant 18 times in the past week.</div>
           </div>
-        </div>
+        </PhoneFrame>
       </div>
       <p className="fine mt-3">Illustrative app screens with sample data.</p>
     </div>

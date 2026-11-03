@@ -1,19 +1,18 @@
+import Image from "next/image";
 import Link from "next/link";
 
+/** The TracePay mark, as used in the app: the mono icon filled with the purple-to-navy gradient. */
 export function LogoMark({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 28 28"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
+    <Image
+      src="/tracepay-mark.svg"
+      alt=""
+      width={998}
+      height={802}
+      unoptimized
       aria-hidden="true"
-      className={className}
-    >
-      <circle cx="14" cy="14" r="12" />
-      <path d="M6 17h4l3-8 3 10 2-5h4" />
-    </svg>
+      className={className ? `brand-mark ${className}` : "brand-mark"}
+    />
   );
 }
 

@@ -19,9 +19,71 @@ export const SITE = {
   tagline: "Your money leaves clues. We find them.",
 } as const;
 
+export const PLANS = [
+  {
+    name: "TracePay Individual",
+    price: "R299",
+    period: "/year",
+    badge: null,
+    tagline: "One simple annual subscription.",
+    features: [
+      "Monitor new transactions throughout the year.",
+      "Detect new recurring payments.",
+      "Identify duplicate payments.",
+      "Detect new bank fees.",
+      "Track subscription price increases.",
+      "Receive alerts about potential financial leaks.",
+      "Access historical monitoring.",
+    ],
+    note: "Full financial analysis: R49 once-off.",
+  },
+  {
+    name: "TracePay Business",
+    price: "R399",
+    period: "/month",
+    badge: "Coming soon",
+    tagline: "One simple monthly subscription.",
+    features: [
+      "Connect multiple business bank accounts.",
+      "Analyse business bank transactions.",
+      "Detect recurring expenses.",
+      "Identify duplicate payments.",
+      "Detect unnecessary bank fees.",
+      "Identify subscription price increases.",
+      "Monitor unusual spending patterns.",
+      "View business financial insights and trends.",
+      "Generate downloadable financial reports.",
+      "Access historical analysis.",
+    ],
+    note: null,
+  },
+  {
+    name: "TracePay Accountant",
+    price: "R499",
+    period: "/month",
+    badge: "Coming soon",
+    tagline: "Includes 5 client businesses.",
+    features: [
+      "Manage multiple client businesses from one dashboard.",
+      "Analyse each client’s bank transactions.",
+      "Detect recurring expenses.",
+      "Identify duplicate payments.",
+      "Detect unnecessary bank fees.",
+      "Identify subscription price increases.",
+      "Monitor unusual spending patterns.",
+      "View financial insights for each client.",
+      "Generate downloadable client reports.",
+      "Compare financial activity over time.",
+      "Manage client access and permissions.",
+    ],
+    note: "Additional clients: R49/client/month.",
+  },
+] as const;
+
 export const NAV_LINKS = [
   { label: "How it works", href: "/how-it-works" },
   { label: "What we detect", href: "/what-we-detect" },
+  { label: "Pricing", href: "/pricing" },
   { label: "Security", href: "/security" },
   { label: "About", href: "/about" },
 ] as const;
