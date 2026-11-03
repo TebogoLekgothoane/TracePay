@@ -138,9 +138,9 @@ export function FinancialInsightsIllustration({ total }: Props) {
 
         {/* Flat tiles and pill. */}
         {TILES.map((tile) => (
-          <Surface key={tile.key} x={tile.x(width)} y={tile.y} width={TILE_W} height={TILE_H} radius={TILE_R} fill={palette.card} stroke={palette.border} />
+          <Surface key={tile.key} x={tile.x(width)} y={tile.y} width={TILE_W} height={TILE_H} radius={TILE_R} fill={palette.card} />
         ))}
-        <Surface x={pillX} y={pillY} width={PILL_W} height={PILL_H} radius={PILL_H / 2} fill={palette.card} stroke={palette.border} />
+        <Surface x={pillX} y={pillY} width={PILL_W} height={PILL_H} radius={PILL_H / 2} fill={palette.card} />
       </Canvas>
 
       {/* Content over the surfaces. */}
@@ -183,7 +183,7 @@ export function FinancialInsightsIllustration({ total }: Props) {
   );
 }
 
-/** A flat card surface with a hairline border. */
+/** A flat card surface, with no border. */
 function Surface({
   x,
   y,
@@ -191,7 +191,6 @@ function Surface({
   height,
   radius,
   fill,
-  stroke,
 }: {
   x: number;
   y: number;
@@ -199,21 +198,10 @@ function Surface({
   height: number;
   radius: number;
   fill: string;
-  stroke: string;
 }) {
   return (
     <>
       <RoundedRect x={x} y={y} width={width} height={height} r={radius} color={fill} />
-      <RoundedRect
-        x={x + 0.5}
-        y={y + 0.5}
-        width={width - 1}
-        height={height - 1}
-        r={radius}
-        style="stroke"
-        strokeWidth={1}
-        color={stroke}
-      />
     </>
   );
 }

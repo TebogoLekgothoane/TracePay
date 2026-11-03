@@ -28,17 +28,4 @@ export type BillingEntitlements = {
     cancelAtPeriodEnd: boolean;
     lastPaymentStatus: string | null;
   };
-  pending: { reference: string; product: BillingProduct; createdAt: string }[];
-};
-
-export type CheckoutResult =
-  | { status: "already_owned" }
-  | { status: "pending"; reference: string; authorizationUrl: string };
-
-export type PurchaseStatus = "pending" | "succeeded" | "failed" | "abandoned" | "refunded";
-
-export type VerifyResult = {
-  status: PurchaseStatus;
-  product: BillingProduct;
-  entitlements: BillingEntitlements;
 };

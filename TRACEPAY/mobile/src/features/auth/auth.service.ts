@@ -6,6 +6,7 @@ import {
 } from "./auth.constants";
 import { secureStorage } from "../../lib/secure-storage";
 import { resetAccountsSnapshot } from "../accounts/account.store";
+import { resetRevenueCat } from "../../lib/revenuecat";
 import { resetBilling } from "../billing/billing.store";
 import { invalidateTransactionLists } from "../../hooks/useTransactions";
 import { invalidateTransactionTotals } from "../../hooks/useTransactionTotals";
@@ -659,6 +660,7 @@ export async function signOut(): Promise<void> {
   resetProfileSnapshot();
   resetAccountsSnapshot();
   resetBilling();
+  await resetRevenueCat();
   clearQueryCache();
   invalidateTransactionLists();
   invalidateTransactionTotals();

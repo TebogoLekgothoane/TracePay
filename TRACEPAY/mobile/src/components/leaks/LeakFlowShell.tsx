@@ -5,9 +5,21 @@ import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { COLORS } from "../../theme/colors";
+import { COLORS, withAlpha } from "../../theme/colors";
 import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
+
+type Palette = (typeof COLORS)["light"] | (typeof COLORS)["dark"];
+
+/** A plain white card with a hairline edge: the neutral surface for notes on the fix pages. */
+export function neutralCardStyle(palette: Palette) {
+  return { borderWidth: 1, borderColor: withAlpha(palette.foreground, 0.08) } as const;
+}
+
+/** A neutral grey tint for small pills, in place of a purple one. */
+export function neutralPillColor(palette: Palette) {
+  return withAlpha(palette.foreground, 0.07);
+}
 
 type ShellProps = {
   title: string;
@@ -53,8 +65,8 @@ export function LeakFlowShell({
 
       {footer ? (
         <View
-          className="px-5 py-4"
-          style={{ backgroundColor: palette.surfaceSoft }}
+          className="bg-card px-5 py-4"
+          style={{ borderTopWidth: 1, borderTopColor: withAlpha(palette.foreground, 0.08) }}
         >
           {footer}
         </View>

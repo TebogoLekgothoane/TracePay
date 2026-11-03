@@ -1,22 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Linking } from "react-native";
 
-import { BillingApiError, startCheckout, verifyPayment } from "../api/billing.api";
+import { BillingApiError, syncStorePurchases } from "../api/billing.api";
 import { applyEntitlements, refreshBilling } from "../features/billing/billing.store";
-import type { BillingProduct } from "../features/billing/billing.types";
+import type { BillingEntitlements, BillingProduct } from "../features/billing/billing.types";
+import { getSupabase } from "../lib/supabase";
+import {
+  PurchaseCancelledError,
+  PurchaseError,
+  purchaseProduct,
+  restoreStorePurchases,
+} from "../lib/revenuecat";
 
 export type PaymentPhase =
   | "idle"
+  /** The store sheet is open or the purchase is being submitted. */
   | "starting"
-  /** The provider's checkout is open; waiting for the user to come back. */
-  | "awaiting"
+  /** Bought in the store; waiting for the backend to confirm it. */
   | "verifying"
   | "success"
-  /** The provider reported a failure or the user left without paying. */
-  | "failed"
-  /** The account has no email; the user must give one for the receipt. */
-  | "needs_email"
-  /** Paid or possibly paid, but the provider has not confirmed yet. */
+  /** The user closed the store sheet without paying. */
+  | "cancelled"
+  /** The store accepted the purchase but our backend has not confirmed it yet. */
   | "delayed"
   | "error";
 
@@ -25,14 +29,27 @@ const VERIFY_GAP_MS = 2_500;
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+function owns(entitlements: BillingEntitlements, product: BillingProduct): boolean {
+  return product === "annual_monitoring"
+    ? entitlements.monitoring.active
+    : entitlements.fullAnalysis.unlocked;
+}
+
+async function currentUserId(): Promise<string> {
+  const { data, error } = await getSupabase().auth.getSession();
+  const id = data.session?.user.id;
+  if (error || !id) throw new BillingApiError("Sign in again to continue.", 401);
+  return id;
+}
+
 /**
- * Drives one purchase through the provider's hosted checkout. Success is only ever set
- * from the backend's verified answer, never from the checkout page closing.
+ * Drives one in-app purchase through RevenueCat. Success is only ever set from the
+ * backend's answer (it re-reads the purchase from RevenueCat), never from the store
+ * sheet closing or the SDK's own customer info.
  */
 export function usePaymentFlow(product: BillingProduct) {
   const [phase, setPhase] = useState<PaymentPhase>("idle");
   const [message, setMessage] = useState<string | null>(null);
-  const reference = useRef<string | null>(null);
   const busy = useRef(false);
   const mounted = useRef(true);
 
@@ -43,103 +60,111 @@ export function usePaymentFlow(product: BillingProduct) {
     };
   }, []);
 
-  const verify = useCallback(async (): Promise<void> => {
-    const ref = reference.current;
-    if (!ref || busy.current) return;
-    busy.current = true;
-    setPhase("verifying");
-    setMessage(null);
-    try {
-      for (let attempt = 0; attempt < VERIFY_ATTEMPTS; attempt += 1) {
-        const result = await verifyPayment(ref);
-        applyEntitlements(result.entitlements);
-        if (!mounted.current) return;
-        if (result.status === "succeeded") {
-          setPhase("success");
-          return;
-        }
-        if (result.status === "failed" || result.status === "abandoned" || result.status === "refunded") {
-          setPhase("failed");
-          setMessage(
-            result.status === "abandoned"
-              ? "The payment was not completed. You have not been charged."
-              : "The payment did not go through. You have not been charged.",
-          );
-          return;
-        }
-        if (attempt < VERIFY_ATTEMPTS - 1) await wait(VERIFY_GAP_MS);
-      }
-      setPhase("delayed");
-      setMessage(
-        "We have not received confirmation yet. If you paid, your access unlocks automatically as soon as it arrives.",
-      );
-    } catch (error) {
-      if (!mounted.current) return;
-      setPhase("error");
-      setMessage(error instanceof BillingApiError ? error.message : "Could not check your payment.");
-    } finally {
-      busy.current = false;
+  /** Ask the backend until it reports the product as owned. Returns false if it never does. */
+  const confirm = useCallback(async (): Promise<boolean> => {
+    for (let attempt = 0; attempt < VERIFY_ATTEMPTS; attempt += 1) {
+      const entitlements = await syncStorePurchases();
+      applyEntitlements(entitlements);
+      if (owns(entitlements, product)) return true;
+      if (attempt < VERIFY_ATTEMPTS - 1) await wait(VERIFY_GAP_MS);
     }
+    return false;
+  }, [product]);
+
+  const fail = useCallback((error: unknown, fallback: string) => {
+    if (!mounted.current) return;
+    setPhase("error");
+    setMessage(
+      error instanceof BillingApiError || error instanceof PurchaseError ? error.message : fallback,
+    );
   }, []);
 
-  const start = useCallback(async (email?: string): Promise<void> => {
+  const start = useCallback(async (): Promise<void> => {
     if (busy.current) return;
     busy.current = true;
     setPhase("starting");
     setMessage(null);
     try {
-      const checkout = await startCheckout(product, email);
-      if (checkout.status === "already_owned") {
-        await refreshBilling();
-        if (mounted.current) setPhase("success");
-        return;
-      }
-      reference.current = checkout.reference;
-      await Linking.openURL(checkout.authorizationUrl);
-      if (mounted.current) setPhase("awaiting");
-    } catch (error) {
+      await purchaseProduct(await currentUserId(), product);
+      if (mounted.current) setPhase("verifying");
+      const confirmed = await confirm();
       if (!mounted.current) return;
-      if (error instanceof BillingApiError && error.code === "email_required") {
-        setPhase("needs_email");
-        setMessage(email ? error.message : null);
+      if (confirmed) {
+        setPhase("success");
         return;
       }
-      setPhase("error");
+      setPhase("delayed");
       setMessage(
-        error instanceof BillingApiError ? error.message : "Could not open checkout. Please try again.",
+        "The store has your payment, but we have not confirmed it yet. Your access unlocks automatically as soon as it arrives.",
       );
+    } catch (error) {
+      if (error instanceof PurchaseCancelledError) {
+        if (mounted.current) {
+          setPhase("cancelled");
+          setMessage(null);
+        }
+        return;
+      }
+      fail(error, "Could not complete the purchase. Please try again.");
     } finally {
       busy.current = false;
     }
-  }, [product]);
+  }, [confirm, fail, product]);
 
-  /** Resume an interrupted checkout (app killed or returned via the callback link). */
-  const resume = useCallback(
-    async (knownReference?: string): Promise<void> => {
-      reference.current = knownReference ?? reference.current;
-      if (!reference.current) {
-        await refreshBilling();
-        return;
+  /** Re-check with the backend, e.g. after a delayed confirmation. */
+  const verify = useCallback(async (): Promise<void> => {
+    if (busy.current) return;
+    busy.current = true;
+    setPhase("verifying");
+    setMessage(null);
+    try {
+      const confirmed = await confirm();
+      if (!mounted.current) return;
+      if (confirmed) {
+        setPhase("success");
+      } else {
+        setPhase("delayed");
+        setMessage("Still waiting for the store to confirm. Try again in a moment.");
       }
-      await verify();
-    },
-    [verify],
-  );
+    } catch (error) {
+      fail(error, "Could not check your purchase.");
+    } finally {
+      busy.current = false;
+    }
+  }, [confirm, fail]);
 
-  // Coming back from the provider's checkout: ask the backend what really happened.
-  const phaseRef = useRef(phase);
-  phaseRef.current = phase;
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active" && phaseRef.current === "awaiting") void verify();
-    });
-    return () => subscription.remove();
-  }, [verify]);
+  /** Required by the stores: bring back purchases made on this store account. */
+  const restore = useCallback(async (): Promise<void> => {
+    if (busy.current) return;
+    busy.current = true;
+    setPhase("verifying");
+    setMessage(null);
+    try {
+      await restoreStorePurchases(await currentUserId());
+      const entitlements = await syncStorePurchases();
+      applyEntitlements(entitlements);
+      if (!mounted.current) return;
+      if (owns(entitlements, product) || entitlements.fullAnalysis.unlocked) {
+        setPhase("success");
+      } else {
+        setPhase("idle");
+        setMessage("We could not find any earlier purchases for this store account.");
+      }
+    } catch (error) {
+      fail(error, "Could not restore your purchases.");
+    } finally {
+      busy.current = false;
+    }
+  }, [fail, product]);
+
+  const resume = useCallback(async (): Promise<void> => {
+    await refreshBilling();
+  }, []);
 
   const reset = useCallback(() => {
     setPhase("idle");
     setMessage(null);
   }, []);
 
-  return { phase, message, start, verify, resume, reset };
+  return { phase, message, start, verify, restore, resume, reset };
 }

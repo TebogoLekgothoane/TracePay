@@ -1,12 +1,4 @@
-import type {
-  BillingEntitlements,
-  BillingProduct,
-  BillingProducts,
-  CheckoutResult,
-  MonitoringStatus,
-  PurchaseStatus,
-  VerifyResult,
-} from "./billing.types";
+import type { BillingEntitlements, BillingProducts, MonitoringStatus } from "./billing.types";
 
 type Obj = Record<string, unknown>;
 
@@ -47,7 +39,6 @@ export function parseEntitlements(payload: unknown): BillingEntitlements {
   const full = obj(root.full_analysis);
   const monitoring = obj(root.monitoring);
   const status = MONITORING.find((candidate) => candidate === monitoring.status) ?? "none";
-  const pending = Array.isArray(root.pending) ? root.pending : [];
   return {
     fullAnalysis: {
       unlocked: full.unlocked === true,
@@ -63,46 +54,5 @@ export function parseEntitlements(payload: unknown): BillingEntitlements {
       cancelAtPeriodEnd: monitoring.cancel_at_period_end === true,
       lastPaymentStatus: str(monitoring.last_payment_status),
     },
-    pending: pending.flatMap((entry) => {
-      const row = obj(entry);
-      const reference = str(row.reference);
-      const product: BillingProduct | null =
-        row.product === "annual_monitoring" || row.product === "full_analysis"
-          ? row.product
-          : null;
-      return reference && product
-        ? [{ reference, product, createdAt: str(row.created_at) ?? "" }]
-        : [];
-    }),
-  };
-}
-
-export function parseCheckout(payload: unknown): CheckoutResult {
-  const root = obj(payload);
-  if (root.status === "already_owned") return { status: "already_owned" };
-  const reference = str(root.reference);
-  const url = str(root.authorization_url);
-  if (reference && url && url.startsWith("https://")) {
-    return { status: "pending", reference, authorizationUrl: url };
-  }
-  throw new Error("Checkout could not be started.");
-}
-
-const PURCHASE_STATUSES: PurchaseStatus[] = [
-  "pending",
-  "succeeded",
-  "failed",
-  "abandoned",
-  "refunded",
-];
-
-export function parseVerify(payload: unknown): VerifyResult {
-  const root = obj(payload);
-  const status = PURCHASE_STATUSES.find((candidate) => candidate === root.status);
-  if (!status) throw new Error("Payment status unavailable.");
-  return {
-    status,
-    product: root.product === "annual_monitoring" ? "annual_monitoring" : "full_analysis",
-    entitlements: parseEntitlements(root.entitlements),
   };
 }

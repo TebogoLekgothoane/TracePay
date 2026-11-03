@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   Fuel,
   RefreshCw,
+  Share2,
   ShoppingCart,
   Smartphone,
   Utensils,
@@ -13,7 +14,7 @@ import {
 import type { LucideIcon } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, ScrollView, Share, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { answerFindingQuestion, skipFindingQuestion } from "../../src/api/finding-questions.api";
@@ -29,12 +30,15 @@ import {
   formatCurrency,
   formatFindingEvidence,
   formatIrregularFinding,
+  formatTuningReport,
+  groupFindingsByValue,
   merchantDisplayName,
   recognisedCategoryKey,
 } from "../../src/features/leak-intelligence/leak-intelligence.format";
 import type {
   FindingQuestion,
   LeakDetection,
+  LeakNearMiss,
   SupportingTransaction,
 } from "../../src/features/leak-intelligence/leak-intelligence.types";
 import { SyntheticSourceNote } from "../../src/features/synthetic-intelligence/SyntheticSourceNote";
@@ -92,6 +96,15 @@ function LeakIntelligenceDebugScreen() {
                 </Text>
               ) : null}
             </View>
+            {result ? (
+              <IconButton
+                accessibilityLabel="Share tuning report"
+                variant="ghost"
+                onPress={() => void Share.share({ message: formatTuningReport(result) })}
+              >
+                <Share2 color={palette.foreground} size={20} strokeWidth={2} />
+              </IconButton>
+            ) : null}
             {synthetic.active ? null : (
               <IconButton accessibilityLabel="Refresh" variant="ghost" onPress={live.refresh}>
                 <RefreshCw color={palette.foreground} size={20} strokeWidth={2} />
@@ -110,6 +123,7 @@ function LeakIntelligenceDebugScreen() {
               leaks={result.leaks}
               questions={result.questions ?? []}
               questionsNotShown={result.questions_not_shown ?? 0}
+              nearMisses={result.near_misses ?? []}
               updating={loading}
               onQuestionHandled={synthetic.active ? undefined : live.refreshQuietly}
             />
@@ -147,12 +161,14 @@ function Findings({
   leaks,
   questions,
   questionsNotShown,
+  nearMisses,
   updating,
   onQuestionHandled,
 }: {
   leaks: LeakDetection[];
   questions: FindingQuestion[];
   questionsNotShown: number;
+  nearMisses: LeakNearMiss[];
   updating: boolean;
   /** Reloads the analysis after an answer. Omitted where answers are not saved. */
   onQuestionHandled?: () => void;
@@ -218,15 +234,82 @@ function Findings({
           <Text className="text-[14px] leading-5 text-muted-foreground">
             We found {leaks.length} {leaks.length === 1 ? "thing" : "things"} worth reviewing.
           </Text>
-          <View className="mt-4 gap-3">
-            {leaks.map((leak) => (
-              <FindingCard key={leak.fingerprint} leak={leak} />
-            ))}
-          </View>
+          {groupFindingsByValue(leaks).map((group) => (
+            <View key={group.key} className="mt-6">
+              <Text className="text-[17px] font-bold text-foreground">
+                {group.title} ({group.leaks.length})
+              </Text>
+              <Text className="mt-0.5 text-[13px] text-muted-foreground">{group.blurb}</Text>
+              <View className="mt-3 gap-3">
+                {group.leaks.map((leak) => (
+                  <FindingCard key={leak.fingerprint} leak={leak} />
+                ))}
+              </View>
+            </View>
+          ))}
         </>
       )}
+      <NearMisses items={nearMisses} />
       {updating ? (
         <Text className="mt-3 text-center text-[13px] text-muted-foreground">Updating…</Text>
+      ) : null}
+    </View>
+  );
+}
+
+/** Look-alikes the engine passed over, so a missed leak can be traced to the rule behind it. */
+function NearMisses({ items }: { items: LeakNearMiss[] }) {
+  const { colorScheme } = useColorScheme();
+  const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
+  const [open, setOpen] = useState(false);
+  if (items.length === 0) return null;
+  return (
+    <View className="mt-8">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        className="flex-row items-center justify-between rounded-2xl bg-muted/40 px-4 py-3 active:opacity-75"
+        onPress={() => setOpen((current) => !current)}
+      >
+        <View className="min-w-0 flex-1">
+          <Text className="text-[14px] font-semibold text-foreground">
+            Looked at, not raised ({items.length})
+          </Text>
+          <Text className="mt-0.5 text-[12px] text-muted-foreground">
+            Things that looked like a finding, and the rule that left each one out.
+          </Text>
+        </View>
+        <ChevronDown color={palette.placeholder} size={18} strokeWidth={2} />
+      </Pressable>
+      {open ? (
+        <View className="mt-3 gap-2">
+          {items.map((item) => (
+            <View
+              key={`${item.merchant}-${item.amount}-${item.dates.join()}-${item.reason_code}`}
+              className="rounded-2xl bg-card px-4 py-3"
+            >
+              <Text className="mb-1 text-[11px] font-semibold uppercase tracking-[0.7px] text-muted-foreground">
+                {KIND_LABELS[item.leak_type] ?? "Finding"}
+              </Text>
+              <View className="flex-row items-start justify-between gap-3">
+                <Text className="min-w-0 flex-1 text-[14px] font-semibold text-foreground">
+                  {item.merchant_display_name ??
+                    item.merchant ??
+                    (item.leak_type === "bank_fee_leak" ? "Bank fees" : "Unknown merchant")}
+                </Text>
+                <Text className="text-[14px] font-bold text-foreground">
+                  {formatCurrency(item.amount)}
+                </Text>
+              </View>
+              {item.dates.length ? (
+                <Text className="mt-0.5 text-[12px] text-muted-foreground">
+                  {item.dates.join(" · ")}
+                </Text>
+              ) : null}
+              <Text className="mt-1.5 text-[13px] leading-5 text-muted-foreground">{item.reason}</Text>
+            </View>
+          ))}
+        </View>
       ) : null}
     </View>
   );

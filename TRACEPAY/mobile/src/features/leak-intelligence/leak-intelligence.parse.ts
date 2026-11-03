@@ -11,6 +11,7 @@ import type {
   LeakCoverageLimit,
   LeakDetection,
   LeakDetectionResult,
+  LeakNearMiss,
   LeakImpactKind,
   LeakSeverity,
   LeakStatus,
@@ -57,7 +58,38 @@ export function parseLeakDetectionResult(payload: unknown): LeakDetectionResult 
       isFiniteNumber(payload.questions_not_shown) && payload.questions_not_shown > 0
         ? Math.floor(payload.questions_not_shown)
         : 0,
+    near_misses: parseNearMisses(payload.near_misses),
   };
+}
+
+/** Skips anything malformed: near misses are for tuning and must never break the screen. */
+export function parseNearMisses(value: unknown): LeakNearMiss[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): LeakNearMiss[] => {
+    if (
+      !isRecord(item) ||
+      typeof item.reason !== "string" ||
+      typeof item.reason_code !== "string" ||
+      typeof item.leak_type !== "string" ||
+      !isMoney(item.amount)
+    ) {
+      return [];
+    }
+    return [
+      {
+        leak_type: item.leak_type,
+        reason_code: item.reason_code,
+        reason: item.reason,
+        merchant: typeof item.merchant === "string" ? item.merchant : null,
+        merchant_display_name:
+          typeof item.merchant_display_name === "string" ? item.merchant_display_name : null,
+        amount: item.amount,
+        dates: Array.isArray(item.dates)
+          ? item.dates.filter((date): date is string => typeof date === "string")
+          : [],
+      },
+    ];
+  });
 }
 
 const QUESTION_KINDS: readonly FindingQuestionKind[] = [
@@ -313,6 +345,12 @@ function parseLeakDetection(value: unknown): LeakDetection {
     period_end: optionalDate(value.period_end),
     analysis: parseLeakAnalysis(value.analysis),
     claims: parseLeakClaims(value.claims),
+    value_group:
+      value.value_group === "recoverable" ||
+      value.value_group === "review" ||
+      value.value_group === "commitment"
+        ? value.value_group
+        : null,
   };
 }
 

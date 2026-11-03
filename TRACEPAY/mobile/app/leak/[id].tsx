@@ -273,9 +273,6 @@ function LeakDetailContent() {
             </IconButton>
 
             <View className="min-w-0 flex-1 flex-row items-start gap-3">
-              <View className="h-11 w-11 items-center justify-center">
-                <detail.HeaderIcon color={tone.color} size={22} strokeWidth={2.2} />
-              </View>
               <View className="min-w-0 flex-1">
                 <Text className="text-[24px] font-bold text-foreground">{detail.title}</Text>
                 <Text className="mt-0.5 text-[13px] text-muted-foreground">

@@ -174,9 +174,8 @@ export function SelectionSheet<T extends string>({
               key={option.value}
               accessibilityRole="button"
               accessibilityState={{ selected: isSelected }}
-              className="rounded-2xl border px-4 py-3.5 active:opacity-80"
+              className="rounded-2xl px-4 py-3.5 active:opacity-80"
               style={{
-                borderColor: isSelected ? palette.primary : palette.border,
                 backgroundColor: isSelected
                   ? withAlpha(palette.primary, 0.12)
                   : palette.card,

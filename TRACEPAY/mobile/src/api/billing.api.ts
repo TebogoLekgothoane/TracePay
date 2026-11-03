@@ -1,17 +1,6 @@
 import { getPdfProcessorBaseUrl } from "../constants/config";
-import {
-  parseCheckout,
-  parseEntitlements,
-  parseProducts,
-  parseVerify,
-} from "../features/billing/billing.parse";
-import type {
-  BillingEntitlements,
-  BillingProduct,
-  BillingProducts,
-  CheckoutResult,
-  VerifyResult,
-} from "../features/billing/billing.types";
+import { parseEntitlements, parseProducts } from "../features/billing/billing.parse";
+import type { BillingEntitlements, BillingProducts } from "../features/billing/billing.types";
 import { getSupabase, isSupabaseConfigured } from "../lib/supabase";
 
 export class BillingApiError extends Error {
@@ -89,16 +78,7 @@ export async function fetchEntitlements(): Promise<BillingEntitlements> {
   return parseEntitlements(await call("/billing/entitlements"));
 }
 
-export async function startCheckout(product: BillingProduct, email?: string): Promise<CheckoutResult> {
-  return parseCheckout(
-    await call("/billing/checkout", { method: "POST", body: { product, ...(email ? { email } : {}) } }),
-  );
-}
-
-export async function verifyPayment(reference: string): Promise<VerifyResult> {
-  return parseVerify(await call("/billing/verify", { method: "POST", body: { reference } }));
-}
-
-export async function cancelMonitoring(): Promise<BillingEntitlements> {
-  return parseEntitlements(await call("/billing/monitoring/cancel", { method: "POST" }));
+/** Ask the backend to re-read the user's store purchases from RevenueCat. */
+export async function syncStorePurchases(): Promise<BillingEntitlements> {
+  return parseEntitlements(await call("/billing/revenuecat/sync", { method: "POST" }));
 }

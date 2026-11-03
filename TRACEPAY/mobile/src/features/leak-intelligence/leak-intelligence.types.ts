@@ -159,6 +159,22 @@ export type LeakDetection = {
   period_end: string | null;
   analysis?: LeakAnalysis | null;
   claims?: LeakClaims | null;
+  /** Absent on older backends; such findings are read as worth reviewing. */
+  value_group?: LeakValueGroup | null;
+};
+
+/** Never combined into one "money lost" figure. */
+export type LeakValueGroup = "recoverable" | "review" | "commitment";
+
+/** A look-alike the engine looked at and did not raise, with the plain reason. */
+export type LeakNearMiss = {
+  leak_type: string;
+  reason_code: string;
+  reason: string;
+  merchant: string | null;
+  merchant_display_name: string | null;
+  amount: number | string;
+  dates: string[];
 };
 
 export type LeakDetectionResult = {
@@ -171,4 +187,6 @@ export type LeakDetectionResult = {
   analysis_summary?: LeakAnalysisSummary | null;
   questions: FindingQuestion[];
   questions_not_shown: number;
+  /** Absent on older backends. For tuning; never shown as a finding. */
+  near_misses?: LeakNearMiss[];
 };

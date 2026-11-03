@@ -6,7 +6,7 @@ import type { PotentialLeak } from "../../features/leaks/potential-leaks";
 import { COLORS, withAlpha } from "../../theme/colors";
 import { REVIEW_STATUS_LABEL } from "../../features/leaks/potential-leaks";
 import { LeakAmount } from "./LeakAmount";
-import { statusColor } from "./ReviewVisuals";
+import { ReviewIconTile, statusColor } from "./ReviewVisuals";
 
 type Props = {
   leak: PotentialLeak;
@@ -24,34 +24,34 @@ export function PotentialLeakCard({ leak, onPress }: Props) {
       accessibilityRole="button"
       accessibilityLabel={`${leak.title}, ${leak.listAmount ?? leak.amount}, ${leak.description}`}
       onPress={() => onPress(leak.id)}
-      className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-2.5 active:opacity-80"
+      className="flex-row items-center gap-3 rounded-[20px] bg-card py-3 pl-3 pr-3.5 active:opacity-80"
     >
+      <View className="items-center justify-center" style={{ width: 48, height: 48 }}>
+        <ReviewIconTile icon={leak.icon} color={palette.foreground} size={44} />
+      </View>
+
       <View className="min-w-0 flex-1">
-        <View className="flex-row items-center justify-between gap-2">
-          <Text numberOfLines={1} className="flex-1 text-[15px] font-semibold text-foreground">
+        <View className="flex-row items-center gap-2">
+          <Text numberOfLines={1} className="shrink text-[16px] font-bold text-foreground">
             {leak.title}
           </Text>
           <View
             className="rounded-full px-2.5 py-0.5"
             style={{ backgroundColor: withAlpha(badgeColor, 0.16) }}
           >
-            <Text className="text-[11px] font-semibold" style={{ color: badgeColor }}>
+            <Text className="text-[12px] font-semibold" style={{ color: badgeColor }}>
               {REVIEW_STATUS_LABEL[leak.status]}
             </Text>
           </View>
         </View>
-        <Text numberOfLines={1} className="mt-0.5 text-[12px] leading-[17px] text-muted-foreground">
+        <Text numberOfLines={1} className="mt-0.5 text-[14px] text-muted-foreground">
           {leak.description}
         </Text>
-        {/^\d/.test(leak.nextCharge) ? (
-          <Text className="mt-0.5 text-[12px] font-medium text-muted-foreground">
-            Next charge · {leak.nextCharge}
-          </Text>
-        ) : null}
       </View>
 
+      <View className="h-10 w-px bg-border" />
       <LeakAmount amount={leak.listAmount ?? leak.amount} />
-      <ChevronRight color={palette.mutedForeground} size={18} />
+      <ChevronRight color={palette.foreground} size={20} />
     </Pressable>
   );
 }

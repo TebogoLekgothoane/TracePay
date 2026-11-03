@@ -59,7 +59,7 @@ export default function PaymentSuccessScreen() {
             : "Every leak, with its transactions, evidence and recommendations, is now available. You will not be charged again for this analysis."}
         </Text>
         <Text className="mt-4 text-center text-[12px]" style={{ color: palette.mutedForeground }}>
-          A receipt is sent by Paystack to your email address.
+          Your receipt is sent by the App Store or Google Play.
         </Text>
       </View>
     </BillingShell>

@@ -106,7 +106,7 @@ export function AccountsCard({
       </View>
 
       <Button
-        className="mt-3 border-dashed border-primary/50"
+        className="mt-3"
         variant="secondary"
         onPress={onAddAccount}
       >

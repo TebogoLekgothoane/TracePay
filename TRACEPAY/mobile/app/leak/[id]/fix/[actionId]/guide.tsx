@@ -4,7 +4,11 @@ import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { LeakFlowShell } from "../../../../../src/components/leaks/LeakFlowShell";
+import {
+  LeakFlowShell,
+  neutralCardStyle,
+  neutralPillColor,
+} from "../../../../../src/components/leaks/LeakFlowShell";
 import { Button } from "../../../../../src/components/ui/Button";
 import { InfoSheet } from "../../../../../src/components/ui/Modal";
 import { getActionDetail } from "../../../../../src/features/leaks/fixContent";
@@ -40,6 +44,7 @@ export default function FixGuideScreen() {
             >
               <View
                 className="h-9 w-9 items-center justify-center rounded-full"
+                style={{ backgroundColor: neutralPillColor(palette) }}
               >
                 <Text className="text-[14px] font-bold text-primary">{index + 1}</Text>
               </View>
@@ -53,7 +58,7 @@ export default function FixGuideScreen() {
           ))}
         </View>
 
-        <View className="mt-7 rounded-3xl bg-muted p-4">
+        <View className="mt-7 rounded-3xl bg-card p-4" style={neutralCardStyle(palette)}>
           <Text className="text-[15px] font-bold text-foreground">
             {detail.helpTitle ?? "Need help?"}
           </Text>
@@ -63,7 +68,8 @@ export default function FixGuideScreen() {
           </Text>
           <Pressable
             onPress={() => setShowTip(true)}
-            className="mt-3 rounded-2xl bg-card px-4 py-3 active:opacity-80"
+            className="mt-3 rounded-2xl px-4 py-3 active:opacity-80"
+            style={{ backgroundColor: neutralPillColor(palette) }}
           >
             <Text className="text-[13px] font-semibold text-primary">
               Quick tip

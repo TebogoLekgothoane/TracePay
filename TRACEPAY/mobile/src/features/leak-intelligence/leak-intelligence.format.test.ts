@@ -9,6 +9,8 @@ import {
   formatImpactKind,
   formatPercentValue,
   formatPrimaryImpactLabel,
+  formatTuningReport,
+  groupFindingsByValue,
   merchantDisplayName,
   recognisedCategoryKey,
 } from "./leak-intelligence.format";
@@ -26,6 +28,7 @@ import {
   parseLeakAnalysis,
   parseLeakClaims,
   parseLeakDetectionResult,
+  parseNearMisses,
 } from "./leak-intelligence.parse";
 import { catalogLogoUrl, resolveCatalogLogo } from "../transactions/merchant-logos";
 
@@ -51,6 +54,148 @@ test("formats monetary and confidence values", () => {
   assert(formatImpactKind("one_time") === "One-time", "formats impact kind");
   assert(formatPrimaryImpactLabel("one_time") === "Potential amount", "one-time impact label");
   assert(formatPrimaryImpactLabel("recurring") === "Monthly impact", "recurring impact label");
+});
+
+test("near misses keep the reason and skip anything malformed", () => {
+  const parsed = parseNearMisses([
+    {
+      leak_type: "duplicate_payment_leak",
+      reason_code: "outside_day_window",
+      reason: "Identical payments 4 days apart are treated as separate purchases.",
+      merchant: "GAME",
+      merchant_display_name: "Game",
+      amount: "1299.00",
+      dates: ["2026-07-12", "2026-07-16", 7],
+    },
+    { reason: "no amount", reason_code: "x", leak_type: "y" },
+    "junk",
+  ]);
+  assert(parsed.length === 1, "malformed entries are dropped");
+  assert(parsed[0].dates.length === 2, "non-string dates are dropped");
+  assert(parsed[0].merchant_display_name === "Game", "display name is kept");
+  assert(parseNearMisses(undefined).length === 0, "an older backend has none");
+});
+
+test("the tuning report lists what was raised and what was left out, without descriptions", () => {
+  const report = formatTuningReport({
+    period_start: "2026-07-01",
+    period_end: "2026-09-30",
+    transaction_count: 120,
+    detector_version: "1.0",
+    leaks: [
+      {
+        leak_type: "duplicate_payment_leak",
+        value_group: "recoverable",
+        impact_kind: "one_time",
+        estimated_monthly_impact: "210.5",
+        confidence: 0.6,
+        evidence: { merchant_display_name: "Takealot", evidence_status: "possible", original_description: "SECRET CARD 1234" },
+      } as never,
+    ],
+    near_misses: [
+      {
+        leak_type: "duplicate_payment_leak",
+        reason_code: "outside_day_window",
+        reason: "These were 4 days apart.",
+        merchant: "GAME",
+        merchant_display_name: "Game",
+        amount: "1299",
+        dates: ["2026-07-12", "2026-07-16"],
+      },
+    ],
+  });
+  assert(report.includes("[recoverable] duplicate_payment_leak · Takealot · R210.50 once"), "raised line");
+  const withOthers = formatTuningReport({
+    period_start: null,
+    period_end: null,
+    transaction_count: 1,
+    detector_version: "1.0",
+    leaks: [
+      {
+        leak_type: "subscription_leak",
+        impact_kind: "recurring",
+        estimated_monthly_impact: "165",
+        confidence: 0.9,
+        evidence: { merchant_display_name: "Apple", other_regular_amounts: ["14.99"] },
+      } as never,
+    ],
+  });
+  assert(withOthers.includes("also repeats monthly at: R14.99"), "other regular amounts are named");
+  const explained = formatTuningReport({
+    period_start: null,
+    period_end: null,
+    transaction_count: 1,
+    detector_version: "1.0",
+    leaks: [
+      {
+        leak_type: "subscription_leak",
+        impact_kind: "recurring",
+        estimated_monthly_impact: "39.69",
+        confidence: 0.9,
+        evidence: {
+          merchant_display_name: "Apple",
+          observation_count: 6,
+          typical_amount: "14.99",
+          latest_amount: "54.68",
+          headline_impact_basis: "price_increase",
+          last_observed_date: "2026-10-16",
+        },
+      } as never,
+    ],
+  });
+  assert(
+    explained.includes("6 charges; typical R14.99; latest R54.68; headline price_increase; last 2026-10-16"),
+    "the numbers behind an amount are shown",
+  );
+  const fees = formatTuningReport({
+    period_start: null,
+    period_end: null,
+    transaction_count: 1,
+    detector_version: "1.0",
+    leaks: [
+      {
+        leak_type: "bank_fee_leak",
+        impact_kind: "recurring",
+        estimated_monthly_impact: "181.79",
+        confidence: 0.82,
+        evidence: {
+          finding_focus: "monthly_banking_fee_trend",
+          bank_fee_transaction_count: 40,
+          monthly_average_fee: "90.00",
+          fee_change_amount: "181.79",
+          recurring_fee_total: "300.00",
+          one_off_fee_total: "790.00",
+        },
+      } as never,
+    ],
+  });
+  assert(
+    fees.includes("focus monthly_banking_fee_trend; 40 fees; monthly average R90.00; rise R181.79; recurring fees R300.00; one-off fees R790.00"),
+    "bank fee findings show what they are made of",
+  );
+  assert(report.includes("Looked at, not raised (1)"), "near-miss header");
+  assert(report.includes("outside_day_window · Game · R1299.00 · 2026-07-12, 2026-07-16"), "near-miss line");
+  assert(!report.includes("SECRET"), "never includes a bank description");
+});
+
+test("findings are split into the three groups in a fixed order", () => {
+  const groups = groupFindingsByValue([
+    { id: "habit", value_group: "commitment" as const },
+    { id: "dup", value_group: "recoverable" as const },
+    { id: "sub", value_group: "review" as const },
+    { id: "old-backend" },
+    { id: "unset", value_group: null },
+  ]);
+  assert(
+    groups.map((group) => group.key).join() === "recoverable,review,commitment",
+    "groups come in a fixed order",
+  );
+  assert(groups[0].leaks.length === 1, "one recoverable finding");
+  assert(
+    groups[1].leaks.map((leak) => leak.id).join() === "sub,old-backend,unset",
+    "findings without a group are read as worth reviewing",
+  );
+  assert(groupFindingsByValue([]).length === 0, "empty groups are not shown");
 });
 
 test("irregular finding shows the exact transaction and baseline evidence", () => {

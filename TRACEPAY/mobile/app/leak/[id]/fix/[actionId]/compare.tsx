@@ -4,7 +4,10 @@ import { useColorScheme } from "nativewind";
 import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { LeakFlowShell } from "../../../../../src/components/leaks/LeakFlowShell";
+import {
+  LeakFlowShell,
+  neutralCardStyle,
+} from "../../../../../src/components/leaks/LeakFlowShell";
 import { BankComparisonTable } from "../../../../../src/components/leaks/BankComparisonTable";
 import { Button } from "../../../../../src/components/ui/Button";
 import { getActionDetail } from "../../../../../src/features/leaks/fixContent";
@@ -61,7 +64,10 @@ export default function FixCompareScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 140 }}
       >
-        <View className="mt-5 overflow-hidden rounded-3xl bg-muted p-4">
+        <View
+          className="mt-5 overflow-hidden rounded-3xl bg-card p-4"
+          style={neutralCardStyle(palette)}
+        >
           <View className="flex-row">
             <View className="w-[34%]" />
             {columnHeaders.map((bank) => (

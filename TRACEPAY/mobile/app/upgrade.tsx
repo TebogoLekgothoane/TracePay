@@ -17,13 +17,14 @@ import { FinancialInsightsIllustration } from "../src/components/billing/Financi
 import { Button } from "../src/components/ui/Button";
 import { IconButton } from "../src/components/ui/IconButton";
 import { Skeleton } from "../src/components/ui/Skeleton";
-import { Input } from "../src/components/ui/Input";
 import { formatCents, formatWholeRand } from "../src/features/billing/billing.format";
 import { usePaymentFlow } from "../src/hooks/usePaymentFlow";
 import { useBilling } from "../src/features/billing/billing.store";
 import type { BillingProduct } from "../src/features/billing/billing.types";
 import { totalMonthlyLeaks } from "../src/features/leaks/leak-paywall";
 import { listPotentialLeaks } from "../src/features/leaks/potential-leaks";
+import { getSupabase } from "../src/lib/supabase";
+import { isRevenueCatAvailable, loadStorePrices } from "../src/lib/revenuecat";
 import { COLORS, withAlpha } from "../src/theme/colors";
 
 type Plan = {
@@ -57,23 +58,39 @@ export default function UpgradeScreen() {
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const { products, entitlements, hydrated, error, refresh } = useBilling();
   const total = useMemo(() => totalMonthlyLeaks(listPotentialLeaks()), []);
-  const params = useLocalSearchParams<{ product?: string; resume?: string }>();
+  const params = useLocalSearchParams<{ product?: string }>();
   const unlocked = Boolean(entitlements?.fullAnalysis.unlocked);
   const [selected, setSelected] = useState<BillingProduct>(
     params.product === "annual_monitoring" ? "annual_monitoring" : "full_analysis",
   );
-  const [email, setEmail] = useState("");
+  const [storePrices, setStorePrices] = useState<Partial<Record<BillingProduct, string>>>({});
 
   // Once the full analysis is owned, the only thing left to buy is monitoring.
   const product: BillingProduct = unlocked ? "annual_monitoring" : selected;
   const flow = usePaymentFlow(product);
 
-  // Returning from Paystack's callback link, or reopening after an interrupted payment.
-  const pending = entitlements?.pending.find((entry) => entry.product === product);
+  // The store's own localized price is the one the user is actually charged.
   useEffect(() => {
-    if (params.resume === "1" && pending) void flow.resume(pending.reference);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.resume, pending?.reference]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data } = await getSupabase().auth.getSession();
+        const userId = data.session?.user.id;
+        if (!userId || !isRevenueCatAvailable()) return;
+        const prices = await loadStorePrices(userId);
+        if (cancelled) return;
+        setStorePrices({
+          full_analysis: prices.full_analysis?.priceString,
+          annual_monitoring: prices.annual_monitoring?.priceString,
+        });
+      } catch {
+        // Fall back to the backend's price; the purchase itself reports store problems.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (flow.phase === "success") {
@@ -86,7 +103,9 @@ export default function UpgradeScreen() {
   }
 
   const monitoringPlan = products?.annualMonitoring;
-  const monitoringAvailable = Boolean(monitoringPlan?.available && monitoringPlan.priceCents > 0);
+  const monitoringAvailable = Boolean(
+    (monitoringPlan?.available && monitoringPlan.priceCents > 0) || storePrices.annual_monitoring,
+  );
 
   const plans: Plan[] = [
     ...(unlocked
@@ -118,9 +137,8 @@ export default function UpgradeScreen() {
   const active = plans.find((plan) => plan.product === selected) ?? plans[0];
   const canContinue = active.product === "full_analysis" || monitoringAvailable;
   const busy = flow.phase === "starting" || flow.phase === "verifying";
-  const waiting = flow.phase === "awaiting" || flow.phase === "delayed";
-  const needsEmail = flow.phase === "needs_email";
-  const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email.trim());
+  const waiting = flow.phase === "delayed";
+  const activeStorePrice = storePrices[active.product];
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
@@ -169,15 +187,13 @@ export default function UpgradeScreen() {
                 accessibilityState={{ selected: isSelected }}
                 onPress={() => setSelected(plan.product)}
                 className="min-w-0 flex-1 rounded-3xl bg-card p-4 active:opacity-90"
-                style={{
-                  borderWidth: 1,
-                  borderColor: isSelected ? withAlpha(palette.primary, 0.7) : palette.border,
-                }}
+                // No border: the chosen plan is shown by a soft primary tint instead.
+                style={isSelected ? { backgroundColor: withAlpha(palette.primary, 0.12) } : undefined}
               >
                 <Text className="mt-1 text-[15px] font-semibold text-foreground">{plan.title}</Text>
-                {plan.priceCents !== null ? (
+                {storePrices[plan.product] || plan.priceCents !== null ? (
                   <Text className="mt-1 text-[30px] font-bold tracking-[-0.6px] text-foreground">
-                    {formatWholeRand(plan.priceCents)}
+                    {storePrices[plan.product] ?? formatWholeRand(plan.priceCents ?? 0)}
                   </Text>
                 ) : (
                   <View className="mt-2">
@@ -228,28 +244,7 @@ export default function UpgradeScreen() {
           </View>
         ) : null}
 
-        {needsEmail ? (
-          <View className="mt-4 rounded-2xl bg-card p-4">
-            <Text className="mb-3 text-[13px] leading-5 text-muted-foreground">
-              Paystack sends your receipt by email. Your account was set up with a phone number, so
-              enter an email to use for this payment.
-            </Text>
-            <Input
-              label="Email address"
-              value={email}
-              onChangeText={setEmail}
-              placeholder="you@example.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-              autoCorrect={false}
-              returnKeyType="done"
-              error={flow.message}
-            />
-          </View>
-        ) : null}
-
-        {flow.message && !needsEmail ? (
+        {flow.message ? (
           <View className="mt-4">
             {flow.phase === "delayed" ? (
               <View className="rounded-2xl bg-card p-4">
@@ -264,24 +259,16 @@ export default function UpgradeScreen() {
         <View className="mt-5 flex-row items-start justify-center gap-2">
           <Lock color={palette.mutedForeground} size={13} strokeWidth={2.2} />
           <Text className="min-w-0 flex-1 text-[11px] leading-4 text-muted-foreground">
-            Payments are processed securely by Paystack. Annual monitoring renews each year until you
-            cancel.
+            Payment is taken by your App Store or Google Play account. Annual monitoring renews each
+            year until you cancel it in your store subscription settings.
           </Text>
         </View>
       </ScrollView>
 
-      <View className="px-5 pb-2 pt-2">
+      <View className="gap-1 px-5 pb-2 pt-2">
         {waiting ? (
           <Button loading={busy} style={{ minHeight: 44 }} onPress={() => void flow.verify()}>
-            I have paid — check status
-          </Button>
-        ) : needsEmail ? (
-          <Button
-            disabled={!emailValid}
-            style={{ minHeight: 44 }}
-            onPress={() => void flow.start(email.trim())}
-          >
-            Continue to payment
+            Check status
           </Button>
         ) : (
           <Button
@@ -291,13 +278,18 @@ export default function UpgradeScreen() {
             style={{ minHeight: 44 }}
             onPress={() => void flow.start()}
           >
-            {flow.phase === "failed" || flow.phase === "error"
+            {flow.phase === "error"
               ? "Try again"
-              : active.priceCents
-                ? `Pay ${formatCents(active.priceCents)} securely`
-                : "Pay securely"}
+              : activeStorePrice
+                ? `Pay ${activeStorePrice}`
+                : active.priceCents
+                  ? `Pay ${formatCents(active.priceCents)}`
+                  : "Continue"}
           </Button>
         )}
+        <Button variant="secondary" disabled={busy} onPress={() => void flow.restore()}>
+          Restore purchases
+        </Button>
       </View>
     </SafeAreaView>
   );

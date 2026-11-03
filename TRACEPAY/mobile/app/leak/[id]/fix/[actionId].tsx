@@ -3,31 +3,21 @@ import { ChevronRight } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Circle, Path, Rect } from "react-native-svg";
 
 import { BankComparisonTable } from "../../../../src/components/leaks/BankComparisonTable";
 import {
   LeakFlowShell,
+  neutralCardStyle,
+  neutralPillColor,
   resolveMarkColor,
 } from "../../../../src/components/leaks/LeakFlowShell";
+import { LeakHero } from "../../../../src/components/leaks/LeakHero";
 import { Button } from "../../../../src/components/ui/Button";
 import {
   getActionDetail,
   hasCompareFlow,
 } from "../../../../src/features/leaks/fixContent";
-import { COLORS, TRACEPAY, withAlpha } from "../../../../src/theme/colors";
-
-function PiggyHero({ accent, primary }: { accent: string; primary: string }) {
-  return (
-    <Svg width={88} height={80} viewBox="0 0 88 80">
-      <Circle cx="44" cy="42" r="26" fill={withAlpha(accent, 0.22)} />
-      <Circle cx="62" cy="28" r="7" fill={withAlpha(primary, 0.35)} />
-      <Circle cx="26" cy="28" r="7" fill={withAlpha(primary, 0.35)} />
-      <Rect x="36" y="18" width="16" height="10" rx="5" fill={accent} />
-      <Path d="M34 40 H54" stroke={primary} strokeWidth={3} strokeLinecap="round" />
-    </Svg>
-  );
-}
+import { COLORS, withAlpha } from "../../../../src/theme/colors";
 
 export default function FixActionDetailScreen() {
   const { id, actionId } = useLocalSearchParams<{ id: string; actionId: string }>();
@@ -37,9 +27,6 @@ export default function FixActionDetailScreen() {
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
-  const trace = TRACEPAY[scheme];
-  const heroSurface =
-    scheme === "dark" ? withAlpha(palette.primary, 0.16) : withAlpha(palette.primary, 0.1);
 
   if (!detail) {
     return null;
@@ -57,20 +44,10 @@ export default function FixActionDetailScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
       >
-        <View
-          className="mt-5 flex-row items-center gap-3 rounded-3xl p-5"
-          style={{ backgroundColor: heroSurface }}
-        >
-          <View className="flex-1">
-            <Text className="text-[13px] text-muted-foreground">{detail.savingsLabel}</Text>
-            <Text className="mt-1 text-[32px] font-bold text-foreground">{detail.savings}</Text>
-            <Text className="mt-0.5 text-[13px] text-muted-foreground">every month</Text>
-          </View>
-          <PiggyHero accent={trace.splashAccentPink} primary={palette.primary} />
-        </View>
+        <LeakHero label={detail.savingsLabel} amount={detail.savings} caption="every month" />
 
         <Text className="mb-2 mt-7 text-[17px] font-bold text-foreground">Why this helps</Text>
-        <View className="rounded-3xl bg-muted p-4">
+        <View className="rounded-3xl bg-card p-4" style={neutralCardStyle(palette)}>
           <Text className="text-[14px] leading-6 text-foreground">{detail.whyThisHelps}</Text>
         </View>
 
@@ -101,6 +78,7 @@ export default function FixActionDetailScreen() {
                       {account.featured ? (
                         <View
                           className="rounded-full px-2 py-0.5"
+                          style={{ backgroundColor: withAlpha(palette.success, 0.14) }}
                         >
                           <Text
                             className="text-[10px] font-semibold"
@@ -119,6 +97,7 @@ export default function FixActionDetailScreen() {
                         <View
                           key={tag}
                           className="rounded-full px-2 py-0.5"
+                          style={{ backgroundColor: neutralPillColor(palette) }}
                         >
                           <Text className="text-[10px] font-medium text-primary">{tag}</Text>
                         </View>

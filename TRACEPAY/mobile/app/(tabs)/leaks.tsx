@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from "expo-router";
-import { Download } from "lucide-react-native";
+import { Download, Info } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
@@ -227,16 +227,20 @@ export default function LeaksScreen() {
 
               {paywall.locked.length > 0 ? (
                 <>
-                  <Text className="mt-5 text-center text-[13px] leading-5 text-muted-foreground">
-                    Unlock your complete analysis to see all {leaks.length} findings, evidence and
-                    next steps.
-                  </Text>
+                  <View className="mt-4 flex-row items-center rounded-[20px] bg-card py-3 pl-4 pr-4">
+                    <Info color={palette.primary} size={24} strokeWidth={1.8} />
+                    <View className="mx-3 h-10 w-px bg-border" />
+                    <Text className="flex-1 text-[15px] leading-6 text-foreground">
+                      Unlock your complete analysis to see all {leaks.length} findings, evidence and
+                      next steps.
+                    </Text>
+                  </View>
 
-                  <View className="mt-3">
-                    <Button onPress={openUpgrade} arrow style={{ minHeight: 44 }}>
+                  <View className="mt-4">
+                    <Button onPress={openUpgrade} arrow style={{ minHeight: 56 }}>
                       {unlockLabel}
                     </Button>
-                    <Text className="mt-1.5 text-center text-[11px] text-muted-foreground">
+                    <Text className="mt-2 text-center text-[14px] text-muted-foreground">
                       One payment. Not a subscription.
                     </Text>
                   </View>

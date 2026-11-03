@@ -5,15 +5,26 @@ import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
 
-import { LeakFlowShell } from "../../../../../src/components/leaks/LeakFlowShell";
+import {
+  LeakFlowShell,
+  neutralCardStyle,
+} from "../../../../../src/components/leaks/LeakFlowShell";
 import { Button } from "../../../../../src/components/ui/Button";
 import { getActionDetail } from "../../../../../src/features/leaks/fixContent";
 import { COLORS, TRACEPAY, withAlpha } from "../../../../../src/theme/colors";
 
-function SuccessIllustration({ primary, accent }: { primary: string; accent: string }) {
+function SuccessIllustration({
+  primary,
+  accent,
+  ring,
+}: {
+  primary: string;
+  accent: string;
+  ring: string;
+}) {
   return (
     <Svg width={120} height={120} viewBox="0 0 120 120">
-      <Circle cx="60" cy="60" r="42" fill={withAlpha(primary, 0.15)} />
+      <Circle cx="60" cy="60" r="42" fill={withAlpha(ring, 0.16)} />
       <Circle cx="60" cy="60" r="30" fill={primary} />
       <Path
         d="M48 60 L56 68 L74 50"
@@ -54,7 +65,11 @@ export default function FixSuccessScreen() {
           paddingTop: 24,
         }}
       >
-        <SuccessIllustration primary={palette.primary} accent={trace.splashAccentPink} />
+        <SuccessIllustration
+          primary={palette.primary}
+          accent={trace.splashAccentPink}
+          ring={palette.success}
+        />
 
         <Text className="mt-6 text-center text-[28px] font-bold text-foreground">
           {detail.successTitle}
@@ -63,15 +78,16 @@ export default function FixSuccessScreen() {
           {detail.successSubtitle}
         </Text>
 
-        <View className="mt-8 w-full rounded-3xl bg-muted p-4">
+        <View className="mt-8 w-full rounded-3xl bg-card p-4" style={neutralCardStyle(palette)}>
           <Text className="text-[15px] font-bold text-foreground">What happens next?</Text>
           <View className="mt-3 gap-3">
             {detail.nextSteps.map((step) => (
               <View key={step} className="flex-row items-start gap-3">
                 <View
                   className="mt-0.5 h-5 w-5 items-center justify-center rounded-full"
+                  style={{ backgroundColor: withAlpha(palette.success, 0.16) }}
                 >
-                  <Check color={palette.primary} size={12} strokeWidth={2.5} />
+                  <Check color={palette.success} size={12} strokeWidth={2.5} />
                 </View>
                 <Text className="flex-1 text-[14px] leading-5 text-foreground">{step}</Text>
               </View>

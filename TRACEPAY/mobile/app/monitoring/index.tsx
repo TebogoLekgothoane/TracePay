@@ -2,17 +2,21 @@ import { Redirect, router } from "expo-router";
 import { Bell, ChevronRight } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useState } from "react";
-import { Alert, Pressable, Text, View } from "react-native";
+import { Linking, Platform, Pressable, Text, View } from "react-native";
 
-import { cancelMonitoring } from "../../src/api/billing.api";
 import { BillingShell, ErrorNote, Panel, goBackOr } from "../../src/components/billing/BillingShell";
 import { Button } from "../../src/components/ui/Button";
 import { formatLongDate } from "../../src/features/billing/billing.format";
-import { applyEntitlements, useBilling } from "../../src/features/billing/billing.store";
+import { useBilling } from "../../src/features/billing/billing.store";
 import type { MonitoringStatus } from "../../src/features/billing/billing.types";
 import { useAccounts } from "../../src/hooks/useAccounts";
 import { useFindingNotifications } from "../../src/hooks/useFindingNotifications";
 import { COLORS } from "../../src/theme/colors";
+
+const STORE_SUBSCRIPTIONS_URL =
+  Platform.OS === "ios"
+    ? "https://apps.apple.com/account/subscriptions"
+    : "https://play.google.com/store/account/subscriptions";
 
 const STATUS_LABEL: Record<MonitoringStatus, string> = {
   none: "Not started",
@@ -39,7 +43,6 @@ export default function MonitoringDashboardScreen() {
   const { entitlements, hydrated } = useBilling();
   const { balanceTotals } = useAccounts();
   const { notifications } = useFindingNotifications();
-  const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!hydrated) return null;
@@ -54,27 +57,11 @@ export default function MonitoringDashboardScreen() {
     : `Ended ${ends}`;
   const canCancel = monitoring.active && !monitoring.cancelAtPeriodEnd && monitoring.status !== "attention";
 
-  const confirmCancel = () => {
-    Alert.alert(
-      "Cancel annual monitoring?",
-      `Monitoring will not renew. You keep access until ${ends}, and your full analysis stays unlocked.`,
-      [
-        { text: "Keep monitoring", style: "cancel" },
-        {
-          text: "Cancel renewal",
-          style: "destructive",
-          onPress: () => {
-            setCancelling(true);
-            setError(null);
-            cancelMonitoring()
-              .then(applyEntitlements)
-              .catch((caught: unknown) =>
-                setError(caught instanceof Error ? caught.message : "Could not cancel. Try again."),
-              )
-              .finally(() => setCancelling(false));
-          },
-        },
-      ],
+  // Subscriptions bought in the app are cancelled in the store, not by us.
+  const manageSubscription = () => {
+    setError(null);
+    Linking.openURL(STORE_SUBSCRIPTIONS_URL).catch(() =>
+      setError("Could not open your store subscription settings."),
     );
   };
 
@@ -96,7 +83,7 @@ export default function MonitoringDashboardScreen() {
 
       {monitoring.status === "attention" ? (
         <View className="mt-3">
-          <ErrorNote message="Your latest renewal payment did not go through. Update your payment method with Paystack to keep monitoring." />
+          <ErrorNote message="Your latest renewal payment did not go through. Update your payment method in your store account to keep monitoring." />
         </View>
       ) : null}
 
@@ -136,8 +123,8 @@ export default function MonitoringDashboardScreen() {
           <Button onPress={() => router.push("/upgrade")}>Renew annual monitoring</Button>
         ) : null}
         {canCancel ? (
-          <Button loading={cancelling} variant="destructive" onPress={confirmCancel}>
-            Cancel renewal
+          <Button variant="secondary" onPress={manageSubscription}>
+            Manage or cancel in store
           </Button>
         ) : null}
       </View>

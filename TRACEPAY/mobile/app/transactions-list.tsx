@@ -307,9 +307,7 @@ function TransactionRowItem({
     <View className="px-5">
       <Pressable
         accessibilityRole="button"
-        className={`flex-row items-center gap-3 border-x border-border/60 bg-card px-4 py-3.5 active:opacity-70 ${radiusClass} ${
-          isFirst ? "border-t border-border/60" : ""
-        } ${isLast ? "border-b border-border/60" : ""} ${
+        className={`flex-row items-center gap-3 bg-card px-4 py-3.5 active:opacity-70 ${radiusClass} ${
           showDivider ? "border-b border-border/40" : ""
         }`}
         onPress={() => router.push(`/transactions/${transaction.id}`)}

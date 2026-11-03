@@ -4,7 +4,10 @@ import type {
   LeakAmountStatus,
   LeakAnalysis,
   LeakConfidenceLevel,
+  LeakDetection,
   LeakImpactKind,
+  LeakNearMiss,
+  LeakValueGroup,
 } from "./leak-intelligence.types";
 
 const currencyFormatter = new Intl.NumberFormat("en-ZA", {
@@ -174,6 +177,125 @@ export function formatImpactKind(value: LeakImpactKind): string {
 /** Primary impact row label — one-time findings are not monthly. */
 export function formatPrimaryImpactLabel(impactKind: LeakImpactKind): string {
   return impactKind === "one_time" ? "Potential amount" : "Monthly impact";
+}
+
+function plainAmount(value: unknown): string {
+  const amount = finiteNumber(value);
+  return amount === null ? "n/a" : `R${amount.toFixed(2)}`;
+}
+
+/**
+ * A plain-text report for tuning the detection rules: what was raised and what was
+ * looked at and left out. Merchant names, amounts and dates only. Never a bank
+ * description, an account number or a transaction id.
+ */
+export function formatTuningReport(result: {
+  period_start: string | null;
+  period_end: string | null;
+  transaction_count: number;
+  detector_version: string;
+  leaks: readonly LeakDetection[];
+  near_misses?: readonly LeakNearMiss[];
+}): string {
+  const lines: string[] = [
+    "TracePay tuning report",
+    `Period: ${result.period_start ?? "?"} to ${result.period_end ?? "?"} · ${result.transaction_count} transactions · detector ${result.detector_version}`,
+    "",
+    `Raised (${result.leaks.length})`,
+  ];
+  for (const leak of result.leaks) {
+    const merchant = merchantDisplayName(leak.evidence) ?? "no merchant";
+    const basis = leak.impact_kind === "one_time" ? "once" : "a month";
+    const status =
+      typeof leak.evidence.evidence_status === "string" ? leak.evidence.evidence_status : "n/a";
+    const others = Array.isArray(leak.evidence.other_regular_amounts)
+      ? leak.evidence.other_regular_amounts.map(plainAmount).join(", ")
+      : "";
+    // The numbers behind the amount, so an odd figure can be explained without guessing.
+    const how: string[] = [];
+    const count = finiteNumber(leak.evidence.observation_count);
+    if (count !== null) how.push(`${count} charges`);
+    if (finiteNumber(leak.evidence.typical_amount) !== null)
+      how.push(`typical ${plainAmount(leak.evidence.typical_amount)}`);
+    if (finiteNumber(leak.evidence.latest_amount) !== null)
+      how.push(`latest ${plainAmount(leak.evidence.latest_amount)}`);
+    if (finiteNumber(leak.evidence.service_cost_monthly) !== null)
+      how.push(`service ${plainAmount(leak.evidence.service_cost_monthly)}`);
+    if (typeof leak.evidence.headline_impact_basis === "string")
+      how.push(`headline ${leak.evidence.headline_impact_basis}`);
+    if (leak.evidence.recurrence_basis === "dominant_amount") how.push("read from one regular amount");
+    // Bank fees: what the amount is made of.
+    if (typeof leak.evidence.finding_focus === "string" && leak.leak_type === "bank_fee_leak")
+      how.push(`focus ${leak.evidence.finding_focus}`);
+    const feeCount = finiteNumber(leak.evidence.bank_fee_transaction_count);
+    if (feeCount !== null) how.push(`${feeCount} fees`);
+    if (finiteNumber(leak.evidence.monthly_average_fee) !== null)
+      how.push(`monthly average ${plainAmount(leak.evidence.monthly_average_fee)}`);
+    if (finiteNumber(leak.evidence.fee_change_amount) !== null)
+      how.push(`rise ${plainAmount(leak.evidence.fee_change_amount)}`);
+    if (finiteNumber(leak.evidence.recurring_fee_total) !== null)
+      how.push(`recurring fees ${plainAmount(leak.evidence.recurring_fee_total)}`);
+    if (finiteNumber(leak.evidence.one_off_fee_total) !== null)
+      how.push(`one-off fees ${plainAmount(leak.evidence.one_off_fee_total)}`);
+    if (typeof leak.evidence.last_observed_date === "string")
+      how.push(`last ${leak.evidence.last_observed_date}`);
+    lines.push(
+      `- [${leak.value_group ?? "review"}] ${leak.leak_type} · ${merchant} · ${plainAmount(
+        leak.estimated_monthly_impact,
+      )} ${basis} · confidence ${formatConfidence(leak.confidence)} · ${status}` +
+        (how.length ? ` · (${how.join("; ")})` : "") +
+        (others ? ` · also repeats monthly at: ${others}` : ""),
+    );
+  }
+  const misses = result.near_misses ?? [];
+  lines.push("", `Looked at, not raised (${misses.length})`);
+  for (const miss of misses) {
+    const name =
+      miss.merchant_display_name ??
+      miss.merchant ??
+      (miss.leak_type === "bank_fee_leak" ? "bank fees" : "unknown merchant");
+    lines.push(
+      `- ${miss.leak_type} · ${miss.reason_code} · ${name} · ${plainAmount(miss.amount)}` +
+        (miss.dates.length ? ` · ${miss.dates.join(", ")}` : "") +
+        ` — ${miss.reason}`,
+    );
+  }
+  return lines.join("\n");
+}
+
+export const VALUE_GROUPS: readonly {
+  key: LeakValueGroup;
+  title: string;
+  blurb: string;
+}[] = [
+  {
+    key: "recoverable",
+    title: "Potentially recoverable",
+    blurb: "Money you may be able to get back or save.",
+  },
+  {
+    key: "review",
+    title: "Worth reviewing",
+    blurb: "Payments that may be unnecessary. You decide.",
+  },
+  {
+    key: "commitment",
+    title: "Where your money goes",
+    blurb: "Commitments and spending habits. Not money lost.",
+  },
+];
+
+/**
+ * Splits findings into the three groups, in a fixed order and without ever adding the
+ * groups together. A finding with no group (an older backend) is read as worth reviewing.
+ */
+export function groupFindingsByValue<T extends { value_group?: LeakValueGroup | null }>(
+  leaks: readonly T[],
+): { key: LeakValueGroup; title: string; blurb: string; leaks: T[] }[] {
+  return VALUE_GROUPS.map((group) => ({
+    ...group,
+    leaks: leaks.filter((leak) => (leak.value_group ?? "review") === group.key),
+  })).filter((group) => group.leaks.length > 0);
 }
 
 /** Share ratios from the API are fractions (0–1); percentages may also appear in behaviour evidence. */

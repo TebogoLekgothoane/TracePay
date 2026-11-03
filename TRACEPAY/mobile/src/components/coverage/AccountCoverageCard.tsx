@@ -195,12 +195,12 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 function GapRow({ gap }: { gap: CoverageGap }) {
   const style =
     gap.kind === "confirmed_missing"
-      ? "border-warning/40 bg-warning/10"
+      ? "bg-warning/10"
       : gap.kind === "balances_continuous"
-        ? "border-success/30 bg-success/10"
-        : "border-border bg-muted";
+        ? "bg-success/10"
+        : "bg-muted";
   return (
-    <View className={`mb-2 rounded-2xl border px-3 py-2.5 ${style}`}>
+    <View className={`mb-2 rounded-2xl px-3 py-2.5 ${style}`}>
       <Text className="text-[13px] font-semibold text-foreground">
         {gapHeadline(gap.kind)} · {formatCoverageRange(gap.start, gap.end)}
       </Text>
@@ -216,12 +216,12 @@ function GapRow({ gap }: { gap: CoverageGap }) {
 function IssueRow({ issue, fileName }: { issue: CoverageIssue; fileName: string | null }) {
   const style =
     issue.severity === "error"
-      ? "border-destructive/40 bg-destructive/10"
+      ? "bg-destructive/10"
       : issue.severity === "warning"
-        ? "border-warning/40 bg-warning/10"
-        : "border-border bg-muted";
+        ? "bg-warning/10"
+        : "bg-muted";
   return (
-    <View className={`mb-2 rounded-2xl border px-3 py-2.5 ${style}`}>
+    <View className={`mb-2 rounded-2xl px-3 py-2.5 ${style}`}>
       <Text className="text-[12px] leading-[18px] text-foreground">{issue.message}</Text>
       {fileName ? (
         <Text className="mt-0.5 text-[11px] text-muted-foreground" numberOfLines={1}>

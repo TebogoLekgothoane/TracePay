@@ -10,6 +10,7 @@ import {
 import { formatRandAmount, parseRandAmount } from "../../utils/currency";
 import { COLORS, withAlpha } from "../../theme/colors";
 import { BrandLogo } from "../ui/BrandLogo";
+import { neutralCardStyle } from "./LeakFlowShell";
 
 const ROW_HEIGHT = 64;
 const NAME_COLUMN_WIDTH = 148;
@@ -77,7 +78,7 @@ export function BankComparisonTable() {
   const rowStyle = (row: TableRow, index: number) => ({
     height: ROW_HEIGHT,
     backgroundColor: row.current
-      ? withAlpha(palette.primary, 0.1)
+      ? withAlpha(palette.success, 0.12)
       : index % 2 === 0
         ? "transparent"
         : withAlpha(palette.foreground, 0.03),
@@ -162,7 +163,7 @@ export function BankComparisonTable() {
         </ScrollView>
       </View>
 
-      <View className="mt-4 rounded-3xl bg-muted p-4">
+      <View className="mt-4 rounded-3xl bg-card p-4" style={neutralCardStyle(palette)}>
         <Text className="text-[12px] font-semibold text-foreground">
           About these figures · {BANK_COMPARISON_AS_OF}
         </Text>

@@ -176,7 +176,7 @@ function ScenarioRow({
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected }}
-      className={`rounded-2xl bg-card px-4 py-3 ${selected ? "border-2 border-primary" : ""}`}
+      className={`rounded-2xl px-4 py-3 ${selected ? "bg-primary/10" : "bg-card"}`}
       onPress={onPress}
     >
       <Text className="text-[15px] font-semibold text-foreground">{scenarioLabel(scenario)}</Text>
