@@ -68,8 +68,8 @@ export function SiteHeader() {
               {link.label}
             </Link>
           ))}
-          <Link href="/#showcase" className="btn btn-solid btn-small" onClick={() => setOpen(false)}>
-            Explore TracePay
+          <Link href="/#waitlist" className="btn btn-solid btn-small" onClick={() => setOpen(false)}>
+            Join the waitlist
           </Link>
         </nav>
         <div className="header-actions">

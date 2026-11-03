@@ -80,6 +80,39 @@ export const PLANS = [
   },
 ] as const;
 
+export const WAITLIST_INTERESTS = [
+  { value: "individual", label: "TracePay Individual" },
+  { value: "business", label: "TracePay Business" },
+  { value: "accountant", label: "TracePay Accountant" },
+] as const;
+
+export const FAQS = [
+  {
+    q: "How does TracePay read my transactions?",
+    a: "You add your bank statements in the app, and TracePay reads the transactions in them to look for recurring charges, fees, duplicates and unusual payments.",
+  },
+  {
+    q: "Which banks does it support?",
+    a: "TracePay is built around statements from Capitec, FNB, Discovery Bank, Absa, African Bank, Investec, Nedbank, Standard Bank and TymeBank. More are added over time.",
+  },
+  {
+    q: "Does TracePay say my money was lost or wasted?",
+    a: "No. It points out potential leaks for you to review, such as a possible duplicate payment or a fee that went up. A statement can’t show whether you use a service, so TracePay doesn’t guarantee savings. You decide what to act on.",
+  },
+  {
+    q: "What do I get for R49 and for R299 a year?",
+    a: "The R49 once-off full analysis unlocks every result, with the transactions behind it and why each one was flagged. The R299 annual plan keeps watching new transactions, tells you about new potential leaks and keeps your history.",
+  },
+  {
+    q: "How do I pay, and how do I cancel?",
+    a: "Individual plans are paid through the App Store or Google Play. The annual plan renews each year until you cancel it in your store subscription settings. Refunds follow the store’s own rules.",
+  },
+  {
+    q: "Are Business and Accountant plans available?",
+    a: "Not yet. They are coming soon and their prices may change before launch. Join the waitlist and tell us which one you’re interested in.",
+  },
+] as const;
+
 export const NAV_LINKS = [
   { label: "How it works", href: "/how-it-works" },
   { label: "What we detect", href: "/what-we-detect" },

@@ -6,7 +6,6 @@ import {
   Ban,
   Check,
   CheckCircle2,
-  ChevronLeft,
   Eye,
   X,
 } from "lucide-react-native";
@@ -30,9 +29,9 @@ import {
   DocumentActionsMenu,
   type DocumentActionsMenuAction,
 } from "../ui/DocumentActionsMenu";
-import { IconButton } from "../ui/IconButton";
+import { ScreenHeader } from "../ui/ScreenHeader";
 import { resolveMarkColor } from "./LeakFlowShell";
-import { ReviewIconTile, ReviewStatusBadge, reviewIconColor, statusColor } from "./ReviewVisuals";
+import { ReviewStatusBadge, statusColor } from "./ReviewVisuals";
 
 const TABS = ["Overview", "Transactions", "Guidance", "History"] as const;
 type ReviewTab = (typeof TABS)[number];
@@ -113,20 +112,23 @@ export function FindingReview(props: FindingReviewProps) {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <View className="flex-row items-center justify-between px-5 pt-1">
-        <IconButton accessibilityLabel="Go back" variant="ghost" onPress={back}>
-          <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
-        </IconButton>
-        {phase === "detail" && menuActions.length > 0 ? (
-          <DocumentActionsMenu
-            actions={menuActions}
-            foregroundColor={palette.foreground}
-            mutedColor={palette.mutedForeground}
-            size={40}
-          />
-        ) : (
-          <View className="h-10 w-10" />
-        )}
+      <View className="px-5 pt-1">
+        <ScreenHeader
+          title={
+            phase === "detail" ? props.title : phase === "steps" ? "Next steps" : "Record your response"
+          }
+          onBack={back}
+          right={
+            phase === "detail" && menuActions.length > 0 ? (
+              <DocumentActionsMenu
+                actions={menuActions}
+                foregroundColor={palette.foreground}
+                mutedColor={palette.mutedForeground}
+                size={40}
+              />
+            ) : undefined
+          }
+        />
       </View>
 
       {phase === "detail" ? (
@@ -173,7 +175,6 @@ function DetailPhase(
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
-  const iconColor = reviewIconColor(scheme, props.icon);
   const badgeColor = statusColor(scheme, props.status);
 
   return (
@@ -184,14 +185,6 @@ function DetailPhase(
         showsVerticalScrollIndicator={false}
       >
         <View className="px-5">
-          <View className="mt-2 flex-row items-start gap-3">
-            <ReviewIconTile icon={props.icon} color={iconColor} size={48} />
-            <View className="min-w-0 flex-1">
-              <Text className="text-[26px] font-bold tracking-[-0.4px] text-foreground">
-                {props.title}
-              </Text>
-            </View>
-          </View>
           <Text className="mt-4 text-[34px] font-bold tracking-[-0.8px] text-foreground">
             {props.amount}
           </Text>
@@ -331,8 +324,7 @@ function StepsPhase({
         showsVerticalScrollIndicator={false}
       >
         <View className="px-5 pt-2">
-          <Text className="text-[28px] font-bold tracking-[-0.4px] text-foreground">Next steps</Text>
-          <Text className="mt-1 text-[15px] text-muted-foreground">
+          <Text className="mt-2 text-[15px] text-muted-foreground">
             Here&apos;s what you can do about this.
           </Text>
           <View className="mt-6">
@@ -392,9 +384,6 @@ function ResponsePhase({
         showsVerticalScrollIndicator={false}
       >
         <View className="px-5 pt-2">
-          <Text className="text-[28px] font-bold tracking-[-0.4px] text-foreground">
-            Record your response
-          </Text>
           <Text className="mt-2 text-[15px] leading-6 text-muted-foreground">
             This helps you keep track of what you&apos;ve done. It doesn&apos;t mark the finding as
             resolved.

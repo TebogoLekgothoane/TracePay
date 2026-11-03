@@ -1,5 +1,4 @@
 import { router } from "expo-router";
-import { ChevronLeft } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
@@ -7,7 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { COLORS, withAlpha } from "../../theme/colors";
 import { Button } from "../ui/Button";
-import { IconButton } from "../ui/IconButton";
+import { ScreenHeader } from "../ui/ScreenHeader";
 
 type Palette = (typeof COLORS)["light"] | (typeof COLORS)["dark"];
 
@@ -42,23 +41,7 @@ export function LeakFlowShell({
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
       <View className="flex-1 px-5 pt-1">
-        <IconButton
-          accessibilityLabel="Go back"
-          className="mb-3 self-start"
-          variant="muted"
-          onPress={onBack ?? (() => router.back())}
-        >
-          <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
-        </IconButton>
-
-        <Text className="text-[28px] font-bold tracking-[-0.5px] text-foreground">
-          {title}
-        </Text>
-        {subtitle ? (
-          <Text className="mt-1 text-[14px] leading-5 text-muted-foreground">
-            {subtitle}
-          </Text>
-        ) : null}
+        <ScreenHeader title={title} subtitle={subtitle} onBack={onBack ?? (() => router.back())} />
 
         <View className="flex-1">{children}</View>
       </View>

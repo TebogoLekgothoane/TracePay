@@ -8,7 +8,7 @@ export function SiteFooter() {
       <div className="wrap">
         <div className="foot">
           <div>
-            <Logo className="text-fg" />
+            <Logo className="brand-footer" />
             <p style={{ marginTop: 16, maxWidth: "26em" }}>
               Financial intelligence that helps you examine your transactions and understand the patterns behind them.
             </p>

@@ -68,10 +68,8 @@ export default function MonitoringDashboardScreen() {
   const recent = notifications.slice(0, 3);
 
   return (
-    <BillingShell onBack={() => goBackOr("/(tabs)/settings")}>
-      <Text className="text-[28px] font-bold tracking-[-0.5px] text-foreground">Monitoring</Text>
-
-      <Panel className="mt-5">
+    <BillingShell title="Monitoring" onBack={() => goBackOr("/(tabs)/settings")}>
+      <Panel className="mt-1">
         <Row label="Status" value={STATUS_LABEL[monitoring.status]} />
         <View className="h-px bg-border/60" />
         <Row label="Plan" value="Annual monitoring" />

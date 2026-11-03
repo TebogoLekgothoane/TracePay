@@ -1,18 +1,33 @@
 import Image from "next/image";
 import Link from "next/link";
 
-/** The TracePay mark, as used in the app: the mono icon filled with the purple-to-navy gradient. */
+/**
+ * The TracePay mark. Two images, one per theme: the dark one has its near-black ink lightened
+ * so the mark stays readable on the dark background. CSS shows whichever theme is active.
+ */
 export function LogoMark({ className }: { className?: string }) {
+  const base = className ? `brand-mark ${className}` : "brand-mark";
   return (
-    <Image
-      src="/tracepay-mark.svg"
-      alt=""
-      width={998}
-      height={802}
-      unoptimized
-      aria-hidden="true"
-      className={className ? `brand-mark ${className}` : "brand-mark"}
-    />
+    <>
+      <Image
+        src="/tracepay-mark.png"
+        alt=""
+        width={560}
+        height={461}
+        unoptimized
+        aria-hidden="true"
+        className={`${base} brand-mark-light`}
+      />
+      <Image
+        src="/tracepay-mark-dark.png"
+        alt=""
+        width={560}
+        height={461}
+        unoptimized
+        aria-hidden="true"
+        className={`${base} brand-mark-dark`}
+      />
+    </>
   );
 }
 

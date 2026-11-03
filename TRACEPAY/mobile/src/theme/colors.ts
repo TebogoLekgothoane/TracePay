@@ -20,10 +20,11 @@ function withAlpha(color: string, alpha: number): string {
 
 const TRACEPAY = {
   light: {
-    background: "rgb(250, 250, 251)",
+    // Cards have no border, so the page is a soft lavender-grey and the cards stay white.
+    background: "rgb(242, 241, 248)",
     foreground: "rgb(23, 24, 45)",
     card: "rgb(255, 255, 255)",
-    muted: "rgb(240, 241, 244)",
+    muted: "rgb(233, 232, 242)",
     mutedForeground: "rgb(119, 120, 140)",
     primary: "#6D3FE0",
     primaryForeground: "rgb(255, 255, 255)",
@@ -34,9 +35,9 @@ const TRACEPAY = {
     success: "rgb(20, 184, 166)",
     border: "rgb(224, 226, 232)",
     input: "rgb(255, 255, 255)",
-    inputborder: "rgb(224, 226, 232)",
+    inputBorder: "rgb(214, 217, 224)",
     placeholder: "rgb(160, 163, 175)",
-    surfaceSoft: "rgb(240, 241, 244)",
+    surfaceSoft: "rgb(233, 232, 242)",
     pinEmpty: "rgb(91, 96, 112)",
     pinFilled: "#6D3FE0",
     keyPressed: "rgba(23, 24, 45, 0.08)",
@@ -56,8 +57,9 @@ const TRACEPAY = {
   dark: {
     background: "rgb(5, 5, 5)",
     foreground: "rgb(255, 255, 255)",
-    card: "rgb(17, 17, 17)",
-    muted: "rgb(26, 26, 26)",
+    // Raised, slightly violet surfaces, so borderless cards stand out from the black page.
+    card: "rgb(26, 25, 36)",
+    muted: "rgb(38, 37, 50)",
     mutedForeground: "rgb(156, 156, 160)",
     primary: "#7B4DEA",
     primaryForeground: "rgb(255, 255, 255)",
@@ -70,7 +72,7 @@ const TRACEPAY = {
     input: "rgb(17, 17, 17)",
     inputBorder: "rgb(58, 58, 58)",
     placeholder: "rgb(112, 112, 116)",
-    surfaceSoft: "rgb(28, 28, 30)",
+    surfaceSoft: "rgb(38, 37, 50)",
     pinEmpty: "rgb(91, 96, 112)",
     pinFilled: "#7B4DEA",
     keyPressed: "rgba(123, 77, 234, 0.13)",

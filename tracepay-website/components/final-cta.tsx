@@ -12,7 +12,7 @@ export function FinalCta() {
           </h2>
           <p className="lead mt-5">Discover a more informed way to examine your financial life.</p>
           <div className="mt-9 flex flex-wrap gap-3">
-            <ButtonLink href="/#showcase">Explore TracePay</ButtonLink>
+            <ButtonLink href="/#waitlist">Join the waitlist</ButtonLink>
             <ButtonLink href={`mailto:${SITE.email}`} variant="ghost">Get in touch</ButtonLink>
           </div>
         </Reveal>

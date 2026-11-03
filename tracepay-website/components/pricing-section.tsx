@@ -1,4 +1,5 @@
 import { Check } from "lucide-react";
+import Link from "next/link";
 import { Reveal } from "@/components/reveal";
 import { SectionHeading } from "@/components/section-heading";
 import { PLANS } from "@/lib/content";
@@ -32,6 +33,9 @@ export function PricingSection({ as = "h2" }: { as?: "h1" | "h2" }) {
                   ))}
                 </ul>
                 {plan.note ? <p className="plan-note">{plan.note}</p> : null}
+                <Link href="/pricing#waitlist" className="btn btn-ghost plan-cta">
+                  Join the waitlist
+                </Link>
               </article>
             </Reveal>
           ))}

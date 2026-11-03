@@ -12,7 +12,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ErrorNote, goBackOr } from "../src/components/billing/BillingShell";
+import { ErrorNote } from "../src/components/billing/BillingShell";
+import { ScreenHeader, goBackOr } from "../src/components/ui/ScreenHeader";
 import { FinancialInsightsIllustration } from "../src/components/billing/FinancialInsightsIllustration";
 import { Button } from "../src/components/ui/Button";
 import { IconButton } from "../src/components/ui/IconButton";
@@ -41,7 +42,7 @@ const FULL_FEATURES = [
   "See all detected leaks",
   "View transaction details",
   "Understand why flagged",
-  "Review recommendations",
+  "Compare cheaper options side by side",
 ] as const;
 
 const MONITORING_FEATURES = [
@@ -143,14 +144,10 @@ export default function UpgradeScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
       <View className="px-5 pt-1">
-        <IconButton
-          accessibilityLabel="Go back"
-          className="self-start"
-          variant="muted"
-          onPress={() => goBackOr("/(tabs)/leaks")}
-        >
-          <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
-        </IconButton>
+        <ScreenHeader
+          title={unlocked ? "Keep TracePay working for you" : "Unlock your full money analysis"}
+          onBack={() => goBackOr("/(tabs)/leaks")}
+        />
       </View>
 
       <ScrollView
@@ -158,16 +155,7 @@ export default function UpgradeScreen() {
         contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 16 }}
         showsVerticalScrollIndicator={false}
       >
-        <Text className="mt-2 text-center text-[28px] font-bold leading-[34px] tracking-[-0.5px] text-foreground">
-          {unlocked ? (
-            "Keep TracePay working for you"
-          ) : (
-            <>
-              Unlock your{"\n"}full money analysis
-            </>
-          )}
-        </Text>
-        <Text className="mt-3 px-3 text-center text-[14px] leading-5 text-muted-foreground">
+        <Text className="mt-4 text-[14px] leading-5 text-muted-foreground">
           {unlocked
             ? "Monitoring helps you spot new issues as your financial activity changes."
             : "We found potential leaks in your transactions. Choose a plan to see the full results and keep track of your money."}

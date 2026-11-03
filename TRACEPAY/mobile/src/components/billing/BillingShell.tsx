@@ -1,23 +1,18 @@
-import { router } from "expo-router";
-import { Check, ChevronLeft } from "lucide-react-native";
+import { Check } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import type { ReactNode } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { COLORS } from "../../theme/colors";
-import { IconButton } from "../ui/IconButton";
+import { ScreenHeader, goBackOr } from "../ui/ScreenHeader";
 
-export function goBackOr(fallback: string) {
-  if (router.canGoBack()) {
-    router.back();
-  } else {
-    router.replace(fallback as never);
-  }
-}
+export { goBackOr };
 
 type ShellProps = {
   children: ReactNode;
+  /** The page title. It sits on the same row as the back arrow. */
+  title?: string;
   /** Fixed to the bottom, so primary actions stay reachable. */
   footer?: ReactNode;
   onBack?: () => void;
@@ -25,17 +20,12 @@ type ShellProps = {
 };
 
 /** Flat page frame for the paywall, checkout and monitoring screens. */
-export function BillingShell({ children, footer, onBack, backLabel = "Go back" }: ShellProps) {
-  const { colorScheme } = useColorScheme();
-  const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
-
+export function BillingShell({ children, title = "", footer, onBack, backLabel = "Go back" }: ShellProps) {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
       <View className="px-5 pt-1">
-        {onBack ? (
-          <IconButton accessibilityLabel={backLabel} className="self-start" variant="muted" onPress={onBack}>
-            <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
-          </IconButton>
+        {onBack || title ? (
+          <ScreenHeader title={title} onBack={onBack} backLabel={backLabel} />
         ) : (
           <View className="h-10" />
         )}

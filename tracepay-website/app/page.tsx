@@ -4,6 +4,8 @@ import { HowItWorks } from "@/components/how-it-works";
 import { WhatWeDetect } from "@/components/what-we-detect";
 import { ProductShowcaseSection } from "@/components/product-showcase-section";
 import { PricingSection } from "@/components/pricing-section";
+import { FaqSection } from "@/components/faq-section";
+import { WaitlistSection } from "@/components/waitlist-section";
 import { SecuritySection } from "@/components/security-section";
 import { AboutSection } from "@/components/about-section";
 import { FinalCta } from "@/components/final-cta";
@@ -17,8 +19,10 @@ export default function HomePage() {
       <WhatWeDetect />
       <ProductShowcaseSection />
       <PricingSection />
+      <FaqSection />
       <SecuritySection />
       <AboutSection />
+      <WaitlistSection />
       <FinalCta />
     </>
   );

@@ -16,7 +16,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { resolveMarkColor } from "../../../src/components/leaks/LeakFlowShell";
 import { BrandLogo } from "../../../src/components/ui/BrandLogo";
-import { IconButton } from "../../../src/components/ui/IconButton";
+import { ScreenHeader } from "../../../src/components/ui/ScreenHeader";
 import { SimpleBrandLogo } from "../../../src/components/ui/SimpleBrandLogo";
 import {
   getSubscriptionById,
@@ -62,19 +62,7 @@ export default function SubscriptionDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View className="px-5 pt-1">
-          <View className="mb-4 flex-row items-center justify-between">
-            <IconButton
-              accessibilityLabel="Go back"
-              variant="ghost"
-              onPress={() => router.back()}
-            >
-              <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
-            </IconButton>
-            <Text className="text-[14px] font-semibold text-muted-foreground">
-              Subscription
-            </Text>
-            <View className="w-10" />
-          </View>
+          <ScreenHeader className="mb-4" title="Subscription" />
 
           <LinearGradient
             colors={[...trace.summaryGradient]}

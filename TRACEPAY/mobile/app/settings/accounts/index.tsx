@@ -12,6 +12,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ScreenHeader } from "../../../src/components/ui/ScreenHeader";
+
 import { InstitutionLogo } from "../../../src/components/accounts/InstitutionLogo";
 import { Button } from "../../../src/components/ui/Button";
 import {
@@ -230,27 +232,7 @@ export default function LinkedAccountsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View className="px-5 pt-1">
-          <View className="flex-row items-center gap-3">
-            <Pressable
-              accessibilityLabel="Back to Settings"
-              accessibilityRole="button"
-              className="flex-row items-center gap-0.5 rounded-full bg-card py-2 pl-2.5 pr-3.5 active:opacity-80"
-              style={{
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: scheme === "dark" ? 0.35 : 0.08,
-                shadowRadius: 4,
-                elevation: 2,
-              }}
-              onPress={() => router.back()}
-            >
-              <ChevronLeft color={palette.foreground} size={18} strokeWidth={2.4} />
-              <Text className="text-[15px] font-semibold text-foreground">Back</Text>
-            </Pressable>
-            <Text className="flex-1 text-[22px] font-bold text-foreground" numberOfLines={1}>
-              My accounts
-            </Text>
-          </View>
+          <ScreenHeader title="My accounts" backLabel="Back to Settings" />
 
           {error ? (
             <View className="mt-5 rounded-2xl bg-destructive/10 px-4 py-3">

@@ -56,7 +56,7 @@ export default function PaymentSuccessScreen() {
         <Text className="mt-2 text-center text-[15px] leading-[22px] text-muted-foreground">
           {monitoring
             ? `Your plan runs until ${formatLongDate(entitlements?.monitoring.currentPeriodEnd ?? null)}. We will tell you when new potential leaks appear in statements you add.`
-            : "Every leak, with its transactions, evidence and recommendations, is now available. You will not be charged again for this analysis."}
+            : "Every leak, with its transactions, evidence and cheaper options to compare, is now available. You will not be charged again for this analysis."}
         </Text>
         <Text className="mt-4 text-center text-[12px]" style={{ color: palette.mutedForeground }}>
           Your receipt is sent by the App Store or Google Play.

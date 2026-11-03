@@ -127,6 +127,12 @@
   .bar { position: relative; display: flex; align-items: center; justify-content: space-between; height: 68px; gap: 24px; }
   .brand { display: inline-flex; align-items: center; gap: 12px; font-weight: 600; letter-spacing: 0.28em; font-size: 14px; text-decoration: none; }
   .brand-mark { flex: none; width: 38px; height: auto; }
+  /* In dark mode the wordmark uses the logo's pale lavender, not the page's pure white. */
+  .brand-footer { color: var(--fg); }
+  :root[data-theme="dark"] .brand, :root[data-theme="dark"] .brand-footer { color: #c9c2e3; }
+  .brand-mark-dark { display: none; }
+  :root[data-theme="dark"] .brand-mark-light { display: none; }
+  :root[data-theme="dark"] .brand-mark-dark { display: block; }
   .nav-main { display: flex; gap: 30px; align-items: center; margin-left: auto; }
   .nav-main a:not(.btn) { font-size: 14px; color: var(--muted); text-decoration: none; transition: color 0.2s; }
   .nav-main a:not(.btn):hover, .nav-main a[aria-current="page"] { color: var(--fg); }
@@ -268,6 +274,43 @@
   .plan-list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 11px; flex: 1; }
   .plan-list li { display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; line-height: 1.4; color: var(--muted); }
   .plan-list svg { width: 16px; height: 16px; flex: none; margin-top: 2px; color: var(--accent-strong); }
+  .plan-cta { margin-top: 22px; }
+
+  /* waitlist */
+  .waitlist-form { display: grid; gap: 18px; max-width: 460px; }
+  .field-label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 8px; }
+  .field { width: 100%; font: 400 16px/1.2 var(--font-sans); padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--fg); }
+  .field:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .field-group { border: 0; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .check { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; line-height: 1.4; cursor: pointer; padding: 4px 0; }
+  .check input { width: 18px; height: 18px; margin-top: 2px; flex: none; accent-color: var(--accent-strong); }
+  .consent { font-size: 14px; color: var(--muted); }
+  .field-error { color: #c0392b; font-size: 14px; }
+  .waitlist-form .btn { justify-self: start; }
+  .waitlist-form .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  .waitlist-done { max-width: 460px; padding: 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+
+  /* legal documents */
+  .legal-doc { max-width: 760px; }
+  .legal-toc { display: grid; gap: 6px; margin-top: 36px; padding: 20px 22px; border: 1px solid var(--line); border-radius: 12px; font-size: 14.5px; }
+  .legal-toc a { text-decoration: none; color: var(--muted); }
+  .legal-toc a:hover { color: var(--fg); text-decoration: underline; }
+  .legal-section { margin-top: 44px; scroll-margin-top: 90px; }
+  .legal-section p { margin-top: 14px; color: var(--muted); font-size: 16.5px; line-height: 1.65; }
+  .legal-section ul { margin: 14px 0 0; padding-left: 22px; display: grid; gap: 10px; color: var(--muted); font-size: 16.5px; line-height: 1.6; }
+  .legal-section li { padding-left: 4px; }
+  mark.confirm { background: rgba(255, 196, 0, 0.28); color: inherit; border-radius: 4px; padding: 1px 4px; }
+
+  /* faq */
+  .faq { margin-top: 48px; border-top: 1px solid var(--line); max-width: 780px; }
+  .faq details { border-bottom: 1px solid var(--line); padding: 20px 0; }
+  .faq summary { cursor: pointer; font-size: 18px; font-weight: 500; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: "+"; color: var(--muted); font-size: 22px; line-height: 1; }
+  .faq details[open] summary::after { content: "−"; }
+  .faq p { margin-top: 12px; color: var(--muted); font-size: 16px; max-width: 40em; }
+
   .plan-note { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 14px; font-weight: 500; }
 }
 

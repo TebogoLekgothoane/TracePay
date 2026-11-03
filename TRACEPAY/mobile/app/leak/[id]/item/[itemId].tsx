@@ -5,7 +5,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "../../../../src/components/ui/Button";
-import { IconButton } from "../../../../src/components/ui/IconButton";
+import { ScreenHeader } from "../../../../src/components/ui/ScreenHeader";
 import {
   CUSTOM_RANGES,
   PERIODS,
@@ -89,30 +89,11 @@ export default function LeakLineItemScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View className="px-5 pt-1">
-          <View className="mb-4 flex-row items-start">
-            <IconButton
-              accessibilityLabel="Go back"
-              className="mr-3 mt-1"
-              variant="muted"
-              onPress={() => router.back()}
-            >
-              <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
-            </IconButton>
-            <View className="min-w-0 flex-1 flex-row items-start gap-3">
-              <View className="h-11 w-11 items-center justify-center">
-                <item.Icon color={tone.color} size={22} strokeWidth={2.2} />
-              </View>
-              <View className="min-w-0 flex-1">
-                <Text className="text-[12px] font-medium text-muted-foreground">
-                  {item.leakTitle}
-                </Text>
-                <Text className="text-[24px] font-bold text-foreground">{item.title}</Text>
-                <Text className="mt-0.5 text-[13px] text-muted-foreground">
-                  {item.description}
-                </Text>
-              </View>
-            </View>
-          </View>
+          <ScreenHeader
+            className="mb-4"
+            title={item.title}
+            subtitle={`${item.leakTitle} · ${item.description}`}
+          />
 
           <View className="mt-2 rounded-3xl bg-card p-5">
             <Text className="text-[13px] text-muted-foreground">

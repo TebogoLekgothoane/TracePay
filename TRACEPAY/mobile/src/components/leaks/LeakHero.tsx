@@ -48,24 +48,13 @@ export function LeakHero({ label, amount, caption }: Props) {
         </Text>
         <Text style={{ marginTop: 2, fontSize: 13, color: trace.heroMuted }}>{caption}</Text>
       </View>
-      <View
-        style={{
-          width: 88,
-          height: 88,
-          borderRadius: 44,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: trace.heroSubtle,
-        }}
-      >
-        <Image
-          source={LEAK_TAP}
-          accessibilityIgnoresInvertColors
-          accessible={false}
-          resizeMode="contain"
-          style={{ width: 52, height: 72 }}
-        />
-      </View>
+      <Image
+        source={LEAK_TAP}
+        accessibilityIgnoresInvertColors
+        accessible={false}
+        resizeMode="contain"
+        style={{ width: 64, height: 88 }}
+      />
     </LinearGradient>
   );
 }

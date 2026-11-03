@@ -1,31 +1,20 @@
-import { useEffect, useRef, type FunctionComponent } from "react";
-import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import { MaskedView } from "./ui/MaskedView";
-import { LinearGradient } from "expo-linear-gradient";
+import { useEffect, useRef } from "react";
+import { Image, StyleSheet, useWindowDimensions } from "react-native";
 import { useColorScheme } from "nativewind";
 import Animated, {
   Easing,
   runOnJS,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withDelay,
   withSequence,
-  withSpring,
   withTiming,
   type SharedValue,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { SvgProps } from "react-native-svg";
 
-import PayWordmark from "../../assets/wordmark/pay-mono.svg";
-import { TracePayDroplet as Droplet, TracePayMark as AssembledTracePayIcon } from "./ui/TracePayMark";
-import TraceWordmark from "../../assets/wordmark/trace white wordmark.svg";
-import { TRACEPAY, withAlpha } from "../theme/colors";
-import { PAY_VIEWBOX, TRACE_VIEWBOX, wordmarkLayout } from "./wordmarkLayout";
-import {
-  TRACEPAY_DROPLET,
-  TRACEPAY_ICON_COMPOSITION,
-} from "./tracePayIconComposition";
+import { TRACEPAY } from "../theme/colors";
 
 export type Props = {
   onAnimationComplete: () => void;
@@ -36,154 +25,130 @@ export const TRACEPAY_SPLASH_BACKGROUNDS = {
   dark: TRACEPAY.dark.splashBackground,
 } as const;
 
-// Soft landing glow in the brand purple.
-const GLOW_VIOLET = "#6D3FE0";
+// The logo, cut into layers so the droplet can fall into the R. The dark set has the
+// near-black ink lightened so the lockup stays readable on a dark background.
+const ART = {
+  light: {
+    mark: require("../../assets/splash/mark-light.png"),
+    droplet: require("../../assets/splash/droplet-light.png"),
+    wordmark: require("../../assets/splash/wordmark-light.png"),
+    tagline: require("../../assets/splash/tagline-light.png"),
+  },
+  dark: {
+    mark: require("../../assets/splash/mark-dark.png"),
+    droplet: require("../../assets/splash/droplet-dark.png"),
+    wordmark: require("../../assets/splash/wordmark-dark.png"),
+    tagline: require("../../assets/splash/tagline-dark.png"),
+  },
+} as const;
+
+/** Pixel sizes of the layers, and where the droplet rests inside the mark. */
+const MARK = { width: 1120, height: 922 };
+const DROPLET = { x: 552, y: 316, width: 184, height: 248 };
+const WORDMARK = { width: 1313, height: 156 };
+const TAGLINE = { width: 1313, height: 41 };
+
+/** How far the camera dives into the R by the time the splash has faded out. */
+const DIVE_TO = 7;
+/**
+ * The logo is laid out this many times larger than it first looks and starts scaled down.
+ * Pictures soften when they are scaled up after layout and stay sharp when they only shrink.
+ */
+const LAYOUT_SCALE = 4;
 
 const ENTER_EASING = Easing.out(Easing.cubic);
 const DROPLET_EASING = Easing.in(Easing.quad);
-const EXIT_EASING = Easing.inOut(Easing.cubic);
+// One easing for the whole dive, with no ease-out: it starts gently and is still gathering
+// speed when the screen fades, so the camera never slows, stops or restarts.
+const DIVE_EASING = Easing.in(Easing.quad);
+const FADE_EASING = Easing.inOut(Easing.cubic);
+
+/** The droplet's bounce: each swing is smaller than the last. + squashes, - stretches up. */
+const BOUNCE: readonly (readonly [value: number, duration: number])[] = [
+  [1, 150],
+  [-0.7, 190],
+  [0.45, 150],
+  [-0.28, 150],
+  [0.14, 130],
+  [-0.06, 110],
+  [0, 100],
+];
+const BOUNCE_DURATION = BOUNCE.reduce((total, [, duration]) => total + duration, 0);
 
 /**
  * Branded intro:
- * assembled lockup is visible immediately
- * droplet drops into the mark
- * tagline reveals
- * fade to onboarding
+ * the mark is on screen without its droplet
+ * the droplet falls into the R and bounces like jelly, then rests in the R
+ * after a pause the wordmark rises in slowly, then the tagline fades in
+ * the droplet disappears once the name and tagline are showing, just before the dive
+ * the camera dives into the R in one continuous move, speeding up the whole way
+ * the screen fades into the app while the dive is still going
  */
 export const TRACEPAY_SPLASH_TIMING = {
   dropletStart: 700,
   dropletDuration: 1400,
-  rippleDuration: 2400,
-  revealDelay: 40,
-  revealDuration: 1100,
-  taglineStart: 3300,
-  taglineDuration: 1600,
-  exitStart: 7400,
-  exitDuration: 500,
+  /** The droplet's disappearance, which ends as the dive begins. */
+  vanishDuration: 200,
+  /** A pause after the bounce is over before the name shows. */
+  wordmarkPause: 450,
+  wordmarkDuration: 1500,
+  /** The tagline starts while the name is still arriving. */
+  taglineAfterWordmark: 1000,
+  taglineDuration: 1300,
+  /** A beat on the finished logo, droplet still in place, then the droplet goes and the dive starts. */
+  divePause: 450,
+  diveDuration: 1800,
+  /** Fraction of the dive at which the fade begins, so it ends with the dive. */
+  fadeStartFraction: 0.7,
 } as const;
 
-type BrandPieceProps = {
-  width: number;
-  height: number;
-  animatedStyle: object;
-  frameStyle?: object;
-  preserveAspectRatio?: string;
-  color?: string;
-  viewBox?: string;
-  Piece: FunctionComponent<SvgProps>;
+const clamp01 = (value: number) => {
+  "worklet";
+  return Math.min(1, Math.max(0, value));
 };
 
-function LockupPiece({
-  width,
-  height,
-  animatedStyle,
-  frameStyle,
-  preserveAspectRatio = "xMidYMid meet",
-  color,
-  viewBox,
-  Piece,
-}: BrandPieceProps) {
-  return (
-    <Animated.View
-      style={[styles.lockupPiece, { width, height }, frameStyle, animatedStyle]}
-    >
-      <Piece
-        width={width}
-        height={height}
-        color={color}
-        viewBox={viewBox}
-        preserveAspectRatio={preserveAspectRatio}
-      />
-    </Animated.View>
-  );
-}
-
-/** One expanding, fading ring of light; stack a few for a neon-glow burst. */
-function GlowRing({
-  progress,
-  delay,
-  size,
-  color,
-  borderWidth,
-  fillAlpha,
-}: {
-  progress: SharedValue<number>;
-  delay: number;
-  size: number;
-  color: string;
-  borderWidth: number;
-  fillAlpha: number;
-}) {
-  const style = useAnimatedStyle(() => {
-    const p = Math.min(1, Math.max(0, (progress.value - delay) / (1 - delay)));
-    return {
-      opacity: p > 0 ? 0.7 * (1 - p) * (1 - p) : 0,
-      transform: [{ scale: 0.1 + 1.1 * p }],
-    };
-  });
-
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        {
-          position: "absolute",
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          borderWidth,
-          borderColor: color,
-          backgroundColor: withAlpha(color, fillAlpha),
-          shadowColor: color,
-          shadowOpacity: 0.5,
-          shadowRadius: 10,
-          shadowOffset: { width: 0, height: 0 },
-          elevation: 12,
-        },
-        style,
-      ]}
-    />
-  );
-}
-
 function AnimatedDroplet({
+  source,
   displayScale,
   progress,
   impact,
+  vanish,
   fallDistance,
-  color,
 }: {
+  source: number;
   displayScale: number;
   progress: SharedValue<number>;
-  /** 0 → 1 → 0 pulse at the moment the droplet lands; drives the squash. */
+  /** The bounce: positive squashes the droplet, negative stretches it up and lifts it. */
   impact: SharedValue<number>;
-  /** How far above its resting place the droplet starts, in screen px. */
+  /** 0 → 1 just before the dive: the droplet disappears. */
+  vanish: SharedValue<number>;
+  /** How far above its resting place the droplet starts, in px at this scale. */
   fallDistance: number;
-  color: string;
 }) {
-  const { final, viewWidth, viewHeight } = TRACEPAY_DROPLET;
-  const pieceWidth = viewWidth * final.scale * displayScale;
-  const pieceHeight = viewHeight * final.scale * displayScale;
+  const pieceWidth = DROPLET.width * displayScale;
+  const pieceHeight = DROPLET.height * displayScale;
 
   const animatedStyle = useAnimatedStyle(() => {
     const t = progress.value;
     const hit = impact.value;
-    // Stretches while it speeds up, is back to true size by the time it lands,
-    // then squashes flat on impact and springs back.
+    const gone = vanish.value;
+    // Stretches while it speeds up and is back to true size by the time it lands.
     const fall = t < 0.9 ? t / 0.9 : (1 - t) / 0.1;
-    const stretch = 1 + 0.3 * fall;
+    const stretch = 1 + 0.25 * fall;
     const grow = 0.7 + 0.3 * t;
-    const squashY = 1 - 0.22 * hit;
-    const squashX = 1 + 0.16 * hit;
+    const squashY = 1 - 0.38 * hit;
+    const squashX = 1 + 0.26 * hit;
+    // The base stays on the R while the top squashes down or stretches up, and a stretch
+    // also lifts the whole droplet a little, so each bounce really leaves the surface.
+    const anchor = (pieceHeight * (1 - squashY)) / 2;
+    const lift = hit < 0 ? pieceHeight * 0.22 * hit : 0;
 
     return {
-      opacity: Math.min(1, t * 8),
-      left: final.x * displayScale,
-      top: final.y * displayScale,
+      opacity: Math.min(1, t * 8) * (1 - gone),
       transform: [
-        { translateY: -fallDistance * (1 - t) + pieceHeight * 0.14 * hit },
-        { scaleX: (grow * squashX) / Math.sqrt(stretch) },
-        { scaleY: grow * stretch * squashY },
+        { translateY: -fallDistance * (1 - t) + anchor + lift },
+        { scaleX: (grow * squashX * (1 - 0.5 * gone)) / Math.sqrt(stretch) },
+        { scaleY: grow * stretch * squashY * (1 - 0.5 * gone) },
       ],
     };
   });
@@ -191,19 +156,18 @@ function AnimatedDroplet({
   return (
     <Animated.View
       style={[
-        styles.composedPiece,
-        { width: pieceWidth, height: pieceHeight, zIndex: 2 },
+        styles.droplet,
+        {
+          width: pieceWidth,
+          height: pieceHeight,
+          left: DROPLET.x * displayScale,
+          top: DROPLET.y * displayScale,
+        },
         animatedStyle,
       ]}
       testID="tracepay-icon-piece-droplet"
     >
-      <Droplet
-        width={pieceWidth}
-        height={pieceHeight}
-        viewBox={`0 0 ${viewWidth} ${viewHeight}`}
-        preserveAspectRatio="xMinYMin meet"
-        color={color}
-      />
+      <Image source={source} style={{ width: pieceWidth, height: pieceHeight }} resizeMode="contain" />
     </Animated.View>
   );
 }
@@ -212,117 +176,154 @@ export function TracePayAnimatedSplash({ onAnimationComplete }: Props) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
-  const palette = TRACEPAY[colorScheme === "dark" ? "dark" : "light"];
+  const scheme = colorScheme === "dark" ? "dark" : "light";
+  const palette = TRACEPAY[scheme];
+  const art = ART[scheme];
   const onCompleteRef = useRef(onAnimationComplete);
   onCompleteRef.current = onAnimationComplete;
 
-  const contentWidth = Math.min(width * 0.9, 410);
-  const iconSize = Math.min(width * 0.56, height * 0.257, 235);
-  const iconHeight =
-    iconSize * (TRACEPAY_ICON_COMPOSITION.height / TRACEPAY_ICON_COMPOSITION.width);
-  const displayScale = iconSize / TRACEPAY_ICON_COMPOSITION.width;
+  // The lockup as the viewer first sees it. The mark is under half the wordmark's width,
+  // as in the logo itself.
+  const lockupWidth = Math.min(width * 0.88, height * 0.55, 400);
+  const baseMarkWidth = lockupWidth * 0.47;
+  const baseMarkHeight = baseMarkWidth * (MARK.height / MARK.width);
+  const wordmarkHeightBase = lockupWidth * (WORDMARK.height / WORDMARK.width);
+  const taglineHeightBase = lockupWidth * (TAGLINE.height / TAGLINE.width);
+  const lockupHeight = baseMarkHeight + 4 + wordmarkHeightBase + 6 + taglineHeightBase;
+  const baseScale = baseMarkWidth / MARK.width;
 
-  const wordmarkWidth = Math.min(contentWidth * 0.94, 380);
-  const wordmark = wordmarkLayout(wordmarkWidth);
-  const wordmarkHeight = wordmark.height;
-  const taglineStageHeight = 16;
-  const accentWidth = 16;
-  const accentHeight = 2;
-  const taglineGap = 14;
-  const taglineWidth = Math.min(width - 32, 440);
-  const taglineTextWidth = taglineWidth - accentWidth * 2 - 16;
+  // Everything is laid out at LAYOUT_SCALE times its first size.
+  const markWidth = baseMarkWidth * LAYOUT_SCALE;
+  const markHeight = baseMarkHeight * LAYOUT_SCALE;
+  const displayScale = baseScale * LAYOUT_SCALE;
+  const bigLockupWidth = lockupWidth * LAYOUT_SCALE;
+  const wordmarkHeight = wordmarkHeightBase * LAYOUT_SCALE;
+  const taglineHeight = taglineHeightBase * LAYOUT_SCALE;
 
-  const dropletCoverWidth =
-    TRACEPAY_DROPLET.viewWidth * TRACEPAY_DROPLET.final.scale * displayScale;
-  const dropletCoverHeight =
-    TRACEPAY_DROPLET.viewHeight * TRACEPAY_DROPLET.final.scale * displayScale;
+  // The middle of the R's opening (where the droplet rests), measured from the middle of the
+  // screen in the first view. The dive heads for this point.
+  const lockupTop = insets.top + (height - insets.top - insets.bottom - lockupHeight) / 2;
+  const focus = {
+    x: (width - baseMarkWidth) / 2 + (DROPLET.x + DROPLET.width / 2) * baseScale - width / 2,
+    y: lockupTop + (DROPLET.y + DROPLET.height / 2) * baseScale - height / 2,
+  };
 
+  const reduceMotion = useReducedMotion();
   const droplet = useSharedValue(0);
   const impact = useSharedValue(0);
-  const ripple = useSharedValue(0);
+  const vanish = useSharedValue(0);
   const reveal = useSharedValue(0);
   const tagline = useSharedValue(0);
-  const fallDistance = height * 0.7;
-  const landAt = TRACEPAY_SPLASH_TIMING.dropletStart + TRACEPAY_SPLASH_TIMING.dropletDuration;
+  const dive = useSharedValue(0);
   const screen = useSharedValue(1);
+  const fallDistance = height * 0.7 * LAYOUT_SCALE;
 
   useEffect(() => {
+    const t = TRACEPAY_SPLASH_TIMING;
+    const landAt = t.dropletStart + t.dropletDuration;
+    const bounceEnd = landAt + BOUNCE_DURATION;
+    const wordmarkStart = bounceEnd + t.wordmarkPause;
+    const taglineStart = wordmarkStart + t.taglineAfterWordmark;
+    const taglineEnd = taglineStart + t.taglineDuration;
+    const diveStart = Math.max(taglineEnd, wordmarkStart + t.wordmarkDuration) + t.divePause;
+    // The droplet stays in the R through the name and tagline and goes at the last moment.
+    const vanishStart = diveStart - t.vanishDuration;
+    const fadeStart = diveStart + t.diveDuration * t.fadeStartFraction;
+    const fadeDuration = t.diveDuration * (1 - t.fadeStartFraction);
+
     const finish = () => {
       onCompleteRef.current();
     };
 
     droplet.value = withDelay(
-      TRACEPAY_SPLASH_TIMING.dropletStart,
-      withTiming(1, {
-        duration: TRACEPAY_SPLASH_TIMING.dropletDuration,
-        easing: DROPLET_EASING,
-      }),
+      t.dropletStart,
+      withTiming(1, { duration: t.dropletDuration, easing: DROPLET_EASING }),
     );
 
+    // A bouncy landing: it squashes, springs up past its shape, and settles in a few
+    // smaller and smaller bounces.
     impact.value = withDelay(
       landAt,
       withSequence(
-        withTiming(1, { duration: 90, easing: Easing.out(Easing.quad) }),
-        withSpring(0, { damping: 6, stiffness: 220, mass: 0.7 }),
+        ...BOUNCE.map(([value, duration]) =>
+          withTiming(value, { duration, easing: Easing.inOut(Easing.sin) }),
+        ),
       ),
     );
 
-    ripple.value = withDelay(
-      landAt,
-      withTiming(1, { duration: TRACEPAY_SPLASH_TIMING.rippleDuration, easing: ENTER_EASING }),
-    );
+    // The droplet disappears just before the dive, so it never goes into the zoom.
+    // (With reduced motion there is no dive, and it simply stays.)
+    if (!reduceMotion) {
+      vanish.value = withDelay(
+        vanishStart,
+        withTiming(1, { duration: t.vanishDuration, easing: Easing.in(Easing.cubic) }),
+      );
+    }
 
     reveal.value = withDelay(
-      landAt + TRACEPAY_SPLASH_TIMING.revealDelay,
-      withTiming(1, { duration: TRACEPAY_SPLASH_TIMING.revealDuration, easing: ENTER_EASING }),
+      wordmarkStart,
+      withTiming(1, { duration: t.wordmarkDuration, easing: ENTER_EASING }),
     );
 
     tagline.value = withDelay(
-      TRACEPAY_SPLASH_TIMING.taglineStart,
-      withTiming(1, {
-        duration: TRACEPAY_SPLASH_TIMING.taglineDuration,
-        easing: ENTER_EASING,
-      }),
+      taglineStart,
+      withTiming(1, { duration: t.taglineDuration, easing: ENTER_EASING }),
     );
 
+    // For people who ask their phone for less motion, there is no dive: the logo just fades out.
+    const quietFadeStart = reduceMotion ? diveStart : fadeStart;
+    const quietFadeDuration = reduceMotion ? 500 : fadeDuration;
+    if (!reduceMotion) {
+      dive.value = withDelay(
+        diveStart,
+        withTiming(1, { duration: t.diveDuration, easing: DIVE_EASING }),
+      );
+    }
+
+    // The fade starts mid-dive and ends with it, so the camera is still speeding up as the
+    // splash disappears into the app.
     screen.value = withDelay(
-      TRACEPAY_SPLASH_TIMING.exitStart,
-      withTiming(
-        0,
-        {
-          duration: TRACEPAY_SPLASH_TIMING.exitDuration,
-          easing: EXIT_EASING,
-        },
-        (finished) => {
-          if (finished) {
-            runOnJS(finish)();
-          }
-        },
-      ),
+      quietFadeStart,
+      withTiming(0, { duration: quietFadeDuration, easing: FADE_EASING }, (finished) => {
+        if (finished) {
+          runOnJS(finish)();
+        }
+      }),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, []);
 
-  // The whole mark gives a little kick when the droplet lands.
-  const iconPulseStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + 0.06 * impact.value }],
-  }));
+  // The camera: one move, driven by one value. It zooms about the middle of the R's opening
+  // and slides that point to the middle of the screen. The scale is exponential, which looks
+  // like a steady rush, and nothing else touches it, so there is no pause and no restart.
+  const cameraStyle = useAnimatedStyle(() => {
+    const p = dive.value;
+    const scale = Math.pow(DIVE_TO, p);
+    const pan = scale - 1 + p;
+    return {
+      transform: [
+        { translateX: -pan * focus.x },
+        { translateY: -pan * focus.y },
+        // The content is laid out LAYOUT_SCALE times larger, so it starts scaled back down.
+        { scale: scale / LAYOUT_SCALE },
+      ],
+    };
+  });
 
-  const glowSize = iconSize * 2.6;
-
+  // The name and the tagline arrive slowly, with a long rise, and leave as the dive starts.
   const wordmarkRevealStyle = useAnimatedStyle(() => ({
-    opacity: reveal.value,
-    transform: [{ translateY: (1 - reveal.value) * 22 }, { scale: 0.94 + 0.06 * reveal.value }],
+    opacity: reveal.value * (1 - clamp01(dive.value * 5)),
+    transform: [
+      { translateY: (1 - reveal.value) * 30 * LAYOUT_SCALE },
+      { scale: 0.92 + 0.08 * reveal.value },
+    ],
   }));
 
   const screenStyle = useAnimatedStyle(() => ({
     opacity: screen.value,
   }));
 
-  const leftAccentStyle = useAnimatedStyle(() => ({ opacity: tagline.value }));
-  const rightAccentStyle = useAnimatedStyle(() => ({ opacity: tagline.value }));
-
-  // Pure fade, no slide: it appears once the droplet has landed and settled.
+  // Pure fade, no slide: it appears after the name has begun to settle.
   const taglineStyle = useAnimatedStyle(() => ({
     opacity: tagline.value,
   }));
@@ -330,173 +331,52 @@ export function TracePayAnimatedSplash({ onAnimationComplete }: Props) {
   return (
     <Animated.View
       pointerEvents="none"
-      className="absolute inset-0 z-[1000] items-center justify-center"
-      style={[
-        styles.screen,
-        {
-          paddingTop: insets.top,
-          paddingBottom: insets.bottom,
-          backgroundColor: palette.splashBackground,
-        },
-        screenStyle,
-      ]}
+      className="absolute inset-0 z-[1000]"
+      style={[styles.screen, { backgroundColor: palette.splashBackground }, screenStyle]}
       testID="tracepay-animated-splash"
     >
-      <View style={styles.lockup}>
-        <Animated.View
-          accessibilityLabel="TracePay icon"
-          style={[
-            styles.iconStage,
-            { width: iconSize, height: iconHeight },
-            iconPulseStyle,
-          ]}
-        >
-          {/* Burst of neon light from the landing point. */}
-          <View
-            pointerEvents="none"
-            style={{
-              position: "absolute",
-              left: iconSize / 2,
-              top: iconHeight / 2,
-              width: 0,
-              height: 0,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+      <Animated.View
+        style={[
+          styles.camera,
+          { paddingTop: insets.top, paddingBottom: insets.bottom },
+          cameraStyle,
+        ]}
+      >
+        <Animated.View style={styles.lockup}>
+          <Animated.View
+            accessibilityLabel="TracePay icon"
+            style={[styles.iconStage, { width: markWidth, height: markHeight }]}
           >
-            <GlowRing progress={ripple} delay={0} size={glowSize} color={GLOW_VIOLET} borderWidth={0} fillAlpha={0.1} />
-            <GlowRing progress={ripple} delay={0.05} size={glowSize * 0.85} color={GLOW_VIOLET} borderWidth={2} fillAlpha={0} />
-            <GlowRing progress={ripple} delay={0.18} size={glowSize * 0.7} color={GLOW_VIOLET} borderWidth={1.5} fillAlpha={0} />
-          </View>
-          <AssembledTracePayIcon
-            width={iconSize}
-            height={iconHeight}
-            color={palette.primary}
-            preserveAspectRatio="xMidYMid meet"
-          />
-          <View
-            pointerEvents="none"
-            style={[
-              styles.dropletCover,
-              {
-                width: dropletCoverWidth,
-                height: dropletCoverHeight,
-                left: TRACEPAY_DROPLET.final.x * displayScale,
-                top: TRACEPAY_DROPLET.final.y * displayScale,
-                backgroundColor: palette.splashBackground,
-              },
-            ]}
-          />
-          <AnimatedDroplet
-            displayScale={displayScale}
-            progress={droplet}
-            impact={impact}
-            fallDistance={fallDistance}
-            color={palette.primary}
-          />
-        </Animated.View>
-
-        <Animated.View
-          accessibilityLabel="TRACEPAY. Find the leaks. Save your money."
-          style={[styles.lockupStage, wordmarkRevealStyle]}
-        >
-          <View
-            style={[
-              styles.wordmarkRow,
-              { width: wordmarkWidth, height: wordmarkHeight },
-            ]}
-          >
-            <LockupPiece
-              width={wordmark.traceWidth}
-              height={wordmark.height}
-              animatedStyle={{}}
-              frameStyle={{ left: 0 }}
-              color={palette.splashForeground}
-              viewBox={TRACE_VIEWBOX}
-              Piece={TraceWordmark}
+            <Image source={art.mark} style={{ width: markWidth, height: markHeight }} resizeMode="contain" />
+            <AnimatedDroplet
+              source={art.droplet}
+              displayScale={displayScale}
+              progress={droplet}
+              impact={impact}
+              vanish={vanish}
+              fallDistance={fallDistance}
             />
-            <LockupPiece
-              width={wordmark.payWidth}
-              height={wordmark.height}
-              animatedStyle={{}}
-              frameStyle={{ left: wordmark.payLeft }}
-              color={palette.splashForeground}
-              viewBox={PAY_VIEWBOX}
-              Piece={PayWordmark}
-            />
-          </View>
+          </Animated.View>
 
-          <View
-            style={[
-              styles.taglineRow,
-              {
-                width: taglineWidth,
-                height: taglineStageHeight,
-                marginTop: taglineGap,
-              },
-            ]}
+          <Animated.View
+            accessibilityLabel="TRACEPAY. Find the leaks. Save your money."
+            style={[styles.lockupStage, { marginTop: 4 * LAYOUT_SCALE }, wordmarkRevealStyle]}
           >
-            <Animated.View
-              style={[
-                styles.taglineAccentWrap,
-                { width: accentWidth, height: taglineStageHeight },
-                leftAccentStyle,
-              ]}
-            >
-              <LinearGradient
-                colors={[palette.primary, "transparent"]}
-                start={{ x: 0, y: 0.5 }}
-                end={{ x: 1, y: 0.5 }}
-                style={{ width: accentWidth, height: accentHeight, borderRadius: 1 }}
+            <Image
+              source={art.wordmark}
+              style={{ width: bigLockupWidth, height: wordmarkHeight }}
+              resizeMode="contain"
+            />
+            <Animated.View style={[{ marginTop: 6 * LAYOUT_SCALE }, taglineStyle]}>
+              <Image
+                source={art.tagline}
+                style={{ width: bigLockupWidth, height: taglineHeight }}
+                resizeMode="contain"
               />
             </Animated.View>
-            <Animated.View
-              style={[
-                styles.taglineTextWrap,
-                { width: taglineTextWidth, height: taglineStageHeight },
-                taglineStyle,
-              ]}
-            >
-              <MaskedView
-                style={{ width: taglineTextWidth, height: taglineStageHeight }}
-                maskElement={
-                  <View style={styles.taglineMask}>
-                    <Text
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.82}
-                      style={styles.taglineText}
-                    >
-                      FIND THE LEAKS. SAVE YOUR MONEY.
-                    </Text>
-                  </View>
-                }
-              >
-                <LinearGradient
-                  colors={[palette.primary, palette.primary]}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={{ width: taglineTextWidth, height: taglineStageHeight }}
-                />
-              </MaskedView>
-            </Animated.View>
-            <Animated.View
-              style={[
-                styles.taglineAccentWrap,
-                { width: accentWidth, height: taglineStageHeight },
-                rightAccentStyle,
-              ]}
-            >
-              <LinearGradient
-                colors={["transparent", palette.primary]}
-                start={{ x: 0, y: 0.5 }}
-                end={{ x: 1, y: 0.5 }}
-                style={{ width: accentWidth, height: accentHeight, borderRadius: 1 }}
-              />
-            </Animated.View>
-          </View>
+          </Animated.View>
         </Animated.View>
-      </View>
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -509,8 +389,17 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     zIndex: 1000,
+    overflow: "hidden",
+  },
+  camera: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "visible",
   },
   lockup: {
     alignItems: "center",
@@ -520,54 +409,13 @@ const styles = StyleSheet.create({
     position: "relative",
     overflow: "visible",
   },
-  dropletCover: {
+  droplet: {
     position: "absolute",
-    zIndex: 1,
-  },
-  composedPiece: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    overflow: "visible",
+    zIndex: 2,
   },
   lockupStage: {
-    marginTop: 8,
     alignItems: "center",
     zIndex: 20,
     elevation: 20,
-  },
-  wordmarkRow: {
-    position: "relative",
-  },
-  taglineRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "visible",
-    gap: 8,
-  },
-  lockupPiece: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-  },
-  taglineTextWrap: {
-    justifyContent: "center",
-  },
-  taglineAccentWrap: {
-    justifyContent: "center",
-  },
-  taglineMask: {
-    flex: 1,
-    justifyContent: "center",
-    backgroundColor: "transparent",
-  },
-  taglineText: {
-    color: "#000000",
-    fontSize: 12,
-    fontWeight: "600",
-    letterSpacing: 1.4,
-    textAlign: "center",
-    includeFontPadding: false,
   },
 });

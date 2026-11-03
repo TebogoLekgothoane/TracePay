@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { PricingSection } from "@/components/pricing-section";
 import { FinalCta } from "@/components/final-cta";
+import { FaqSection } from "@/components/faq-section";
+import { WaitlistSection } from "@/components/waitlist-section";
 
 export const metadata: Metadata = {
   title: "Pricing",
@@ -13,6 +15,8 @@ export default function Page() {
   return (
     <>
       <PricingSection as="h1" />
+      <FaqSection />
+      <WaitlistSection />
       <FinalCta />
     </>
   );

@@ -11,6 +11,9 @@ import {
   neutralPillColor,
   resolveMarkColor,
 } from "../../../../src/components/leaks/LeakFlowShell";
+import { BundleComparisonTable } from "../../../../src/components/leaks/BundleComparisonTable";
+import { CashOptionsTable } from "../../../../src/components/leaks/CashOptionsTable";
+import { ComparisonCard } from "../../../../src/components/leaks/ComparisonCard";
 import { LeakHero } from "../../../../src/components/leaks/LeakHero";
 import { Button } from "../../../../src/components/ui/Button";
 import {
@@ -32,11 +35,8 @@ export default function FixActionDetailScreen() {
     return null;
   }
 
-  const nextRoute = detail.bankComparison
-    ? `/leak/${leakId}/fix/${actionId}/guide`
-    : hasCompareFlow(detail)
-    ? `/leak/${leakId}/fix/${actionId}/compare`
-    : `/leak/${leakId}/fix/${actionId}/guide`;
+  // Comparisons are shown right here, so the button always goes on to the steps.
+  const nextRoute = `/leak/${leakId}/fix/${actionId}/guide`;
 
   return (
     <LeakFlowShell title={detail.title} subtitle={detail.subtitle}>
@@ -71,24 +71,9 @@ export default function FixActionDetailScreen() {
                     </Text>
                   </View>
                   <View className="min-w-0 flex-1">
-                    <View className="flex-row flex-wrap items-center gap-2">
-                      <Text className="text-[14px] font-semibold text-foreground">
-                        {account.name}
-                      </Text>
-                      {account.featured ? (
-                        <View
-                          className="rounded-full px-2 py-0.5"
-                          style={{ backgroundColor: withAlpha(palette.success, 0.14) }}
-                        >
-                          <Text
-                            className="text-[10px] font-semibold"
-                            style={{ color: palette.success }}
-                          >
-                            Top pick
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
+                    <Text className="text-[14px] font-semibold text-foreground">
+                      {account.name}
+                    </Text>
                     <Text className="mt-0.5 text-[12px] text-muted-foreground">
                       {account.monthlyFee} monthly
                     </Text>
@@ -123,15 +108,37 @@ export default function FixActionDetailScreen() {
           </>
         ) : null}
 
+        {detail.bundleComparison ? (
+          <>
+            <Text className="mb-1 mt-7 text-[17px] font-bold text-foreground">
+              Compare data bundles
+            </Text>
+            <Text className="text-[13px] leading-5 text-muted-foreground">
+              Vodacom, MTN, Cell C, Telkom, Rain and the cheaper network resellers, cheapest per GB first.
+            </Text>
+            <BundleComparisonTable />
+          </>
+        ) : null}
+
+        {detail.cashComparison ? (
+          <>
+            <Text className="mb-1 mt-7 text-[17px] font-bold text-foreground">
+              Compare ways to get cash
+            </Text>
+            <Text className="text-[13px] leading-5 text-muted-foreground">
+              What each option usually costs, so you can see the difference.
+            </Text>
+            <CashOptionsTable />
+          </>
+        ) : null}
+
+        <ComparisonCard detail={detail} />
+
         <Button
           className="mt-6"
           onPress={() => router.push(nextRoute as never)}
         >
-          {detail.bankComparison
-            ? detail.compareCta
-            : hasCompareFlow(detail)
-              ? detail.primaryCta
-              : "Show step-by-step guide"}
+          {hasCompareFlow(detail) ? detail.compareCta : "Show step-by-step guide"}
         </Button>
       </ScrollView>
     </LeakFlowShell>

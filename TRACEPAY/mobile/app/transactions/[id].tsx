@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { ScreenHeader } from "../../src/components/ui/ScreenHeader";
+
 import {
   categoryName,
   formatTransactionAmount,
@@ -59,32 +61,22 @@ export default function TransactionDetailScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
-      <View className="px-5 pt-2">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          className="mb-4 h-10 w-10 items-center justify-center active:opacity-70"
-          onPress={() => router.back()}
-        >
-          <ChevronLeft color={palette.foreground} size={24} strokeWidth={2} />
-        </Pressable>
+      <View className="px-5 pt-1">
+        <ScreenHeader
+          title={transaction && !loading && !error ? transaction.description : "Transaction"}
+          subtitle={transaction && !loading && !error ? transaction.date : undefined}
+        />
 
         {loading ? (
-          <Text className="text-[14px] text-muted-foreground">Loading…</Text>
+          <Text className="mt-6 text-[14px] text-muted-foreground">Loading…</Text>
         ) : error || !transaction ? (
-          <Text className="text-[14px] text-destructive">
+          <Text className="mt-6 text-[14px] text-destructive">
             {error ?? "This transaction could not be found."}
           </Text>
         ) : (
-          <View>
-            <Text className="text-[13px] text-muted-foreground">
-              {transaction.date}
-            </Text>
-            <Text className="mt-1 text-[24px] font-bold text-foreground">
-              {transaction.description}
-            </Text>
+          <View className="mt-6">
             <Text
-              className={`mt-3 text-[22px] font-bold ${
+              className={`text-[22px] font-bold ${
                 transaction.type === "debit"
                   ? "text-destructive"
                   : "text-green-600"

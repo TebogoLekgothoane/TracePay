@@ -69,6 +69,10 @@ export type ActionDetailContent = {
   topPick?: { name: string; description: string };
   /** Show the side-by-side South African bank account fee table. */
   bankComparison?: boolean;
+  /** Show the table of every mobile network's data bundles, cheapest per GB first. */
+  bundleComparison?: boolean;
+  /** Show the table of ways to get cash and what each costs. */
+  cashComparison?: boolean;
   guideTitle: string;
   guideSubtitle: string;
   steps: GuideStep[];
@@ -861,6 +865,7 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
   }),
   atm: guideAction({
     title: "Use free ATM networks",
+    cashComparison: true,
     subtitle: "Avoid other-bank ATM fees with these habits.",
     savings: "R154.50",
     savingsLabel: "Potential saving",
@@ -963,44 +968,8 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
     savingsLabel: "Potential saving",
     whyThisHelps:
       "Buying the wrong bundle — or topping up too often — adds up quickly. A bundle that fits your usage avoids out-of-bundle charges and impulse top-ups.",
-    recommendedTitle: "Recommended bundles",
-    accounts: [
-      {
-        id: "vodacom",
-        name: "Vodacom 10GB",
-        mark: "V",
-        markColor: "destructive",
-        monthlyFee: "R149.00",
-        tags: ["Best value", "Rollover data"],
-        featured: true,
-      },
-      {
-        id: "mtn",
-        name: "MTN 8GB",
-        mark: "M",
-        markColor: "warning",
-        monthlyFee: "R139.00",
-        tags: ["Night data", "Social bundles"],
-      },
-      {
-        id: "cellc",
-        name: "Cell C 6GB",
-        mark: "C",
-        markColor: "primary",
-        monthlyFee: "R129.00",
-        tags: ["Lower cost", "Flexible"],
-      },
-    ],
-    compareRows: [
-      { label: "Monthly cost", values: ["R149.00", "R139.00", "R129.00"] },
-      { label: "Data included", values: ["10GB", "8GB", "6GB"] },
-      { label: "Night data", values: ["Unlimited", "5GB", "None"] },
-      { label: "Rollover", values: ["Yes", "Yes", "No"] },
-    ],
-    topPick: {
-      name: "Vodacom 10GB",
-      description: "Best fit for your current usage and lowest risk of out-of-bundle charges.",
-    },
+    recommendedTitle: "Bundle options",
+    bundleComparison: true,
     guideTitle: "How to switch data bundles",
     guideSubtitle: "Check usage, pick a fit, then activate on your network.",
     helpTitle: "Need help activating a bundle?",
@@ -1042,7 +1011,7 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
     nextSteps: [
       "We'll track your data spending",
       "Alert you before out-of-bundle charges",
-      "Suggest better bundles over time",
+      "Show how bundles compare over time",
     ],
     primaryCta: "Compare bundles",
     compareCta: "See activation steps",
@@ -1056,26 +1025,8 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
     savingsLabel: "Potential saving",
     whyThisHelps:
       "Withdrawing at another bank's ATM often costs R8–R15 per withdrawal. Using your home bank's network — or getting cash back at a store — keeps more money in your pocket.",
-    recommendedTitle: "Free ATM options near you",
-    accounts: [
-      {
-        id: "nedbank",
-        name: "Nedbank ATM · Sandton City",
-        mark: "N",
-        markColor: "success",
-        monthlyFee: "Free",
-        tags: ["0.4 km away", "No fee"],
-        featured: true,
-      },
-      {
-        id: "capitec",
-        name: "Capitec ATM · Rosebank",
-        mark: "C",
-        markColor: "primary",
-        monthlyFee: "Free",
-        tags: ["1.2 km away", "Partner network"],
-      },
-    ],
+    recommendedTitle: "Ways to get cash",
+    cashComparison: true,
     guideTitle: "How to avoid ATM fees",
     guideSubtitle: "Simple habits that cut withdrawal costs.",
     helpTitle: "Need a free ATM nearby?",
@@ -1360,6 +1311,7 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
   }),
   cashback: guideAction({
     title: "Get cash back at stores",
+    cashComparison: true,
     subtitle: "Take cash at the till instead of paying other-bank ATM fees.",
     savings: "R35.00",
     savingsLabel: "Potential saving",
@@ -1663,7 +1615,11 @@ export function getActionDetail(actionId: string): ActionDetailContent | null {
 }
 
 export function hasCompareFlow(detail: ActionDetailContent): boolean {
-  return Boolean(detail.bankComparison || detail.compareRows?.length);
+  return Boolean(detail.bankComparison ||
+      detail.bundleComparison ||
+      detail.cashComparison ||
+      detail.compareRows?.length,
+  );
 }
 
 /** Prefer the step-by-step guide unless the action needs a comparison first. */

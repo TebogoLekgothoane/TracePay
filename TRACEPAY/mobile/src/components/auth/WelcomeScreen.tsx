@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useState } from "react";
 import {
+  Image,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -15,17 +16,14 @@ import Animated, {
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import PayWordmark from "../../../assets/wordmark/pay-mono.svg";
 import { TracePayMark as AssembledTracePayIcon } from "../ui/TracePayMark";
-import { PAY_VIEWBOX, TRACE_VIEWBOX, wordmarkLayout } from "../wordmarkLayout";
-import TraceWordmark from "../../../assets/wordmark/trace white wordmark.svg";
 import { continueAfterAuth } from "../../features/auth/auth.navigation";
 import { getPendingPhone } from "../../features/auth/auth.service";
 import { useAppLock } from "../../features/security/AppLockProvider";
 import { useAuth } from "../../hooks/useAuth";
 import { TRACEPAY } from "../../theme/colors";
+import { LOGO, LOGO_ASPECT } from "../../theme/logo";
 import { Button } from "../ui/Button";
-import { TRACEPAY_ICON_COMPOSITION } from "../tracePayIconComposition";
 import {
   WelcomeAuthForm,
   type WelcomeAuthMode,
@@ -42,37 +40,17 @@ function usePalette() {
 }
 
 function WelcomeWordmark({ width }: { width: number }) {
-  const palette = usePalette();
-  const { height, traceWidth, payWidth, payLeft } = wordmarkLayout(width);
+  const { colorScheme } = useColorScheme();
+  const art = LOGO[colorScheme === "dark" ? "dark" : "light"];
 
   return (
-    <View
+    <Image
       accessibilityLabel="TRACEPAY"
-      className="relative mt-2"
-      style={{ width, height }}
-    >
-      <View className="absolute left-0 top-0" style={{ width: traceWidth, height }}>
-        <TraceWordmark
-          width={traceWidth}
-          height={height}
-          color={palette.foreground}
-          viewBox={TRACE_VIEWBOX}
-          preserveAspectRatio="xMidYMid meet"
-        />
-      </View>
-      <View
-        className="absolute top-0"
-        style={{ left: payLeft, width: payWidth, height }}
-      >
-        <PayWordmark
-          width={payWidth}
-          height={height}
-          color={palette.foreground}
-          viewBox={PAY_VIEWBOX}
-          preserveAspectRatio="xMidYMid meet"
-        />
-      </View>
-    </View>
+      className="mt-2"
+      source={art.wordmark}
+      style={{ width, height: width / LOGO_ASPECT.wordmark }}
+      resizeMode="contain"
+    />
   );
 }
 
@@ -85,8 +63,7 @@ function WelcomeLogo({
 }) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
-  const height =
-    size * (TRACEPAY_ICON_COMPOSITION.height / TRACEPAY_ICON_COMPOSITION.width);
+  const height = size / LOGO_ASPECT.mark;
   const palette = usePalette();
 
   return (

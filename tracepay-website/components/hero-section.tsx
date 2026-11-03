@@ -30,7 +30,7 @@ export function HeroSection() {
             patterns that deserve a closer look.
           </motion.p>
           <motion.div className="mt-10 flex flex-wrap gap-3" {...enter(0.28)}>
-            <ButtonLink href="/#showcase">Explore TracePay</ButtonLink>
+            <ButtonLink href="/#waitlist">Join the waitlist</ButtonLink>
             <ButtonLink href="/how-it-works" variant="ghost">How it works</ButtonLink>
           </motion.div>
         </div>

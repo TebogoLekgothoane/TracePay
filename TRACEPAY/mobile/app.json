@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "scheme": "tracepay",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/images/icon.png",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.tracepay.mobile",
@@ -16,6 +17,11 @@
     },
     "android": {
       "package": "com.tracepay.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png",
+        "backgroundColor": "#0E0B1D"
+      },
       "softwareKeyboardLayoutMode": "pan",
       "permissions": [
         "android.permission.USE_BIOMETRIC",
@@ -55,7 +61,8 @@
       "typedRoutes": true
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "favicon": "./assets/images/favicon.png"
     },
     "extra": {
       "router": {},
