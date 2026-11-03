@@ -104,14 +104,17 @@
     {
       "scenario_id": "next-day-lookalike-payment",
       "fi_id": "FI-040",
-      "name": "Next-day lookalike payment",
-      "case_kind": "negative",
+      "name": "Next-day identical payment",
+      "case_kind": "positive",
       "family": "duplicate",
-      "summary": "The same Woolworths amount on consecutive days is not a same-day duplicate leak.",
+      "summary": "The same Woolworths amount on consecutive days is a possible duplicate, at lower confidence than a same-day pair.",
       "transactions_file": "scenarios/next-day-lookalike-payment.json",
       "expected": {
-        "detected": false,
-        "leak_type": "duplicate_payment_leak"
+        "detected": true,
+        "leak_type": "duplicate_payment_leak",
+        "evidence": {
+          "finding_focus": "duplicate_merchant_payment"
+        }
       },
       "enforce_expectation": true
     },
@@ -857,14 +860,17 @@
     {
       "scenario_id": "FI-054-no-duplicate-charge",
       "fi_id": "FI-054",
-      "name": "No duplicate charge",
-      "case_kind": "negative",
+      "name": "Next-day duplicate charge",
+      "case_kind": "positive",
       "family": "duplicate",
-      "summary": "The same CNA amount on consecutive days is not a duplicate charge.",
+      "summary": "The same CNA amount on consecutive days is a possible duplicate charge, at lower confidence than a same-day pair.",
       "transactions_file": "scenarios/FI-054-no-duplicate-charge.json",
       "expected": {
-        "detected": false,
-        "leak_type": "duplicate_payment_leak"
+        "detected": true,
+        "leak_type": "duplicate_payment_leak",
+        "evidence": {
+          "finding_focus": "duplicate_merchant_payment"
+        }
       },
       "enforce_expectation": true
     },

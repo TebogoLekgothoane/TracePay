@@ -124,6 +124,16 @@ class RecurrenceFeature(BaseModel):
     observed_amounts: list[Decimal] = Field(default_factory=list)
     amount_variance: Decimal | None = None
     recurrence_strength: Literal["none", "low", "medium", "high"] = "none"
+    # "dominant_amount" when the cadence was read from one regular amount inside a
+    # mix of charges (a plan plus usage, or a card that bills several things).
+    basis: Literal["all_charges", "dominant_amount"] = "all_charges"
+    first_date: date | None = None
+    last_date: date | None = None
+    # Other amounts at the same merchant that also repeat on a steady cycle. Only the
+    # chosen series is costed; these are named so nothing regular is hidden.
+    other_regular_amounts: list[Decimal] = Field(default_factory=list)
+    # The merchant's most repeated amounts and their gaps, when no steady series was found.
+    series_note: str | None = None
     baseline_interval_days: Decimal | None = None
     current_interval_days: Decimal | None = None
     interval_change_days: Decimal | None = None
@@ -162,6 +172,9 @@ class MerchantFeature(BaseModel):
     # charge and unrelated purchases, so merchant-wide recurrence is not a
     # safe proxy for the subscription amount or cadence.
     subscription_recurrence: RecurrenceFeature | None = None
+    # Further regular amounts at this merchant (an iCloud plan beside another plan),
+    # each judged and raised as its own series.
+    extra_subscription_series: list[RecurrenceFeature] = Field(default_factory=list)
     failed_payment_attempt_count: int = 0
     failed_payment_attempt_amounts: list[Decimal] = Field(default_factory=list)
     debit_order_transaction_count: int = 0
@@ -355,6 +368,22 @@ class DuplicateCandidate(BaseModel):
     amount_variance: Decimal = Decimal("0")
 
 
+class NearMiss(BaseModel):
+    """Something that looked like a finding but was not raised, and the plain reason why.
+
+    For tuning the rules against real statements. It names a merchant, an amount and
+    dates, never a description or a transaction id.
+    """
+
+    leak_type: str
+    reason_code: str
+    reason: str
+    merchant: str | None = None
+    merchant_display_name: str | None = None
+    amount: Decimal
+    dates: list[date] = Field(default_factory=list)
+
+
 class TrialConversionCandidate(BaseModel):
     """A subscription whose first paid charge follows a recorded trial.
 
@@ -508,6 +537,11 @@ class FinancialFeatureSnapshot(BaseModel):
     payday: PaydaySpendingFeatures
     income: IncomeFeatures
     duplicate_candidates: list[DuplicateCandidate] = Field(default_factory=list)
+    # Identical purchases a few days apart. Kept apart from the same-day candidates so
+    # the stricter rules for them never change how a same-day duplicate is read.
+    near_day_duplicate_candidates: list[DuplicateCandidate] = Field(default_factory=list)
+    # Look-alikes the feature rules passed over before any finding was built.
+    near_misses: list[NearMiss] = Field(default_factory=list)
     irregular_candidates: list[IrregularCandidate] = Field(default_factory=list)
     trial_conversion_candidates: list[TrialConversionCandidate] = Field(default_factory=list)
     unidentified_recurring_candidates: list[UnidentifiedRecurringCandidate] = Field(

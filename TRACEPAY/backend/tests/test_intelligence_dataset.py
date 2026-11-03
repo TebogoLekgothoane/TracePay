@@ -606,10 +606,12 @@ def test_fi040_duplicate_merchant_payment_matches_pipeline() -> None:
     lookalike = load_intelligence_scenario("next-day-lookalike-payment")
     lookalike_evaluation = evaluate_intelligence_scenario(lookalike)
     assert expectation_mismatch(lookalike, lookalike_evaluation) is None
-    assert all(
-        item.evidence.get("finding_focus") != "duplicate_merchant_payment"
-        for item in lookalike_evaluation.leaks.leaks
+    near_day = next(
+        item for item in lookalike_evaluation.leaks.leaks if item.leak_type == "duplicate_payment_leak"
     )
+    assert near_day.evidence["date_span_days"] == 1
+    assert "near_day_window" in near_day.evidence["match_basis"]
+    assert near_day.confidence <= 0.60
 
 
 def test_fi054_duplicate_charges_use_the_existing_duplicate_payment() -> None:
@@ -638,10 +640,11 @@ def test_fi054_duplicate_charges_use_the_existing_duplicate_payment() -> None:
     consecutive = load_intelligence_scenario("FI-054-no-duplicate-charge")
     consecutive_evaluation = evaluate_intelligence_scenario(consecutive)
     assert expectation_mismatch(consecutive, consecutive_evaluation) is None
-    assert all(
-        item.evidence.get("finding_focus") != "duplicate_merchant_payment"
-        for item in consecutive_evaluation.leaks.leaks
+    consecutive_duplicate = next(
+        item for item in consecutive_evaluation.leaks.leaks if item.leak_type == "duplicate_payment_leak"
     )
+    assert consecutive_duplicate.evidence["date_span_days"] == 1
+    assert "near_day_window" in consecutive_duplicate.evidence["match_basis"]
 
 
 def test_named_loader_returns_only_that_scenario() -> None:

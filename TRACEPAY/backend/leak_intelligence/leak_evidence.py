@@ -282,7 +282,18 @@ def _select(leak: LeakDetection, transactions: list[FeatureTransaction]) -> Sele
                 key = match.group(1)
                 break
     if leak.leak_type in _MERCHANT_LEAKS and isinstance(key, str):
-        return _merchant_rows(key, transactions)
+        rows = _merchant_rows(key, transactions)
+        series = evidence.get("series_amount")
+        if series is not None:
+            # A finding read from one regular amount shows that amount's charges only,
+            # within the same tolerance used to find the series.
+            anchor = Decimal(str(series))
+            return [
+                (item, role)
+                for item, role in rows
+                if abs(amount_of(item) - anchor) <= anchor * Decimal("0.08")
+            ]
+        return rows
     category = evidence.get("category_name")
     if isinstance(category, str):
         rows = _category_rows(

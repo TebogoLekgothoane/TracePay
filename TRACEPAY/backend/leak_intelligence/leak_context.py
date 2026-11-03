@@ -74,8 +74,9 @@ RULE_WINDOWS: dict[str, str] = {
         "transfers and refunds removed, compared with the months before it."
     ),
     "duplicate_payment_leak": (
-        "Same merchant, same amount (within one cent) on the same calendar day, counted only when "
-        "the rows are distinct transactions: statement overlaps are already removed. Matches on "
+        "Same merchant, same amount (within one cent) on the same calendar day, or for purchases of "
+        "R100 or more, exactly two identical ones one to three days apart. Counted only when the "
+        "rows are distinct transactions: statement overlaps are already removed. Matches on "
         "different accounts are reported as a cross-account duplicate."
     ),
     "duplicate_debit_order_leak": (

@@ -71,14 +71,15 @@ def test_empty_and_single_transaction_have_no_leaks() -> None:
 
 def test_irregular_transaction_is_evidence_backed_and_not_fraud() -> None:
     transactions = [
-        _transaction("g-1", "100", date(2026, 7, 1)),
-        _transaction("g-2", "110", date(2026, 8, 1)),
-        _transaction("g-3", "90", date(2026, 9, 1)),
+        _transaction("g-1", "100", date(2026, 7, 1), category="Shopping"),
+        _transaction("g-2", "110", date(2026, 8, 1), category="Shopping"),
+        _transaction("g-3", "90", date(2026, 9, 1), category="Shopping"),
         _transaction(
             "g-4",
             "900",
             date(2026, 10, 1),
             merchant="NEW SHOP",
+            category="Shopping",
             description="NEW SHOP REF 123456789",
             transaction_time=time(14, 30),
         ),
@@ -99,10 +100,10 @@ def test_irregular_transaction_is_evidence_backed_and_not_fraud() -> None:
 
 def test_irregular_transaction_without_source_time_is_explicitly_unknown() -> None:
     transactions = [
-        _transaction("g-1", "100", date(2026, 7, 1)),
-        _transaction("g-2", "110", date(2026, 8, 1)),
-        _transaction("g-3", "90", date(2026, 9, 1)),
-        _transaction("g-4", "900", date(2026, 10, 1)),
+        _transaction("g-1", "100", date(2026, 7, 1), category="Shopping"),
+        _transaction("g-2", "110", date(2026, 8, 1), category="Shopping"),
+        _transaction("g-3", "90", date(2026, 9, 1), category="Shopping"),
+        _transaction("g-4", "900", date(2026, 10, 1), category="Shopping"),
     ]
     leak = next(item for item in _detect(transactions).leaks if item.leak_type == "irregular_transaction_leak")
     assert leak.evidence["transaction_time"] is None
@@ -1996,9 +1997,11 @@ def test_cash_and_duplicate_rules_remain_conservative() -> None:
 
 def test_duplicate_merchant_payment_rejects_lookalikes_and_does_not_inflate_counts() -> None:
     later = _transaction("later", "420", date(2026, 9, 30), merchant="CHECKERS", category="Groceries")
+    # More than three days apart is two purchases (a pair a day or two apart is a
+    # lower-confidence possible duplicate, covered in test_duplicate_payment_false_positives).
     different_days = [
         _transaction("day-a", "186.40", date(2026, 7, 18), merchant="WOOLWORTHS", category="Groceries"),
-        _transaction("day-b", "186.40", date(2026, 7, 19), merchant="WOOLWORTHS", category="Groceries"),
+        _transaction("day-b", "186.40", date(2026, 7, 23), merchant="WOOLWORTHS", category="Groceries"),
         later,
     ]
     assert "duplicate_payment_leak" not in _types(different_days)
@@ -2162,31 +2165,31 @@ def test_leak_endpoint_is_sanitized(monkeypatch) -> None:
 
 def test_irregular_transaction_requires_both_3x_median_and_r500() -> None:
     normal_high_value = [
-        _transaction("g-1", "600", date(2026, 7, 2), merchant="CHECKERS", category="Groceries"),
-        _transaction("g-2", "620", date(2026, 8, 2), merchant="CHECKERS", category="Groceries"),
-        _transaction("g-3", "610", date(2026, 9, 2), merchant="CHECKERS", category="Groceries"),
-        _transaction("g-4", "650", date(2026, 9, 29), merchant="CHECKERS", category="Groceries"),
+        _transaction("g-1", "600", date(2026, 7, 2), merchant="CHECKERS", category="Shopping"),
+        _transaction("g-2", "620", date(2026, 8, 2), merchant="CHECKERS", category="Shopping"),
+        _transaction("g-3", "610", date(2026, 9, 2), merchant="CHECKERS", category="Shopping"),
+        _transaction("g-4", "650", date(2026, 9, 29), merchant="CHECKERS", category="Shopping"),
     ]
     assert "irregular_transaction_leak" not in _types(normal_high_value)
 
     small_3x_value = [
-        _transaction("s-1", "50", date(2026, 7, 2), merchant="CHECKERS", category="Groceries"),
-        _transaction("s-2", "50", date(2026, 8, 2), merchant="CHECKERS", category="Groceries"),
-        _transaction("s-3", "50", date(2026, 9, 2), merchant="CHECKERS", category="Groceries"),
-        _transaction("s-4", "200", date(2026, 9, 29), merchant="CHECKERS", category="Groceries"),
+        _transaction("s-1", "50", date(2026, 7, 2), merchant="CHECKERS", category="Shopping"),
+        _transaction("s-2", "50", date(2026, 8, 2), merchant="CHECKERS", category="Shopping"),
+        _transaction("s-3", "50", date(2026, 9, 2), merchant="CHECKERS", category="Shopping"),
+        _transaction("s-4", "200", date(2026, 9, 29), merchant="CHECKERS", category="Shopping"),
     ]
     assert "irregular_transaction_leak" not in _types(small_3x_value)
 
     qualifying_outlier = [
-        _transaction("q-1", "200", date(2026, 7, 2), merchant="CHECKERS", category="Groceries"),
-        _transaction("q-2", "200", date(2026, 8, 2), merchant="CHECKERS", category="Groceries"),
-        _transaction("q-3", "200", date(2026, 9, 2), merchant="CHECKERS", category="Groceries"),
+        _transaction("q-1", "200", date(2026, 7, 2), merchant="CHECKERS", category="Shopping"),
+        _transaction("q-2", "200", date(2026, 8, 2), merchant="CHECKERS", category="Shopping"),
+        _transaction("q-3", "200", date(2026, 9, 2), merchant="CHECKERS", category="Shopping"),
         _transaction(
             "q-4",
             "900",
             date(2026, 9, 29),
             merchant="CHECKERS",
-            category="Groceries",
+            category="Shopping",
             transaction_time=time(14, 30),
         ),
     ]

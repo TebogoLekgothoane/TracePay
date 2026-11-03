@@ -25,6 +25,7 @@ from .leak_models import (
     EvidenceStatusName,
     FindingImpact,
     FindingOverlap,
+    GroupTotals,
     ImpactSummary,
     LeakDetection,
     LeakDetectionResult,
@@ -93,6 +94,7 @@ def summarise_impact(leaks: Iterable[LeakDetection]) -> ImpactSummary:
     totals: dict[Bucket, Decimal] = {"recurring_monthly": Decimal("0"), "one_time": Decimal("0")}
     naive: dict[Bucket, Decimal] = {"recurring_monthly": Decimal("0"), "one_time": Decimal("0")}
     by_status: dict[str, Decimal] = {}
+    by_group: dict[str, GroupTotals] = {}
     observed_total = Decimal("0")
     unquantified: list[str] = []
     impacts: list[FindingImpact] = []
@@ -138,9 +140,16 @@ def summarise_impact(leaks: Iterable[LeakDetection]) -> ImpactSummary:
                         str(value) for value in item.evidence.get("explained_by_leak_ids") or []
                     ],
                     display=not item.evidence.get("redundant_for_display"),
+                    value_group=item.value_group,
                 )
             )
         totals[group_bucket] += keeper.estimated_monthly_impact
+        keeper_group = by_group.setdefault(keeper.value_group or "review", GroupTotals())
+        keeper_group.count += 1
+        if group_bucket == "recurring_monthly":
+            keeper_group.recurring_monthly += keeper.estimated_monthly_impact
+        else:
+            keeper_group.one_time += keeper.estimated_monthly_impact
         if group_bucket == "recurring_monthly":
             status = _status(keeper)
             by_status[status] = by_status.get(status, Decimal("0")) + keeper.estimated_monthly_impact
@@ -153,6 +162,7 @@ def summarise_impact(leaks: Iterable[LeakDetection]) -> ImpactSummary:
     notes = [
         "Potential amounts are estimates that need verification; they are not money lost.",
         "Recurring monthly and one-time amounts are kept apart and never added together.",
+        "Recoverable, worth-reviewing and commitment findings are kept in separate groups.",
     ]
     if prevented > 0:
         notes.append(
@@ -166,6 +176,7 @@ def summarise_impact(leaks: Iterable[LeakDetection]) -> ImpactSummary:
         double_counting_prevented=prevented,
         observed_total_paid=observed_total,
         recurring_monthly_by_status=by_status,
+        by_group=by_group,
         findings_without_observed_amount=sorted(unquantified),
         overlaps=overlaps,
         findings=impacts,

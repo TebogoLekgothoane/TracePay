@@ -35,11 +35,13 @@ from .models import (
     IrregularCandidate,
     MerchantFeature,
     MonthlyFeature,
+    NearMiss,
     PaydaySpendingFeatures,
     RecurrenceFeature,
     WeekendSpendingFeatures,
 )
 from .consolidation import order_chronologically
+from .near_misses import build_near_miss
 from .payee_candidates import (
     UNIDENTIFIED_GROUP_PREFIX,
     penalty_fee_candidates,
@@ -63,6 +65,14 @@ TREND_MIN_OBSERVATIONS = 3
 PAYDAY_MIN_OBSERVATIONS = 3
 # Same calendar day only. Adjacent-day matches are legitimate repeats, not duplicates.
 DUPLICATE_DATE_WINDOW_DAYS = 0
+# A double charge can post a day or two late. Pairs this far apart are weaker evidence
+# than same-day ones, so they are only kept for larger, non-routine purchases.
+NEAR_DAY_DUPLICATE_MAX_DAYS = 3
+NEAR_DAY_DUPLICATE_MIN_AMOUNT = Decimal("100")
+# Below this, a repeat that misses its minimum is not worth listing as a near miss.
+NEAR_MISS_MIN_LISTED_AMOUNT = Decimal("50")
+# Pairs just past the window are reported as near misses, never raised.
+NEAR_DAY_DUPLICATE_REPORT_EXTRA_DAYS = 4
 AMOUNT_TOLERANCE = Decimal("0.01")
 _REFERENCE_TOKEN = re.compile(
     r"\b(?:REF|REFERENCE|AUTH|TRN|TXN)[\s:#-]*([A-Z0-9-]{4,})\b",
@@ -155,6 +165,12 @@ def build_financial_features(
     coverage_start, coverage_end = resolve_coverage_observation_bounds(
         date_start, date_end, qualities
     )
+    same_day_duplicates = _duplicate_candidates(active)
+    near_misses: list[NearMiss] = []
+    near_day_duplicates = _near_day_duplicate_candidates(
+        active, same_day_duplicates, near_misses
+    )
+    irregular = _irregular_candidates(active, near_misses)
     return FinancialFeatureSnapshot(
         user_id=user_id,
         transaction_count=len(active),
@@ -174,8 +190,10 @@ def build_financial_features(
         weekend=_weekend_features(active),
         payday=_payday_spending_features(active),
         income=_income_features(active),
-        duplicate_candidates=_duplicate_candidates(active),
-        irregular_candidates=_irregular_candidates(active),
+        duplicate_candidates=same_day_duplicates,
+        near_day_duplicate_candidates=near_day_duplicates,
+        near_misses=near_misses,
+        irregular_candidates=irregular,
         trial_conversion_candidates=trial_conversion_candidates(active),
         unidentified_recurring_candidates=unidentified_recurring_candidates(active),
         penalty_fee_candidates=penalty_fee_candidates(active),
@@ -406,6 +424,8 @@ def _recurrence(transactions: list[FeatureTransaction]) -> RecurrenceFeature:
     introductory = _introductory_amount(amounts)
     observed_amounts = sorted(set(amounts))
     feature = RecurrenceFeature(
+        first_date=dated_transactions[0].transaction_date if dated_transactions else None,
+        last_date=dated_transactions[-1].transaction_date if dated_transactions else None,
         missed_cycle_count=missed_cycles,
         introductory_amount=introductory,
         observation_count=len(dated_transactions),
@@ -479,6 +499,134 @@ def _recurrence(transactions: list[FeatureTransaction]) -> RecurrenceFeature:
     else:
         feature.recurrence_strength = "low"
     return feature
+
+
+# A foreign-priced plan drifts a few percent with the exchange rate, so one regular amount
+# is any group of charges within this share of each other.
+DOMINANT_AMOUNT_TOLERANCE = Decimal("0.08")
+DOMINANT_SERIES_MIN_CHARGES = 3
+DOMINANT_SERIES_MIN_SHARE = Decimal("0.25")
+
+
+# A plan with an extra charge or two (a second seat, a top-up) still bills monthly most of
+# the time. The gaps between charges need not be steady, but most of them must be monthly.
+MONTHLY_GAP_DAYS = (25, 38)
+MONTHLY_GAP_MIN_SHARE = Decimal("0.6")
+MONTHLY_GAP_MIN_CHARGES = 4
+MONTHLY_AMOUNT_MAX_SPREAD = Decimal("0.06")
+
+
+def _bills_monthly_most_of_the_time(
+    members: list[FeatureTransaction], feature: RecurrenceFeature
+) -> bool:
+    dates = sorted({item.transaction_date for item in members if item.transaction_date is not None})
+    if len(members) < MONTHLY_GAP_MIN_CHARGES or len(dates) < MONTHLY_GAP_MIN_CHARGES:
+        return False
+    average_amount = feature.average_amount
+    if not average_amount:
+        return False
+    amount_spread = (feature.amount_variance or ZERO).sqrt() / average_amount
+    if amount_spread > MONTHLY_AMOUNT_MAX_SPREAD:
+        return False
+    gaps = [(later - earlier).days for earlier, later in zip(dates, dates[1:])]
+    monthly = sum(1 for gap in gaps if MONTHLY_GAP_DAYS[0] <= gap <= MONTHLY_GAP_DAYS[1])
+    return Decimal(monthly) / Decimal(len(gaps)) >= MONTHLY_GAP_MIN_SHARE
+
+
+def _dominant_amount_series(items: list[FeatureTransaction]) -> list[RecurrenceFeature] | None:
+    """Each steady cycle hidden inside a mix of charges, best first, or None.
+
+    Cursor-style plans bill a fixed fee plus usage, and an app store bills several things
+    through one name. Judged together the charges look irregular; one amount on its own
+    often repeats monthly. The group must itself pass the normal steady-pattern test,
+    have at least three charges, and be a real share of the merchant's charges.
+    """
+    amounts = sorted({amount_of(item) for item in items if amount_of(item) > ZERO})
+    if len(items) < 4 or len(amounts) < 2:
+        return None
+    qualifying: list[tuple[tuple[int, bool], RecurrenceFeature]] = []
+    for anchor in amounts:
+        members = [
+            item for item in items if abs(amount_of(item) - anchor) <= anchor * DOMINANT_AMOUNT_TOLERANCE
+        ]
+        if (
+            len(members) < DOMINANT_SERIES_MIN_CHARGES
+            or Decimal(len(members)) / Decimal(len(items)) < DOMINANT_SERIES_MIN_SHARE
+        ):
+            continue
+        feature = _recurrence(members)
+        if feature.recurrence_strength not in {"medium", "high"}:
+            if not _bills_monthly_most_of_the_time(members, feature):
+                continue
+            feature = feature.model_copy(update={"recurrence_strength": "medium"})
+        key = (feature.observation_count, feature.recurrence_strength == "high")
+        qualifying.append((key, feature))
+    if not qualifying:
+        return None
+    qualifying.sort(key=lambda entry: entry[0], reverse=True)
+    # Overlapping groups around one price are the same series; a group at a clearly
+    # different price is a second regular charge, kept as its own series.
+    series: list[RecurrenceFeature] = []
+    for _, feature in qualifying:
+        typical = feature.typical_amount
+        if typical is None:
+            continue
+        if all(
+            abs(typical - (kept.typical_amount or ZERO)) > typical * DOMINANT_AMOUNT_TOLERANCE
+            for kept in series
+        ):
+            series.append(feature)
+    amounts = [feature.typical_amount for feature in series if feature.typical_amount is not None]
+    return [
+        feature.model_copy(
+            update={
+                "basis": "dominant_amount",
+                "other_regular_amounts": sorted(a for a in amounts if a != feature.typical_amount),
+            }
+        )
+        for feature in series
+    ]
+
+
+def _describe_amount_groups(items: list[FeatureTransaction]) -> str | None:
+    """The merchant's most repeated amounts with the gaps between them, for tuning."""
+    amounts = sorted({amount_of(item) for item in items if amount_of(item) > ZERO})
+    groups: list[tuple[int, Decimal, list[FeatureTransaction]]] = []
+    for anchor in amounts:
+        members = [
+            item for item in items if abs(amount_of(item) - anchor) <= anchor * DOMINANT_AMOUNT_TOLERANCE
+        ]
+        if len(members) >= 2:
+            groups.append((len(members), anchor, members))
+    groups.sort(key=lambda entry: (-entry[0], entry[1]))
+    shown: list[str] = []
+    seen: list[Decimal] = []
+    for count, anchor, members in groups:
+        if any(abs(anchor - other) <= anchor * DOMINANT_AMOUNT_TOLERANCE for other in seen):
+            continue
+        seen.append(anchor)
+        gaps = ", ".join(str(int(gap)) for gap in _intervals(members)[:6]) or "same day"
+        shown.append(f"R{anchor:.2f} x{count} (gaps in days: {gaps})")
+        if len(shown) == 3:
+            break
+    return "; ".join(shown) or None
+
+
+def _subscription_series(
+    items: list[FeatureTransaction],
+) -> tuple[RecurrenceFeature | None, list[RecurrenceFeature]]:
+    """The merchant's main subscription cadence and any further regular series."""
+    if not items:
+        return None, []
+    feature = _recurrence(items)
+    # Only a series that fails as a whole is looked at again, so nothing that already
+    # passes can change.
+    if feature.recurrence_strength in {"none", "low"}:
+        rescued = _dominant_amount_series(items)
+        if rescued:
+            return rescued[0], rescued[1:]
+        return feature.model_copy(update={"series_note": _describe_amount_groups(items)}), []
+    return feature, []
 
 
 def _is_stepped_price_rise(amounts: list[Decimal]) -> bool:
@@ -836,6 +984,7 @@ def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantF
         subscription_recurrence_items = _without_duplicate_debit_order_echos(
             subscription_items
         )
+        main_series, extra_series = _subscription_series(subscription_recurrence_items)
         features.append(
             MerchantFeature(
                 merchant_name=merchant,
@@ -856,11 +1005,8 @@ def _merchant_features(transactions: list[FeatureTransaction]) -> list[MerchantF
                 merchant_monthly_totals=monthly_totals,
                 merchant_monthly_transaction_count=monthly_counts,
                 merchant_category_transaction_count=dict(category_counts),
-                subscription_recurrence=(
-                    _recurrence(subscription_recurrence_items)
-                    if subscription_recurrence_items
-                    else None
-                ),
+                subscription_recurrence=main_series,
+                extra_subscription_series=extra_series,
                 failed_payment_attempt_count=len(failed_attempts.get(merchant, [])),
                 failed_payment_attempt_amounts=sorted(
                     {amount_of(item) for item in failed_attempts.get(merchant, [])}
@@ -1905,8 +2051,109 @@ def _duplicate_candidates(
     return candidates
 
 
+def _near_day_duplicate_candidates(
+    transactions: list[FeatureTransaction],
+    same_day_candidates: list[DuplicateCandidate],
+    misses: list[NearMiss] | None = None,
+) -> list[DuplicateCandidate]:
+    """Exactly two identical purchases one to three days apart, from a known merchant.
+
+    A card charge can post a day or two late, so a real double charge is not always
+    same-day. The evidence is weaker, so this only keeps pairs that are not routine:
+    a merchant and amount seen three or more times is a habit or a subscription, and a
+    merchant with any same-day candidate is left to the same-day rules.
+    """
+    same_day_ids = {tx_id for item in same_day_candidates for tx_id in item.transaction_ids}
+    same_day_merchants = {item.merchant_name for item in same_day_candidates}
+    groups: defaultdict[str, list[FeatureTransaction]] = defaultdict(list)
+    for item in transactions:
+        if (
+            item.categorisation.transaction_class in _NON_PURCHASE_CLASSES
+            or item.categorisation.transaction_class == "person_to_person"
+            or item.transaction_date is None
+            or item.transaction_type == "credit"
+            or is_purchase_reversal(item)
+            or _is_debit_order_transaction(item)
+        ):
+            continue
+        if (merchant := merchant_group_key(item)) is not None:
+            groups[merchant].append(item)
+
+    candidates: list[DuplicateCandidate] = []
+    for merchant, items in groups.items():
+        if merchant in same_day_merchants:
+            continue
+        items.sort(key=lambda item: (item.transaction_date, item.transaction_id))
+        for first, second in zip(items, items[1:]):
+            gap = (second.transaction_date - first.transaction_date).days
+            amount = amount_of(first)
+            if (
+                gap < 1
+                or gap > NEAR_DAY_DUPLICATE_MAX_DAYS + NEAR_DAY_DUPLICATE_REPORT_EXTRA_DAYS
+                or abs(amount_of(second) - amount) > AMOUNT_TOLERANCE
+                or first.transaction_id in same_day_ids
+                or second.transaction_id in same_day_ids
+            ):
+                continue
+
+            def miss(code: str, detail: str | None = None) -> None:
+                if misses is not None:
+                    misses.append(
+                        build_near_miss(
+                            "duplicate_payment_leak",
+                            code,
+                            merchant=merchant,
+                            amount=amount,
+                            dates=[first.transaction_date, second.transaction_date],
+                            detail=detail,
+                        )
+                    )
+
+            if amount < NEAR_DAY_DUPLICATE_MIN_AMOUNT:
+                # Tiny repeats (airtime, small snacks) are not worth a line in the list.
+                if amount >= NEAR_MISS_MIN_LISTED_AMOUNT:
+                    miss("below_minimum_amount", "Pairs a few days apart are only raised from R100.")
+                continue
+            if gap > NEAR_DAY_DUPLICATE_MAX_DAYS:
+                miss("outside_day_window", f"These were {gap} days apart (the limit is three).")
+                continue
+            same_amount_count = sum(
+                1 for other in items if abs(amount_of(other) - amount) <= AMOUNT_TOLERANCE
+            )
+            if same_amount_count != 2:
+                miss("repeated_routine")
+                continue
+            candidate = _maybe_build_candidate(
+                merchant,
+                [first, second],
+                transactions,
+                debit_items=[],
+                debit_month_count=0,
+                months_with_multiple_debits=0,
+            )
+            if candidate is None:
+                continue
+            basis = [
+                "near_day_window" if value == "billing_cycle_window" else value
+                for value in candidate.match_basis
+                if value != "close_timestamp"
+            ]
+            # Times of day on different days say nothing about a double charge.
+            candidates.append(
+                candidate.model_copy(
+                    update={
+                        "match_basis": basis,
+                        "max_time_gap_minutes": None,
+                        "min_time_gap_minutes": None,
+                    }
+                )
+            )
+    return candidates
+
+
 def _irregular_candidates(
     transactions: list[FeatureTransaction],
+    misses: list[NearMiss] | None = None,
 ) -> list[IrregularCandidate]:
     """Keep only explainable outliers; transfers and people are never leak candidates."""
     eligible = [
@@ -1923,10 +2170,26 @@ def _irregular_candidates(
         category = item.categorisation.category_name or "Other"
         amounts_by_category[category].append(amount_of(item))
     candidates: list[IrregularCandidate] = []
+
+    def miss(item: FeatureTransaction, code: str, detail: str | None = None) -> None:
+        if misses is not None:
+            misses.append(
+                build_near_miss(
+                    "irregular_transaction_leak",
+                    code,
+                    merchant=merchant_group_key(item),
+                    amount=amount_of(item),
+                    dates=[item.transaction_date],
+                    detail=detail,
+                )
+            )
+
     for item in eligible:
         category = item.categorisation.category_name or "Other"
         amounts = amounts_by_category[category]
         if len(amounts) < 4:
+            if amount_of(item) >= Decimal("500"):
+                miss(item, "too_little_history", f"Only {len(amounts)} in {category}.")
             continue
         baseline_amounts = [
             amount_of(other)
@@ -1941,6 +2204,12 @@ def _irregular_candidates(
             continue
         multiple = amount_of(item) / baseline
         if multiple < Decimal("3") or amount_of(item) < Decimal("500"):
+            if amount_of(item) >= Decimal("500") and multiple >= Decimal("2"):
+                miss(item, "below_outlier_multiple", f"It is {multiple:.1f} times the usual {category} amount.")
+            elif multiple >= Decimal("3") and amount_of(item) >= Decimal("400"):
+                # Only a purchase close to the R500 line is worth listing; ordinary
+                # grocery trips above three times the median would only add noise.
+                miss(item, "below_outlier_amount")
             continue
         candidates.append(
             IrregularCandidate(
@@ -1978,6 +2247,10 @@ def _has_reliable_irregular_category(item: FeatureTransaction) -> bool:
         "Cash Withdrawals",
         "ATM Cash Withdrawal",
     }:
+        return False
+    # A big grocery shop, fuel fill or medical bill is a normal part of life, not an
+    # unusual purchase worth a second look, whichever merchant it was made at.
+    if category in ESSENTIAL_SPENDING_CATEGORIES:
         return False
     if (item.categorisation.rule or "").startswith("fallback"):
         return False

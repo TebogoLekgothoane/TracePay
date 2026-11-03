@@ -67,26 +67,19 @@ class Settings(BaseSettings):
     subscription_llm_model: str = ""
     subscription_llm_timeout_seconds: int = 10
     tracepay_env: str = "production"
-    # Billing. Prices are in cents (ZAR) and are the single source of truth; the app
-    # reads them from /billing/products. PAYSTACK_PLAN_CODE is the annual plan created
-    # in the Paystack dashboard at the same price.
+    # Billing. Prices are in cents (ZAR), recorded on purchases and shown by the app
+    # from /billing/products; keep them equal to the store prices.
     supabase_service_role_key: str = ""
-    paystack_secret_key: str = ""
-    paystack_base_url: str = "https://api.paystack.co"
-    paystack_plan_code: str = ""
-    paystack_callback_url: str = "tracepay://billing/return"
-    full_analysis_price_cents: int = 3900
-    monitoring_price_cents: int = 19900
-    # Billing. Prices are in cents (ZAR) and are the single source of truth; the app
-    # reads them from /billing/products. PAYSTACK_PLAN_CODE is the annual plan created
-    # in the Paystack dashboard at the same price.
-    supabase_service_role_key: str = ""
-    paystack_secret_key: str = ""
-    paystack_base_url: str = "https://api.paystack.co"
-    paystack_plan_code: str = ""
-    paystack_callback_url: str = "tracepay://billing/return"
-    full_analysis_price_cents: int = 3900
-    monitoring_price_cents: int = 19900
+    full_analysis_price_cents: int = 4900
+    monitoring_price_cents: int = 29900
+    # RevenueCat (in-app purchases). The secret key is a server-side v1 REST key; the app
+    # only ever holds the public SDK key. The webhook secret is the Authorization header
+    # value configured on the RevenueCat webhook. Product ids are the store product ids.
+    revenuecat_secret_key: str = ""
+    revenuecat_webhook_secret: str = ""
+    revenuecat_base_url: str = "https://api.revenuecat.com"
+    revenuecat_full_analysis_product_id: str = "tracepay_full_analysis"
+    revenuecat_monitoring_product_id: str = "tracepay_annual_monitoring"
     synthetic_intelligence_debug: bool = False
 
     @field_validator("ai_pdf_extraction_enabled", mode="before")

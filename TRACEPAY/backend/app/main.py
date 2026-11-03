@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from app import billing
+from app import billing, revenuecat
 from app.auth import require_supabase_user
 from app.anthropic_analysis import build_user_anthropic_analysis
 from app.behaviour_analysis import build_user_behaviour_analysis
@@ -423,40 +423,21 @@ async def billing_entitlements(_user_id: str = Depends(require_supabase_user)) -
     return await asyncio.to_thread(billing.load_entitlements, _user_id)
 
 
-@app.post("/billing/checkout")
-async def billing_checkout(
-    body: billing.CheckoutRequest,
-    authorization: str | None = Header(default=None),
-    _user_id: str = Depends(require_supabase_user),
-) -> dict[str, object]:
-    enforce_rate_limit(f"billing-checkout:{_user_id}", 10, 15 * 60)
-    access_token = (authorization or "").removeprefix("Bearer ").strip()
-    return await asyncio.to_thread(billing.create_checkout, _user_id, access_token, body)
+@app.post("/billing/revenuecat/sync")
+async def billing_revenuecat_sync(_user_id: str = Depends(require_supabase_user)) -> dict[str, object]:
+    """After an in-app purchase or restore: re-read the store state from RevenueCat."""
+    enforce_rate_limit(f"billing-rc-sync:{_user_id}", 30, 15 * 60)
+    return await asyncio.to_thread(revenuecat.sync_subscriber, _user_id)
 
 
-@app.post("/billing/verify")
-async def billing_verify(
-    body: billing.VerifyRequest,
-    _user_id: str = Depends(require_supabase_user),
-) -> dict[str, object]:
-    enforce_rate_limit(f"billing-verify:{_user_id}", 30, 15 * 60)
-    return await asyncio.to_thread(billing.verify_reference, _user_id, body.reference)
-
-
-@app.post("/billing/monitoring/cancel")
-async def billing_cancel_monitoring(_user_id: str = Depends(require_supabase_user)) -> dict[str, object]:
-    enforce_rate_limit(f"billing-cancel:{_user_id}", 5, 15 * 60)
-    return await asyncio.to_thread(billing.cancel_monitoring, _user_id)
-
-
-@app.post("/billing/webhooks/paystack")
-async def paystack_webhook(
+@app.post("/billing/webhooks/revenuecat")
+async def revenuecat_webhook(
     request: Request,
-    x_paystack_signature: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
 ) -> dict[str, str]:
-    """Signed by Paystack, not by a user. Rejected unless the HMAC matches."""
+    """Sent by RevenueCat, not by a user. Rejected unless the shared secret matches."""
     raw_body = await request.body()
-    return await asyncio.to_thread(billing.handle_webhook, raw_body, x_paystack_signature)
+    return await asyncio.to_thread(revenuecat.handle_webhook, authorization, raw_body)
 
 
 @app.post("/finding-registry/imports/{statement_import_id}")

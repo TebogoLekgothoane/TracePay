@@ -161,15 +161,16 @@ def test_c_a_duplicate_payment_without_a_spending_increase_is_unchanged() -> Non
 
 # D. Same merchant, different transactions: two separate financial events.
 def test_d_same_merchant_but_different_transactions_stay_separate() -> None:
+    # A non-essential category: a big grocery shop is never an "unusual transaction".
     rows = [
-        _transaction("a", "300", date(2026, 4, 6), merchant="WOOLWORTHS", category="Groceries"),
-        _transaction("d1", "300", date(2026, 5, 9), merchant="WOOLWORTHS", category="Groceries",
+        _transaction("a", "300", date(2026, 4, 6), merchant="WOOLWORTHS", category="Shopping"),
+        _transaction("d1", "300", date(2026, 5, 9), merchant="WOOLWORTHS", category="Shopping",
                      transaction_time=time(11, 0)),
-        _transaction("d2", "300", date(2026, 5, 9), merchant="WOOLWORTHS", category="Groceries",
+        _transaction("d2", "300", date(2026, 5, 9), merchant="WOOLWORTHS", category="Shopping",
                      transaction_time=time(11, 2)),
-        _transaction("c", "300", date(2026, 6, 6), merchant="WOOLWORTHS", category="Groceries"),
-        _transaction("big", "900", date(2026, 7, 14), merchant="WOOLWORTHS", category="Groceries"),
-        _transaction("aug", "300", date(2026, 8, 5), merchant="WOOLWORTHS", category="Groceries"),
+        _transaction("c", "300", date(2026, 6, 6), merchant="WOOLWORTHS", category="Shopping"),
+        _transaction("big", "900", date(2026, 7, 14), merchant="WOOLWORTHS", category="Shopping"),
+        _transaction("aug", "300", date(2026, 8, 5), merchant="WOOLWORTHS", category="Shopping"),
     ]
     result, summary = _run(rows)
     duplicate = _of(result, "duplicate_payment_leak")

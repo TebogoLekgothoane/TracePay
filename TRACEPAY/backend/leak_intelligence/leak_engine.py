@@ -35,9 +35,15 @@ from .merchant_display import (
 from .engine import (
     DEBIT_ORDER_DUPLICATE_MAX_SHIFT_DAYS,
     DEBIT_ORDER_MONTHLY_DUPLICATE_MAX_SHIFT_DAYS,
+    MONTHLY_GAP_DAYS,
+    NEAR_DAY_DUPLICATE_MAX_DAYS,
+    NEAR_DAY_DUPLICATE_MIN_AMOUNT,
+    NEAR_MISS_MIN_LISTED_AMOUNT,
     RECURRENCE_MIN_OBSERVATIONS,
 )
+from .near_misses import build_near_miss
 from .models import (
+    NearMiss,
     CashFeatures,
     ConfidenceSupport,
     FeeFeatures,
@@ -69,16 +75,25 @@ def detect_leaks(
     for observation in behaviours.observations:
         observations.setdefault(observation.behavior_type, []).append(observation)
 
+    near_misses: list[NearMiss] = []
+    # Duplicates are judged first: a merchant whose same-day pair is raised as a
+    # duplicate is not also reported as a recurring payment.
+    duplicate_findings = _duplicate_leaks(snapshot, observations, near_misses)
+    raised_duplicate_merchants = {
+        key
+        for leak in duplicate_findings
+        if isinstance(key := leak.evidence.get("merchant_key"), str)
+    }
     findings = [
-        *_bank_fee_leaks(snapshot, observations),
-        *_recurring_leaks(snapshot, observations),
+        *_bank_fee_leaks(snapshot, observations, near_misses),
+        *_recurring_leaks(snapshot, observations, near_misses, raised_duplicate_merchants),
         *_duplicate_streaming_leaks(snapshot, observations),
         *_overlapping_cover_leaks(snapshot, observations),
         *_gambling_spending_leaks(snapshot, observations),
         *_high_cost_credit_leaks(snapshot, observations),
         *_penalty_fee_leaks(snapshot),
         *_recurring_transfer_leaks(snapshot),
-        *_inactive_recurring_leaks(snapshot),
+        *_inactive_recurring_leaks(snapshot, near_misses),
         *_irregular_transaction_leaks(snapshot),
         *_spending_escalation_leaks(snapshot, observations),
         *(category_findings := _category_leaks(snapshot, observations)),
@@ -88,16 +103,23 @@ def detect_leaks(
         *_weekend_spending_leaks(snapshot, observations),
         *_payday_spending_leaks(snapshot, observations),
         *_cash_leaks(snapshot, observations),
-        *_duplicate_leaks(snapshot, observations),
+        *duplicate_findings,
         *_duplicate_debit_order_leaks(snapshot, observations),
         *_trial_conversion_leaks(snapshot),
         *_unidentified_recurring_leaks(snapshot),
     ]
     deduplicated = {finding.fingerprint: finding for finding in findings}
-    return _result(snapshot, sorted(deduplicated.values(), key=lambda item: (-item.confidence, item.leak_id)))
+    return _result(
+        snapshot,
+        sorted(deduplicated.values(), key=lambda item: (-item.confidence, item.leak_id)),
+        _ranked_near_misses([*snapshot.near_misses, *near_misses]),
+    )
 
 
-def _inactive_recurring_leaks(snapshot: FinancialFeatureSnapshot) -> list[LeakDetection]:
+def _inactive_recurring_leaks(
+    snapshot: FinancialFeatureSnapshot,
+    misses: list[NearMiss] | None = None,
+) -> list[LeakDetection]:
     """Report a missed expected charge as a review cue, never as cancellation/resolution."""
     if snapshot.date_end is None:
         return []
@@ -107,6 +129,35 @@ def _inactive_recurring_leaks(snapshot: FinancialFeatureSnapshot) -> list[LeakDe
         interval = recurrence.median_interval_days or recurrence.average_interval_days
         amount = recurrence.average_amount
         last_date = merchant.merchant_last_transaction_date
+        # Two charges and then silence: worth explaining, but too little to call it missing.
+        if (
+            misses is not None
+            and recurrence.recurrence_strength in {"medium", "high"}
+            and recurrence.observation_count == 2
+            and amount is not None
+            and last_date is not None
+            and is_reliable_merchant_display_name(merchant.merchant_name)
+            and (
+                merchant.debit_order_transaction_count >= 1
+                or merchant.merchant_category_transaction_count.get("Subscriptions", 0) >= 2
+            )
+            and (
+                snapshot.account_observation_end.get(
+                    merchant.last_account_id or "", snapshot.date_end
+                )
+                - last_date
+            ).days
+            > 60
+        ):
+            misses.append(
+                build_near_miss(
+                    "inactive_recurring_payment_leak",
+                    "missing_needs_three_charges",
+                    merchant=merchant.merchant_name,
+                    amount=amount,
+                    dates=[last_date],
+                )
+            )
         if (
             recurrence.recurrence_strength not in {"medium", "high"}
             or recurrence.observation_count < 3
@@ -124,7 +175,20 @@ def _inactive_recurring_leaks(snapshot: FinancialFeatureSnapshot) -> list[LeakDe
             merchant.last_account_id or "", snapshot.date_end
         )
         days_since = (observed_until - last_date).days
-        if days_since <= max(30, int(interval * Decimal("1.6"))):
+        window = max(30, int(interval * Decimal("1.6")))
+        if days_since <= window:
+            # Only a payment that is a few days from being flagged is a near miss.
+            if misses is not None and days_since >= window - 14 and days_since > 0:
+                misses.append(
+                    build_near_miss(
+                        "inactive_recurring_payment_leak",
+                        "still_within_expected_window",
+                        merchant=merchant.merchant_name,
+                        amount=amount,
+                        dates=[last_date],
+                        detail=f"Last charged {days_since} days ago; flagged after {window}.",
+                    )
+                )
             continue
         monthly = amount * Decimal("30") / interval
         confidence = leak_confidence(
@@ -239,8 +303,29 @@ def _safe_transaction_description(description: str) -> str | None:
     return _LONG_DIGITS.sub("[REDACTED]", cleaned)
 
 
+MAX_NEAR_MISSES_PER_TYPE = 8
+MAX_NEAR_MISSES = 40
+
+
+def _ranked_near_misses(misses: list[NearMiss]) -> list[NearMiss]:
+    """Largest first, each look-alike once, a few per rule so one rule cannot crowd out the rest."""
+    seen: set[tuple] = set()
+    per_type: dict[str, int] = {}
+    kept: list[NearMiss] = []
+    for item in sorted(misses, key=lambda m: (-m.amount, m.merchant or "", m.dates, m.reason_code)):
+        key = (item.leak_type, item.merchant, item.amount, tuple(item.dates), item.reason_code)
+        if key in seen or per_type.get(item.leak_type, 0) >= MAX_NEAR_MISSES_PER_TYPE:
+            continue
+        seen.add(key)
+        per_type[item.leak_type] = per_type.get(item.leak_type, 0) + 1
+        kept.append(item)
+    return kept[:MAX_NEAR_MISSES]
+
+
 def _result(
-    snapshot: FinancialFeatureSnapshot, leaks: list[LeakDetection]
+    snapshot: FinancialFeatureSnapshot,
+    leaks: list[LeakDetection],
+    near_misses: list[NearMiss] | None = None,
 ) -> LeakDetectionResult:
     return LeakDetectionResult(
         user_id=snapshot.user_id,
@@ -249,6 +334,7 @@ def _result(
         period_end=snapshot.date_end,
         detector_version=DETECTOR_VERSION,
         leaks=leaks,
+        near_misses=near_misses or [],
     )
 
 
@@ -264,6 +350,7 @@ def _has_minimum_history(snapshot: FinancialFeatureSnapshot) -> bool:
 def _bank_fee_leaks(
     snapshot: FinancialFeatureSnapshot,
     observations: dict[str, list[BehaviourObservation]],
+    misses: list[NearMiss] | None = None,
 ) -> list[LeakDetection]:
     fees = snapshot.fees
     monthly_average = _completed_month_average(
@@ -320,6 +407,25 @@ def _bank_fee_leaks(
             or typed_burden
         )
     ):
+        fee_total = snapshot.spending_profile.bank_fee_total
+        if misses is not None and fees.bank_fee_transaction_count >= 1 and fee_total:
+            if fees.bank_fee_transaction_count < 2:
+                code, detail = "single_fee", None
+            elif monthly_average is None:
+                code, detail = "no_full_month", None
+            elif monthly_average < MIN_IMPACT and not typed_burden:
+                code, detail = "fees_too_small", f"About R{monthly_average:.2f} a month."
+            else:
+                code, detail = "fees_below_trigger", f"About R{monthly_average:.2f} a month."
+            misses.append(
+                build_near_miss(
+                    "bank_fee_leak",
+                    code,
+                    amount=fee_total,
+                    dates=[snapshot.date_end] if snapshot.date_end else [],
+                    detail=detail,
+                )
+            )
         return []
     typed_total = Decimal("0")
     if sms_banking_burden:
@@ -520,22 +626,78 @@ def _is_monthly_billing_interval(interval: Decimal | None) -> bool:
     return Decimal("26") <= interval <= Decimal("35")
 
 
+def _series_price_step(merchant, recurrence) -> dict[str, Decimal] | None:
+    """A regular charge that was followed, one billing cycle later, by a higher amount.
+
+    A plan upgrade (more storage, a bigger tier) bills on the same day each month at a new
+    price, so it appears about one cycle after the last old-price charge and stays the
+    merchant's latest charge. A different purchase at the same merchant (a gadget, an app)
+    does not land one cycle later. Timing is the only evidence the statements give, so a
+    step is reported as a possible plan change for the customer to confirm.
+    """
+    latest_date = merchant.merchant_last_transaction_date
+    latest_amount = merchant.recurrence.latest_amount
+    typical = recurrence.typical_amount
+    series_last = recurrence.last_date
+    if None in (latest_date, latest_amount, typical, series_last) or typical <= 0:
+        return None
+    if latest_amount <= typical * (Decimal("1") + Decimal("0.08")):
+        return None
+    gap = (latest_date - series_last).days
+    low, high = MONTHLY_GAP_DAYS
+    if not low <= gap <= high:
+        return None
+    return {"first_amount": typical, "latest_amount": latest_amount}
+
+
+def _recurrence_diagnostic(recurrence) -> str | None:
+    """The measured numbers behind a failed steady-pattern test, so a rule can be tuned.
+
+    Medium recurrence needs gaps within 35% of their average and amounts within 25%.
+    """
+    average_interval = recurrence.average_interval_days
+    average_amount = recurrence.average_amount
+    if not average_interval or not average_amount:
+        return None
+    interval_spread = (recurrence.interval_variance or Decimal("0")).sqrt() / average_interval
+    amount_spread = (recurrence.amount_variance or Decimal("0")).sqrt() / average_amount
+    text = (
+        f"{recurrence.observation_count} charges; gaps average {average_interval:.0f} days and "
+        f"vary by {interval_spread:.0%} (steady is up to 35%); "
+        f"amounts vary by {amount_spread:.0%} (up to 25%); "
+        f"{len(recurrence.observed_amounts)} different amounts."
+    )
+    if recurrence.series_note:
+        text += f" No amount repeats on a steady cycle. Most repeated: {recurrence.series_note}."
+    return text
+
+
 def _recurring_leaks(
     snapshot: FinancialFeatureSnapshot,
     observations: dict[str, list[BehaviourObservation]],
+    misses: list[NearMiss] | None = None,
+    raised_duplicate_merchants: set[str] | None = None,
 ) -> list[LeakDetection]:
     findings = []
     recurring_observations = observations.get("recurring_payment_pattern", [])
     price_observations = observations.get("price_increase_pattern", [])
     frequency_observations = observations.get("frequency_change_pattern", [])
-    # Only suppress recurring when a same-day duplicate candidate exists.
-    # Adjacent-day repeats must not block legitimate subscription detection.
+    # Only suppress recurring when a same-day duplicate is actually raised for the
+    # merchant. A candidate the duplicate rules rejected (different descriptions, a
+    # refund nearby) must not also hide a genuine subscription: nothing would be
+    # reported at all. Adjacent-day repeats never block subscription detection.
     duplicate_merchants = {
         candidate.merchant_name
         for candidate in snapshot.duplicate_candidates
         if candidate.transaction_dates
         and (
-            (max(candidate.transaction_dates) - min(candidate.transaction_dates)).days == 0
+            (
+                (max(candidate.transaction_dates) - min(candidate.transaction_dates)).days == 0
+                and (
+                    raised_duplicate_merchants is None
+                    or candidate.merchant_name in raised_duplicate_merchants
+                )
+            )
             or (
                 candidate.is_debit_order
                 and 0 <= candidate.billing_date_shift_days <= DEBIT_ORDER_MONTHLY_DUPLICATE_MAX_SHIFT_DAYS
@@ -548,7 +710,20 @@ def _recurring_leaks(
     # Betting operators and credit providers are reported by their own
     # detectors, so the generic recurring finding would only repeat them.
     credit_merchants = _claimed_credit_merchants(snapshot)
-    for merchant in snapshot.merchants:
+
+    def merchant_series():
+        for item in snapshot.merchants:
+            yield item, None
+            for extra in item.extra_subscription_series:
+                if extra.typical_amount is not None:
+                    yield (
+                        item.model_copy(
+                            update={"subscription_recurrence": extra, "extra_subscription_series": []}
+                        ),
+                        extra.typical_amount,
+                    )
+
+    for merchant, series_amount in merchant_series():
         if is_gambling_merchant(merchant.merchant_name) or merchant.merchant_name in credit_merchants:
             continue
         categories = merchant.merchant_category_transaction_count
@@ -567,25 +742,74 @@ def _recurring_leaks(
             else merchant.recurrence
         )
         interval = recurrence.median_interval_days or recurrence.average_interval_days
-        if (
-            recurrence.recurrence_strength not in {"medium", "high"}
-            # Two card/subscription charges can be a low-history candidate.
-            # Two debit orders remain below the stronger debit-order evidence
-            # threshold because a mandate may have been imported only once.
-            or recurrence.observation_count < (
-                2 if is_subscription and merchant.debit_order_transaction_count < 2 else 3
+        required_charges = 2 if is_subscription and merchant.debit_order_transaction_count < 2 else 3
+        # A merchant is only worth explaining when it is a subscription or almost a
+        # regular payer; most merchants are one-offs and would only add noise.
+        # Repeat shopping at a supermarket is not a bill, so a merchant needs a debit
+        # order behind it to count as "almost a regular payer".
+        worth_explaining = is_subscription or (
+            merchant.debit_order_transaction_count >= 1
+            and recurrence.recurrence_strength in {"medium", "high"}
+            and recurrence.observation_count >= 2
+        )
+        near_miss_amount = recurrence.typical_amount or recurrence.average_amount
+
+        def miss(code: str, detail: str | None = None, amount: Decimal | None = None) -> None:
+            shown = amount if amount is not None else near_miss_amount
+            # A further series is judged by the same rules but is not listed twice.
+            if misses is None or not worth_explaining or shown is None or series_amount is not None:
+                return
+            last_charge = merchant.merchant_last_transaction_date
+            misses.append(
+                build_near_miss(
+                    "subscription_leak" if is_subscription else "recurring_payment_leak",
+                    code,
+                    merchant=merchant.merchant_name,
+                    amount=shown,
+                    dates=[last_charge] if last_charge else [],
+                    detail=detail,
+                )
             )
-            or not matches_plausible_recurring_interval(interval)
-            or support_ratio(merchant.confidence_support) < Decimal("0.60")
-            or merchant.merchant_name in duplicate_merchants
-        ):
+
+        if recurrence.recurrence_strength not in {"medium", "high"}:
+            miss("recurrence_not_established", _recurrence_diagnostic(recurrence))
+            continue
+        # Two card/subscription charges can be a low-history candidate.
+        # Two debit orders remain below the stronger debit-order evidence
+        # threshold because a mandate may have been imported only once.
+        if recurrence.observation_count < required_charges:
+            miss(
+                "too_few_charges",
+                f"{recurrence.observation_count} seen; {required_charges} are needed.",
+            )
+            continue
+        if not matches_plausible_recurring_interval(interval):
+            miss("interval_not_billing_like")
+            continue
+        if support_ratio(merchant.confidence_support) < Decimal("0.60"):
+            miss("merchant_not_confident")
+            continue
+        if merchant.merchant_name in duplicate_merchants:
+            miss("handled_as_duplicate")
             continue
         if _is_app_store_billing_merchant(merchant.merchant_name) and not _is_monthly_billing_interval(
             interval
         ):
+            miss("app_store_not_monthly")
             continue
-        price_obs = _matching_recurring_price_observation(
-            price_observations, merchant.merchant_name
+        # Price and frequency signals are read from all of a merchant's charges. A series
+        # chosen for its one steady amount has no price rise of its own: a different
+        # purchase at the same merchant is not a rise in this plan.
+        merchant_wide_signals = recurrence.basis != "dominant_amount"
+        price_obs = (
+            _matching_recurring_price_observation(price_observations, merchant.merchant_name)
+            if merchant_wide_signals
+            else None
+        )
+        # A step to a higher amount one billing cycle after the regular charge is a
+        # possible plan change; it is the one price signal a stable series can carry.
+        price_step = (
+            _series_price_step(merchant, recurrence) if not merchant_wide_signals else None
         )
         # After a price rise the current price is what is being charged now,
         # not the median of the old and new prices.
@@ -598,10 +822,14 @@ def _recurring_leaks(
             and recurrence.latest_amount > typical
             else None
         )
+        if price_step is not None:
+            current_price = price_step["latest_amount"]
         impact = _recurring_monthly_impact(
             merchant, recurrence=recurrence, amount=current_price
         )
         if impact is None or impact < MIN_IMPACT:
+            if impact is not None:
+                miss("below_minimum_impact", f"About R{impact:.2f} a month.", amount=impact)
             continue
         if total_tx > 0 and categories.get("Bank Fees", 0) == total_tx:
             continue
@@ -618,12 +846,14 @@ def _recurring_leaks(
             or _data_repeat_merchant(merchant)
             or is_repeated_shopping_merchant(merchant)
         ) and not is_subscription and not debit_order_review:
+            miss("spending_habit", amount=impact)
             continue
         # Several mandates at one merchant (two policies, a loan and a policy)
         # are separate commitments. Their total is reported as a commitment on
         # the recurring-payment observation; it is not an amount lost, and
         # nothing here shows any one of them to be a duplicate or unwanted.
         if debit_order_review and not is_subscription and merchant.parallel_mandate_amounts:
+            miss("parallel_mandates", amount=impact)
             continue
         is_unknown = not categories or set(categories).issubset({"Other"})
         reliable_merchant = is_reliable_merchant_display_name(merchant.merchant_name)
@@ -710,9 +940,12 @@ def _recurring_leaks(
             ceiling=ceiling,
         )
         if confidence is None:
+            miss("confidence_too_low", amount=impact)
             continue
-        frequency_obs = _matching_observation(
-            frequency_observations, merchant.merchant_name
+        frequency_obs = (
+            _matching_observation(frequency_observations, merchant.merchant_name)
+            if merchant_wide_signals
+            else None
         )
         supporting_ids = list(
             dict.fromkeys(
@@ -726,6 +959,21 @@ def _recurring_leaks(
             )
         )
         signal = _recurring_signal_evidence(price_obs, frequency_obs, interval)
+        if price_step is not None:
+            signal.update(_price_rise_impact(price_step, interval))
+            signal.update(
+                {
+                    "price_change_focus": "plan_step_up",
+                    "first_amount": price_step["first_amount"],
+                    "latest_amount": price_step["latest_amount"],
+                    "plan_change_possible": True,
+                    "plan_change_note": (
+                        "The regular charge was followed one billing cycle later by a higher "
+                        "amount. If you changed plan on purpose (more storage, a bigger tier), "
+                        "this is your own upgrade; the statements cannot tell."
+                    ),
+                }
+            )
         # The cost of the service is not the cost of the rise. When a rise is
         # established, the finding's impact is the rise; the service cost stays
         # in evidence as context and is never added to it.
@@ -745,14 +993,31 @@ def _recurring_leaks(
         if recurrence.introductory_amount is not None:
             signal["introductory_amount"] = recurrence.introductory_amount
         signal["service_cost_monthly"] = service_cost
+        if recurrence.basis == "dominant_amount":
+            # Said plainly: the cost is the regular charge, not the other charges.
+            signal["recurrence_basis"] = "dominant_amount"
+            signal["recurrence_basis_note"] = (
+                "Read from the regular charge only. Other charges from this merchant, in "
+                "different amounts, are not counted in this cost."
+            )
+            if recurrence.other_regular_amounts:
+                signal["other_regular_amounts"] = list(recurrence.other_regular_amounts)
         signal["headline_impact_basis"] = (
             "price_increase" if headline_is_increase else "recurring_cost"
         )
+        if recurrence.basis == "dominant_amount" and recurrence.typical_amount is not None:
+            # The finding's own charges, so its evidence is not every charge at the merchant.
+            signal["series_amount"] = recurrence.typical_amount
         findings.append(
             _leak(
                 snapshot=snapshot,
                 leak_type=leak_type,
-                subject=merchant.merchant_name,
+                # A further regular amount is its own finding, with its own identity.
+                subject=(
+                    merchant.merchant_name
+                    if series_amount is None
+                    else f"{merchant.merchant_name} {series_amount:.2f}"
+                ),
                 title=title,
                 description=description,
                 monthly_impact=impact,
@@ -1614,29 +1879,64 @@ def _habitual_same_day_repeat_keys(candidates: list) -> set[tuple[str, Decimal]]
     return {key for key, seen in days.items() if len(seen) >= 2}
 
 
-def _is_plausible_duplicate(candidate, habitual: set[tuple[str, Decimal]]) -> bool:
-    """Whether a same-day group has any evidence beyond merchant, amount and day."""
+def _implausible_duplicate_reason(candidate, habitual: set[tuple[str, Decimal]]) -> str | None:
+    """Why a same-day group has no evidence beyond merchant, amount and day, or None."""
     category = (candidate.category_name or "").strip().casefold()
     if category in _DUPLICATE_EXCLUDED_CATEGORIES:
-        return False
+        return "excluded_category"
     # The same pair doubling up on several days is a routine, not an accident.
     if (candidate.merchant_name, candidate.amount) in habitual:
-        return False
+        return "habitual_same_day_repeat"
     if candidate.max_time_gap_minutes is not None:
-        return candidate.max_time_gap_minutes <= DUPLICATE_MAX_TIME_GAP_MINUTES
+        if candidate.max_time_gap_minutes <= DUPLICATE_MAX_TIME_GAP_MINUTES:
+            return None
+        return "hours_apart"
     if candidate.shared_reference_tokens:
-        return True
+        return None
     if len(candidate.transaction_dates) != 2:
-        return False
+        return "untimed_group_size"
     if candidate.amount < DUPLICATE_UNTIMED_MIN_AMOUNT:
-        return False
-    return not any(marker in category for marker in _DUPLICATE_EVERYDAY_REPEAT_MARKERS)
+        return "untimed_below_minimum"
+    if any(marker in category for marker in _DUPLICATE_EVERYDAY_REPEAT_MARKERS):
+        return "everyday_spend"
+    return None
+
+
+def _is_plausible_duplicate(candidate, habitual: set[tuple[str, Decimal]]) -> bool:
+    """Whether a same-day group has any evidence beyond merchant, amount and day."""
+    return _implausible_duplicate_reason(candidate, habitual) is None
+
+
+def _duplicate_near_miss(candidate, code: str) -> NearMiss:
+    return build_near_miss(
+        "duplicate_payment_leak",
+        code,
+        merchant=candidate.merchant_name,
+        amount=candidate.amount,
+        dates=candidate.transaction_dates,
+        detail="Same-day repeats are only raised from R20." if code == "below_minimum_amount" else None,
+    )
 
 
 def _duplicate_leaks(
     snapshot: FinancialFeatureSnapshot,
     observations: dict[str, list[BehaviourObservation]],
+    misses: list[NearMiss] | None = None,
 ) -> list[LeakDetection]:
+    def miss(candidate, code: str) -> None:
+        # An unrecognised payee has no merchant name to show, so it is not listed.
+        if misses is None or candidate.description_signature is not None:
+            return
+        # A small same-day pair of rides, food or airtime is ordinary, not a near miss.
+        category = (candidate.category_name or "").strip().casefold()
+        if code == "untimed_below_minimum" and any(
+            marker in category for marker in _DUPLICATE_EVERYDAY_REPEAT_MARKERS
+        ):
+            return
+        if code == "below_minimum_amount" and candidate.amount < NEAR_MISS_MIN_LISTED_AMOUNT:
+            return
+        misses.append(_duplicate_near_miss(candidate, code))
+
     findings = []
     habitual = _habitual_same_day_repeat_keys(snapshot.duplicate_candidates)
     observation_ids = _observation_ids(observations.get("duplicate_payment_pattern", []))
@@ -1654,16 +1954,18 @@ def _duplicate_leaks(
             else Decimal("0")
         )
         unidentified = candidate.description_signature is not None
-        if (
-            len(dates) < 2
-            or (max(dates) - min(dates)).days != 0
-            or candidate.amount < Decimal("20")
-            # An unrecognised payee has no classification confidence by definition.
-            or (high_confidence_ratio < Decimal("0.60") and not unidentified)
-        ):
+        if len(dates) < 2 or (max(dates) - min(dates)).days != 0:
+            continue
+        if candidate.amount < Decimal("20"):
+            miss(candidate, "below_minimum_amount")
+            continue
+        # An unrecognised payee has no classification confidence by definition.
+        if high_confidence_ratio < Decimal("0.60") and not unidentified:
+            miss(candidate, "merchant_not_recognised")
             continue
         # Refunds/reversals on the same day weaken the accidental-duplicate claim.
         if candidate.nearby_reversal_or_refund:
+            miss(candidate, "refund_nearby")
             continue
         # With no merchant to vouch for it, only a tight timestamp pair is evidence
         # enough: two rows within minutes with the same description and amount.
@@ -1673,7 +1975,9 @@ def _duplicate_leaks(
             or candidate.min_time_gap_minutes > 15
         ):
             continue
-        if not _is_plausible_duplicate(candidate, habitual):
+        reason = _implausible_duplicate_reason(candidate, habitual)
+        if reason is not None:
+            miss(candidate, reason)
             continue
         # Divergent descriptions without a shared payment reference are weak
         # same-merchant/amount/date matches and are often intentional repeats.
@@ -1681,14 +1985,53 @@ def _duplicate_leaks(
             candidate.distinct_description_count > 1
             and not candidate.shared_reference_tokens
         ):
+            miss(candidate, "different_descriptions")
             continue
         impact = candidate.amount * Decimal(len(dates) - 1)
         current = selected_by_merchant.get(candidate.merchant_name)
         if current is None or impact > current[0]:  # type: ignore[index]
             selected_by_merchant[candidate.merchant_name] = (impact, candidate)
 
+    # Identical purchases a few days apart. A merchant that already has a same-day
+    # finding, or any same-day candidate, keeps the same-day reading.
+    same_day_merchants = {item.merchant_name for item in snapshot.duplicate_candidates}
+    for candidate in snapshot.near_day_duplicate_candidates:
+        dates = candidate.transaction_dates
+        high_confidence_ratio = (
+            Decimal(candidate.high_confidence_transaction_count) / Decimal(len(dates))
+            if dates
+            else Decimal("0")
+        )
+        if (
+            candidate.merchant_name in same_day_merchants
+            or candidate.merchant_name in selected_by_merchant
+            or candidate.is_debit_order
+            or len(dates) != 2
+            or not 1 <= (max(dates) - min(dates)).days <= NEAR_DAY_DUPLICATE_MAX_DAYS
+            or candidate.amount < NEAR_DAY_DUPLICATE_MIN_AMOUNT
+        ):
+            continue
+        if high_confidence_ratio < Decimal("0.60"):
+            miss(candidate, "merchant_not_recognised")
+            continue
+        if candidate.nearby_reversal_or_refund:
+            miss(candidate, "refund_nearby")
+            continue
+        if candidate.distinct_description_count > 1 and not candidate.shared_reference_tokens:
+            miss(candidate, "different_descriptions")
+            continue
+        category = (candidate.category_name or "").strip().casefold()
+        if category in _DUPLICATE_EXCLUDED_CATEGORIES:
+            miss(candidate, "excluded_category")
+            continue
+        if any(marker in category for marker in _DUPLICATE_EVERYDAY_REPEAT_MARKERS):
+            miss(candidate, "everyday_spend")
+            continue
+        selected_by_merchant[candidate.merchant_name] = (candidate.amount, candidate)
+
     for impact, candidate in selected_by_merchant.values():  # type: ignore[misc]
         dates = candidate.transaction_dates
+        near_day = "near_day_window" in candidate.match_basis
         unidentified = candidate.description_signature is not None
         support = (
             None
@@ -1711,11 +2054,16 @@ def _duplicate_leaks(
             pattern_strength = Decimal("0.58")
         if candidate.distinct_description_count <= 1 and not close_timestamp:
             pattern_strength = min(pattern_strength, Decimal("0.52"))
+        ceiling = Decimal("0.70") if close_timestamp else Decimal("0.68")
+        if near_day:
+            # Days apart is weaker than the same day: never stronger than "possible".
+            pattern_strength = Decimal("0.44")
+            ceiling = Decimal("0.60")
         confidence = leak_confidence(
             support=support,
             observation_count=len(dates),
             pattern_strength=pattern_strength,
-            ceiling=Decimal("0.70") if close_timestamp else Decimal("0.68"),
+            ceiling=ceiling,
         )
         if confidence is None:
             continue
@@ -1742,10 +2090,20 @@ def _duplicate_leaks(
                     amount=candidate.amount,
                 ),
                 description=(
-                    "Same-day transactions with the same merchant and amount were grouped as a "
-                    "duplicate candidate that requires manual verification. Matching merchant, "
-                    "amount and date alone does not confirm a duplicate, accidental payment, "
-                    "error, or recoverable amount."
+                    (
+                        "Two transactions with the same merchant and amount, a few days apart, "
+                        "were grouped as a duplicate candidate that requires manual verification. "
+                        "Two orders or visits can look identical, and matching merchant and "
+                        "amount alone does not confirm a duplicate, accidental payment, error, "
+                        "or recoverable amount."
+                    )
+                    if near_day
+                    else (
+                        "Same-day transactions with the same merchant and amount were grouped as a "
+                        "duplicate candidate that requires manual verification. Matching merchant, "
+                        "amount and date alone does not confirm a duplicate, accidental payment, "
+                        "error, or recoverable amount."
+                    )
                 ),
                 monthly_impact=impact,
                 annual_impact=None,
@@ -1768,7 +2126,7 @@ def _duplicate_leaks(
                     "transaction_count_in_group": len(dates),
                     "group_total": candidate.amount * Decimal(len(dates)),
                     "observed_date": dates[0].isoformat(),
-                    "date_span_days": 0,
+                    "date_span_days": (max(dates) - min(dates)).days,
                     "match_basis": list(candidate.match_basis),
                     "distinct_description_count": candidate.distinct_description_count,
                     "shared_reference_tokens": candidate.shared_reference_tokens,
@@ -1787,8 +2145,8 @@ def _duplicate_leaks(
                         else {}
                     ),
                 },
-                behaviour_ids=observation_ids,
-                feature_refs=["duplicate_candidates"],
+                behaviour_ids=[] if near_day else observation_ids,
+                feature_refs=["near_day_duplicate_candidates" if near_day else "duplicate_candidates"],
             )
         )
     return findings

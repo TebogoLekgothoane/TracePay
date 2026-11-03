@@ -99,9 +99,102 @@ def test_same_day_repeat_that_happens_on_several_days_is_a_routine() -> None:
     assert not _flagged(untimed)
 
 
-def test_rows_on_different_days_stay_separate() -> None:
-    pair = [
-        _transaction("a", "1299", date(2026, 7, 18), merchant="GAME", category="Shopping"),
-        _transaction("b", "1299", date(2026, 7, 19), merchant="GAME", category="Shopping"),
+def _days_apart(first, second, amount="1299", merchant="GAME", category="Shopping", prefix="d"):
+    return [
+        _transaction(f"{prefix}-a", amount, first, merchant=merchant, category=category),
+        _transaction(f"{prefix}-b", amount, second, merchant=merchant, category=category),
     ]
-    assert not _flagged(pair)
+
+
+def _leak_for(transactions):
+    leaks = _detect([*transactions, _later()]).leaks
+    return next((item for item in leaks if item.leak_type == "duplicate_payment_leak"), None)
+
+
+def _misses(transactions):
+    return {(item.merchant, item.reason_code) for item in _detect([*transactions, _later()]).near_misses}
+
+
+def test_near_misses_say_why_a_look_alike_was_not_raised() -> None:
+    assert ("TAKEALOT", "below_minimum_amount") in _misses(
+        _days_apart(date(2026, 7, 12), date(2026, 7, 13), amount="89.90", merchant="TAKEALOT")
+    )
+    assert ("GAME", "outside_day_window") in _misses(_days_apart(date(2026, 7, 12), date(2026, 7, 16)))
+    routine = [
+        *_days_apart(date(2026, 7, 12), date(2026, 7, 13), amount="349", merchant="TAKEALOT"),
+        _transaction("d-c", "349", date(2026, 8, 12), merchant="TAKEALOT", category="Shopping"),
+    ]
+    assert ("TAKEALOT", "repeated_routine") in _misses(routine)
+    assert ("KFC", "everyday_spend") in _misses(
+        _days_apart(date(2026, 7, 12), date(2026, 7, 13), amount="500", merchant="KFC", category="Fast Food")
+    )
+    assert ("GAME", "everyday_spend") not in _misses(_days_apart(date(2026, 7, 12), date(2026, 7, 13)))
+
+
+def test_a_raised_finding_is_not_also_a_near_miss() -> None:
+    pair = _days_apart(date(2026, 7, 12), date(2026, 7, 13), amount="500", merchant="TAKEALOT")
+    assert _leak_for(pair) is not None
+    assert not [
+        item
+        for item in _detect([*pair, _later()]).near_misses
+        if item.merchant == "TAKEALOT" and item.leak_type == "duplicate_payment_leak"
+    ]
+
+
+def test_near_misses_name_a_merchant_and_amount_never_a_description() -> None:
+    result = _detect([*_days_apart(date(2026, 7, 12), date(2026, 7, 16)), _later()])
+    dumped = result.near_misses[0].model_dump()
+    assert set(dumped) == {
+        "leak_type", "reason_code", "reason", "merchant", "merchant_display_name", "amount", "dates",
+    }
+
+
+@pytest.mark.parametrize("gap", [1, 2, 3])
+def test_a_large_identical_pair_a_few_days_apart_is_a_possible_duplicate(gap) -> None:
+    leak = _leak_for(_days_apart(date(2026, 7, 12), date(2026, 7, 12 + gap), amount="210.50", merchant="TAKEALOT"))
+    assert leak is not None
+    assert leak.evidence["date_span_days"] == gap
+    assert "near_day_window" in leak.evidence["match_basis"]
+    assert leak.evidence["verification_required"] is True
+    assert leak.evidence["evidence_status"] != "confirmed"
+    assert leak.confidence <= 0.60
+    assert float(leak.estimated_monthly_impact) == 210.50  # only the extra charge
+
+
+def test_four_days_apart_is_not_a_duplicate() -> None:
+    assert not _flagged(_days_apart(date(2026, 7, 12), date(2026, 7, 16)))
+
+
+def test_near_day_pairs_below_r100_are_not_duplicates() -> None:
+    assert not _flagged(_days_apart(date(2026, 7, 12), date(2026, 7, 13), amount="89.90", merchant="TAKEALOT"))
+
+
+@pytest.mark.parametrize(
+    ("merchant", "category"),
+    [("KFC", "Fast Food"), ("ENGEN", "Fuel"), ("UBER", "Transport"), ("VODACOM", "Airtime & Data")],
+)
+def test_near_day_everyday_spend_is_not_a_duplicate(merchant, category) -> None:
+    assert not _flagged(_days_apart(date(2026, 7, 12), date(2026, 7, 13), amount="500", merchant=merchant, category=category))
+
+
+def test_a_third_identical_purchase_makes_it_a_routine_not_a_duplicate() -> None:
+    routine = [
+        *_days_apart(date(2026, 7, 12), date(2026, 7, 13), amount="349", merchant="TAKEALOT"),
+        _transaction("d-c", "349", date(2026, 8, 12), merchant="TAKEALOT", category="Shopping"),
+    ]
+    assert not _flagged(routine)
+
+
+def test_a_refund_between_the_pair_removes_the_duplicate_claim() -> None:
+    pair = _days_apart(date(2026, 7, 12), date(2026, 7, 14), amount="500", merchant="TAKEALOT")
+    refund = _transaction("refund", "500", date(2026, 7, 13), merchant="TAKEALOT", category="Shopping", transaction_type="credit")
+    assert not _flagged([*pair, refund])
+
+
+def test_a_same_day_duplicate_keeps_its_own_reading_when_a_near_day_pair_exists() -> None:
+    same_day = _pair("1299", "GAME", "Shopping", prefix="s", day=date(2026, 7, 18))
+    next_day = _transaction("n", "1299", date(2026, 7, 19), merchant="GAME", category="Shopping")
+    leak = _leak_for([*same_day, next_day])
+    assert leak is not None
+    assert leak.evidence["date_span_days"] == 0
+    assert "near_day_window" not in leak.evidence["match_basis"]

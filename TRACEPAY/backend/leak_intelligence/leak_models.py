@@ -6,9 +6,11 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .coverage import CoverageLimit
+from .finding_groups import ValueGroup, value_group_for
+from .models import NearMiss
 
 LeakType = Literal[
     "bank_fee_leak",
@@ -203,9 +205,17 @@ class LeakDetection(BaseModel):
     period_end: date | None = None
     analysis: LeakAnalysisContext | None = None
     claims: LeakClaims | None = None
+    # Recoverable, worth reviewing or a commitment; set from the type when not given.
+    value_group: ValueGroup | None = None
+
+    @model_validator(mode="after")
+    def _set_value_group(self) -> "LeakDetection":
+        if self.value_group is None:
+            self.value_group = value_group_for(self.leak_type, self.evidence)
+        return self
 
 
-Bucket = Literal["recurring_monthly", "one_time"]
+Bucket =Literal["recurring_monthly", "one_time"]
 EvidenceStatusName = Literal["confirmed", "likely", "possible"]
 
 
@@ -231,6 +241,15 @@ class FindingImpact(BaseModel):
     # worth showing the customer as well.
     explained_by: list[str] = Field(default_factory=list)
     display: bool = True
+    value_group: ValueGroup | None = None
+
+
+class GroupTotals(BaseModel):
+    """What one group adds up to, with monthly and once-off amounts kept apart."""
+
+    recurring_monthly: Decimal = Decimal("0")
+    one_time: Decimal = Decimal("0")
+    count: int = 0
 
 
 class ImpactSummary(BaseModel):
@@ -248,6 +267,8 @@ class ImpactSummary(BaseModel):
     double_counting_prevented: Decimal = Decimal("0")
     observed_total_paid: Decimal = Decimal("0")
     recurring_monthly_by_status: dict[str, Decimal] = Field(default_factory=dict)
+    # Counted findings only, by group. The groups are never summed into one figure.
+    by_group: dict[str, GroupTotals] = Field(default_factory=dict)
     findings_without_observed_amount: list[str] = Field(default_factory=list)
     overlaps: list[FindingOverlap] = Field(default_factory=list)
     findings: list[FindingImpact] = Field(default_factory=list)
@@ -271,3 +292,5 @@ class LeakDetectionResult(BaseModel):
     explained_leaks: list[LeakDetection] = Field(default_factory=list)
     questions: list[FindingQuestion] = Field(default_factory=list)
     questions_not_shown: int = 0
+    # Why look-alikes were not raised. Debug and tuning only; never a finding.
+    near_misses: list[NearMiss] = Field(default_factory=list)
