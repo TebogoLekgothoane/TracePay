@@ -125,6 +125,10 @@ RULE_WINDOWS: dict[str, str] = {
         "Transfers to the same recipient, matched by the name and number tail on the statement and "
         "ordered by date, across accounts. The recipient's details are not kept, only a hash."
     ),
+    "money_pass_through_leak": (
+        "Large deposits and the payments made in the following days, from the actual dates, "
+        "amounts and running balances on the statement."
+    ),
     "penalty_fee_leak": (
         "Charges whose description names a late-payment, reconnection, reinstatement, arrears or "
         "penalty fee, taken from the actual rows across accounts. Bank-owned fees are reported "

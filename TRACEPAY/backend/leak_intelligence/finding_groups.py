@@ -31,6 +31,7 @@ _REVIEW = frozenset(
         "overlapping_cover_leak",
         "irregular_transaction_leak",
         "cash_usage_leak",
+        "money_pass_through_leak",
     }
 )
 _COMMITMENT = frozenset(

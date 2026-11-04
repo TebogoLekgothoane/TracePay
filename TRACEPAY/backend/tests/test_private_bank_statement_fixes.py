@@ -152,6 +152,66 @@ def test_fee_notes_show_the_fee_as_a_share_of_the_cash_sent():
     assert check
 
 
+def _deposit_then_payments(final_balance: str):
+    from dataclasses import replace
+
+    from tests.test_leak_detection import _transaction
+
+    rows = [
+        replace(
+            _transaction("in", "5000", date(2026, 6, 2), transaction_type="credit", merchant=None,
+                         category=None, transaction_class="unknown", description="DEPOSIT"),
+            balance=Decimal("5000"),
+        )
+    ]
+    for index in range(8):
+        left = Decimal("5000") - Decimal("610") * (index + 1)
+        rows.append(
+            replace(
+                _transaction(f"p{index}", "610", date(2026, 6, 2 + index // 4), merchant=None,
+                             category=None, transaction_class="unknown", description=f"PAY {index}"),
+                balance=Decimal(final_balance) if index == 7 else left,
+            )
+        )
+    return rows
+
+
+def test_a_deposit_paid_straight_out_in_many_payments_is_found():
+    from leak_intelligence.engine import _pass_through_events
+
+    events = _pass_through_events(_deposit_then_payments("40"))
+    assert len(events) == 1
+    assert events[0].outflow_count == 8
+
+
+def test_a_deposit_that_leaves_a_healthy_balance_is_not_a_pass_through():
+    from leak_intelligence.engine import _pass_through_events
+
+    assert _pass_through_events(_deposit_then_payments("2500")) == []
+
+
+def test_pass_through_needs_the_running_balance():
+    from leak_intelligence.engine import _pass_through_events
+
+    from dataclasses import replace
+
+    rows = [replace(row, balance=None) for row in _deposit_then_payments("40")]
+    assert _pass_through_events(rows) == []
+
+
+def test_many_small_airtime_top_ups_are_found_before_two_full_months():
+    from tests.test_leak_detection import _detect, _transaction
+
+    rows = [
+        _transaction(f"a{day}", "30", date(2026, 6, day), merchant="TELKOM", category="Airtime & Data")
+        for day in range(1, 29, 2)
+    ]
+    rows.append(_transaction("c1", "420", date(2026, 7, 12), merchant="CHECKERS", category="Groceries"))
+    leaks = [item for item in _detect(rows).leaks if item.leak_type == "airtime_data_leak"]
+    assert leaks
+    assert leaks[0].evidence["finding_focus"] == "frequent_small_topups"
+
+
 def test_a_small_monthly_plan_is_found_inside_a_busy_app_store_merchant():
     plan = _charges("p", "APPLE", [("69.99", date(2026, month, 18)) for month in (6, 7, 8, 10)])
     noise = _charges(

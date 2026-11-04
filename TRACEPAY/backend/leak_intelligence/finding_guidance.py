@@ -69,6 +69,7 @@ _SPENDING = frozenset(
         "weekend_spending_leak",
         "payday_spending_leak",
         "gambling_spending_leak",
+        "money_pass_through_leak",
     }
 )
 _LABELS = {
@@ -95,6 +96,7 @@ _LABELS = {
     "high_cost_credit_leak": "Credit repayments",
     "penalty_fee_leak": "Late or penalty fees",
     "recurring_transfer_leak": "Regular payments to a person",
+    "money_pass_through_leak": "Deposits paid straight out",
 }
 _STATUS_LABELS = {
     "open": "Open",

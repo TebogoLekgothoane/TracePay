@@ -244,6 +244,10 @@ def _select(leak: LeakDetection, transactions: list[FeatureTransaction]) -> Sele
         wanted = evidence.get("recipient_transaction_ids")
         ids = {str(item) for item in wanted} if isinstance(wanted, list) else set()
         return [(item, "payment") for item in transactions if item.transaction_id in ids]
+    if leak.leak_type == "money_pass_through_leak":
+        wanted = evidence.get("event_transaction_ids")
+        ids = {str(item) for item in wanted} if isinstance(wanted, list) else set()
+        return [(item, "payment") for item in transactions if item.transaction_id in ids]
     if leak.leak_type == "penalty_fee_leak":
         wanted = evidence.get("penalty_transaction_ids")
         ids = {str(item) for item in wanted} if isinstance(wanted, list) else set()

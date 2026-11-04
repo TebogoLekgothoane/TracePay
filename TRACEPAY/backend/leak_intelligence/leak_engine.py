@@ -93,6 +93,7 @@ def detect_leaks(
         *_gambling_spending_leaks(snapshot, observations),
         *_high_cost_credit_leaks(snapshot, observations),
         *_short_term_lender_leaks(snapshot, _claimed_credit_merchants(snapshot)),
+        *_pass_through_leaks(snapshot),
         *_penalty_fee_leaks(snapshot),
         *_recurring_transfer_leaks(snapshot),
         *_inactive_recurring_leaks(snapshot, near_misses),
@@ -100,6 +101,7 @@ def detect_leaks(
         *_spending_escalation_leaks(snapshot, observations, near_misses),
         *(category_findings := _category_leaks(snapshot, observations)),
         *_sustained_habit_leaks(snapshot, category_findings),
+        *_short_history_topup_leaks(snapshot, category_findings),
         *_coffee_spending_leaks(snapshot, observations),
         *_convenience_store_leaks(snapshot, observations),
         *_weekend_spending_leaks(snapshot, observations),
@@ -1713,6 +1715,95 @@ def _sustained_habit_leaks(
     return findings
 
 
+SHORT_HISTORY_MIN_DAYS = 28
+SHORT_HISTORY_TOPUP_MIN_COUNT = 10
+SHORT_HISTORY_TOPUP_MAX_AVERAGE = Decimal("100")
+SHORT_HISTORY_TOPUP_MIN_MONTHLY = Decimal("100")
+
+
+def _short_history_topup_leaks(
+    snapshot: FinancialFeatureSnapshot,
+    category_findings: list[LeakDetection],
+) -> list[LeakDetection]:
+    """Many small airtime top-ups seen over weeks, before two full months exist.
+
+    The habit rule needs two completed months. A statement of a month and a half can
+    already show a dozen R10-R20 top-ups, each with its own fee.
+    """
+    if len(completed_months(snapshot)) >= HABIT_MIN_MONTHS:
+        return []
+    if snapshot.date_start is None or snapshot.date_end is None:
+        return []
+    span_days = (snapshot.date_end - snapshot.date_start).days + 1
+    if span_days < SHORT_HISTORY_MIN_DAYS:
+        return []
+    if any(item.evidence.get("category_name") == "Airtime & Data" for item in category_findings):
+        return []
+    feature = next((item for item in snapshot.categories if item.category_name == "Airtime & Data"), None)
+    if feature is None or support_ratio(feature.confidence_support) < Decimal("0.60"):
+        return []
+    total_count = sum(feature.category_monthly_transaction_count.values())
+    total_amount = sum(feature.category_monthly_total.values(), Decimal("0"))
+    if total_count < SHORT_HISTORY_TOPUP_MIN_COUNT or total_amount <= 0:
+        return []
+    average = total_amount / Decimal(total_count)
+    monthly = (total_amount * Decimal("30.44") / Decimal(span_days)).quantize(Decimal("0.01"))
+    if average > SHORT_HISTORY_TOPUP_MAX_AVERAGE or monthly < SHORT_HISTORY_TOPUP_MIN_MONTHLY:
+        return []
+    confidence = leak_confidence(
+        support=feature.confidence_support,
+        observation_count=total_count,
+        pattern_strength=Decimal("0.60"),
+        ceiling=Decimal("0.68"),
+    )
+    if confidence is None:
+        return []
+    fee_total = next(
+        (
+            row["total"]
+            for row in snapshot.fees.fee_sources
+            if row.get("key") == "airtime" and isinstance(row.get("total"), Decimal)
+        ),
+        None,
+    )
+    evidence: dict[str, object] = {
+        "category_name": "Airtime & Data",
+        "finding_focus": "frequent_small_topups",
+        "finding_kind": "potential_leak",
+        "category_transaction_count": total_count,
+        "category_total_amount": total_amount,
+        "average_transaction_amount": average.quantize(Decimal("0.01")),
+        "monthly_average_spend": monthly,
+        "history_days": span_days,
+        "short_history": True,
+        "classification_support_ratio": support_ratio(feature.confidence_support),
+    }
+    if fee_total is not None:
+        evidence["airtime_fee_total"] = fee_total
+    return [
+        _leak(
+            snapshot=snapshot,
+            leak_type="airtime_data_leak",
+            subject="habit:Airtime & Data",
+            title="Potential frequent small airtime top-ups",
+            description=(
+                f"Airtime was bought {total_count} times in {span_days} days, about "
+                f"{format_zar(average)} each. Each small top-up can carry its own fee, so fewer, "
+                "larger purchases or a bundle can cost less. This is a pattern over a short "
+                "period, not a confirmed loss."
+            ),
+            monthly_impact=monthly,
+            annual_impact=None,
+            impact_kind="estimated",
+            confidence=confidence,
+            severity=severity_for_impact(monthly, persistent=False, confidence=confidence),
+            evidence=evidence,
+            behaviour_ids=[],
+            feature_refs=["categories[Airtime & Data].category_monthly_total"],
+        )
+    ]
+
+
 def _category_leak_definition(
     category: str,
 ) -> tuple[LeakType | None, str, str, int]:
@@ -3011,6 +3102,84 @@ def _claimed_credit_merchants(snapshot: FinancialFeatureSnapshot) -> set[str]:
         for name, (merchant, _, high_cost) in series.items()
         if high_cost and merchant.merchant_transaction_count >= 3
     }
+
+
+PASS_THROUGH_SINGLE_EVENT_MIN_PAYMENTS = 10
+
+
+def _pass_through_leaks(snapshot: FinancialFeatureSnapshot) -> list[LeakDetection]:
+    """Large deposits paid straight back out in many small payments, leaving almost nothing.
+
+    The statement shows the movement, not the reasons, so this is a prompt. The cost
+    named is what the bank charged on those days, never the money itself.
+    """
+    events = snapshot.pass_through_events
+    if not events:
+        return []
+    if len(events) < 2 and events[0].outflow_count < PASS_THROUGH_SINGLE_EVENT_MIN_PAYMENTS:
+        return []
+    fees = sum((event.fee_total for event in events), Decimal("0"))
+    if fees < MIN_IMPACT:
+        return []
+    deposits = sum((event.amount for event in events), Decimal("0"))
+    payments = sum(event.outflow_count for event in events)
+    confidence = leak_confidence(
+        support=None,
+        observation_count=payments,
+        pattern_strength=Decimal("0.60"),
+        ceiling=Decimal("0.70"),
+    )
+    if confidence is None:
+        return []
+    return [
+        _leak(
+            snapshot=snapshot,
+            leak_type="money_pass_through_leak",
+            subject="deposits-paid-straight-out",
+            title="Large deposits leave within days in many small payments",
+            description=(
+                f"{len(events)} deposits totalling {format_zar(deposits)} were paid back out within "
+                f"{events[0].days_window} days, in {payments} payments, leaving almost nothing in "
+                f"the account. The bank charged {format_zar(fees)} in fees on those days; that is "
+                "part of your bank fees, not extra. The statement does not show what the payments "
+                "were for, so this is not a finding that any of it was wasted."
+            ),
+            monthly_impact=fees.quantize(Decimal("0.01")),
+            annual_impact=None,
+            impact_kind="estimated",
+            confidence=confidence,
+            severity=severity_for_impact(fees, persistent=False, confidence=confidence),
+            evidence={
+                "finding_focus": "deposits_paid_straight_out",
+                "finding_kind": "spending_pattern",
+                "event_count": len(events),
+                "total_deposited": deposits,
+                "payment_count": payments,
+                "fees_in_windows": fees,
+                "amounts_not_additive_with_category_findings": True,
+                "events": [
+                    {
+                        "date": event.credit_date.isoformat(),
+                        "amount": event.amount,
+                        "share_spent": event.share_spent,
+                        "payments": event.outflow_count,
+                        "fees": event.fee_total,
+                        "left": event.end_balance,
+                    }
+                    for event in events
+                ],
+                "event_transaction_ids": [tid for event in events for tid in event.transaction_ids],
+                "observation_count": payments,
+                "verification_prompt": (
+                    "Large deposits are being paid out in many small payments within days. "
+                    "Fewer, planned payments would pay fewer fees, and a small buffer would "
+                    "avoid failed or declined payments."
+                ),
+            },
+            behaviour_ids=[],
+            feature_refs=["pass_through_events"],
+        )
+    ]
 
 
 def _short_term_lender_leaks(

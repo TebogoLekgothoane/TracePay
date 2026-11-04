@@ -454,6 +454,21 @@ class PenaltyFeeCandidate(BaseModel):
     amounts: list[Decimal]
 
 
+class PassThroughEvent(BaseModel):
+    """A large deposit that was almost entirely paid out again within days."""
+
+    credit_transaction_id: str
+    credit_date: date
+    amount: Decimal
+    days_window: int
+    spent: Decimal
+    share_spent: Decimal
+    outflow_count: int
+    fee_total: Decimal
+    end_balance: Decimal
+    transaction_ids: list[str] = Field(default_factory=list)
+
+
 class IrregularCandidate(BaseModel):
     """A transaction that is unusual relative to the user's own history."""
 
@@ -549,6 +564,7 @@ class FinancialFeatureSnapshot(BaseModel):
     # Look-alikes the feature rules passed over before any finding was built.
     near_misses: list[NearMiss] = Field(default_factory=list)
     irregular_candidates: list[IrregularCandidate] = Field(default_factory=list)
+    pass_through_events: list[PassThroughEvent] = Field(default_factory=list)
     trial_conversion_candidates: list[TrialConversionCandidate] = Field(default_factory=list)
     unidentified_recurring_candidates: list[UnidentifiedRecurringCandidate] = Field(
         default_factory=list

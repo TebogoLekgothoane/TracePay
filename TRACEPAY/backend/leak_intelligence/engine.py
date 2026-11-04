@@ -33,6 +33,7 @@ from .models import (
     FinancialFeatureSnapshot,
     IncomeFeatures,
     IrregularCandidate,
+    PassThroughEvent,
     MerchantFeature,
     MonthlyFeature,
     NearMiss,
@@ -194,6 +195,7 @@ def build_financial_features(
         near_day_duplicate_candidates=near_day_duplicates,
         near_misses=near_misses,
         irregular_candidates=irregular,
+        pass_through_events=_pass_through_events(active),
         trial_conversion_candidates=trial_conversion_candidates(active),
         unidentified_recurring_candidates=unidentified_recurring_candidates(active),
         penalty_fee_candidates=penalty_fee_candidates(active),
@@ -2298,6 +2300,78 @@ def _near_day_duplicate_candidates(
                 )
             )
     return candidates
+
+
+PASS_THROUGH_MIN_DEPOSIT = Decimal("2000")
+PASS_THROUGH_WINDOW_DAYS = 3
+PASS_THROUGH_MIN_SHARE_SPENT = Decimal("0.90")
+PASS_THROUGH_MIN_PAYMENTS = 6
+# The balance after the window must be almost nothing: a salary that pays the bills and
+# leaves a healthy balance is ordinary, not a pass-through.
+PASS_THROUGH_MAX_LEFT_SHARE = Decimal("0.10")
+PASS_THROUGH_MAX_LEFT_FLOOR = Decimal("500")
+
+
+def _pass_through_events(transactions: list[FeatureTransaction]) -> list[PassThroughEvent]:
+    """Large deposits that left the account within days, in many payments, leaving ~nothing.
+
+    Needs the running balance on the statement; without it nothing is claimed.
+    """
+    events: list[PassThroughEvent] = []
+    last_window_end = None
+    for credit in transactions:
+        if (
+            credit.transaction_type != "credit"
+            or credit.transaction_date is None
+            or amount_of(credit) < PASS_THROUGH_MIN_DEPOSIT
+            or is_purchase_reversal(credit)
+            or credit.categorisation.transaction_class in {"internal_transfer", "savings", "bank_fee"}
+        ):
+            continue
+        if last_window_end is not None and credit.transaction_date <= last_window_end:
+            continue
+        end = credit.transaction_date + timedelta(days=PASS_THROUGH_WINDOW_DAYS)
+        window = [
+            item
+            for item in transactions
+            if item.transaction_date is not None and credit.transaction_date <= item.transaction_date <= end
+        ]
+        outflows = [
+            item for item in window if item.transaction_type == "debit" and not is_purchase_reversal(item)
+        ]
+        balances = [item.balance for item in window if item.balance is not None]
+        if len(outflows) < PASS_THROUGH_MIN_PAYMENTS or not balances:
+            continue
+        spent = sum((amount_of(item) for item in outflows), ZERO)
+        share = spent / amount_of(credit)
+        end_balance = balances[-1]
+        if share < PASS_THROUGH_MIN_SHARE_SPENT or end_balance > max(
+            PASS_THROUGH_MAX_LEFT_FLOOR, amount_of(credit) * PASS_THROUGH_MAX_LEFT_SHARE
+        ):
+            continue
+        last_window_end = end
+        events.append(
+            PassThroughEvent(
+                credit_transaction_id=credit.transaction_id,
+                credit_date=credit.transaction_date,
+                amount=amount_of(credit),
+                days_window=PASS_THROUGH_WINDOW_DAYS,
+                spent=spent,
+                share_spent=min(share, Decimal("1")).quantize(Decimal("0.01")),
+                outflow_count=len(outflows),
+                fee_total=sum(
+                    (
+                        amount_of(item)
+                        for item in outflows
+                        if item.categorisation.transaction_class == "bank_fee"
+                    ),
+                    ZERO,
+                ),
+                end_balance=end_balance,
+                transaction_ids=[credit.transaction_id, *(item.transaction_id for item in outflows)][:60],
+            )
+        )
+    return events
 
 
 def _irregular_candidates(

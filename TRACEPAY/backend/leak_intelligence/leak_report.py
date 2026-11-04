@@ -133,5 +133,6 @@ def _public_title(leak_type: str, fallback: str) -> str:
         "high_cost_credit_leak": "Credit repayments to review",
         "penalty_fee_leak": "Late or penalty fees charged",
         "recurring_transfer_leak": "Regular payments to the same recipient",
+        "money_pass_through_leak": "Large deposits paid straight out",
     }
     return generic.get(leak_type, "Potential spending pattern")
