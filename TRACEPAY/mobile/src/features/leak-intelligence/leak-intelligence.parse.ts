@@ -99,6 +99,7 @@ const QUESTION_KINDS: readonly FindingQuestionKind[] = [
   "data_usage",
   "insurance_cover",
   "bank_account",
+  "payment_purpose",
 ];
 
 /**

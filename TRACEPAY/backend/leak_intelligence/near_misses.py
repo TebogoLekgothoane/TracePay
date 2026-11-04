@@ -22,6 +22,18 @@ REASONS: dict[str, str] = {
         "This merchant and amount appears three or more times, so it looks like a habit or a "
         "subscription, not a double charge."
     ),
+    "repeated_amount": (
+        "You pay this merchant this exact amount more than once, so it is a routine "
+        "purchase, not an unusual one."
+    ),
+    "multiple_of_regular_amount": (
+        "This is two or three times the regular amount, so it is most likely missed "
+        "months billed together, not an unusual purchase."
+    ),
+    "mostly_unidentified": (
+        "A large share of this spending is made of payments TracePay could not identify, so "
+        "it cannot say your spending really rose. Tell it what they are to see this finding."
+    ),
     "merchant_not_recognised": (
         "The merchant was not recognised with enough confidence to call this a duplicate."
     ),

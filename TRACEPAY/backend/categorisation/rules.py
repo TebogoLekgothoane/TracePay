@@ -35,6 +35,8 @@ MerchantGroups = tuple[tuple[str, tuple[str, ...]], ...]
 # Bank-owned products are matched by the generic words in INSURANCE_PHRASES.
 INSURER_GROUPS: MerchantGroups = (
     ("Outsurance", ("OUTSURANCE",)),
+    ("Dotsure", ("DOTSURE",)),
+    ("Pineapple", ("PINEAPPLE",)),
     ("Santam", ("SANTAM",)),
     ("Sanlam", ("SANLAM",)),
     ("Old Mutual", ("OLD MUTUAL", "OLDMUTUAL")),
@@ -82,7 +84,7 @@ MEDICAL_AID_PHRASES: tuple[str, ...] = ("MEDICAL AID", "MEDICAL SCHEME")
 
 # Gyms bill a membership every month, so they behave like subscriptions.
 GYM_GROUPS: MerchantGroups = (
-    ("Virgin Active", ("VIRGIN ACTIVE", "VIRGINACTIVE")),
+    ("Virgin Active", ("VIRGIN ACTIVE", "VIRGINACTIVE", "VIRGIN ACT NETCASH")),
     ("Planet Fitness", ("PLANET FITNESS",)),
     ("Anytime Fitness", ("ANYTIME FITNESS",)),
 )
@@ -418,6 +420,8 @@ RULES: tuple[Rule, ...] = (
             "CELLPHONE BANKING FEE",
             # Cards.
             "CARD FEE",
+            "FASTER PAYMENT FEE",
+            "PAY SHAP FEE",
             "ANNUAL FEE",
             "CREDIT CARD FEE",
             # Cash and ATM. These must beat the cash-withdrawal rule below.
@@ -704,6 +708,32 @@ RULES: tuple[Rule, ...] = (
             "ATM W/D",
             "CASH ADVANCE",
         ),
+    ),
+    # Private-bank wording: money moved between the customer's own accounts.
+    Rule(
+        "description:own-account-move",
+        "Transfers",
+        0.90,
+        lambda description, _kind: (
+            description in {"SAVINGS", "CASH MANAGEMENT"}
+            or description.startswith(("OWN ACCOUNT", "LINKED ACCOUNT", "CASH MANAGEMENT "))
+        ),
+        transaction_class="internal_transfer",
+    ),
+    # Faster Payments and rent go to other people, so they are not purchases.
+    Rule(
+        "description:faster-payment-to-person",
+        "Transfers",
+        0.88,
+        lambda description, kind: (
+            kind == "debit"
+            and (
+                "(FP)" in description
+                or description in {"RENT"}
+                or description.startswith("DEPOSIT LANDLORD")
+            )
+        ),
+        transaction_class="person_to_person",
     ),
     Rule(
         "description:banking-app-internal-transfer",

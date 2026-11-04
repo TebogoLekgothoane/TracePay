@@ -7,6 +7,7 @@ from .ai_extract import (
     extract_transactions_with_ai,
 )
 from .extract import ExtractionError, extract_layers
+from .mirrored_sections import drop_mirrored_text, has_mirrored_sections, is_mirror_table
 from .models import ProcessingResult, StatementBalance, Transaction, ValidationResult
 from .normalise import normalize_row, parse_text_rows, split_same_row_fee, table_marks_debits_with_sign
 from .statement_schema import period_from_text, resolve_extracted_statement, statement_has_no_activity
@@ -48,6 +49,11 @@ def process_pdf(
     except ExtractionError as error:
         raise PdfProcessingError(str(error)) from error
 
+    mirrored = has_mirrored_sections(text)
+    if mirrored:
+        text = drop_mirrored_text(text)
+        logger.info("pdf_mirrored_sections_dropped")
+
     transactions: list[Transaction] = []
     rows_rejected = 0
     ai_statement = None
@@ -70,6 +76,9 @@ def process_pdf(
                         table_index,
                         headers,
                     )
+                    continue
+                if mirrored and is_mirror_table(headers):
+                    logger.info("pdf_table_skipped table=%s reason=mirrored_section", table_index)
                     continue
                 data_rows = table[header_index + 1 :]
                 aligned_headers = headers

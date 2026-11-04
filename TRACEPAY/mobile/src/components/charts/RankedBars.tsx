@@ -58,6 +58,14 @@ function Row({ item, track, colors, index }: { item: RankedBarItem; track: strin
 
 /** Ranked rows with a proportional bar under each label. */
 export function RankedBars({ items, track, colors, selectedKey = null, onPress }: Props) {
+  // Names can repeat (two merchants or categories with the same label), and React
+  // logs an error for duplicate keys, so make each row's React key unique.
+  const seen = new Map<string, number>();
+  const rowKeys = items.map((item) => {
+    const count = (seen.get(item.key) ?? 0) + 1;
+    seen.set(item.key, count);
+    return count === 1 ? item.key : `${item.key}#${count}`;
+  });
   return (
     <View className="gap-4">
       {items.map((item, index) => {
@@ -67,9 +75,9 @@ export function RankedBars({ items, track, colors, selectedKey = null, onPress }
             <Row item={item} track={track} colors={colors} index={index} />
           </View>
         );
-        if (!onPress) return <View key={item.key}>{row}</View>;
+        if (!onPress) return <View key={rowKeys[index]}>{row}</View>;
         return (
-          <Pressable key={item.key} accessibilityRole="button" className="active:opacity-80" onPress={() => onPress(item.key)}>
+          <Pressable key={rowKeys[index]} accessibilityRole="button" className="active:opacity-80" onPress={() => onPress(item.key)}>
             {row}
           </Pressable>
         );

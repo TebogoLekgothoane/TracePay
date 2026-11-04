@@ -516,11 +516,21 @@ MONTHLY_GAP_MIN_CHARGES = 4
 MONTHLY_AMOUNT_MAX_SPREAD = Decimal("0.06")
 
 
+# A small amount inside a busy merchant (an app store with dozens of charges) is only read
+# as its own plan when nearly all of its gaps are monthly.
+SMALL_SHARE_MIN_CHARGES = 3
+SMALL_SHARE_MONTHLY_GAP_SHARE = Decimal("0.66")
+
+
 def _bills_monthly_most_of_the_time(
-    members: list[FeatureTransaction], feature: RecurrenceFeature
+    members: list[FeatureTransaction],
+    feature: RecurrenceFeature,
+    *,
+    min_charges: int = MONTHLY_GAP_MIN_CHARGES,
+    min_gap_share: Decimal = MONTHLY_GAP_MIN_SHARE,
 ) -> bool:
     dates = sorted({item.transaction_date for item in members if item.transaction_date is not None})
-    if len(members) < MONTHLY_GAP_MIN_CHARGES or len(dates) < MONTHLY_GAP_MIN_CHARGES:
+    if len(members) < min_charges or len(dates) < min_charges:
         return False
     average_amount = feature.average_amount
     if not average_amount:
@@ -530,7 +540,7 @@ def _bills_monthly_most_of_the_time(
         return False
     gaps = [(later - earlier).days for earlier, later in zip(dates, dates[1:])]
     monthly = sum(1 for gap in gaps if MONTHLY_GAP_DAYS[0] <= gap <= MONTHLY_GAP_DAYS[1])
-    return Decimal(monthly) / Decimal(len(gaps)) >= MONTHLY_GAP_MIN_SHARE
+    return Decimal(monthly) / Decimal(len(gaps)) >= min_gap_share
 
 
 def _dominant_amount_series(items: list[FeatureTransaction]) -> list[RecurrenceFeature] | None:
@@ -549,13 +559,20 @@ def _dominant_amount_series(items: list[FeatureTransaction]) -> list[RecurrenceF
         members = [
             item for item in items if abs(amount_of(item) - anchor) <= anchor * DOMINANT_AMOUNT_TOLERANCE
         ]
-        if (
-            len(members) < DOMINANT_SERIES_MIN_CHARGES
-            or Decimal(len(members)) / Decimal(len(items)) < DOMINANT_SERIES_MIN_SHARE
-        ):
+        if len(members) < DOMINANT_SERIES_MIN_CHARGES:
             continue
         feature = _recurrence(members)
-        if feature.recurrence_strength not in {"medium", "high"}:
+        if Decimal(len(members)) / Decimal(len(items)) < DOMINANT_SERIES_MIN_SHARE:
+            if not _bills_monthly_most_of_the_time(
+                members,
+                feature,
+                min_charges=SMALL_SHARE_MIN_CHARGES,
+                min_gap_share=SMALL_SHARE_MONTHLY_GAP_SHARE,
+            ):
+                continue
+            if feature.recurrence_strength not in {"medium", "high"}:
+                feature = feature.model_copy(update={"recurrence_strength": "medium"})
+        elif feature.recurrence_strength not in {"medium", "high"}:
             if not _bills_monthly_most_of_the_time(members, feature):
                 continue
             feature = feature.model_copy(update={"recurrence_strength": "medium"})
@@ -1105,6 +1122,16 @@ def _monthly_features(transactions: list[FeatureTransaction]) -> list[MonthlyFea
                 ),
                 transaction_count=len(items),
                 outflow_transaction_count=sum(_purchase_outflow(item) for item in items),
+                unclassified_outflow=sum(
+                    (
+                        amount_of(item)
+                        for item in items
+                        if _purchase_outflow(item)
+                        and (item.categorisation.transaction_class or "unknown") == "unknown"
+                        and not item.categorisation.category_name
+                    ),
+                    ZERO,
+                ),
                 category_totals=dict(category_totals),
                 merchant_totals=dict(merchant_totals),
                 bank_fee_total=sum(
@@ -1358,7 +1385,16 @@ def _fee_features(transactions: list[FeatureTransaction]) -> FeeFeatures:
     interest_total = sum((amount_of(item) for item in interest_charges), ZERO)
     overdraft_total = sum((amount_of(item) for item in overdraft_fees), ZERO)
     insufficient_funds_total = sum((amount_of(item) for item in insufficient_funds_fees), ZERO)
+    sources: dict[str, list[Decimal]] = defaultdict(list)
+    for item in fees:
+        label = " ".join(re.sub(r"[\d*#]+", " ", item.description or "").split())[:60] or "Unlabelled fee"
+        sources[label].append(amount_of(item))
+    top_fee_sources = [
+        {"label": label, "count": len(values), "total": sum(values, ZERO)}
+        for label, values in sorted(sources.items(), key=lambda pair: sum(pair[1], ZERO), reverse=True)[:5]
+    ]
     return FeeFeatures(
+        top_fee_sources=top_fee_sources,
         bank_fee_transaction_count=len(fees),
         bank_fee_total=sum(amounts, ZERO),
         bank_fee_average=_average(amounts),
@@ -2203,6 +2239,34 @@ def _irregular_candidates(
         if baseline <= ZERO:
             continue
         multiple = amount_of(item) / baseline
+        if multiple >= Decimal("3") and amount_of(item) >= Decimal("500"):
+            merchant_key = merchant_group_key(item)
+            repeats = sum(
+                1
+                for other in eligible
+                if other.transaction_id != item.transaction_id
+                and merchant_group_key(other) == merchant_key
+                and abs(amount_of(other) - amount_of(item)) <= AMOUNT_TOLERANCE
+            )
+            if repeats >= 1:
+                # The same merchant at the same amount again is a routine, not an outlier.
+                miss(item, "repeated_amount")
+                continue
+            regular_amounts = [
+                amount_of(other)
+                for other in eligible
+                if other.transaction_id != item.transaction_id
+                and merchant_group_key(other) == merchant_key
+                and amount_of(other) > ZERO
+            ]
+            if category in {"Subscriptions", "Insurance", "Loans & Credit"} and any(
+                sum(1 for value in regular_amounts if abs(value - base) <= AMOUNT_TOLERANCE) >= 2
+                and any(abs(amount_of(item) - base * k) <= AMOUNT_TOLERANCE for k in (2, 3))
+                for base in set(regular_amounts)
+            ):
+                # Two or three months billed in one go: a catch-up, not an outlier.
+                miss(item, "multiple_of_regular_amount")
+                continue
         if multiple < Decimal("3") or amount_of(item) < Decimal("500"):
             if amount_of(item) >= Decimal("500") and multiple >= Decimal("2"):
                 miss(item, "below_outlier_multiple", f"It is {multiple:.1f} times the usual {category} amount.")

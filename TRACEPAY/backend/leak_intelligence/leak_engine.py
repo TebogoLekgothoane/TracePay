@@ -95,7 +95,7 @@ def detect_leaks(
         *_recurring_transfer_leaks(snapshot),
         *_inactive_recurring_leaks(snapshot, near_misses),
         *_irregular_transaction_leaks(snapshot),
-        *_spending_escalation_leaks(snapshot, observations),
+        *_spending_escalation_leaks(snapshot, observations, near_misses),
         *(category_findings := _category_leaks(snapshot, observations)),
         *_sustained_habit_leaks(snapshot, category_findings),
         *_coffee_spending_leaks(snapshot, observations),
@@ -521,6 +521,7 @@ def _bank_fee_leaks(
         "bank_fee_ratio": ratio,
         "fee_change_amount": change if change > 0 else None,
         "fee_type_breakdown": fee_breakdown,
+        "top_fee_sources": fees.top_fee_sources,
         "recurring_fee_total": fee_breakdown.get("recurring_total"),
         "one_off_fee_total": fee_breakdown.get("one_off_total"),
         "fees_are_not_all_avoidable": True,
@@ -1071,9 +1072,23 @@ def _recurring_leaks(
     return findings
 
 
+# An overall rise is not believable when this much of the money behind it is unidentified.
+UNIDENTIFIED_SPEND_MAX_SHARE = Decimal("0.30")
+
+
+def _unidentified_share(snapshot: FinancialFeatureSnapshot, months: list[str]) -> Decimal:
+    wanted = set(months)
+    chosen = [month for month in snapshot.months if month.month in wanted]
+    outflow = sum((month.total_outflow for month in chosen), Decimal("0"))
+    if outflow <= 0:
+        return Decimal("0")
+    return sum((month.unclassified_outflow for month in chosen), Decimal("0")) / outflow
+
+
 def _spending_escalation_leaks(
     snapshot: FinancialFeatureSnapshot,
     observations: dict[str, list[BehaviourObservation]],
+    misses: list[NearMiss] | None = None,
 ) -> list[LeakDetection]:
     findings = []
     overall_support = _snapshot_support_ratio(snapshot)
@@ -1082,6 +1097,25 @@ def _spending_escalation_leaks(
     for observation in observations.get("spending_increase", []):
         change = _decimal(observation.evidence.get("change_amount"))
         if change is None or change < MIN_IMPACT:
+            continue
+        compared = [
+            str(value)
+            for value in [
+                observation.evidence.get("current_period"),
+                *(observation.evidence.get("baseline_months") or []),
+            ]
+            if value
+        ]
+        if _unidentified_share(snapshot, compared) >= UNIDENTIFIED_SPEND_MAX_SHARE:
+            if misses is not None:
+                misses.append(
+                    build_near_miss(
+                        "spending_escalation_leak",
+                        "mostly_unidentified",
+                        amount=change,
+                        dates=[snapshot.date_end] if snapshot.date_end else [],
+                    )
+                )
             continue
         confidence = min(observation.confidence, 0.80)
         contributors = _spending_contributor_breakdown(snapshot, observation)
@@ -1582,7 +1616,9 @@ def _sustained_habit_leaks(
         leak_type, title, description, minimum_monthly = definition
         totals = {m: feature.category_monthly_total.get(m, Decimal("0")) for m in months}
         counts = {m: feature.category_monthly_transaction_count.get(m, 0) for m in months}
-        if any(total <= 0 for total in totals.values()):
+        # Every month, or all but one quiet month (a holiday) once there are four or more.
+        active_months = sum(1 for total in totals.values() if total > 0)
+        if active_months < max(HABIT_MIN_MONTHS, -(-3 * len(months) // 4)):
             continue
         month_count = Decimal(len(months))
         total_amount = sum(totals.values(), Decimal("0"))

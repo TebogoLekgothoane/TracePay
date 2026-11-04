@@ -232,6 +232,8 @@ class MonthlyFeature(BaseModel):
     total_outflow: Decimal = Decimal("0")
     transaction_count: int = 0
     outflow_transaction_count: int = 0
+    # Outflow from rows with no class and no category: money TracePay cannot explain.
+    unclassified_outflow: Decimal = Decimal("0")
     category_totals: dict[str, Decimal] = Field(default_factory=dict)
     merchant_totals: dict[str, Decimal] = Field(default_factory=dict)
     bank_fee_total: Decimal = Decimal("0")
@@ -242,6 +244,8 @@ class MonthlyFeature(BaseModel):
 
 
 class FeeFeatures(BaseModel):
+    # Largest fee descriptions (digits stripped) as {"label", "count", "total"}.
+    top_fee_sources: list[dict[str, object]] = Field(default_factory=list)
     bank_fee_transaction_count: int = 0
     bank_fee_total: Decimal = Decimal("0")
     bank_fee_average: Decimal | None = None

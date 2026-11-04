@@ -237,6 +237,17 @@ export function formatTuningReport(result: {
       how.push(`recurring fees ${plainAmount(leak.evidence.recurring_fee_total)}`);
     if (finiteNumber(leak.evidence.one_off_fee_total) !== null)
       how.push(`one-off fees ${plainAmount(leak.evidence.one_off_fee_total)}`);
+    if (Array.isArray(leak.evidence.top_fee_sources) && leak.evidence.top_fee_sources.length) {
+      const sources = (leak.evidence.top_fee_sources as unknown[])
+        .map((entry) => {
+          const row = entry as { label?: unknown; count?: unknown; total?: unknown };
+          return typeof row.label === "string" && finiteNumber(row.total) !== null
+            ? `${row.label} x${String(row.count)} ${plainAmount(row.total)}`
+            : null;
+        })
+        .filter((text): text is string => text !== null);
+      if (sources.length) how.push(`biggest fees: ${sources.join(" | ")}`);
+    }
     if (typeof leak.evidence.last_observed_date === "string")
       how.push(`last ${leak.evidence.last_observed_date}`);
     lines.push(

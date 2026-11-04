@@ -78,6 +78,17 @@ _OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
         ("medical", "Medical"),
         ("other", "Other"),
     ),
+    # For a regular payment the statement cannot name (a bank debit order, say).
+    "payment_purpose": (
+        ("insurance", "Insurance or cover"),
+        ("credit", "Loan, card or store account"),
+        ("membership", "Subscription or membership"),
+        ("medical", "Medical aid or health"),
+        ("utilities", "Phone, internet or utilities"),
+        ("savings", "Savings or investment"),
+        ("person", "Rent or money to a person"),
+        ("other", "Something else"),
+    ),
     "bank_account": (
         ("fnb", "FNB"),
         ("absa", "Absa"),
@@ -163,6 +174,11 @@ def _current_amount(leak: LeakDetection) -> Decimal | None:
         value = _dec(evidence.get(key))
         if value is not None and value > 0:
             return value
+    payments = evidence.get("payment_amounts")
+    if isinstance(payments, list) and payments:
+        value = _dec(payments[-1])
+        if value is not None and value > 0:
+            return value
     return None
 
 
@@ -174,7 +190,7 @@ def _signature(kind: str, leak: LeakDetection) -> str:
         if total is not None and isinstance(count, int) and count > 0:
             return f"amt={(total / count).quantize(Decimal('1'))}"
         return ""
-    if kind in {"subscription_usage", "insurance_cover"}:
+    if kind in {"subscription_usage", "insurance_cover", "payment_purpose"}:
         amount = _current_amount(leak)
         return f"amt={amount.quantize(Decimal('1'))}" if amount is not None else ""
     return ""
@@ -362,6 +378,21 @@ def _candidates(leak: LeakDetection, answers: dict[str, StoredAnswer]) -> list[F
             )
         )
 
+    if leak.leak_type == "unknown_recurring_payment" and evidence.get("merchant_category") != "Insurance":
+        # The merchant is often unnamed, so key the question on the amount's own subject.
+        purpose_subject = subject or _amount_subject(leak)
+        if purpose_subject:
+            paid = f"You pay {_money(amount)} regularly" if amount is not None else "You pay this regularly"
+            found.append(
+                make(
+                    "payment_purpose",
+                    purpose_subject,
+                    f"{paid} and the statement does not say who it goes to. What is it for?",
+                    "Only you know. Savings, rent and loan repayments are not leaks, so your answer decides whether this is shown.",
+                    boost=1.1,
+                )
+            )
+
     if leak.leak_type == "bank_fee_leak":
         found.append(
             make(
@@ -372,6 +403,12 @@ def _candidates(leak: LeakDetection, answers: dict[str, StoredAnswer]) -> list[F
             )
         )
     return found
+
+
+def _amount_subject(leak: LeakDetection) -> str | None:
+    """A stable subject for a payment with no merchant: its regular amount."""
+    amount = _current_amount(leak)
+    return f"amount-{int(amount)}" if amount is not None else None
 
 
 def _payment_months(leak: LeakDetection) -> list[str]:
@@ -481,6 +518,14 @@ def _apply_to_leak(
     covers: dict[str, tuple[str, LeakDetection]],
 ) -> LeakDetection:
     subject = _subject(leak)
+    if leak.leak_type == "unknown_recurring_payment":
+        purpose_subject = subject or _amount_subject(leak)
+        purpose = answers.get(question_key("payment_purpose", purpose_subject)) if purpose_subject else None
+        if _answer_applies(purpose, leak, "payment_purpose"):
+            assert purpose is not None
+            purpose_edit = _Edit(leak)
+            if _apply_purpose(purpose_edit, purpose.answer):
+                return purpose_edit.finish()
     if subject is None:
         return leak
     edit = _Edit(leak)
@@ -634,6 +679,39 @@ def _apply_duplicate(edit: _Edit, answer: str) -> bool:
         edit.status = "resolved"
     else:
         return False
+    return True
+
+
+def _apply_purpose(edit: _Edit, answer: str) -> bool:
+    label = dict(_OPTIONS["payment_purpose"]).get(answer)
+    if label is None:
+        return False
+    if answer in {"savings", "person"}:
+        what = "savings or an investment" if answer == "savings" else "rent or money sent to a person"
+        edit.tell("payment_purpose", answer, f"You told us this is {what}.")
+        edit.possible = []
+        edit.effect = "resolves"
+        edit.status = "dismissed"
+    elif answer == "credit":
+        edit.tell("payment_purpose", answer, "You told us this is a loan, card or store account repayment.")
+        edit.possible.insert(
+            0,
+            PossibleLeak(
+                text="Part of each repayment may be interest.",
+                cannot_see=["The interest rate and balance on the account."],
+                check="Look at the account's statement to see how much of the repayment is interest.",
+            ),
+        )
+        edit.effect = "none"
+    elif answer in {"insurance", "medical", "utilities"}:
+        names = {"insurance": "insurance", "medical": "medical aid or health cover", "utilities": "phone, internet or utilities"}
+        edit.tell("payment_purpose", answer, f"You told us this is {names[answer]}.")
+        edit.effect = "weakens"
+    elif answer == "membership":
+        edit.tell("payment_purpose", answer, "You told us this is a subscription or membership.")
+        edit.effect = "none"
+    else:
+        edit.tell("payment_purpose", answer, "You told us this is something else.")
     return True
 
 

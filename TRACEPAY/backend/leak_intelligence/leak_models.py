@@ -154,6 +154,7 @@ QuestionKind = Literal[
     "data_usage",
     "insurance_cover",
     "bank_account",
+    "payment_purpose",
 ]
 
 

@@ -112,7 +112,8 @@ export type FindingQuestionKind =
   | "duplicate_expected"
   | "data_usage"
   | "insurance_cover"
-  | "bank_account";
+  | "bank_account"
+  | "payment_purpose";
 
 export type FindingQuestionOption = {
   value: string;
