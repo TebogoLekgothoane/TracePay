@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import date
 
+from decimal import Decimal
+
 import pytest
 
 from categorisation.classifier import classify_transaction
@@ -89,7 +91,7 @@ def test_a_lower_price_held_for_two_charges_is_the_current_cost():
     ]
     leak = _subscription(_charges("p", "PINEAPPLE", rows), "PINEAPPLE")
     assert leak is not None
-    assert leak.estimated_monthly_impact == 676.23
+    assert leak.estimated_monthly_impact == Decimal("676.23")
 
 
 def test_a_small_monthly_plan_is_found_inside_a_busy_app_store_merchant():
