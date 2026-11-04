@@ -160,6 +160,9 @@ CREDIT_GROUPS: MerchantGroups = (
     ("Moneyline", ("MONEYLINE",)),
     ("Jumo", ("JUMO",)),
     ("Cash Converters", ("CASH CONVERTERS",)),
+    ("Wonga", ("WONGA",)),
+    ("Fasta", ("FASTA",)),
+    ("Bizmula", ("BIZMULA",)),
 )
 
 # Premium-rated and network-billed content. Never a bank fee.
@@ -707,6 +710,8 @@ RULES: tuple[Rule, ...] = (
             "CASH AT ATM",
             "ATM W/D",
             "CASH ADVANCE",
+            "CASHSEND",
+            "CASH SEND",
         ),
     ),
     # Private-bank wording: money moved between the customer's own accounts.
@@ -733,6 +738,22 @@ RULES: tuple[Rule, ...] = (
                 or description.startswith("DEPOSIT LANDLORD")
             )
         ),
+        transaction_class="person_to_person",
+    ),
+    # Absa wording: "DIGITAL TRANSF" moves money between the customer's own accounts;
+    # "DIGITAL PAYMENT" pays another customer.
+    Rule(
+        "description:absa-digital-transfer",
+        "Transfers",
+        0.88,
+        contains("DIGITAL TRANSF"),
+        transaction_class="internal_transfer",
+    ),
+    Rule(
+        "description:absa-digital-payment",
+        "Transfers",
+        0.88,
+        lambda description, kind: kind != "credit" and "DIGITAL PAYMENT" in description,
         transaction_class="person_to_person",
     ),
     Rule(

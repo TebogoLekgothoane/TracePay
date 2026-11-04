@@ -1343,6 +1343,7 @@ def _fee_subtype(transaction: FeatureTransaction) -> str | None:
         return "insufficient_funds"
     if (
         "ACCOUNT" in description
+        or "ACC FEE" in description
         or "ADMIN FEE" in description
         or "ADMINISTRATION FEE" in description
         or "MANAGEMENT FEE" in description

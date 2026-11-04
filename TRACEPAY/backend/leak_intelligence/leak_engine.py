@@ -92,6 +92,7 @@ def detect_leaks(
         *_overlapping_cover_leaks(snapshot, observations),
         *_gambling_spending_leaks(snapshot, observations),
         *_high_cost_credit_leaks(snapshot, observations),
+        *_short_term_lender_leaks(snapshot, _claimed_credit_merchants(snapshot)),
         *_penalty_fee_leaks(snapshot),
         *_recurring_transfer_leaks(snapshot),
         *_inactive_recurring_leaks(snapshot, near_misses),
@@ -3009,6 +3010,72 @@ def _claimed_credit_merchants(snapshot: FinancialFeatureSnapshot) -> set[str]:
         for name, (merchant, _, high_cost) in series.items()
         if high_cost and merchant.merchant_transaction_count >= 3
     }
+
+
+def _short_term_lender_leaks(
+    snapshot: FinancialFeatureSnapshot,
+    claimed: set[str],
+) -> list[LeakDetection]:
+    """Repayments to short-term lenders seen too few times to call a schedule.
+
+    A short statement can show one lender twice, or several lenders once each. Either
+    is worth a prompt: the statement cannot show the cost, only that it was repaid.
+    """
+    lenders = [
+        merchant
+        for merchant in snapshot.merchants
+        if merchant.merchant_name not in claimed
+        and (found := credit_provider(merchant.merchant_name)) is not None
+        and found[1]
+        and merchant.merchant_total_amount > 0
+        and merchant.merchant_transaction_count >= 1
+    ]
+    repeated = [item for item in lenders if item.merchant_transaction_count >= 2]
+    if not repeated and len(lenders) < 2:
+        return []
+    names = [merchant_display_name_for(item.merchant_name) or item.merchant_name for item in lenders]
+    total = sum((item.merchant_total_amount for item in lenders), Decimal("0"))
+    count = sum(item.merchant_transaction_count for item in lenders)
+    confidence = leak_confidence(
+        support=_combined_support(lenders),
+        observation_count=count,
+        pattern_strength=Decimal("0.55"),
+        ceiling=Decimal("0.65"),
+    )
+    if confidence is None:
+        return []
+    return [
+        _leak(
+            snapshot=snapshot,
+            leak_type="high_cost_credit_leak",
+            subject="short-term-lenders",
+            title=f"Repayments to {', '.join(names[:3])}, lenders that often charge high rates",
+            description=(
+                f"{count} repayments totalling {format_zar(total)} went to short-term lenders "
+                f"({', '.join(names)}). The statement does not show the amounts borrowed or the "
+                "interest, so this is a prompt to check the cost of each loan, not a finding "
+                "that any of it is too expensive."
+            ),
+            monthly_impact=total,
+            annual_impact=None,
+            impact_kind="estimated",
+            confidence=confidence,
+            severity=severity_for_impact(total, persistent=False, confidence=confidence),
+            evidence={
+                "finding_focus": "short_term_lenders",
+                "finding_kind": "potential_leak",
+                "provider_names": names,
+                "provider_count": len(names),
+                "repayment_count": count,
+                "total_repaid": total,
+                "includes_high_cost_lender": True,
+                "observation_count": count,
+                "verification_required": True,
+            },
+            behaviour_ids=[],
+            feature_refs=[f"merchants[{item.merchant_name}]" for item in lenders],
+        )
+    ]
 
 
 def _high_cost_credit_leaks(
