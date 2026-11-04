@@ -1366,6 +1366,105 @@ def _fee_subtype(transaction: FeatureTransaction) -> str | None:
     return None
 
 
+_PARENT_AMOUNT = re.compile(r"AMT:\s*-?\s*([\d ]+),(\d{2})")
+_SMALL_PAYMENT = Decimal("200")
+
+# (key, label, matcher on the upper-case description), first match wins.
+_FEE_SOURCES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("failed_debit_order", "Failed debit order fees", ("UNSUCCESSFUL",)),
+    ("declined_card", "Declined card payment fees", ("DECL POS", "DECLINED")),
+    ("payshap", "PayShap payment fees", ("PAYSHAP", "PAY SHAP")),
+    ("cash_send", "Cash Send fees", ("CASHSEND", "CASH SEND")),
+    ("airtime", "Airtime top-up fees", ("AIRTIME",)),
+    ("cross_border", "Cross-border card fees", ("CROSS-BORDER", "CROSS BORDER")),
+    ("faster_payment", "Faster Payment fees", ("FASTER PAYMENT",)),
+    ("debit_interest", "Debit interest", ("INTEREST",)),
+    ("account_fee", "Monthly account fee", ("MONTHLY", "SERVICE CHARGE", "ACC FEE", "ACCOUNT")),
+)
+
+
+def _fee_source_of(description: str) -> tuple[str, str]:
+    upper = (description or "").upper()
+    for key, label, tokens in _FEE_SOURCES:
+        if any(token in upper for token in tokens):
+            return key, label
+    return "other", "Other bank fees"
+
+
+def _fee_source_notes(
+    key: str, count: int, fee_each: Decimal, parents: list[Decimal], rate: Decimal | None
+) -> tuple[str, str]:
+    """What the fees are made of, and the one thing worth checking. Never claims avoidability."""
+    each = f"R{fee_each:.2f}"
+    small = sum(1 for value in parents if value < _SMALL_PAYMENT)
+    if key == "payshap":
+        detail = f"{count} payments, about {each} each"
+        if parents:
+            detail += f"; {small} of {len(parents)} were under R200"
+        return detail + ".", "Each payment pays the fee once, so fewer, larger transfers cost less."
+    if key == "cash_send":
+        detail = f"{count} withdrawals, about {each} each"
+        if rate is not None:
+            detail += f", roughly {rate:.1f}% of the cash sent"
+        return detail + ".", "Compare this with other ways of getting cash before the next withdrawal."
+    if key == "declined_card":
+        return (
+            f"{count} card payments were declined and each was charged about {each}.",
+            "These usually happen when the balance is too low; a small buffer avoids the charge.",
+        )
+    if key == "failed_debit_order":
+        return (
+            f"{count} debit orders failed and each was charged about {each}.",
+            "Make sure the money is in the account on debit day, or ask the provider to move the date.",
+        )
+    if key == "airtime":
+        return (
+            f"{count} top-ups, about {each} each.",
+            "A fee applies to every small top-up, so fewer, larger top-ups pay it fewer times.",
+        )
+    if key == "account_fee":
+        return f"{count} charges, about {each} each.", "Compare it with your bank's other account options."
+    if key == "debit_interest":
+        return f"{count} charges for being overdrawn or using credit.", "Clearing the balance stops this charge."
+    if key == "cross_border":
+        return f"{count} charges, about {each} each.", "Paying a local merchant avoids a cross-border fee."
+    return f"{count} charges, about {each} each.", "Check each charge on your statement."
+
+
+def _fee_sources(fees: list[FeatureTransaction]) -> list[dict[str, object]]:
+    """Every kind of fee the statement shows, largest first, with plain-language notes."""
+    groups: dict[str, list[FeatureTransaction]] = defaultdict(list)
+    labels: dict[str, str] = {}
+    for item in fees:
+        key, label = _fee_source_of(item.description)
+        groups[key].append(item)
+        labels[key] = label
+    grand_total = sum((amount_of(item) for item in fees), ZERO)
+    rows: list[dict[str, object]] = []
+    for key, items in groups.items():
+        amounts = sorted(amount_of(item) for item in items)
+        total = sum(amounts, ZERO)
+        parents: list[Decimal] = []
+        for item in items:
+            if match := _PARENT_AMOUNT.search(item.description or ""):
+                parents.append(Decimal(match.group(1).replace(" ", "") + "." + match.group(2)))
+        sent = sum(parents, ZERO)
+        rate = (total / sent * Decimal("100")) if sent > ZERO and len(parents) == len(items) else None
+        detail, check = _fee_source_notes(key, len(items), amounts[len(amounts) // 2], parents, rate)
+        rows.append(
+            {
+                "key": key,
+                "label": labels[key],
+                "count": len(items),
+                "total": total,
+                "share_of_fees": (total / grand_total).quantize(Decimal("0.01")) if grand_total > ZERO else ZERO,
+                "detail": detail,
+                "check": check,
+            }
+        )
+    return sorted(rows, key=lambda row: row["total"], reverse=True)  # type: ignore[arg-type,return-value]
+
+
 def _fee_features(transactions: list[FeatureTransaction]) -> FeeFeatures:
     fees = [
         item
@@ -1408,6 +1507,7 @@ def _fee_features(transactions: list[FeatureTransaction]) -> FeeFeatures:
     ]
     return FeeFeatures(
         top_fee_sources=top_fee_sources,
+        fee_sources=_fee_sources(fees),
         bank_fee_transaction_count=len(fees),
         bank_fee_total=sum(amounts, ZERO),
         bank_fee_average=_average(amounts),

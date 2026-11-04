@@ -26,6 +26,7 @@ import { IconButton } from "../../src/components/ui/IconButton";
 import { SimpleBrandLogo } from "../../src/components/ui/SimpleBrandLogo";
 import { resolveBrandIcon } from "../../src/features/brands/simple-brand-icons";
 import {
+  feeSources,
   formatConfidence,
   formatCurrency,
   formatFindingEvidence,
@@ -399,6 +400,8 @@ function FindingCard({ leak }: { leak: LeakDetection }) {
         </View>
       ) : null}
 
+      <FeeBreakdown evidence={evidence} />
+
       <LeakClaimsSection claims={leak.claims} />
 
       <Pressable
@@ -413,6 +416,31 @@ function FindingCard({ leak }: { leak: LeakDetection }) {
         <ChevronDown color={palette.placeholder} size={18} strokeWidth={2} />
       </Pressable>
       {open ? <Evidence leak={leak} /> : null}
+    </View>
+  );
+}
+
+/** Each kind of fee behind a bank-fee finding, with what it cost and what to check. */
+function FeeBreakdown({ evidence }: { evidence: Record<string, unknown> }) {
+  const sources = feeSources(evidence);
+  if (sources.length === 0) return null;
+  return (
+    <View className="mt-3 gap-3 rounded-2xl bg-muted/40 px-4 py-3">
+      <Text className="text-[13px] font-semibold text-foreground">Where the fees come from</Text>
+      {sources.map((source) => (
+        <View key={source.label}>
+          <View className="flex-row items-start justify-between gap-3">
+            <Text className="min-w-0 flex-1 text-[14px] font-semibold text-foreground">{source.label}</Text>
+            <Text className="text-[14px] font-bold text-foreground">{formatCurrency(source.total)}</Text>
+          </View>
+          {source.detail ? (
+            <Text className="mt-0.5 text-[13px] leading-5 text-muted-foreground">{source.detail}</Text>
+          ) : null}
+          {source.check ? (
+            <Text className="mt-0.5 text-[13px] leading-5 text-muted-foreground">{source.check}</Text>
+          ) : null}
+        </View>
+      ))}
     </View>
   );
 }

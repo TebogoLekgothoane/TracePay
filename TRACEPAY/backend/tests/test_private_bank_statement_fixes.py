@@ -120,6 +120,38 @@ def test_short_term_lenders_repaid_twice_are_raised_without_a_schedule():
     assert leaks[0].evidence["finding_focus"] == "short_term_lenders"
 
 
+@pytest.mark.parametrize(
+    ("description", "key"),
+    [
+        ("TRANSACTION FEE PayShap Ext Debit (EFF:020626 AMT: -1000,00-)", "payshap"),
+        ("TRANSACTION FEE DECL POS TRAN FEE (EFF:050626 AMT: 0,00 )", "declined_card"),
+        ("TRANSACTION FEE (EFFEC 24062026) UNSUCCESSFUL INT", "failed_debit_order"),
+        ("TRANSACTION FEE CASHSEND DIGITAL (EFF:020626 AMT: 500,00-)", "cash_send"),
+        ("MONTHLY ACC FEE", "account_fee"),
+        ("Cross-border card fee - APPLE.COM/BILL", "cross_border"),
+        ("SOMETHING ELSE", "other"),
+    ],
+)
+def test_fees_are_grouped_into_plain_sources(description, key):
+    from leak_intelligence.engine import _fee_source_of
+
+    assert _fee_source_of(description)[0] == key
+
+
+def test_monthly_account_fee_is_a_bank_fee():
+    assert classify_transaction("MONTHLY ACC FEE", "debit").transaction_class == "bank_fee"
+
+
+def test_fee_notes_show_the_fee_as_a_share_of_the_cash_sent():
+    from decimal import Decimal as D
+
+    from leak_intelligence.engine import _fee_source_notes
+
+    detail, check = _fee_source_notes("cash_send", 7, D("8.10"), [D("500")], D("2.9"))
+    assert "2.9%" in detail
+    assert check
+
+
 def test_a_small_monthly_plan_is_found_inside_a_busy_app_store_merchant():
     plan = _charges("p", "APPLE", [("69.99", date(2026, month, 18)) for month in (6, 7, 8, 10)])
     noise = _charges(

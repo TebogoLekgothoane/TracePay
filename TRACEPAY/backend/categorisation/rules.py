@@ -382,6 +382,8 @@ RULES: tuple[Rule, ...] = (
             "SERVICE FEE",
             "BANK FEE",
             "MONTHLY FEE",
+            "MONTHLY ACC FEE",
+            "ACC FEE",
             "ACCOUNT FEE",
             "TRANSACTION FEE",
             "IMMEDIATE PAYMENT FEE",

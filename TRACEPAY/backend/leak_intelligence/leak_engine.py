@@ -524,6 +524,7 @@ def _bank_fee_leaks(
         "fee_change_amount": change if change > 0 else None,
         "fee_type_breakdown": fee_breakdown,
         "top_fee_sources": fees.top_fee_sources,
+        "fee_sources": fees.fee_sources,
         "recurring_fee_total": fee_breakdown.get("recurring_total"),
         "one_off_fee_total": fee_breakdown.get("one_off_total"),
         "fees_are_not_all_avoidable": True,

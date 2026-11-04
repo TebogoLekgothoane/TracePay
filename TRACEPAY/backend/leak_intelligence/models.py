@@ -246,6 +246,8 @@ class MonthlyFeature(BaseModel):
 class FeeFeatures(BaseModel):
     # Largest fee descriptions (digits stripped) as {"label", "count", "total"}.
     top_fee_sources: list[dict[str, object]] = Field(default_factory=list)
+    # Every kind of fee with a plain label, count, cost and what to check.
+    fee_sources: list[dict[str, object]] = Field(default_factory=list)
     bank_fee_transaction_count: int = 0
     bank_fee_total: Decimal = Decimal("0")
     bank_fee_average: Decimal | None = None

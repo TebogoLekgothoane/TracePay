@@ -184,6 +184,35 @@ function plainAmount(value: unknown): string {
   return amount === null ? "n/a" : `R${amount.toFixed(2)}`;
 }
 
+export type FeeSource = {
+  label: string;
+  count: number;
+  total: number;
+  detail: string;
+  check: string;
+};
+
+/** The kinds of fee behind a bank-fee finding, largest first. Malformed rows are dropped. */
+export function feeSources(evidence: Record<string, unknown>): FeeSource[] {
+  const raw = evidence.fee_sources;
+  if (!Array.isArray(raw)) return [];
+  const rows: FeeSource[] = [];
+  for (const entry of raw as unknown[]) {
+    const row = (entry ?? {}) as Record<string, unknown>;
+    const total = finiteNumber(row.total);
+    const count = finiteNumber(row.count);
+    if (typeof row.label !== "string" || total === null || count === null) continue;
+    rows.push({
+      label: row.label,
+      count,
+      total,
+      detail: typeof row.detail === "string" ? row.detail : "",
+      check: typeof row.check === "string" ? row.check : "",
+    });
+  }
+  return rows;
+}
+
 /**
  * A plain-text report for tuning the detection rules: what was raised and what was
  * looked at and left out. Merchant names, amounts and dates only. Never a bank
@@ -257,6 +286,13 @@ export function formatTuningReport(result: {
         (how.length ? ` · (${how.join("; ")})` : "") +
         (others ? ` · also repeats monthly at: ${others}` : ""),
     );
+    for (const source of feeSources(leak.evidence)) {
+      lines.push(
+        `    · ${source.label} x${source.count} ${plainAmount(source.total)}` +
+          (source.detail ? ` — ${source.detail}` : "") +
+          (source.check ? ` Check: ${source.check}` : ""),
+      );
+    }
   }
   const misses = result.near_misses ?? [];
   lines.push("", `Looked at, not raised (${misses.length})`);
