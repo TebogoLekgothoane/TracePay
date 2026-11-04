@@ -30,6 +30,10 @@ REASONS: dict[str, str] = {
         "This is two or three times the regular amount, so it is most likely missed "
         "months billed together, not an unusual purchase."
     ),
+    "cause_not_identified": (
+        "Spending was higher than usual, but the merchants behind it explain only a small "
+        "part of the rise, so it is not reported as a spending problem."
+    ),
     "mostly_unidentified": (
         "A large share of this spending is made of payments TracePay could not identify, so "
         "it cannot say your spending really rose. Tell it what they are to see this finding."

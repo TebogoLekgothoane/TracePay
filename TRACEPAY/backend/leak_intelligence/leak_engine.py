@@ -33,6 +33,7 @@ from .merchant_display import (
     spending_increase_title,
 )
 from .engine import (
+    AMOUNT_TOLERANCE,
     DEBIT_ORDER_DUPLICATE_MAX_SHIFT_DAYS,
     DEBIT_ORDER_MONTHLY_DUPLICATE_MAX_SHIFT_DAYS,
     MONTHLY_GAP_DAYS,
@@ -825,6 +826,17 @@ def _recurring_leaks(
         )
         if price_step is not None:
             current_price = price_step["latest_amount"]
+        elif current_price is None and typical is not None:
+            # A lower price held for the last two charges is what is being paid now.
+            trend = merchant.merchant_amount_trend
+            if (
+                trend is not None
+                and trend.latest_amount is not None
+                and trend.previous_amount is not None
+                and trend.latest_amount < typical
+                and abs(trend.latest_amount - trend.previous_amount) <= AMOUNT_TOLERANCE
+            ):
+                current_price = trend.latest_amount
         impact = _recurring_monthly_impact(
             merchant, recurrence=recurrence, amount=current_price
         )
@@ -1074,6 +1086,8 @@ def _recurring_leaks(
 
 # An overall rise is not believable when this much of the money behind it is unidentified.
 UNIDENTIFIED_SPEND_MAX_SHARE = Decimal("0.30")
+# The merchants named as the cause must account for at least this share of the rise.
+ESCALATION_MIN_EXPLAINED_SHARE = Decimal("0.25")
 
 
 def _unidentified_share(snapshot: FinancialFeatureSnapshot, months: list[str]) -> Decimal:
@@ -1120,6 +1134,28 @@ def _spending_escalation_leaks(
         confidence = min(observation.confidence, 0.80)
         contributors = _spending_contributor_breakdown(snapshot, observation)
         merchant_contributors = contributors.get("top_merchant_contributors") or []
+        explained = sum(
+            (
+                _decimal(item.get("share_of_overall_change")) or Decimal("0")
+                for item in merchant_contributors
+                if isinstance(item, dict)
+            ),
+            Decimal("0"),
+        )
+        if merchant_contributors and explained < ESCALATION_MIN_EXPLAINED_SHARE:
+            # The named merchants account for a sliver of the rise. Reporting it as a
+            # spending problem would blame spending for money that went elsewhere.
+            if misses is not None:
+                misses.append(
+                    build_near_miss(
+                        "spending_escalation_leak",
+                        "cause_not_identified",
+                        amount=change,
+                        dates=[snapshot.date_end] if snapshot.date_end else [],
+                        detail=f"The merchants behind it explain {explained * 100:.0f}% of the rise.",
+                    )
+                )
+            continue
         attributed = bool(merchant_contributors)
         if not attributed:
             # No merchant can be tied to the increase, so no transactions can be

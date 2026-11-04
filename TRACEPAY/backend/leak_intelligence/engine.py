@@ -7,7 +7,7 @@ duplicate-confirmation, recommendation, or affordability decisions.
 from __future__ import annotations
 
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Mapping
@@ -337,6 +337,18 @@ def _amount_trend(transactions: list[FeatureTransaction]) -> AmountTrend | None:
         ),
         key=lambda item: item.transaction_date,
     )
+    # Two or three months billed together (a catch-up) is not a new price.
+    counts = Counter(amount_of(item) for item in dated)
+    usual, usual_count = counts.most_common(1)[0] if counts else (ZERO, 0)
+    if usual > ZERO and usual_count >= 3:
+        dated = [
+            item
+            for item in dated
+            if not (
+                counts[amount_of(item)] == 1
+                and any(abs(amount_of(item) - usual * k) <= AMOUNT_TOLERANCE for k in (2, 3))
+            )
+        ]
     if len(dated) < TREND_MIN_OBSERVATIONS:
         return None
     previous = [amount_of(item) for item in dated[:-1]]

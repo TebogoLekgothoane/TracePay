@@ -74,6 +74,24 @@ def test_what_the_user_says_it_is_decides_whether_it_stays(answer, status):
     assert any(fact.answer == answer for fact in updated.claims.reported)
 
 
+def test_a_catch_up_payment_is_not_called_a_price_increase():
+    rows = [("835", date(2026, month, 1)) for month in (6, 7, 8, 9)] + [("1670", date(2026, 10, 1))]
+    leak = _subscription(_charges("g", "VIRGIN ACTIVE", rows), "VIRGIN ACTIVE")
+    assert leak is not None
+    assert leak.evidence.get("headline_impact_basis") != "price_increase"
+    assert leak.estimated_monthly_impact == 835
+
+
+def test_a_lower_price_held_for_two_charges_is_the_current_cost():
+    rows = [("1054.66", date(2026, month, 28)) for month in (6, 7, 8)] + [
+        ("676.23", date(2026, 9, 28)),
+        ("676.23", date(2026, 10, 28)),
+    ]
+    leak = _subscription(_charges("p", "PINEAPPLE", rows), "PINEAPPLE")
+    assert leak is not None
+    assert leak.estimated_monthly_impact == 676.23
+
+
 def test_a_small_monthly_plan_is_found_inside_a_busy_app_store_merchant():
     plan = _charges("p", "APPLE", [("69.99", date(2026, month, 18)) for month in (6, 7, 8, 10)])
     noise = _charges(
