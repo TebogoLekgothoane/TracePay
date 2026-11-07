@@ -553,6 +553,17 @@ def test_recommendations_are_derived_from_pipeline_reasoning() -> None:
             )
             for index in range(2)
         )
+    # Airtime meets the general growth bar, which wants three months of baseline.
+    transactions.extend(
+        _transaction(
+            f"airtime-6-{index}",
+            "40",
+            date(2026, 6, index + 10),
+            merchant="AIRTIME",
+            category="Airtime & Data",
+        )
+        for index in range(2)
+    )
     transactions.append(
         _transaction(
             "grocery-9",
@@ -592,7 +603,7 @@ def test_recommendations_are_derived_from_pipeline_reasoning() -> None:
             transaction_class="bank_fee",
             description="ATM FEE",
         )
-        for month in (7, 8, 9)
+        for month in (6, 7, 8, 9)
     )
 
     snapshot = build_financial_features("user-a", transactions)

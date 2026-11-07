@@ -779,6 +779,23 @@ def test_cash_finding_stays_visible_and_out_of_every_inventory() -> None:
                 transaction_class="bank_fee",
                 description="ATM WITHDRAWAL FEE",
             ),
+            # A second withdrawal and fee each month, so the fees stack (recurring impact).
+            *[
+                row
+                for month, day in ((7, 19), (8, 19), (9, 12))
+                for row in (
+                    _transaction(f"cash-{month}b", "200", date(2026, month, day), merchant=None, category="Cash Withdrawal"),
+                    _transaction(
+                        f"fee-{month}b",
+                        "20",
+                        date(2026, month, day),
+                        merchant=None,
+                        category="Bank Fees",
+                        transaction_class="bank_fee",
+                        description="ATM WITHDRAWAL FEE",
+                    ),
+                )
+            ],
         ]
     )
     cash = next(finding for finding in report.findings if finding.leak_type == "cash_usage_leak")

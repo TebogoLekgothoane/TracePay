@@ -107,7 +107,8 @@ def test_fi034_cash_dependency_scenario_matches_pipeline() -> None:
         "Cash withdrawals represent a meaningful share of observed spending."
     )
     leak = next(item for item in evaluation.leaks.leaks if item.leak_type == "cash_usage_leak")
-    assert leak.evidence["finding_focus"] == "atm_withdrawal_fee_stacking"
+    # One withdrawal and one fee a month is cash reliance, not fee stacking (FI-004 has two a month).
+    assert leak.evidence["finding_focus"] == "cash_dependency"
 
     negative = load_intelligence_scenario("FI-034-no-cash-withdrawals")
     negative_evaluation = evaluate_intelligence_scenario(negative)
@@ -559,7 +560,7 @@ def test_fi004_atm_withdrawal_fee_stacking_scenario_matches_pipeline() -> None:
         item for item in evaluation.leaks.leaks if item.leak_type == "cash_usage_leak"
     )
     assert leak.evidence.get("finding_focus") == "atm_withdrawal_fee_stacking"
-    assert leak.evidence.get("atm_fee_count") == 3
+    assert leak.evidence.get("atm_fee_count") == 6
     assert "recurring_payment_leak" not in evaluation.leak_types
 
 

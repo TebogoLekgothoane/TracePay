@@ -176,9 +176,15 @@ def test_a_sustained_rise_needs_only_the_lower_percentage() -> None:
     assert not one_month.passes
 
 
-def test_a_meaningful_change_in_essential_spending_keeps_the_existing_bar() -> None:
-    rows = _spend("Fuel", "SHELL", _plan([[1000], [1000], [1000], [1000], [1120]]))
-    assert "transport_spending_leak" in _growth_types(rows)  # +12%, +R120, essential
+def test_a_meaningful_change_in_essential_spending_needs_a_second_month() -> None:
+    # Fuel, groceries and bills move around 10% on their own, so one month 12% above the
+    # average is ordinary variation until the next month agrees.
+    one_month = _spend("Fuel", "SHELL", _plan([[1000], [1000], [1000], [1000], [1120]]))
+    assert "transport_spending_leak" not in _growth_types(one_month)
+    two_months = _spend("Fuel", "SHELL", _plan([[1000], [1000], [1000], [1120], [1250]]))
+    assert "transport_spending_leak" in _growth_types(two_months)  # +R220, essential, held
+    jump = _spend("Fuel", "SHELL", _plan([[1000], [1000], [1000], [1000], [1600]]))
+    assert "transport_spending_leak" in _growth_types(jump)  # a +60% step is evident at once
     discretionary = _spend("Restaurants", "NANDOS", _plan([[1000], [1000], [1000], [1000], [1120]]))
     assert "food_spending_leak" not in _growth_types(discretionary)  # same numbers
 
@@ -199,8 +205,8 @@ def test_a_two_month_comparison_of_a_modest_rise_is_not_enough() -> None:
 
 
 # ------------------------------------------------------- scope and presentation
-def test_only_the_broad_discretionary_leak_types_are_assessed() -> None:
-    assert set(GROWTH_MATERIALITY) == {"food_spending_leak", "transport_spending_leak"}
+def test_only_the_category_growth_leak_types_are_assessed() -> None:
+    assert set(GROWTH_MATERIALITY) == {"food_spending_leak", "transport_spending_leak", "airtime_data_leak"}
 
 
 def test_a_growth_finding_is_an_observation_not_a_confirmed_loss() -> None:
@@ -222,5 +228,11 @@ def test_thresholds_are_configurable() -> None:
     assert not _assess([1000] * 4 + [1250], thresholds=strict).passes
 
 
-def test_airtime_and_data_growth_is_not_subject_to_the_general_bar() -> None:
-    assert "airtime_data_leak" not in GROWTH_MATERIALITY
+def test_airtime_growth_meets_the_general_bar() -> None:
+    assert "airtime_data_leak" in GROWTH_MATERIALITY
+    # A R100 top-up followed by a R150 one is a R50 swing, not a finding.
+    swing = _spend("Airtime & Data", "MTN", _plan([[100], [100], [100], [100], [150]]))
+    assert "airtime_data_leak" not in _growth_types(swing)
+    # Airtime that has stepped up several times over is.
+    step = _spend("Airtime & Data", "MTN", _plan([[100, 100], [100, 100], [100, 100], [100, 100], [300, 300, 300]]))
+    assert "airtime_data_leak" in _growth_types(step)

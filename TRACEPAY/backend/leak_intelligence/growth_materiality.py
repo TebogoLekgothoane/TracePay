@@ -68,6 +68,9 @@ class GrowthAssessment:
 GROWTH_MATERIALITY: dict[str, GrowthMateriality] = {
     "food_spending_leak": GrowthMateriality(),
     "transport_spending_leak": GrowthMateriality(),
+    # Airtime keeps its own count and total rules (in the engine) but a R50 swing between
+    # a R100 and a R150 top-up is not a finding, so it also meets the ordinary bar.
+    "airtime_data_leak": GrowthMateriality(),
 }
 
 
@@ -173,7 +176,10 @@ def assess_category_growth(
     if one_purchase_among_others and single_share >= thresholds.one_off_share and not broad:
         reasons.append("single_purchase")
     sustained = consecutive >= thresholds.sustained_consecutive
-    if consecutive < thresholds.min_consecutive and not broad and not essential and not step_change:
+    # Essential spending is exempt from the longer-baseline rules but not from this one:
+    # fuel, groceries and bills move 10% from one month to the next on their own, so a
+    # single month above the average is ordinary variation until a second month confirms it.
+    if consecutive < thresholds.min_consecutive and not broad and not step_change:
         reasons.append("temporary_spike")
 
     if essential:

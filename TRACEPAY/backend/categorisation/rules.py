@@ -91,7 +91,9 @@ GYM_GROUPS: MerchantGroups = (
 GYM_PHRASES: tuple[str, ...] = ("GYM MEMBERSHIP", "GYM FEES", "FITNESS CLUB", "HEALTH CLUB")
 
 MORE_SUBSCRIPTION_GROUPS: MerchantGroups = (
-    ("MultiChoice", ("MULTICHOICE",)),
+    # "MULTICHOICE DSTV" and "DSTV SUBSCRIPTION" are one bill; naming both "Dstv"
+    # keeps them in one series instead of two alternating ones.
+    ("Dstv", ("MULTICHOICE",)),
     ("StarSat", ("STARSAT",)),
     ("iCloud", ("ICLOUD", "APPLE ICLOUD")),
     ("Dropbox", ("DROPBOX",)),
@@ -228,9 +230,9 @@ _RECOGNISED_MERCHANT_GROUPS: MerchantGroups = (
     ("Microsoft", ("MICROSOFT", "OFFICE 365", "M365")),
     ("Discord", ("DISCORD",)),
     ("Canva", ("CANVA",)),
-    ("YouTube Premium", ("YOUTUBE PREMIUM", "YOUTUBE MUSIC")),
+    ("YouTube Premium", ("YOUTUBE PREMIUM", "YOUTUBEPREMIUM", "YOUTUBE MUSIC")),
     ("Prime Video", ("PRIME VIDEO", "AMAZON PRIME")),
-    ("Disney+", ("DISNEY PLUS", "DISNEY")),
+    ("Disney+", ("DISNEY PLUS", "DISNEYPLUS", "DISNEY")),
     ("Apple Music", ("APPLE MUSIC",)),
     ("Apple", ("APPLE", "ITUNES", "APP STORE")),
     ("Mr Price", ("MR PRICE", "MRPRICE")),
@@ -570,10 +572,12 @@ RULES: tuple[Rule, ...] = (
             "DISCORD",
             "CANVA",
             "YOUTUBE PREMIUM",
+            "YOUTUBEPREMIUM",
             "YOUTUBE MUSIC",
             "PRIME VIDEO",
             "AMAZON PRIME",
             "DISNEY PLUS",
+            "DISNEYPLUS",
             "APPLE MUSIC",
             "CURSOR AI",
             "CURSOR",
@@ -741,6 +745,16 @@ RULES: tuple[Rule, ...] = (
             )
         ),
         transaction_class="person_to_person",
+    ),
+    # A payment whose own wording says it is rent is a housing cost, not an
+    # unidentified payee. Bounded match, so CURRENT and RENTAL do not qualify.
+    Rule(
+        "description:rent-payment",
+        "Rent",
+        0.88,
+        lambda description, kind: kind == "debit"
+        and contains("RENT")(description, kind)
+        and description != "RENT",
     ),
     # Absa wording: "DIGITAL TRANSF" moves money between the customer's own accounts;
     # "DIGITAL PAYMENT" pays another customer.

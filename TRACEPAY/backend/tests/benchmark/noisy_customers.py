@@ -267,6 +267,9 @@ def build_noisy_customers() -> list[Customer]:
         )
     )
 
+    from tests.benchmark.noisy_extra import build_extra_noisy_customers
+
+    customers.extend(build_extra_noisy_customers())
     return customers
 
 

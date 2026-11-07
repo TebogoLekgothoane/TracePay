@@ -310,7 +310,7 @@
         "leak_type": "cash_usage_leak",
         "evidence": {
           "finding_focus": "atm_withdrawal_fee_stacking",
-          "atm_fee_count": 3
+          "atm_fee_count": 6
         }
       },
       "enforce_expectation": true

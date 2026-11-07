@@ -123,11 +123,20 @@ def _baseline_checkers():
     ]
 
 
-def test_b_genuinely_higher_purchases_remain_independently_reportable() -> None:
-    rows = [
-        *_baseline_checkers(),
-        _transaction("w1", "600", date(2026, 7, 18), merchant="WOOLWORTHS", category="Shopping"),
+# July's extra R600 is four purchases, not one: a single large purchase is not an escalation
+# (see _rise_is_one_large_purchase), so the rise has to be broad to be reported.
+WOOLWORTHS_IDS = {"w1", "w2", "w3", "w4"}
+
+
+def _july_woolworths():
+    return [
+        _transaction(f"w{index + 1}", "150", date(2026, 7, 6 + index * 4), merchant="WOOLWORTHS", category="Shopping")
+        for index in range(4)
     ]
+
+
+def test_b_genuinely_higher_purchases_remain_independently_reportable() -> None:
+    rows = [*_baseline_checkers(), *_july_woolworths()]
     result, summary = _run(rows)
     escalation = _of(result, "spending_escalation_leak")
     assert len(escalation) == 1
@@ -136,8 +145,8 @@ def test_b_genuinely_higher_purchases_remain_independently_reportable() -> None:
     assert leak.evidence["increase_attribution"] == "merchant_rows"
     assert leak.supporting_transaction_count > 0
     attached = {row.transaction_id for row in leak.supporting_transactions}
-    assert attached == {"w1"}  # unchanged Checkers spending is not attached
-    assert escalation_increase_ids(leak) == {"w1"}
+    assert attached == WOOLWORTHS_IDS  # unchanged Checkers spending is not attached
+    assert escalation_increase_ids(leak) == WOOLWORTHS_IDS
     assert "R600.00" in leak.evidence["increase_calculation"]
     assert summary.overlaps == []
     assert summary.one_time_potential == Decimal("600.00")
@@ -221,10 +230,7 @@ def test_e_an_increase_that_cannot_be_attributed_carries_no_invented_evidence() 
 
 
 def test_e_unreadable_contributor_figures_attach_nothing() -> None:
-    rows = [
-        *_baseline_checkers(),
-        _transaction("w1", "600", date(2026, 7, 18), merchant="WOOLWORTHS", category="Shopping"),
-    ]
+    rows = [*_baseline_checkers(), *_july_woolworths()]
     result = _detect(rows)
     leak = _of(result, "spending_escalation_leak")[0]
     broken = leak.model_copy(

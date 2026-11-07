@@ -111,12 +111,14 @@ def build_all() -> list[dict]:
 
     months = month_starts(2026, 7, 3)
     fi004_pos: list[dict] = []
-    for index, month in enumerate(months):
+    # Two withdrawals a month, each with its own fee: fees stack when cash comes out in
+    # several small withdrawals, so one a month is not stacking.
+    for index, (month, day) in enumerate((m, d) for m in months for d in (5, 19)):
         fi004_pos.append(
             tx(
                 f"fi004-cash-{index}",
-                date(month.year, month.month, 5),
-                str(200 + index * 100),
+                date(month.year, month.month, day),
+                str(200 + index * 50),
                 description="ATM CASH WITHDRAWAL FNB",
                 merchant=None,
                 category="Cash Withdrawal",
@@ -125,7 +127,7 @@ def build_all() -> list[dict]:
         fi004_pos.append(
             tx(
                 f"fi004-atm-fee-{index}",
-                date(month.year, month.month, 5),
+                date(month.year, month.month, day),
                 "20.00",
                 description="ATM WITHDRAWAL FEE",
                 merchant=None,

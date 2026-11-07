@@ -1911,7 +1911,7 @@ def test_cash_dependency_promotes_to_cash_usage_leak_without_atm_fees() -> None:
     )
 
 
-def test_atm_withdrawal_fee_stacking_uses_fee_focus_not_cash_dependency_title() -> None:
+def test_one_atm_withdrawal_a_month_is_not_fee_stacking() -> None:
     transactions = [
         _transaction("cash-1", "200", date(2026, 7, 5), merchant=None, category="Cash Withdrawal"),
         _transaction("fee-1", "20", date(2026, 7, 5), merchant=None, category="Bank Fees", transaction_class="bank_fee", description="ATM WITHDRAWAL FEE"),
@@ -1920,10 +1920,30 @@ def test_atm_withdrawal_fee_stacking_uses_fee_focus_not_cash_dependency_title() 
         _transaction("cash-3", "400", date(2026, 9, 30), merchant=None, category="Cash Withdrawal"),
         _transaction("fee-3", "20", date(2026, 9, 30), merchant=None, category="Bank Fees", transaction_class="bank_fee", description="ATM WITHDRAWAL FEE"),
     ]
+    findings = [item for item in _detect(transactions).leaks if item.leak_type == "cash_usage_leak"]
+    assert all(item.evidence.get("finding_focus") != "atm_withdrawal_fee_stacking" for item in findings)
+
+
+def test_atm_withdrawal_fee_stacking_uses_fee_focus_not_cash_dependency_title() -> None:
+    transactions = [
+        _transaction("cash-1", "200", date(2026, 7, 5), merchant=None, category="Cash Withdrawal"),
+        _transaction("fee-1", "20", date(2026, 7, 5), merchant=None, category="Bank Fees", transaction_class="bank_fee", description="ATM WITHDRAWAL FEE"),
+        _transaction("cash-2", "300", date(2026, 8, 5), merchant=None, category="Cash Withdrawal"),
+        _transaction("fee-2", "20", date(2026, 8, 5), merchant=None, category="Bank Fees", transaction_class="bank_fee", description="ATM WITHDRAWAL FEE"),
+        _transaction("cash-3", "400", date(2026, 9, 30), merchant=None, category="Cash Withdrawal"),
+        _transaction("fee-3", "20", date(2026, 9, 30), merchant=None, category="Bank Fees", transaction_class="bank_fee", description="ATM WITHDRAWAL FEE"),
+        # A second withdrawal and fee in each month: that is what makes the fees stack.
+        _transaction("cash-1b", "200", date(2026, 7, 19), merchant=None, category="Cash Withdrawal"),
+        _transaction("fee-1b", "20", date(2026, 7, 19), merchant=None, category="Bank Fees", transaction_class="bank_fee", description="ATM WITHDRAWAL FEE"),
+        _transaction("cash-2b", "300", date(2026, 8, 19), merchant=None, category="Cash Withdrawal"),
+        _transaction("fee-2b", "20", date(2026, 8, 19), merchant=None, category="Bank Fees", transaction_class="bank_fee", description="ATM WITHDRAWAL FEE"),
+        _transaction("cash-3b", "400", date(2026, 9, 12), merchant=None, category="Cash Withdrawal"),
+        _transaction("fee-3b", "20", date(2026, 9, 12), merchant=None, category="Bank Fees", transaction_class="bank_fee", description="ATM WITHDRAWAL FEE"),
+    ]
     leak = next(item for item in _detect(transactions).leaks if item.leak_type == "cash_usage_leak")
     assert leak.title == "Potential ATM withdrawal fee stacking"
     assert leak.evidence["finding_focus"] == "atm_withdrawal_fee_stacking"
-    assert leak.evidence["atm_fee_count"] == 3
+    assert leak.evidence["atm_fee_count"] == 6
     assert "recurring_payment_leak" not in _types(transactions)
 
 

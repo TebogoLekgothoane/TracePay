@@ -120,6 +120,38 @@ def detect_leaks(
     )
 
 
+# Everyday shopping the customer moves between stores. A store that goes quiet
+# because they shop elsewhere is not a commitment that lapsed.
+_EVERYDAY_SHOPPING_CATEGORIES = frozenset(
+    {
+        "groceries",
+        "fuel",
+        "restaurants",
+        "fast food",
+        "coffee",
+        "shopping",
+        "ride hailing",
+        "public transport",
+        "transport",
+        "gambling",
+        "cash withdrawal",
+        "cash withdrawals",
+        "atm cash withdrawal",
+    }
+)
+
+
+def _is_everyday_shopping_merchant(merchant: MerchantFeature) -> bool:
+    """True when the merchant is everyday retail and was never paid by debit order."""
+    if merchant.debit_order_transaction_count >= 1:
+        return False
+    counts = merchant.merchant_category_transaction_count
+    if not counts:
+        return False
+    dominant = max(counts, key=lambda name: counts[name])
+    return dominant.strip().lower() in _EVERYDAY_SHOPPING_CATEGORIES
+
+
 def _inactive_recurring_leaks(
     snapshot: FinancialFeatureSnapshot,
     misses: list[NearMiss] | None = None,
@@ -129,6 +161,8 @@ def _inactive_recurring_leaks(
         return []
     findings: list[LeakDetection] = []
     for merchant in snapshot.merchants:
+        if _is_everyday_shopping_merchant(merchant):
+            continue
         recurrence = merchant.recurrence
         interval = recurrence.median_interval_days or recurrence.average_interval_days
         amount = recurrence.average_amount
@@ -1103,6 +1137,86 @@ def _unidentified_share(snapshot: FinancialFeatureSnapshot, months: list[str]) -
     return sum((month.unclassified_outflow for month in chosen), Decimal("0")) / outflow
 
 
+ESCALATION_ONE_OFF_SHARE = Decimal("0.60")
+ESCALATION_BROAD_EXTRA_TRANSACTIONS = 3
+ESCALATION_STEP_CHANGE_PERCENT = Decimal("35")
+
+
+def _rise_is_one_month_blip(
+    snapshot: FinancialFeatureSnapshot,
+    observation: BehaviourObservation,
+) -> bool:
+    """True when only the latest month is up: ordinary variation until a second month agrees.
+
+    A rise of ``ESCALATION_STEP_CHANGE_PERCENT`` or more is a step change and does not wait.
+    """
+    current = observation.evidence.get("current_period")
+    baseline = [str(m) for m in (observation.evidence.get("baseline_months") or [])]
+    percent = _decimal(observation.evidence.get("change_percentage"))
+    if not isinstance(current, str) or len(baseline) < 2:
+        return False
+    if percent is not None and percent >= ESCALATION_STEP_CHANGE_PERCENT:
+        return False
+    if _rise_is_broad(snapshot, current, baseline):
+        return False
+    totals = {month.month: month.total_outflow for month in snapshot.months}
+    previous = baseline[-1]
+    earlier = [totals.get(m, Decimal("0")) for m in baseline[:-1]]
+    if previous not in totals or not earlier:
+        return False
+    usual = sum(earlier, Decimal("0")) / Decimal(len(earlier))
+    # The month before was also meaningfully above the months before it.
+    return not (usual > 0 and totals[previous] >= usual * Decimal("1.10"))
+
+
+def _rise_is_one_large_purchase(
+    snapshot: FinancialFeatureSnapshot,
+    observation: BehaviourObservation,
+    change: Decimal,
+) -> bool:
+    """True when one purchase, not wider spending, is most of an overall rise.
+
+    A single big shop or bill makes one month higher than the average of the others,
+    but spending has not escalated: nothing about next month is different.
+    """
+    current = observation.evidence.get("current_period")
+    baseline = [str(m) for m in (observation.evidence.get("baseline_months") or [])]
+    if not isinstance(current, str) or not baseline or change <= 0:
+        return False
+    biggest_rise = Decimal("0")
+    biggest_category_count = 0
+    for category in snapshot.categories:
+        largest = category.category_monthly_max_amount
+        if current not in largest:
+            continue
+        usual = sum((largest.get(month, Decimal("0")) for month in baseline), Decimal("0")) / Decimal(
+            len(baseline)
+        )
+        if largest[current] - usual > biggest_rise:
+            biggest_rise = largest[current] - usual
+            biggest_category_count = category.category_monthly_transaction_count.get(current, 0)
+    if biggest_rise / change < ESCALATION_ONE_OFF_SHARE:
+        return False
+    # With a single purchase a month in that category there is nothing to single out:
+    # a rising monthly purchase is a trend, not a one-off.
+    if biggest_category_count < 2:
+        return False
+    return not _rise_is_broad(snapshot, current, baseline)
+
+
+def _rise_is_broad(snapshot: FinancialFeatureSnapshot, current: str, baseline: list[str]) -> bool:
+    """True when the latest month has several more purchases than usual."""
+    by_month = {month.month: month for month in snapshot.months}
+    in_baseline = [m for m in baseline if m in by_month]
+    if current not in by_month or not in_baseline:
+        return False
+    usual_count = sum(
+        (Decimal(by_month[m].outflow_transaction_count) for m in in_baseline), Decimal("0")
+    ) / Decimal(len(in_baseline))
+    extra = Decimal(by_month[current].outflow_transaction_count) - usual_count
+    return extra >= ESCALATION_BROAD_EXTRA_TRANSACTIONS
+
+
 def _spending_escalation_leaks(
     snapshot: FinancialFeatureSnapshot,
     observations: dict[str, list[BehaviourObservation]],
@@ -1134,6 +1248,29 @@ def _spending_escalation_leaks(
                         dates=[snapshot.date_end] if snapshot.date_end else [],
                     )
                 )
+            continue
+        for reason_check, detail in (
+            (_rise_is_one_month_blip(snapshot, observation), "Spending was higher for one month only."),
+            (
+                _rise_is_one_large_purchase(snapshot, observation, change),
+                "One large purchase accounts for most of the rise.",
+            ),
+        ):
+            if reason_check:
+                if misses is not None:
+                    misses.append(
+                        build_near_miss(
+                            "spending_escalation_leak",
+                            "cause_not_identified",
+                            amount=change,
+                            dates=[snapshot.date_end] if snapshot.date_end else [],
+                            detail=detail,
+                        )
+                    )
+                break
+        else:
+            reason_check = False
+        if reason_check:
             continue
         confidence = min(observation.confidence, 0.80)
         contributors = _spending_contributor_breakdown(snapshot, observation)
@@ -1265,14 +1402,10 @@ def _category_leaks(
             and feature.food_delivery_transaction_count < minimum_transactions
         ):
             continue
-        # Delivery-only and ride-hailing-only categories are judged by their own
-        # purchase-count rules above; the general materiality bar is for the broad
-        # food and transport categories.
-        materiality = (
-            None
-            if feature.food_delivery_only or feature.ride_hailing_only
-            else GROWTH_MATERIALITY.get(leak_type)
-        )
+        # Delivery-only categories are judged by their own purchase-count rules above;
+        # ride-hailing, like the rest, must also clear the general materiality bar, so
+        # a few rides at irregular amounts are not read as a growing dependency.
+        materiality = None if feature.food_delivery_only else GROWTH_MATERIALITY.get(leak_type)
         assessment = None
         if materiality is not None:
             assessment = assess_category_growth(
@@ -1883,12 +2016,18 @@ def _airtime_repeat_merchant(merchant: MerchantFeature) -> bool:
     )
 
 
-def _atm_withdrawal_fee_stacking_eligible(cash: CashFeatures) -> bool:
+def _atm_withdrawal_fee_stacking_eligible(cash: CashFeatures, months: int = 1) -> bool:
+    """Fees stack when the customer takes cash out in several small withdrawals.
+
+    One withdrawal a month with its fee is ordinary use: there is nothing to
+    consolidate. Stacking needs about two or more withdrawals a month on average.
+    """
     atm_total = cash.atm_fee_total or Decimal("0")
     return (
         atm_total >= MIN_IMPACT
         and cash.atm_fee_count >= 2
         and cash.cash_withdrawal_count >= 3
+        and Decimal(cash.cash_withdrawal_count) / Decimal(max(1, months)) >= Decimal("2")
     )
 
 
@@ -1911,7 +2050,11 @@ def _cash_leaks(
         return []
 
     months = max(1, len(completed_months(snapshot)))
-    stacking = _atm_withdrawal_fee_stacking_eligible(cash)
+    stacking = _atm_withdrawal_fee_stacking_eligible(cash, months)
+    # A fee on a single monthly withdrawal is the price of getting cash, not a leak.
+    fee_backed = fee_backed and Decimal(cash.cash_withdrawal_count) / Decimal(months) >= Decimal("2")
+    if not fee_backed and not reliance_backed:
+        return []
     if stacking:
         impact = atm_total / Decimal(months)
         impact_kind = "recurring"

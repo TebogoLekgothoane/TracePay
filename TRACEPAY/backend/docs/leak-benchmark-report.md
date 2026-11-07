@@ -1,6 +1,6 @@
 # TracePay leak engine benchmark
 
-Customers: 30. Expected findings are defined in `tests/benchmark/customers.py` before the engine runs and are not adjusted to its output. Findings are scored as the customer sees them; 4 finding(s) kept internally as explained by another finding are not counted.
+Customers: 30. Expected findings are defined in `tests/benchmark/customers.py` before the engine runs and are not adjusted to its output. Findings are scored as the customer sees them; 1 finding(s) kept internally as explained by another finding are not counted.
 
 ## Summary
 
@@ -18,7 +18,7 @@ Customers: 30. Expected findings are defined in `tests/benchmark/customers.py` b
 | Double-counting rate (total above expected) | 0/5 |
 | Idempotent runs | 30/30 |
 | Classification accuracy (gold set) | 20/22 |
-| Processing time (all customers, twice each) | 0.37s |
+| Processing time (all customers, twice each) | 0.48s |
 
 ## Results by leak category
 
