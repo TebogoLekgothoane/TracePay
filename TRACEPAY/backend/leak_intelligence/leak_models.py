@@ -156,6 +156,7 @@ QuestionKind = Literal[
     "insurance_cover",
     "bank_account",
     "payment_purpose",
+    "transfer_purpose",
 ]
 
 
@@ -277,6 +278,15 @@ class ImpactSummary(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class GoodNewsItem(BaseModel):
+    """A price that fell. Not a leak, never counted as money found, and kept apart from findings."""
+
+    key: str
+    title: str
+    # One sentence, with **bold** markers around the figures that matter.
+    line: str
+
+
 class LeakDetectionResult(BaseModel):
     """Leak detections for a single user and a single snapshot period."""
 
@@ -296,3 +306,5 @@ class LeakDetectionResult(BaseModel):
     questions_not_shown: int = 0
     # Why look-alikes were not raised. Debug and tuning only; never a finding.
     near_misses: list[NearMiss] = Field(default_factory=list)
+    # Prices that fell. Shown beside the findings, never as one and never in a total.
+    good_news: list[GoodNewsItem] = Field(default_factory=list)

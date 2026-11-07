@@ -71,6 +71,9 @@ def attach_supporting_transactions(
 
 
 def _with_support(leak: LeakDetection, transactions: list[FeatureTransaction]) -> LeakDetection:
+    # A finding from the statement review already carries the exact rows it was built from.
+    if leak.evidence.get("source") == "statement_review":
+        return leak
     evidence_update: dict[str, object] = {}
     if leak.leak_type == "spending_escalation_leak":
         selected, evidence_update = _escalation_rows(leak, transactions)

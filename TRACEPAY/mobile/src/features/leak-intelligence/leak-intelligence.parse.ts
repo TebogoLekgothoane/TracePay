@@ -11,6 +11,7 @@ import type {
   LeakCoverageLimit,
   LeakDetection,
   LeakDetectionResult,
+  LeakGoodNews,
   LeakNearMiss,
   LeakImpactKind,
   LeakSeverity,
@@ -59,7 +60,22 @@ export function parseLeakDetectionResult(payload: unknown): LeakDetectionResult 
         ? Math.floor(payload.questions_not_shown)
         : 0,
     near_misses: parseNearMisses(payload.near_misses),
+    good_news: parseGoodNews(payload.good_news),
   };
+}
+
+/** Prices that fell. A malformed entry is dropped, never shown half-filled. */
+export function parseGoodNews(value: unknown): LeakGoodNews[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): LeakGoodNews[] =>
+    isRecord(item) &&
+    typeof item.key === "string" &&
+    typeof item.title === "string" &&
+    typeof item.line === "string" &&
+    item.line.trim()
+      ? [{ key: item.key, title: item.title, line: item.line.trim() }]
+      : [],
+  );
 }
 
 /** Skips anything malformed: near misses are for tuning and must never break the screen. */
@@ -100,6 +116,7 @@ const QUESTION_KINDS: readonly FindingQuestionKind[] = [
   "insurance_cover",
   "bank_account",
   "payment_purpose",
+  "transfer_purpose",
 ];
 
 /**

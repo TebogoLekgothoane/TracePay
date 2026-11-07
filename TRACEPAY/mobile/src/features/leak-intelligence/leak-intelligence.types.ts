@@ -113,7 +113,8 @@ export type FindingQuestionKind =
   | "data_usage"
   | "insurance_cover"
   | "bank_account"
-  | "payment_purpose";
+  | "payment_purpose"
+  | "transfer_purpose";
 
 export type FindingQuestionOption = {
   value: string;
@@ -178,6 +179,14 @@ export type LeakNearMiss = {
   dates: string[];
 };
 
+/** A price that fell. Not a leak, never counted as money found, and never in a total. */
+export type LeakGoodNews = {
+  key: string;
+  title: string;
+  /** One sentence, with **bold** markers around the figures that matter. */
+  line: string;
+};
+
 export type LeakDetectionResult = {
   user_id: string;
   transaction_count: number;
@@ -190,4 +199,6 @@ export type LeakDetectionResult = {
   questions_not_shown: number;
   /** Absent on older backends. For tuning; never shown as a finding. */
   near_misses?: LeakNearMiss[];
+  /** Absent on older backends. Prices that fell, shown beside the findings. */
+  good_news?: LeakGoodNews[];
 };

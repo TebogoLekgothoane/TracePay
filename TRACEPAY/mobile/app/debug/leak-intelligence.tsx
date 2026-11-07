@@ -3,6 +3,7 @@ import {
   ArrowLeftRight,
   ChevronDown,
   ChevronLeft,
+  FileText,
   Fuel,
   RefreshCw,
   Share2,
@@ -14,13 +15,27 @@ import {
 import type { LucideIcon } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Pressable, ScrollView, Share, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  Share,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { answerFindingQuestion, skipFindingQuestion } from "../../src/api/finding-questions.api";
+import { fetchStatementReport } from "../../src/api/leak-intelligence.api";
 import { FindingQuestionCard } from "../../src/components/leaks/FindingQuestionCard";
 import { LeakClaimsSection } from "../../src/components/leaks/LeakClaimsSection";
 import { LeakEvidenceSection } from "../../src/components/leaks/LeakEvidenceSection";
+import {
+  GoodNews,
+  StatementReviewSections,
+} from "../../src/components/leaks/StatementReviewSections";
 import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
 import { SimpleBrandLogo } from "../../src/components/ui/SimpleBrandLogo";
@@ -48,9 +63,17 @@ import {
   catalogLogoUrl,
   resolveCatalogLogo,
 } from "../../src/features/transactions/merchant-logos";
+import type {
+  GoodNewsItem,
+  StatementReview,
+} from "../../src/features/leak-intelligence/statement-review.parse";
 import { useLeakIntelligenceDebug } from "../../src/hooks/useLeakIntelligenceDebug";
+import { useStatementReview } from "../../src/hooks/useStatementReview";
 import { useStoredSyntheticAnalysis } from "../../src/hooks/useStoredSyntheticAnalysis";
 import { COLORS } from "../../src/theme/colors";
+
+/** At most this many questions are put to the user at once, the engine's own rule. */
+const MAX_PENDING_QUESTIONS = 3;
 
 /**
  * Potential leaks, laid out the way the Leaks tab shows them: a short list of
@@ -76,6 +99,27 @@ function LeakIntelligenceDebugScreen() {
       ? null
       : "Run a synthetic scenario before opening this view."
     : live.error;
+  const statementReview = useStatementReview(!synthetic.active && live.result !== null, live.result);
+  // The new review is the main list when it loaded. The person can switch to the original
+  // engine's list to compare, and the screen says plainly when the review is unavailable.
+  const [chosenView, setChosenView] = useState<"review" | "engine" | null>(null);
+  const view: "review" | "engine" =
+    chosenView ?? (statementReview.review ? "review" : "engine");
+  const [sharingReport, setSharingReport] = useState(false);
+
+  async function shareStatementReport() {
+    setSharingReport(true);
+    try {
+      await Share.share({ message: await fetchStatementReport() });
+    } catch (reportError) {
+      Alert.alert(
+        "Could not build the report",
+        reportError instanceof Error ? reportError.message : "Please try again.",
+      );
+    } finally {
+      setSharingReport(false);
+    }
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -107,6 +151,20 @@ function LeakIntelligenceDebugScreen() {
               </IconButton>
             ) : null}
             {synthetic.active ? null : (
+              <IconButton
+                accessibilityLabel="Share statement report"
+                variant="ghost"
+                disabled={sharingReport}
+                onPress={() => void shareStatementReport()}
+              >
+                {sharingReport ? (
+                  <ActivityIndicator size="small" color={palette.foreground} />
+                ) : (
+                  <FileText color={palette.foreground} size={20} strokeWidth={2} />
+                )}
+              </IconButton>
+            )}
+            {synthetic.active ? null : (
               <IconButton accessibilityLabel="Refresh" variant="ghost" onPress={live.refresh}>
                 <RefreshCw color={palette.foreground} size={20} strokeWidth={2} />
               </IconButton>
@@ -119,12 +177,31 @@ function LeakIntelligenceDebugScreen() {
 
           {loading && !result ? <LoadingState /> : null}
           {error ? <ErrorState message={error} onRetry={live.refresh} /> : null}
+          {result && !synthetic.active ? (
+            <ViewSwitch
+              view={view}
+              reviewReady={statementReview.review !== null}
+              reviewLoading={statementReview.loading}
+              reviewError={statementReview.error}
+              onChange={setChosenView}
+              onRetry={statementReview.reload}
+            />
+          ) : null}
           {result ? (
             <Findings
+              view={view}
+              review={statementReview.review}
               leaks={result.leaks}
               questions={result.questions ?? []}
               questionsNotShown={result.questions_not_shown ?? 0}
               nearMisses={result.near_misses ?? []}
+              goodNews={
+                statementReview.review?.goodNews ??
+                (result.good_news ?? []).map((item) => ({ ...item, rows: [], rowsTotal: 0 }))
+              }
+              reportQuestions={statementReview.review?.questions ?? []}
+              reportQuestionsNotShown={statementReview.review?.questionsNotShown ?? 0}
+              onReportQuestionHandled={statementReview.reload}
               updating={loading}
               onQuestionHandled={synthetic.active ? undefined : live.refreshQuietly}
             />
@@ -135,7 +212,7 @@ function LeakIntelligenceDebugScreen() {
   );
 }
 
-function LoadingState() {
+export function LoadingState() {
   return (
     <View className="mt-8 items-center rounded-3xl bg-card px-5 py-10">
       <ActivityIndicator size="large" />
@@ -146,7 +223,7 @@ function LoadingState() {
   );
 }
 
-function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+export function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <View className="mt-6 rounded-3xl bg-card px-5 py-5">
       <Text className="text-[16px] font-semibold text-destructive">Analysis unavailable</Text>
@@ -158,18 +235,105 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
   );
 }
 
+/**
+ * Which list the page shows: the statement review (the new rules, laid out as the report is)
+ * or the original engine's findings. It also says why the review is missing, so a screen full
+ * of the original engine's answers is never mistaken for the new ones.
+ */
+function ViewSwitch({
+  view,
+  reviewReady,
+  reviewLoading,
+  reviewError,
+  onChange,
+  onRetry,
+}: {
+  view: "review" | "engine";
+  reviewReady: boolean;
+  reviewLoading: boolean;
+  reviewError: string | null;
+  onChange: (view: "review" | "engine") => void;
+  onRetry: () => void;
+}) {
+  const options: { key: "review" | "engine"; label: string }[] = [
+    { key: "review", label: "Report" },
+    { key: "engine", label: "Finding cards" },
+  ];
+  return (
+    <View className="mt-4">
+      <View className="flex-row gap-2">
+        {options.map((option) => {
+          const selected = option.key === view;
+          const disabled = option.key === "review" && !reviewReady;
+          return (
+            <Pressable
+              key={option.key}
+              accessibilityRole="button"
+              accessibilityState={{ selected, disabled }}
+              disabled={disabled}
+              className={`rounded-full border px-4 py-2 active:opacity-70 ${
+                selected ? "border-foreground bg-foreground" : "border-border"
+              } ${disabled ? "opacity-40" : ""}`}
+              onPress={() => onChange(option.key)}
+            >
+              <Text
+                className={`text-[13px] font-semibold ${selected ? "text-background" : "text-foreground"}`}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      <Text className="mt-2 text-[12px] leading-4 text-muted-foreground">
+        {view === "review"
+          ? "The report: findings in groups, what the rows show and what they can't, and the rows behind each figure."
+          : "The same findings as cards. Both views come from one detection, so they never disagree."}
+      </Text>
+      {reviewLoading && !reviewReady ? (
+        <Text className="mt-2 text-[12px] text-muted-foreground">Loading the report…</Text>
+      ) : null}
+      {reviewError && !reviewReady ? (
+        <View className="mt-2 rounded-2xl bg-muted/40 px-4 py-3">
+          <Text className="text-[13px] font-semibold text-foreground">
+            The report didn't load, so you are seeing the finding cards.
+          </Text>
+          <Text className="mt-1 text-[12px] leading-4 text-muted-foreground">{reviewError}</Text>
+          <Button className="mt-3 self-start" variant="outline" onPress={onRetry}>
+            Try again
+          </Button>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 function Findings({
+  view,
+  review,
   leaks,
   questions,
   questionsNotShown,
   nearMisses,
+  goodNews,
+  reportQuestions,
+  reportQuestionsNotShown,
+  onReportQuestionHandled,
   updating,
   onQuestionHandled,
 }: {
+  view: "review" | "engine";
+  review: StatementReview | null;
   leaks: LeakDetection[];
   questions: FindingQuestion[];
   questionsNotShown: number;
   nearMisses: LeakNearMiss[];
+  goodNews: GoodNewsItem[];
+  /** Questions from the statement report, asked after the engine's own. */
+  reportQuestions: FindingQuestion[];
+  reportQuestionsNotShown: number;
+  /** Reloads the statement report after an answer. */
+  onReportQuestionHandled: () => void;
   updating: boolean;
   /** Reloads the analysis after an answer. Omitted where answers are not saved. */
   onQuestionHandled?: () => void;
@@ -177,13 +341,27 @@ function Findings({
   const [handled, setHandled] = useState<string[]>([]);
   useEffect(() => {
     setHandled([]);
-  }, [questions]);
-  const pending = onQuestionHandled
+  }, [questions, reportQuestions]);
+  const enginePending = onQuestionHandled
     ? questions.filter((item) => !handled.includes(item.question_key))
     : [];
+  // The same few-at-a-time rule as the engine's: report questions only fill what room is left,
+  // and one the engine already asks is never shown twice.
+  const engineKeys = new Set(questions.map((item) => item.question_key));
+  const reportOpen = onQuestionHandled
+    ? reportQuestions.filter(
+        (item) => !engineKeys.has(item.question_key) && !handled.includes(item.question_key),
+      )
+    : [];
+  const reportShown = reportOpen.slice(0, Math.max(0, MAX_PENDING_QUESTIONS - enginePending.length));
+  const pending = [...enginePending, ...reportShown];
+  // Both lists now come from one detection, so they share one count of questions waiting.
+  const waiting =
+    Math.max(questionsNotShown, reportQuestionsNotShown) + (reportOpen.length - reportShown.length);
   const done = (question: FindingQuestion) => {
     setHandled((current) => [...current, question.question_key]);
     onQuestionHandled?.();
+    onReportQuestionHandled();
   };
   const answer = async (question: FindingQuestion, value: string) => {
     await answerFindingQuestion({
@@ -213,44 +391,50 @@ function Findings({
               onSkip={skip}
             />
           ))}
-          {questionsNotShown ? (
+          {waiting ? (
             <Text className="text-center text-[12px] text-muted-foreground">
-              {questionsNotShown} more {questionsNotShown === 1 ? "question" : "questions"} once
-              these are done.
+              {waiting} more {waiting === 1 ? "question" : "questions"} once these are done.
             </Text>
           ) : null}
         </View>
       ) : null}
 
-      {leaks.length === 0 ? (
-        <View className="rounded-3xl bg-card px-5 py-6">
-          <Text className="text-[16px] font-semibold text-foreground">Nothing to review yet</Text>
-          <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">
-            We found nothing worth flagging in your statements. We keep looking as more
-            transactions come in.
-          </Text>
-        </View>
+      {view === "review" && review ? (
+        <StatementReviewSections review={review} />
       ) : (
         <>
-          <Text className="text-[14px] leading-5 text-muted-foreground">
-            We found {leaks.length} {leaks.length === 1 ? "thing" : "things"} worth reviewing.
-          </Text>
-          {groupFindingsByValue(leaks).map((group) => (
-            <View key={group.key} className="mt-6">
-              <Text className="text-[17px] font-bold text-foreground">
-                {group.title} ({group.leaks.length})
+          {leaks.length === 0 ? (
+            <View className="rounded-3xl bg-card px-5 py-6">
+              <Text className="text-[16px] font-semibold text-foreground">Nothing to review yet</Text>
+              <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">
+                We found nothing worth flagging in your statements. We keep looking as more
+                transactions come in.
               </Text>
-              <Text className="mt-0.5 text-[13px] text-muted-foreground">{group.blurb}</Text>
-              <View className="mt-3 gap-3">
-                {group.leaks.map((leak) => (
-                  <FindingCard key={leak.fingerprint} leak={leak} />
-                ))}
-              </View>
             </View>
-          ))}
+          ) : (
+            <>
+              <Text className="text-[14px] leading-5 text-muted-foreground">
+                We found {leaks.length} {leaks.length === 1 ? "thing" : "things"} worth reviewing.
+              </Text>
+              {groupFindingsByValue(leaks).map((group) => (
+                <View key={group.key} className="mt-6">
+                  <Text className="text-[17px] font-bold text-foreground">
+                    {group.title} ({group.leaks.length})
+                  </Text>
+                  <Text className="mt-0.5 text-[13px] text-muted-foreground">{group.blurb}</Text>
+                  <View className="mt-3 gap-3">
+                    {group.leaks.map((leak) => (
+                      <FindingCard key={leak.fingerprint} leak={leak} />
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </>
+          )}
+          <GoodNews items={goodNews} />
+          <NearMisses items={nearMisses} />
         </>
       )}
-      <NearMisses items={nearMisses} />
       {updating ? (
         <Text className="mt-3 text-center text-[13px] text-muted-foreground">Updating…</Text>
       ) : null}
@@ -259,7 +443,7 @@ function Findings({
 }
 
 /** Look-alikes the engine passed over, so a missed leak can be traced to the rule behind it. */
-function NearMisses({ items }: { items: LeakNearMiss[] }) {
+export function NearMisses({ items }: { items: LeakNearMiss[] }) {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const [open, setOpen] = useState(false);
@@ -351,7 +535,7 @@ const STATUS_CHIPS: Record<string, { label: string; container: string; text: str
   possible: { label: "Possible", container: "bg-muted", text: "text-muted-foreground" },
 };
 
-function FindingCard({ leak }: { leak: LeakDetection }) {
+export function FindingCard({ leak }: { leak: LeakDetection }) {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const [open, setOpen] = useState(false);

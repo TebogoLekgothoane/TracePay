@@ -5,3 +5,8 @@ dist/
 __pycache__/
 .pytest_cache/
 *.pyc
+
+# A real customer's (redacted) bank statements, used to check the statement review end to
+# end. Personal financial data: kept on the machine that has it, never committed. The tests
+# that need it skip themselves when it is absent.
+tests/fixtures/statement_review/

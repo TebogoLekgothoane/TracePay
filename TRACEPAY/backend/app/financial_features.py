@@ -210,6 +210,28 @@ def fetch_accounts_and_statements(
     return accounts, statements
 
 
+def fetch_printed_figure_rows(user_id: str, access_token: str) -> list[dict[str, Any]]:
+    """The figures each processed statement printed outside its rows, one row per statement.
+
+    A deployment that has not applied the migration, or a statement that printed none, gives
+    no rows. The caller then simply has nothing to check against, never a wrong figure.
+    """
+    try:
+        project_url, publishable_key = _supabase_config()
+        return _first_working_select(
+            project_url,
+            publishable_key,
+            access_token,
+            "statement_imports",
+            ("account_id,printed_figures",),
+            f"user_id=eq.{quote(user_id, safe='-')}&status=eq.processed"
+            "&printed_figures=not.is.null&order=created_at.asc",
+        )
+    except HTTPException:
+        logger.info("printed_figures_unavailable user_id_prefix=%s", user_id[:8])
+        return []
+
+
 def _first_working_select(
     project_url: str,
     publishable_key: str,

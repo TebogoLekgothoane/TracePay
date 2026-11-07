@@ -42,7 +42,12 @@ from app.subscription_usage import (
 )
 from app.financial_reasoning import build_user_financial_reasoning
 from app.financial_recommendations import build_user_financial_recommendations
-from app.leak_detection import build_user_leak_detections
+from app.leak_detection import (
+    build_user_leak_detections,
+    build_user_statement_review,
+    invalidate_user_leak_detections,
+    leak_detection_cache,
+)
 from app.rate_limit import enforce_rate_limit
 from app.synthetic_intelligence import (
     analyze_scenario,
@@ -308,20 +313,46 @@ async def behaviour_analysis(
 
 @app.get("/leak-detections")
 async def leak_detections(
+    refresh: bool = False,
     authorization: str | None = Header(default=None),
     _user_id: str = Depends(require_supabase_user),
 ) -> dict[str, object]:
     """Return current deterministic potential leaks without persisting state."""
-    enforce_rate_limit(f"leaks-user:{_user_id}", 20, 15 * 60)
     access_token = (authorization or "").removeprefix("Bearer ").strip()
-    result = await build_user_leak_detections(_user_id, access_token)
+    # A saved result is cheap to return, so only a real build counts against the limit.
+    async def build():
+        enforce_rate_limit(f"leaks-user:{_user_id}", 20, 15 * 60)
+        return await build_user_leak_detections(_user_id, access_token)
+
+    result, from_cache = await leak_detection_cache.get_or_build(
+        _user_id, build, force=refresh
+    )
     logger.info(
-        "leak_detections_completed user_id_prefix=%s transactions=%s leaks=%s",
+        "leak_detections_completed user_id_prefix=%s transactions=%s leaks=%s cached=%s",
         _user_id[:8],
         result.transaction_count,
         len(result.leaks),
+        from_cache,
     )
     return result.model_dump(mode="json")
+
+
+@app.get("/statement-review")
+async def statement_review(
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """The statement report in plain language, grouped and with what each finding cannot show."""
+    enforce_rate_limit(f"statement-review-user:{_user_id}", 20, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    result = await build_user_statement_review(_user_id, access_token)
+    logger.info(
+        "statement_review_completed user_id_prefix=%s transactions=%s findings=%s",
+        _user_id[:8],
+        result["transaction_count"],
+        len(result["findings"]),  # type: ignore[arg-type]
+    )
+    return result
 
 
 @app.get("/statement-coverage")
@@ -346,7 +377,10 @@ async def consolidation_reconcile(
     """
     enforce_rate_limit(f"reconcile-user:{_user_id}", 30, 15 * 60)
     access_token = (authorization or "").removeprefix("Bearer ").strip()
-    return await reconcile_user_transfers(_user_id, access_token)
+    try:
+        return await reconcile_user_transfers(_user_id, access_token)
+    finally:
+        invalidate_user_leak_detections(_user_id)
 
 
 @app.get("/financial-reasoning")
@@ -449,11 +483,16 @@ async def reconcile_finding_registry(
     """Store finding identity after one processed import. This does not read as a report."""
     enforce_rate_limit(f"finding-registry:{_user_id}", 20, 15 * 60)
     access_token = (authorization or "").removeprefix("Bearer ").strip()
-    result = await reconcile_findings_after_import(
-        _user_id,
-        access_token,
-        statement_import_id,
-    )
+    # The import just added transactions, so any saved leak result is out of date.
+    invalidate_user_leak_detections(_user_id)
+    try:
+        result = await reconcile_findings_after_import(
+            _user_id,
+            access_token,
+            statement_import_id,
+        )
+    finally:
+        invalidate_user_leak_detections(_user_id)
     return result.model_dump(mode="json")
 
 
@@ -517,6 +556,7 @@ async def answer_finding_question(
     stored = save_finding_answer(
         _user_id, access_token, body, answered_at=datetime.now(timezone.utc)
     )
+    invalidate_user_leak_detections(_user_id)
     return answer_payload(stored)
 
 
@@ -532,6 +572,7 @@ async def skip_finding_question_endpoint(
     stored = skip_finding_question(
         _user_id, access_token, body, answered_at=datetime.now(timezone.utc)
     )
+    invalidate_user_leak_detections(_user_id)
     return answer_payload(stored)
 
 

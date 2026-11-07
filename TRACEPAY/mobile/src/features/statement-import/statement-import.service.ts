@@ -20,6 +20,7 @@ import {
   assessStatementAccount,
   belongsToOtherAccountMessage,
 } from "./statement-account";
+import { readPrintedFigures, type PrintedFigures } from "./statement-import.figures";
 import {
   buildImportRpcRows,
   buildImportRpcStatement,
@@ -112,6 +113,11 @@ export type PdfStatementPreview = {
     periodSource: "declared" | "inferred" | "unknown" | null;
     openingClosingReconciliation: "verified" | "not_available" | "mismatch" | null;
     reconciliationDifference: number | null;
+    /**
+     * Figures the statement printed outside its rows (interest rates, facility, summary
+     * totals), exactly as read. Null when it printed none; never estimated.
+     */
+    printedFigures: PrintedFigures | null;
   };
 };
 
@@ -147,6 +153,11 @@ export type PreparePdfStatementOptions = {
   onProgress?: (progress: StatementImportProgress) => void;
   /** Abort in-flight upload/extract when the user cancels tracing. */
   signal?: AbortSignal;
+  /**
+   * Skip the per-statement findings run. A batch caller reconciles once after
+   * the last statement, since each run already covers the user's whole history.
+   */
+  deferReconciliation?: boolean;
 };
 
 export const PDF_IMPORT_CANCELLED_MESSAGE = "PDF processing was cancelled.";
@@ -212,6 +223,7 @@ type ProcessorPreviewPayload = {
     closing_balance?: number | string | null;
     balance_source?: "closing_balance" | "running_balance" | "unavailable";
     period_source?: "declared" | "inferred" | "unknown";
+    printed_figures?: Record<string, unknown> | null;
   };
   transactions?: ExtractedTransaction[];
 };
@@ -322,6 +334,7 @@ function readExtractedStatement(
         ? payload.validation.opening_closing_reconciliation
         : null,
     reconciliationDifference: readOptionalNumber(payload.validation?.reconciliation_difference),
+    printedFigures: readPrintedFigures(raw?.printed_figures),
   };
 }
 
@@ -596,6 +609,7 @@ async function confirmStatementAccount(
 async function persistPreview(
   preview: PdfStatementPreview,
   account: FinancialAccount,
+  deferReconciliation = false,
 ): Promise<PersistResult> {
   console.info("[TracePay][statement] persist_started", {
     statementId: preview.statementId,
@@ -653,6 +667,20 @@ async function persistPreview(
     }
   }
 
+  // Keep what the statement printed outside its rows, so a later report can check the rows
+  // against the bank's own totals. Best effort: the import is already saved without it.
+  if (preview.statement.printedFigures) {
+    const { error: figuresError } = await supabase
+      .from("statement_imports")
+      .update({ printed_figures: preview.statement.printedFigures })
+      .eq("id", preview.statementId);
+    if (figuresError) {
+      console.warn("[TracePay][statement] printed_figures_not_saved", {
+        code: figuresError.code ?? null,
+      });
+    }
+  }
+
   // Link own-account transfers and refunds now that this statement is in.
   // Evidence-based and best effort; analysis re-derives the same decision.
   await requestTransferReconciliation();
@@ -666,7 +694,10 @@ async function persistPreview(
   void noteImportCompleted();
   let newFindings = 0;
   let updatedFindings = 0;
-  if (shouldReconcileSavedImport("processed", summary.newTransactions)) {
+  if (
+    !deferReconciliation &&
+    shouldReconcileSavedImport("processed", summary.newTransactions)
+  ) {
     try {
       const counts = await retryFindingReconciliation(preview.statementId);
       newFindings = counts.newFindings;
@@ -973,7 +1004,11 @@ export async function preparePdfStatement(
       );
     }
     reportProgress(onProgress, "saving");
-    const persistResult = await persistPreview(preview, account);
+    const persistResult = await persistPreview(
+      preview,
+      account,
+      options.deferReconciliation === true,
+    );
     preview.findingSummary = {
       inserted: persistResult.inserted,
       newFindings: persistResult.newFindings,

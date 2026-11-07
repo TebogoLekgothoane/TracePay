@@ -84,6 +84,32 @@ class StatementBalance(BaseModel):
     source: Literal["closing_balance", "running_balance", "unavailable"] = "unavailable"
 
 
+class PrintedFigures(BaseModel):
+    """Figures a statement prints outside its transaction rows.
+
+    Each one is read only when its label is on the statement, and is ``None`` otherwise,
+    so a missing figure is never filled in from a guess. They let a later review check
+    the rows against the bank's own totals and state a rate or a limit as printed.
+    """
+
+    # The statement's own date, e.g. 30 June 2026. Which month the figures belong to.
+    statement_date: date | None = None
+    # Percent per year, as printed ("10.50%" is 10.50).
+    debit_interest_rate: Decimal | None = None
+    credit_interest_rate: Decimal | None = None
+    facility: Decimal | None = None
+    # The account summary: what the bank says it charged or paid for the period.
+    card_purchases: Decimal | None = None
+    online_payments: Decimal | None = None
+    deposits_received: Decimal | None = None
+    fees_total: Decimal | None = None
+    interest_paid: Decimal | None = None
+    interest_received: Decimal | None = None
+
+    def is_empty(self) -> bool:
+        return all(value is None for value in self.model_dump().values())
+
+
 class ExtractedStatement(BaseModel):
     bank: str | None = None
     account_number_last4: str | None = None
@@ -99,6 +125,7 @@ class ExtractedStatement(BaseModel):
     # first and last extracted transaction, so it proves nothing about days
     # at either edge. ``unknown``: no dates at all.
     period_source: Literal["declared", "inferred", "unknown"] = "unknown"
+    printed_figures: PrintedFigures | None = None
 
 
 class ProcessingResult(BaseModel):

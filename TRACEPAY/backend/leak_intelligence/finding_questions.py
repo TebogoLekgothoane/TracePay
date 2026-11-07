@@ -89,6 +89,12 @@ _OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
         ("person", "Rent or money to a person"),
         ("other", "Something else"),
     ),
+    # For money sent to the customer's own accounts that comes straight back.
+    "transfer_purpose": (
+        ("kept", "Money I keep there"),
+        ("moved_back", "A budgeting move I reverse"),
+        ("other", "Something else"),
+    ),
     "bank_account": (
         ("fnb", "FNB"),
         ("absa", "Absa"),

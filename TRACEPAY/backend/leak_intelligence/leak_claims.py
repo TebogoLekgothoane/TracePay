@@ -56,8 +56,17 @@ _CATEGORY_TYPES = frozenset(
 
 def attach_claims(result: LeakDetectionResult) -> LeakDetectionResult:
     """Return the result with ``claims`` filled on every finding."""
+    # A finding that arrives with its claims (the statement review writes its own, from the
+    # rows) keeps them; every other finding has its claims built here.
     return result.model_copy(
-        update={"leaks": [leak.model_copy(update={"claims": claims_for(leak)}) for leak in result.leaks]}
+        update={
+            "leaks": [
+                leak
+                if leak.claims is not None
+                else leak.model_copy(update={"claims": claims_for(leak)})
+                for leak in result.leaks
+            ]
+        }
     )
 
 

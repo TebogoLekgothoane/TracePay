@@ -5,6 +5,7 @@ from decimal import Decimal
 from .models import ExtractedStatement, Transaction
 from .normalise import parse_amount, parse_date
 from .statement_balance import resolve_statement_balance
+from .statement_figures import extract_printed_figures
 
 _BANK_ALIASES = (
     ("gotyme", "GoTyme"),
@@ -105,6 +106,7 @@ def resolve_extracted_statement(
         closing_balance=closing,
         balance_source=balance.source if closing is not None else "unavailable",
         period_source=period_source,
+        printed_figures=extract_printed_figures(text),
     )
 
 
