@@ -53,6 +53,7 @@ import {
   type ImportNoticeTone,
   type QueueItemStatus,
 } from "../../features/statement-import/statement-import.messages";
+import { invalidateLeakDetections } from "../../hooks/useLeakIntelligenceDebug";
 import {
   isFindingReconciliationError,
   isPdfImportCancelled,
@@ -106,6 +107,8 @@ type FileResult =
       overlapDuplicates: number;
       possibleDuplicates: number;
       warnings: string[];
+      /** Set when new transactions were saved and findings still need to run. */
+      statementId: string | null;
     }
   | { kind: "empty" }
   | { kind: "password"; resume: PdfImportResume; passwordError: string | null }
@@ -195,6 +198,8 @@ export function AccountStatementSetupFlow({
   const importGenerationRef = useRef(0);
   const queueRunRef = useRef(0);
   const itemsRef = useRef<QueueItem[]>([]);
+  /** Latest saved statement still waiting for the single findings run of this batch. */
+  const deferredReconcileRef = useRef<{ itemId: string; statementId: string } | null>(null);
 
   const [bank, setBank] = useState<SaInstitution | null>(initialInstitution);
   const [loadedAccount, setLoadedAccount] = useState<FinancialAccount | null>(null);
@@ -404,6 +409,7 @@ export function AccountStatementSetupFlow({
         password: effectivePassword,
         resume: item.resume,
         signal: controller.signal,
+        deferReconciliation: true,
         onProgress: (progress) => {
           if (mountedRef.current && generation === importGenerationRef.current) {
             setStage(progress.stage);
@@ -441,6 +447,7 @@ export function AccountStatementSetupFlow({
         overlapDuplicates: summary?.overlapDuplicates ?? 0,
         possibleDuplicates: summary?.possibleDuplicates ?? 0,
         warnings: preview.warnings ?? [],
+        statementId: classified.newTransactions > 0 ? preview.statementId : null,
       };
     } catch (error) {
       if (isPdfImportCancelled(error) || generation !== importGenerationRef.current) {
@@ -522,6 +529,9 @@ export function AccountStatementSetupFlow({
           passwordError: null,
           message: null,
         });
+        if (result.statementId) {
+          deferredReconcileRef.current = { itemId: id, statementId: result.statementId };
+        }
         break;
       case "empty":
         patchItem(id, { status: "empty", resume: null, message: NO_TRANSACTIONS_FOUND_MESSAGE });
@@ -550,6 +560,25 @@ export function AccountStatementSetupFlow({
     }
   };
 
+  /**
+   * One findings run for the whole batch: it reads the user's full history, so
+   * running it per statement only repeats the same work and trips the server limits.
+   */
+  const reconcileDeferred = async () => {
+    const pending = deferredReconcileRef.current;
+    if (!pending) return;
+    deferredReconcileRef.current = null;
+    try {
+      await retryFindingReconciliation(pending.statementId);
+    } catch (error) {
+      if (!mountedRef.current) return;
+      patchItem(pending.itemId, {
+        reconcileId: pending.statementId,
+        message: isFindingReconciliationError(error) ? error.message : null,
+      });
+    }
+  };
+
   /** Processes the given items one at a time. A file that needs a password is set aside. */
   const runQueue = async (ids: string[], passwords: Record<string, string> = {}) => {
     if (processLock.current) return;
@@ -574,6 +603,13 @@ export function AccountStatementSetupFlow({
         if (run !== queueRunRef.current || !mountedRef.current) return;
         if (result.kind === "cancelled") return;
         applyResult(id, result);
+      }
+      // A statement waiting on a password keeps the batch open; findings run once it is done.
+      if (!itemsRef.current.some((item) => item.status === "password")) {
+        setStage("saving");
+        await reconcileDeferred();
+        invalidateLeakDetections();
+        if (run !== queueRunRef.current || !mountedRef.current) return;
       }
       finalizeQueue();
     } finally {
@@ -660,6 +696,9 @@ export function AccountStatementSetupFlow({
       resume: null,
       message: "Skipped. Add this statement again when you have its password.",
     });
+    if (!itemsRef.current.some((item) => item.status === "password")) {
+      void reconcileDeferred();
+    }
     finalizeQueue();
   };
 
@@ -697,6 +736,7 @@ export function AccountStatementSetupFlow({
           : item,
       ),
     );
+    void reconcileDeferred();
     finalizeQueue();
   };
 
