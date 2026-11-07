@@ -40,7 +40,7 @@ import {
   savePinRecord,
   verifyPinRecord,
 } from "./pin.service";
-import { APP_LOCK_TIMEOUT } from "./security.constants";
+import { APP_LOCK_TIMEOUT, PIN_KDF_ITERATIONS } from "./security.constants";
 import type {
   AppLockContextValue,
   BiometricAvailability,
@@ -233,6 +233,15 @@ export function AppLockProvider({ children }: PropsWithChildren): ReactElement {
           applyAttempts(INITIAL_PIN_ATTEMPTS);
           await clearPinAttempts().catch(() => undefined);
           setLocked(false);
+          if (record.iterations > PIN_KDF_ITERATIONS) {
+            // Older, slower record: re-save at the current cost so the next unlock is fast.
+            void createPinRecord(pin, record.userId ?? null)
+              .then(async (upgraded) => {
+                await savePinRecord(upgraded);
+                applyPinRecord(upgraded);
+              })
+              .catch(() => undefined);
+          }
           return { status: "success" };
         }
 
@@ -255,7 +264,7 @@ export function AppLockProvider({ children }: PropsWithChildren): ReactElement {
       pinQueueRef.current = result.catch(() => undefined);
       return result;
     },
-    [applyAttempts, clearDeviceLock, setLocked],
+    [applyAttempts, applyPinRecord, clearDeviceLock, setLocked],
   );
 
   const enableBiometrics = useCallback(async () => {

@@ -2,7 +2,11 @@
 export const APP_LOCK_TIMEOUT = 10_000;
 
 export const PIN_LENGTH = 4;
-export const PIN_KDF_ITERATIONS = 40_000;
+/**
+ * A four-digit PIN has only 10,000 values, so more rounds add little; the
+ * attempt limit and wipe protect it. 40,000 rounds made unlock take seconds in JS.
+ */
+export const PIN_KDF_ITERATIONS = 10_000;
 
 /** Wrong PINs allowed before delays begin. */
 export const PIN_FREE_ATTEMPTS = 5;

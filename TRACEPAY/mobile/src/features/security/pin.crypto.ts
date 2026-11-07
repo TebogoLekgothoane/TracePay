@@ -6,7 +6,7 @@ import { PIN_KDF_ITERATIONS, PIN_LENGTH } from "./security.constants";
 import type { PinRecord } from "./security.types";
 
 const DERIVED_KEY_LENGTH = 32;
-const MIN_ITERATIONS = 40_000;
+const MIN_ITERATIONS = PIN_KDF_ITERATIONS;
 
 export function isValidPin(pin: readonly number[]): boolean {
   return (
