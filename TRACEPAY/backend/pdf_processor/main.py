@@ -1,11 +1,6 @@
 import logging
 from pathlib import PurePath
 
-from .ai_extract import (
-    AiExtractionError,
-    ai_extraction_available,
-    extract_transactions_with_ai,
-)
 from .extract import ExtractionError, extract_layers
 from .mirrored_sections import drop_mirrored_text, has_mirrored_sections, is_mirror_table
 from .models import ProcessingResult, StatementBalance, Transaction, ValidationResult
@@ -128,59 +123,11 @@ def process_pdf(
         rows_rejected,
     )
 
-    # A genuinely empty period: nothing for the AI to find, so don't ask it.
+    # Statements are read by the deterministic extractors and OCR only; the PDF is never
+    # sent to an AI provider.
     no_activity = not transactions and statement_has_no_activity(text)
     if no_activity:
         logger.info("pdf_statement_no_activity method=%s", raw.extraction_method)
-
-    if not no_activity and _needs_ai_fallback(raw.extraction_method, classical_validation, transactions):
-        logger.info(
-            "[AI_EXTRACT] fallback_triggered method=%s confidence=%s transactions=%s rejected=%s reconciliation=%s",
-            raw.extraction_method,
-            classical_validation.confidence,
-            len(transactions),
-            classical_validation.rows_rejected,
-            classical_validation.balance_reconciliation,
-        )
-        try:
-            ai_transactions, ai_statement = extract_transactions_with_ai(
-                content,
-                password=password,
-                page_count_hint=raw.pages,
-            )
-            ai_validation = validate_transactions(
-                ai_transactions,
-                "ai",
-                len(ai_transactions),
-                0,
-            )
-            if _prefer_ai_result(classical_validation, transactions, ai_validation, ai_transactions):
-                transactions = ai_transactions
-                rows_rejected = 0
-                raw = raw.model_copy(
-                    update={
-                        "extraction_method": "ai",
-                        "extraction_confidence": ai_validation.confidence,
-                        "rows_found": len(ai_transactions),
-                    },
-                )
-                logger.info(
-                    "[AI_EXTRACT] fallback_accepted ai_transactions=%s ai_confidence=%s",
-                    len(ai_transactions),
-                    ai_validation.confidence,
-                )
-            else:
-                logger.info(
-                    "[AI_EXTRACT] fallback_rejected keeping_classical classical=%s ai=%s",
-                    len(transactions),
-                    len(ai_transactions),
-                )
-        except AiExtractionError as error:
-            logger.warning("[AI_EXTRACT] fallback_failed reason=%s", error)
-            if raw.extraction_method == "unknown" and not transactions:
-                raise PdfProcessingError(
-                    "The PDF could not be read reliably. Classical extraction failed and AI fallback was unavailable.",
-                ) from error
 
     if raw.extraction_method == "unknown" and not transactions:
         raise PdfProcessingError(
@@ -316,50 +263,3 @@ def _with_category(transaction: Transaction, classification, catalog: dict[str, 
             "merchant_name": classification.merchant_name or transaction.merchant_name,
         },
     )
-
-
-def _needs_ai_fallback(
-    extraction_method: str,
-    validation: ValidationResult,
-    transactions: list[Transaction],
-) -> bool:
-    if not ai_extraction_available():
-        return False
-    if extraction_method == "unknown" or not transactions:
-        return True
-    # A broken balance chain means rows were dropped or misread, however many converted.
-    if validation.balance_reconciliation == "mismatch":
-        return True
-    detected = validation.rows_detected or len(transactions)
-    if extraction_method in {"table", "text"} and detected > 0 and len(transactions) / detected >= 0.8:
-        logger.info(
-            "[AI_EXTRACT] skipped_usable_classical method=%s transactions=%s confidence=%s",
-            extraction_method,
-            len(transactions),
-            validation.confidence,
-        )
-        return False
-    if validation.confidence < 0.65:
-        return True
-    if validation.rows_detected > 0 and validation.rows_rejected / validation.rows_detected >= 0.2:
-        return True
-    return False
-
-
-def _prefer_ai_result(
-    classical: ValidationResult,
-    classical_transactions: list[Transaction],
-    ai: ValidationResult,
-    ai_transactions: list[Transaction],
-) -> bool:
-    if not classical_transactions:
-        return bool(ai_transactions)
-    if not ai_transactions:
-        return False
-    if ai.confidence > classical.confidence:
-        return True
-    if len(ai_transactions) > len(classical_transactions) and ai.confidence >= classical.confidence - 0.05:
-        return True
-    if classical.balance_reconciliation == "mismatch" and ai.balance_reconciliation != "mismatch":
-        return True
-    return False

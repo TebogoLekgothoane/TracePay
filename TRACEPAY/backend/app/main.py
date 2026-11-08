@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 
 from app import billing, revenuecat
 from app.auth import require_supabase_user
-from app.anthropic_analysis import build_user_anthropic_analysis
 from app.behaviour_analysis import build_user_behaviour_analysis
 from app.category_catalog import fetch_category_names
 from app.consolidation_service import build_user_coverage_payload, reconcile_user_transfers
@@ -280,17 +279,6 @@ async def financial_features(
         len(snapshot.categories),
     )
     return public_feature_payload(snapshot)
-
-
-@app.get("/anthropic-financial-analysis")
-async def anthropic_financial_analysis(
-    authorization: str | None = Header(default=None),
-    _user_id: str = Depends(require_supabase_user),
-) -> dict[str, object]:
-    """Return optional Anthropic leak/subscription results for development views."""
-    enforce_rate_limit(f"anthropic-analysis:{_user_id}", 6, 15 * 60)
-    access_token = (authorization or "").removeprefix("Bearer ").strip()
-    return await build_user_anthropic_analysis(_user_id, access_token)
 
 
 @app.get("/behaviour-analysis")

@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 ImportQualityStatus = Literal["reliable", "unreliable", "unknown"]
 
-# Same gates as pdf_processor.main._needs_ai_extraction / validate.py.
+# Same gates as pdf_processor/validate.py.
 REJECT_RATIO_THRESHOLD = Decimal("0.20")
 EXTRACTION_CONFIDENCE_FLOOR = Decimal("0.65")
 

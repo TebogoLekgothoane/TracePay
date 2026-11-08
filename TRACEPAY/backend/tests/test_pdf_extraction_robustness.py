@@ -29,7 +29,6 @@ def _text_pdf(lines: list[str], *, gap: float) -> bytes:
 
 
 def _process(content: bytes, filename: str, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr("pdf_processor.main.ai_extraction_available", lambda: False)
     return process_pdf(content, filename, _USER_ID, category_names=LIVE_CATEGORIES)
 
 

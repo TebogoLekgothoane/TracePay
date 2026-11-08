@@ -30,9 +30,6 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_key: str = ""
     supabase_anon_key: str = ""
-    gemini_api_key: str = ""
-    gemini_model: str = "gemini-3.6-flash"
-    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
     openai_api_key: str = ""
     openai_model: str = "gpt-4.1-mini"
     openai_base_url: str = "https://api.openai.com/v1"
@@ -51,10 +48,6 @@ class Settings(BaseSettings):
     anthropic_timeout_seconds: int = 45
     ai_categorisation_enabled: bool = False
     ai_merchant_identification_min_confidence: float = Field(default=0.85, ge=0, le=1)
-    ai_pdf_extraction_enabled: bool = False
-    ai_extraction_timeout_seconds: int = 180
-    ai_extraction_max_pages: int = 20
-    gemini_fallback_models: str = "gemini-3.8-flash,gemini-2.5-flash"
     openrouter_api_key: str = ""
     openrouter_model: str = "openai/gpt-4o-mini"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
@@ -81,11 +74,6 @@ class Settings(BaseSettings):
     revenuecat_full_analysis_product_id: str = "tracepay_full_analysis"
     revenuecat_monitoring_product_id: str = "tracepay_annual_monitoring"
     synthetic_intelligence_debug: bool = False
-
-    @field_validator("ai_pdf_extraction_enabled", mode="before")
-    @classmethod
-    def _parse_ai_pdf_extraction_enabled(cls, value: object) -> bool:
-        return _explicit_pdf_extraction_opt_in(value)
 
     @field_validator("synthetic_intelligence_debug", mode="before")
     @classmethod

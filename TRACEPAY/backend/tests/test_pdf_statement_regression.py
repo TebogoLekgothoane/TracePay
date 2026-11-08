@@ -57,7 +57,6 @@ def _statement_pdf() -> bytes:
 
 @pytest.fixture(name="extracted")
 def extracted_statement(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr("pdf_processor.main.ai_extraction_available", lambda: False)
     result = process_pdf(
         _statement_pdf(),
         "fictional-statement.pdf",
@@ -134,7 +133,6 @@ def test_extracted_classifications_and_purchase_spending(extracted) -> None:
 
 
 def test_table_pdf_preserves_directions_and_classes(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("pdf_processor.main.ai_extraction_available", lambda: False)
     result = process_pdf(
         _table_pdf(),
         "fictional-table-statement.pdf",

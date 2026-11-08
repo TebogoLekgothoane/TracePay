@@ -242,83 +242,6 @@ def test_description_category_header_is_normalised() -> None:
     assert transaction.amount == Decimal("-450.00")
 
 
-def test_usable_classical_extract_skips_ai_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.config import settings
-    from pdf_processor.main import _needs_ai_fallback
-    from pdf_processor.models import ValidationResult
-
-    monkeypatch.setattr(settings, "ai_pdf_extraction_enabled", True)
-    monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
-
-    transactions = [
-        Transaction(
-            date=date(2026, 9, 18),
-            description="WOOLWORTHS",
-            amount=Decimal("-450.00"),
-            type="debit",
-            source_row=2,
-            confidence="medium",
-        )
-        for _ in range(80)
-    ]
-    validation = ValidationResult(
-        status="warning",
-        confidence=0.65,
-        transaction_count=80,
-        rows_detected=90,
-        rows_rejected=10,
-        balance_reconciliation="not_available",
-    )
-    assert _needs_ai_fallback("table", validation, transactions) is False
-
-
-def test_balance_mismatch_requests_ai_even_when_most_rows_convert(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.config import settings
-    from pdf_processor.main import _needs_ai_fallback
-    from pdf_processor.models import ValidationResult
-
-    monkeypatch.setattr(settings, "ai_pdf_extraction_enabled", True)
-    monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
-
-    transactions = [
-        Transaction(
-            date=date(2026, 9, 18),
-            description="WOOLWORTHS",
-            amount=Decimal("-450.00"),
-            type="debit",
-            source_row=2,
-            confidence="medium",
-        )
-        for _ in range(90)
-    ]
-    validation = ValidationResult(
-        status="warning",
-        confidence=0.8,
-        transaction_count=90,
-        rows_detected=90,
-        rows_rejected=0,
-        balance_reconciliation="mismatch",
-    )
-    assert _needs_ai_fallback("table", validation, transactions) is True
-
-
-def test_empty_or_unknown_extract_still_requests_ai(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.config import settings
-    from pdf_processor.main import _needs_ai_fallback
-    from pdf_processor.models import ValidationResult
-
-    monkeypatch.setattr(settings, "ai_pdf_extraction_enabled", True)
-    monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
-    empty = ValidationResult(
-        status="failed",
-        confidence=0,
-        transaction_count=0,
-        rows_detected=0,
-        rows_rejected=0,
-    )
-    assert _needs_ai_fallback("unknown", empty, []) is True
-
-
 def test_gotyme_blank_separator_and_wrap() -> None:
     headers = ["date", "details", "", "fees*", "credits", "debits", "running balance"]
     row, aligned = align_row_to_headers(
@@ -473,7 +396,6 @@ def test_process_pdf_keeps_extraction_confidence_and_canonical_rows(
     from pdf_processor.main import process_pdf
     from pdf_processor.models import RawExtraction
 
-    monkeypatch.setattr("pdf_processor.main.ai_extraction_available", lambda: False)
     monkeypatch.setattr(
         "pdf_processor.main.extract_layers",
         lambda *_args, **_kwargs: (
@@ -544,11 +466,6 @@ def _table_layers(text: str):
 def test_zero_activity_statement_is_a_valid_empty_result_without_ai(monkeypatch: pytest.MonkeyPatch) -> None:
     from pdf_processor.main import NO_ACTIVITY_MESSAGE, process_pdf
 
-    def no_ai(*_args, **_kwargs):
-        raise AssertionError("AI fallback must not run for an empty statement")
-
-    monkeypatch.setattr("pdf_processor.main.ai_extraction_available", lambda: True)
-    monkeypatch.setattr("pdf_processor.main.extract_transactions_with_ai", no_ai)
     monkeypatch.setattr("pdf_processor.main.extract_layers", _table_layers(_EMPTY_SB_TEXT))
 
     result = process_pdf(b"%PDF", "statement.pdf", "user-id-12345678")
@@ -573,7 +490,6 @@ def test_statement_with_activity_or_no_summary_still_fails_when_no_rows_extract(
 ) -> None:
     from pdf_processor.main import process_pdf
 
-    monkeypatch.setattr("pdf_processor.main.ai_extraction_available", lambda: False)
     monkeypatch.setattr("pdf_processor.main.extract_layers", _table_layers(text))
 
     result = process_pdf(b"%PDF", "statement.pdf", "user-id-12345678")

@@ -384,15 +384,14 @@ def test_ai_disabled_still_applies_fallback(monkeypatch: pytest.MonkeyPatch, cap
     assert "skipped reason=disabled" in " ".join(record.getMessage() for record in caplog.records)
 
 
-def test_gemini_key_does_not_enable_categorisation(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+def test_no_categorisation_provider_key_means_no_ai_call(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
     monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", True)
     monkeypatch.setattr("categorisation.service.settings.openrouter_api_key", "")
     monkeypatch.setattr("categorisation.service.settings.openai_api_key", "")
     monkeypatch.setattr("categorisation.service.settings.xai_api_key", "")
-    monkeypatch.setattr("categorisation.service.settings.gemini_api_key", "pdf-only-gemini-key")
 
     def fail_if_called(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("Gemini must not be called for transaction categorisation")
+        raise AssertionError("No provider may be called without a categorisation provider key")
 
     monkeypatch.setattr("categorisation.service.classify_batch", fail_if_called)
     caplog.set_level("WARNING", logger="tracepay.categorisation")

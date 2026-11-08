@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, computed_field
 
 class RawExtraction(BaseModel):
     pages: int
-    extraction_method: Literal["text", "table", "ocr", "ai", "unknown"]
+    extraction_method: Literal["text", "table", "ocr", "unknown"]
     extraction_confidence: float = Field(default=0, ge=0, le=1)
     raw_text_available: bool
     useful_text_characters: int

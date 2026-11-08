@@ -43,8 +43,6 @@ def validate_transactions(
         errors.append("No reliable transaction rows were extracted.")
     if extraction_method == "ocr":
         warnings.append("OCR was required. Review every transaction before saving.")
-    if extraction_method == "ai":
-        warnings.append("AI extraction was used. Review transactions if anything looks off.")
     if any(item.balance is not None and abs(item.balance) > 100_000_000 for item in transactions):
         warnings.append("Some balances look unusually large and need review.")
     reconciliation = reconcile_balances(transactions)
@@ -54,7 +52,6 @@ def validate_transactions(
     extraction_signal = {
         "table": 1.0,
         "text": 0.75,
-        "ai": 0.85,
         "ocr": 0.5,
         "unknown": 0.0,
     }.get(extraction_method, 0.0)
