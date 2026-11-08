@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from categorisation.descriptor import parse_descriptor
 from categorisation.models import CategorisationResult
 from categorisation.normalize import normalize_description, normalize_for_matching
 from categorisation.rules import RULES
@@ -26,6 +27,13 @@ def classify_transaction(
         if rule.matcher(matching_text, kind) or (
             matching_text != normalized and rule.matcher(normalized, kind)
         ):
+            rule_merchant = merchant
+            if rule.name.startswith("description:business-type") and rule_merchant is None:
+                # The trading name comes straight from the statement text, minus processor and
+                # place, so name it (e.g. "Andys Sushi Bar") only when that clearly separated.
+                parsed = parse_descriptor(description)
+                if parsed.stripped and len(parsed.merchant.replace(" ", "")) >= 4:
+                    rule_merchant = parsed.display_name
             return CategorisationResult(
                 category_name=rule.category_name or None,
                 category_confidence=rule.confidence if rule.category_name else 0,
@@ -33,7 +41,7 @@ def classify_transaction(
                 transaction_class=rule.transaction_class,  # type: ignore[arg-type]
                 classification_reason=f"Matched deterministic rule: {rule.name}",
                 rule=rule.name,
-                merchant_name=merchant,
+                merchant_name=rule_merchant,
             )
 
     # Identity can still classify transfers/people when no named rule matched.

@@ -1070,7 +1070,7 @@ def test_mapped_statement_category_used_when_rules_miss(monkeypatch: pytest.Monk
         [
             CategorisableTransaction(
                 "0",
-                "Some local cinema purchase",
+                "Some local venue purchase",
                 Decimal("-80"),
                 "debit",
                 statement_category="Movies",

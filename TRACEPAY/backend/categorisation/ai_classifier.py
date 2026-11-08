@@ -10,6 +10,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from app.config import settings
+from categorisation.descriptor import parse_descriptor
 from categorisation.models import CategorisationResult
 from categorisation.resolve import resolve_category_name
 from categorisation.sanitizer import sanitize_for_ai
@@ -402,9 +403,31 @@ def _build_instructions(transactions: list[AiTransaction], allowed: list[str]) -
         "or WITH CARD AT as a merchant. Payment processors are not the underlying merchant. "
         "Person-to-person recipients are source_type=person with merchant_name null. "
         "If the merchant cannot be identified, set merchant_name null, source_type=unknown, uncertainty=unknown.\n\n"
+        "Rows carry either a raw 'description', or a parsed 'name' where the trading name printed on the statement "
+        "has already been separated from 'paid_via' (the payment processor, such as Yoco or PayFast) and 'place' "
+        "(the suburb or city the bank appended). The processor and place are never the merchant. Banks cut names "
+        "short, so 'Moro Gelato Wi' may be truncated: do not guess missing letters or invent a fuller name.\n\n"
         f"Allowed categories: {json.dumps(allowed)}\n"
-        f"Transactions: {json.dumps([{ 'transaction_id': item.transaction_id, 'description': sanitize_for_ai(item.description), 'type': item.transaction_type } for item in transactions])}"
+        f"Transactions: {json.dumps([_prompt_row(item) for item in transactions])}"
     )
+
+
+def _prompt_row(item: AiTransaction) -> dict:
+    """One row for the model: the trading name where it separates cleanly, else the description."""
+    parsed = parse_descriptor(item.description)
+    if parsed.stripped and len(parsed.merchant.replace(" ", "")) >= 3:
+        row: dict = {"transaction_id": item.transaction_id, "name": sanitize_for_ai(parsed.display_name)}
+        if parsed.processor:
+            row["paid_via"] = parsed.processor.title()
+        if parsed.location:
+            row["place"] = parsed.location.title()
+        row["type"] = item.transaction_type
+        return row
+    return {
+        "transaction_id": item.transaction_id,
+        "description": sanitize_for_ai(item.description),
+        "type": item.transaction_type,
+    }
 
 
 def _request_xai(instructions: str, schema: dict, transactions_count: int) -> dict | None:

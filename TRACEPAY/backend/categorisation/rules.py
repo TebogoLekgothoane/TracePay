@@ -90,6 +90,44 @@ GYM_GROUPS: MerchantGroups = (
 )
 GYM_PHRASES: tuple[str, ...] = ("GYM MEMBERSHIP", "GYM FEES", "FITNESS CLUB", "HEALTH CLUB")
 
+# Words in a trading name that say what a small merchant sells. Whole words only (see `contains`),
+# so "BARBER" never matches "BAR". Kept short on purpose: every word here must be right far more
+# often than wrong, and anything ambiguous (KITCHEN-ware shops, "MARKET") is left to the AI.
+BUSINESS_TYPE_WORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "Restaurants",
+        (
+            "SUSHI", "BISTRO", "CAFE", "COFFEE", "ESPRESSO", "BAKERY", "GELATO", "PIZZERIA",
+            "PIZZA", "STEAKHOUSE", "RESTAURANT", "EATERY", "TRATTORIA", "BRASSERIE", "DINER",
+        ),
+    ),
+    ("Fast Food", ("TAKEAWAY", "TAKE AWAY", "BURGER", "BURGERS", "FISH AND CHIPS", "FISH & CHIPS")),
+    (
+        "Groceries",
+        (
+            "SUPERMARKET", "SUPERSTORE", "SUPERETTE", "BUTCHERY", "GREENGROCER", "FRUIT AND VEG",
+            "FRUIT & VEG", "MINIMARKET", "MINI MARKET", "FARM STALL",
+        ),
+    ),
+    (
+        "Healthcare",
+        (
+            "CLINIC", "DENTAL", "DENTIST", "OPTOMETRIST", "OPTICAL", "PHYSIOTHERAPY", "PHYSIO",
+            "MEDICAL CENTRE", "MEDICAL CENTER", "PATHOLOGY", "HOSPITAL",
+        ),
+    ),
+    ("Entertainment", ("CINEMA", "CINEMAS", "THEATRE", "THEATER", "MUSEUM", "BOWLING")),
+    ("Fuel", ("SERVICE STATION", "FILLING STATION")),
+    (
+        "Personal Care",
+        ("HAIR SALON", "HAIRDRESSER", "HAIRDRESSERS", "BARBER", "BARBERS", "BARBERSHOP", "SALON", "NAILS", "NAIL BAR", "BEAUTY", "LASHES", "WAXING"),
+    ),
+    (
+        "Education",
+        ("STUDENT FEES", "STUDENT FEE", "UCT STUDENT", "TUITION", "UNISA", "SCHOOL FEES", "UNIVERSITY", "COLLEGE"),
+    ),
+)
+
 MORE_SUBSCRIPTION_GROUPS: MerchantGroups = (
     # "MULTICHOICE DSTV" and "DSTV SUBSCRIPTION" are one bill; naming both "Dstv"
     # keeps them in one series instead of two alternating ones.
@@ -239,6 +277,9 @@ _RECOGNISED_MERCHANT_GROUPS: MerchantGroups = (
     ("Mr Price", ("MR PRICE", "MRPRICE")),
     ("Takealot", ("TAKEALOT",)),
     ("Interpark", ("INTERPARK",)),
+    ("CIPC", ("CIPC",)),
+    ("CTICC", ("CTICC",)),
+    ("Traffic Department", ("TRAFFIC DEPARTMENT", "TRAFFIC DEPARTMEN")),
     ("Wild Coast Go Karts", ("WILD COAST GO KARTS",)),
     ("MTN MoMo", ("MTN MOMO", "MTNMOMO")),
     ("MTN", ("MTN",)),
@@ -535,6 +576,21 @@ RULES: tuple[Rule, ...] = (
         0.90,
         _outflow(contains("PHARMACY", "CLICKS", "DIS CHEM", "DIS-CHEM", "DISCHEM", "MEDIRITE")),
     ),
+    # Company registration and traffic fines are fees owed to the state, not shopping. The category
+    # may not exist in a given catalogue yet; the result then falls back to Other with the merchant
+    # still named.
+    Rule(
+        "merchant:government-fees",
+        "Government & Fees",
+        0.90,
+        _outflow(
+            contains(
+                "CIPC", "TRAFFIC DEPARTMENT", "TRAFFIC DEPARTMEN", "TRAFFIC FINE", "TRAFFIC FINES",
+                "HOME AFFAIRS", "SARS EFILING",
+            )
+        ),
+    ),
+    Rule("merchant:cticc", "Entertainment", 0.80, _outflow(contains("CTICC"))),
     Rule(
         "merchant:airtime-data",
         "Airtime & Data",
@@ -970,6 +1026,18 @@ RULES: tuple[Rule, ...] = (
         1.00,
         incoming_contains("SALARY", "PAYROLL", "WAGES", "MONTHLY SALARY"),
         transaction_class="income",
+    ),
+    # Trading-name words that say what kind of business a small, unlisted merchant is, e.g.
+    # "Andys Sushi Bar" or "Yoco *Moro Gelato". Deliberately last among named rules and below
+    # the 0.85 merchant-memory threshold: a word is a hint, never a verified merchant.
+    *(
+        Rule(
+            f"description:business-type:{category.casefold()}",
+            category,
+            0.80,
+            _outflow(contains(*words)),
+        )
+        for category, words in BUSINESS_TYPE_WORDS
     ),
     # Last resort for collections nothing above could name. The class is known
     # (a recurring outflow someone is entitled to collect); the category is not.

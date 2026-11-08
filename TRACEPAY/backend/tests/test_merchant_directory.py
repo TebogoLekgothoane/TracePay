@@ -15,7 +15,7 @@ from categorisation.models import CategorisationResult
 from categorisation.service import CategorisableTransaction, categorise_batch, categorise_batch_with_metrics
 from tests.test_categorisation import LIVE_CATEGORIES
 
-DESCRIPTION = "Mabaso Corner Cafe"
+DESCRIPTION = "Zamani Trading Post"
 
 
 class FakeDirectory(MerchantDirectory):
@@ -35,12 +35,12 @@ class FakeDirectory(MerchantDirectory):
 
 def _ai_result(**overrides) -> CategorisationResult:
     values = dict(
-        category_name="Restaurants",
+        category_name="Shopping",
         category_confidence=0.95,
         transaction_class="spending",
         classification_confidence=0.95,
         classification_reason="Identified by AI",
-        merchant_name="Mabaso Corner Cafe",
+        merchant_name="Zamani Trading Post",
         rule="ai:openai",
     )
     values.update(overrides)
@@ -67,8 +67,8 @@ def test_directory_hit_skips_the_ai_call(monkeypatch: pytest.MonkeyPatch) -> Non
         merchant_directory=directory,
     )
     result = run.results["0"]
-    assert result.category_name == "Restaurants"
-    assert result.merchant_name == "Mabaso Corner Cafe"
+    assert result.category_name == "Shopping"
+    assert result.merchant_name == "Zamani Trading Post"
     assert run.metrics.directory_matches == 1
     assert run.metrics.ai_requests == 0
     assert directory.stored == []
@@ -83,7 +83,7 @@ def test_directory_hit_works_even_when_ai_categorisation_is_off(monkeypatch: pyt
         LIVE_CATEGORIES,
         merchant_directory=directory,
     )["0"]
-    assert result.category_name == "Restaurants"
+    assert result.category_name == "Shopping"
 
 
 def test_ai_answer_for_a_verified_merchant_is_learned(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -98,7 +98,7 @@ def test_ai_answer_for_a_verified_merchant_is_learned(monkeypatch: pytest.Monkey
         LIVE_CATEGORIES,
         merchant_directory=directory,
     )
-    assert directory.stored == [DirectoryEntry(pattern_key_for(DESCRIPTION), "Mabaso Corner Cafe", "Restaurants", 0.95)]
+    assert directory.stored == [DirectoryEntry(pattern_key_for(DESCRIPTION), "Zamani Trading Post", "Shopping", 0.95)]
 
 
 def test_credits_are_never_looked_up_or_learned(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -154,8 +154,8 @@ def test_disabled_by_default_makes_no_network_call(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr("urllib.request.urlopen", _fail_if_called)
     monkeypatch.setattr("categorisation.merchant_directory.urlopen", _fail_if_called)
     directory = MerchantDirectory()
-    assert directory.lookup(["mabaso corner cafe"]) == {}
-    assert directory.store([DirectoryEntry("mabaso corner cafe", "Mabaso", "Restaurants", 0.95)]) == 0
+    assert directory.lookup(["zamani trading post"]) == {}
+    assert directory.store([DirectoryEntry("zamani trading post", "Mabaso", "Shopping", 0.95)]) == 0
 
 
 def test_enabled_client_reads_and_writes_only_non_personal_fields(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -176,20 +176,20 @@ def test_enabled_client_reads_and_writes_only_non_personal_fields(monkeypatch: p
         if request.get_method() == "GET":
             return Response(
                 json.dumps(
-                    [{"pattern_key": "mabaso corner cafe", "merchant_name": "Mabaso Corner Cafe",
-                      "category_name": "Restaurants", "confidence": 0.95}]
+                    [{"pattern_key": "zamani trading post", "merchant_name": "Zamani Trading Post",
+                      "category_name": "Shopping", "confidence": 0.95}]
                 ).encode()
             )
         return Response(b"")
 
     monkeypatch.setattr("categorisation.merchant_directory.urlopen", fake_urlopen)
     directory = MerchantDirectory()
-    found = directory.lookup(["mabaso corner cafe", "unknown thing"])
-    assert list(found) == ["mabaso corner cafe"]
-    assert found["mabaso corner cafe"].rule == "merchant_directory"
+    found = directory.lookup(["zamani trading post", "unknown thing"])
+    assert list(found) == ["zamani trading post"]
+    assert found["zamani trading post"].rule == "merchant_directory"
     assert "merchant_directory" in requests[0].full_url and "in.(" in requests[0].full_url
 
-    assert directory.store([DirectoryEntry("mabaso corner cafe", "Mabaso Corner Cafe", "Restaurants", 0.95)]) == 1
+    assert directory.store([DirectoryEntry("zamani trading post", "Zamani Trading Post", "Shopping", 0.95)]) == 1
     body = json.loads(requests[1].data)[0]
     assert set(body) == {
         "pattern_key", "merchant_name", "category_name", "transaction_class",
@@ -208,5 +208,5 @@ def test_lookup_failure_never_raises(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr("categorisation.merchant_directory.urlopen", boom)
     directory = MerchantDirectory()
-    assert directory.lookup(["mabaso corner cafe"]) == {}
-    assert directory.store([DirectoryEntry("mabaso corner cafe", "Mabaso", "Restaurants", 0.95)]) == 0
+    assert directory.lookup(["zamani trading post"]) == {}
+    assert directory.store([DirectoryEntry("zamani trading post", "Mabaso", "Shopping", 0.95)]) == 0

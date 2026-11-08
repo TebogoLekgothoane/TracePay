@@ -25,6 +25,7 @@ from urllib.request import Request, urlopen
 
 from app.config import settings
 from categorisation.constants import FALLBACK_CATEGORY, MERCHANT_MEMORY_AI_MIN_CONFIDENCE
+from categorisation.descriptor import parse_descriptor
 from categorisation.models import CategorisationResult
 from categorisation.normalize import is_bank_boilerplate_label, merchant_key, normalize_for_matching
 from categorisation.sanitizer import sanitize_for_ai
@@ -35,6 +36,7 @@ TABLE = "merchant_directory"
 RULE = "merchant_directory"
 MIN_KEY_LENGTH = 3
 MAX_KEY_LENGTH = 80
+MIN_SINGLE_WORD_KEY = 5
 _LOOKUP_CHUNK = 100
 _TIMEOUT_SECONDS = 8
 
@@ -49,12 +51,19 @@ class DirectoryEntry:
 
 def pattern_key_for(description: str | None) -> str | None:
     """Stable, shareable key for a description, or None when it must not be shared."""
-    sanitised = sanitize_for_ai(description)
+    # Key on the trading name only: processor ("Yoco *"), place ("Cape Town") and bank account
+    # wording are removed first, so one shop is one entry whichever way it was paid or wherever
+    # the statement placed it, and account text can never reach the table.
+    parsed = parse_descriptor(description)
+    cleaned = parsed.merchant if parsed.stripped else (description or "")
+    sanitised = sanitize_for_ai(cleaned)
     if not sanitised or "[" in sanitised:  # phone / account / reference was redacted
         return None
-    key = normalize_for_matching(description)
+    key = normalize_for_matching(cleaned)
     if not (MIN_KEY_LENGTH <= len(key) <= MAX_KEY_LENGTH):
         return None
+    if " " not in key and len(key) < MIN_SINGLE_WORD_KEY:
+        return None  # "BEN", "DDC": too generic to share with everyone
     if '"' in key or "\\" in key:
         return None
     return key
