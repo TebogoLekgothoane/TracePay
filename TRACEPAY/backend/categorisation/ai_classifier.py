@@ -403,7 +403,7 @@ def _build_instructions(transactions: list[AiTransaction], allowed: list[str]) -
         "Person-to-person recipients are source_type=person with merchant_name null. "
         "If the merchant cannot be identified, set merchant_name null, source_type=unknown, uncertainty=unknown.\n\n"
         f"Allowed categories: {json.dumps(allowed)}\n"
-        f"Transactions: {json.dumps([{ 'transaction_id': item.transaction_id, 'description': sanitize_for_ai(item.description), 'amount': item.amount, 'type': item.transaction_type } for item in transactions])}"
+        f"Transactions: {json.dumps([{ 'transaction_id': item.transaction_id, 'description': sanitize_for_ai(item.description), 'type': item.transaction_type } for item in transactions])}"
     )
 
 

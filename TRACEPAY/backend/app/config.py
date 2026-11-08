@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     anthropic_base_url: str = "https://api.anthropic.com"
     anthropic_timeout_seconds: int = 45
     ai_categorisation_enabled: bool = False
+    # Shared merchant directory (see categorisation/merchant_directory.py). Off by default; needs
+    # SUPABASE_SERVICE_ROLE_KEY and the merchant_directory migration.
+    merchant_directory_enabled: bool = False
     ai_merchant_identification_min_confidence: float = Field(default=0.85, ge=0, le=1)
     openrouter_api_key: str = ""
     openrouter_model: str = "openai/gpt-4o-mini"
