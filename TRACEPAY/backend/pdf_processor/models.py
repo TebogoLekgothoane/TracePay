@@ -98,6 +98,8 @@ class PrintedFigures(BaseModel):
     debit_interest_rate: Decimal | None = None
     credit_interest_rate: Decimal | None = None
     facility: Decimal | None = None
+    # A credit card's limit. Printed on card statements, where an overdraft facility is not.
+    credit_limit: Decimal | None = None
     # The account summary: what the bank says it charged or paid for the period.
     card_purchases: Decimal | None = None
     online_payments: Decimal | None = None

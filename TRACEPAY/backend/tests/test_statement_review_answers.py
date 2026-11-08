@@ -57,6 +57,8 @@ def test_every_question_is_one_the_answer_endpoints_accept(transactions, context
         "insurance_cover",
         "transfer_purpose",
         "subscription_usage",
+        "one_off_expected",
+        "spending_level",
     }
     for question in review.questions:
         parsed = parse_question_key(question.question_key)
@@ -76,13 +78,13 @@ def test_insurers_and_cloud_services_are_asked_one_at_a_time(transactions, conte
 
 def test_only_a_few_questions_are_put_to_the_user_at_once(transactions, context) -> None:
     review = _review(transactions, context)
-    assert len(review.questions) == 9
+    assert len(review.questions) == 11
     assert [q.kind for q in review.pending_questions] == [
         "duplicate_expected",
         "cancelled_in",
         "payment_purpose",
     ]
-    assert review.questions_not_shown == 6
+    assert review.questions_not_shown == 8
 
 
 def test_no_more_than_two_of_one_kind_are_pending(transactions, context) -> None:

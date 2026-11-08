@@ -103,6 +103,7 @@ _EVIDENCE_STATUS = {
     "insurers": "possible",
     "cloud_overlap": "possible",
     "unknown_recurring": "possible",
+    "optional_charge": "possible",
 }
 _FEE_ROLES = {"service charge", "cross-border fee", "payment fee", "interest"}
 
@@ -140,7 +141,7 @@ def _impact(finding: ReviewFinding, months: int) -> tuple[Decimal, Decimal | Non
     if prefix == "cloud_overlap":
         monthly = money("monthly")
         return monthly, monthly * 12, "recurring"
-    if prefix == "unknown_recurring":
+    if prefix in {"unknown_recurring", "optional_charge"}:
         monthly = money("amount")
         return monthly, monthly * 12, "recurring"
     if prefix == "airtime":
@@ -170,7 +171,10 @@ def _support(rows: Iterable[EvidenceRow]) -> list[SupportingTransaction]:
             transaction_id=row.transaction_id,
             date=row.date,
             description=_redact(row.description),
-            amount=row.amount,
+            # A supporting row carries a magnitude; ``direction`` says which way it went.
+            # Statement rows can hold a signed amount (a debit of -124.99), which the
+            # model rejects, and that turned /leak-detections into a 500.
+            amount=abs(row.amount),
             direction=row.direction,
             role="fee" if row.role in _FEE_ROLES else "payment",
         )

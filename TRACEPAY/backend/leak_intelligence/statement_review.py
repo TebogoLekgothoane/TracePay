@@ -21,7 +21,7 @@ from __future__ import annotations
 import calendar
 import re
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from statistics import median
@@ -54,6 +54,8 @@ class StatementContext:
     debit_interest_rates: dict[str, Decimal] = field(default_factory=dict)
     credit_interest_rate: Decimal | None = None
     facility: Decimal | None = None
+    # A credit card's limit, printed on card statements. Set, with no facility, means a card.
+    credit_limit: Decimal | None = None
     # What each statement's own summary says it charged, "YYYY-MM" -> amount.
     statement_fee_totals: dict[str, Decimal] = field(default_factory=dict)
     statement_interest_totals: dict[str, Decimal] = field(default_factory=dict)
@@ -131,15 +133,27 @@ def context_from_printed_figures(
             cards[key] = spent
     latest = usable[-1][2]
     first_month = usable[0][0]
+    last_day = calendar.monthrange(first_month.year, first_month.month)[1]
+    if first_month.day == last_day:
+        # A calendar-month statement: it starts on the first of its month.
+        period_start = date(first_month.year, first_month.month, 1)
+    else:
+        # A cycle that ends mid-month (say on the 4th) began the day after the previous
+        # month's statement date, so the earliest statement still covers a whole month.
+        previous_month = first_month.month - 1 or 12
+        previous_year = first_month.year - (1 if first_month.month == 1 else 0)
+        previous_last = calendar.monthrange(previous_year, previous_month)[1]
+        period_start = date(previous_year, previous_month, min(first_month.day, previous_last)) + timedelta(days=1)
     return StatementContext(
         account_label=account_label,
-        # Statements are monthly: the period runs from the first of the earliest month
-        # to the last statement date.
-        period_start=date(first_month.year, first_month.month, 1),
+        # Statements are monthly: the period runs from the start of the earliest
+        # statement's cycle to the last statement date.
+        period_start=period_start,
         period_end=usable[-1][0],
         debit_interest_rates=rates,
         credit_interest_rate=_printed_decimal(latest.get("credit_interest_rate")),
         facility=_printed_decimal(latest.get("facility")),
+        credit_limit=_printed_decimal(latest.get("credit_limit")),
         statement_fee_totals=fees,
         statement_interest_totals=interest,
         card_purchases=cards,
@@ -322,7 +336,26 @@ _ALIASES: tuple[tuple[re.Pattern[str], str], ...] = tuple(
         (r"discbank", "Discbank"),
     )
 )
-_DELIVERY = re.compile(r"uber\s*eats|\bdl\W*uber", re.IGNORECASE)
+# Restaurant and takeaway delivery services, by how their orders appear on a statement. A
+# supermarket's own delivery (Checkers Sixty60, say) is a grocery shop, not a delivery habit.
+_DELIVERY_SERVICES: tuple[tuple[re.Pattern[str], str], ...] = tuple(
+    (re.compile(pattern, re.IGNORECASE), name)
+    for pattern, name in (
+        (r"uber\s*eats|\bdl\W*uber", "Uber Eats"),
+        (r"\bmr\.?\s*d\s+food|\bmrd\s*food|\bmrdfood", "Mr D Food"),
+        (r"\bbolt\s*food|\bboltfood", "Bolt Food"),
+        (r"\border\s*in\b|\borderin\b", "OrderIn"),
+        (r"\bdeliveroo\b", "Deliveroo"),
+    )
+)
+
+
+def delivery_service(description: str | None) -> str | None:
+    """The delivery service a statement line is an order from, or None."""
+    for pattern, name in _DELIVERY_SERVICES:
+        if pattern.search(description or ""):
+            return name
+    return None
 _PLATFORM_BILLING = re.compile(r"\.com/bill|itunes|google\s*play", re.IGNORECASE)
 _INSURERS = (
     "outsurance", "dotsure", "pineapple", "discovery insure", "king price", "miway", "santam",
@@ -334,6 +367,38 @@ _LENDERS = ("bank", "cred", "finance", "loan", "discbank")
 _DOMAIN_HOSTS = ("godaddy", "namecheap", "xneelo", "afrihost")
 _CLOUD = ("Google One", "Microsoft", "Apple")
 _TRIP_CITIES = ("new york", "london", "dubai", "paris", "amsterdam", "bangkok", "lisbon", "rome")
+# What a bank charges for holding and running the account itself. A recurring bank charge
+# that is none of these (and not interest, a penalty or a payment fee) is something the
+# customer may have chosen, so it is raised on its own and the customer is asked about it.
+_UPKEEP = re.compile(
+    r"account|acc\b|service|admin|facilit|monthly\s+fee|card\s+fee|notif|\bsms\b|statement|"
+    r"maintenance|management|annual|licen[cs]e|bank\s+(?:fee|charge)|banking|internet|online|"
+    r"cellphone|mobile|\bapp\b",
+    re.IGNORECASE,
+)
+# What a product the customer signed up for tends to be called. A charge must read like one
+# (as well as repeat monthly) before it is raised as a choice: "anything not known to be
+# ordinary" would raise every fee wording a bank has, and a wrong finding costs trust.
+_OPTIONAL_SIGNAL = re.compile(
+    r"premium|reward|member|programme|\bprogram\b|\bcover\b|covered|insur|assurance|\bplan\b|"
+    r"package|bundle|subscri|\bclub\b|benefit|protect|\blife\b|funeral|loyalty|concierge|"
+    r"lounge|wellness|vitality|greenbacks|ebucks",
+    re.IGNORECASE,
+)
+# A penalty, or a fee for how the account is used (abroad, for cash, per transaction), which
+# repeats because the usage does, not because the customer signed up for something.
+_PENALTY = re.compile(
+    r"overdraft|interest|penalt|unpaid|returned|rejected|dishono|insufficient|exceed|\blate\b|"
+    r"cross.?border|forex|foreign|international|overseas|abroad|currency|conversion|"
+    r"transaction|\bcash\b|swipe|purchase|enquiry|inquiry|\bbalance\b|\bdeposit\b|withdraw|declined|replacement|"
+    r"\bnsf\b|debit\s+order|send\s*money|cash\s*send|\bvas\b|e-?wallet|pay\s*shap|voucher|airtime|prepaid",
+    re.IGNORECASE,
+)
+# A fee on a payment or transfer, as opposed to a charge for holding the account.
+_PAYMENT_FEE = re.compile(
+    r"payment|faster|shap|\(fp\)|\bfp\b|transfer|\beft\b|immediate|withdraw|\batm\b|enquiry",
+    re.IGNORECASE,
+)
 _FOREIGN_CURRENCY = re.compile(r"\b(USD|EUR|GBP)\s?(\d+(?:\.\d+)?)", re.IGNORECASE)
 
 
@@ -402,9 +467,10 @@ def _clean_description(description: str) -> str:
 def payee_name(tx: FeatureTransaction) -> str:
     """How the customer would name who was paid. Stable across a payee's own spellings."""
     description = tx.description or ""
-    if _DELIVERY.search(description):
-        return "Uber Eats"
-    if re.search(r"landlord|\brent\b", description, re.IGNORECASE) and _is_debit(tx):
+    if service := delivery_service(description):
+        return service
+    # "Rent A Car" and rentals are hire companies, not a landlord.
+    if re.search(r"landlord|\brent\b(?!\s+a\s+car)", description, re.IGNORECASE) and _is_debit(tx):
         return "Rent"
     for pattern, name in _ALIASES:
         if pattern.search(description):
@@ -430,6 +496,35 @@ def _is_fee(tx: FeatureTransaction) -> bool:
 
 def _is_interest(tx: FeatureTransaction) -> bool:
     return _is_fee(tx) and "interest" in (tx.description or "").lower()
+
+
+def _optional_charge_series(txs: list[FeatureTransaction]) -> dict[str, list[FeatureTransaction]]:
+    """Bank charges that repeat monthly and are not the account's own upkeep.
+
+    Judged from how the charge behaves and what it is called, never from a merchant list: the
+    same charge for two or more months, at one amount, named like a product the customer
+    chose (a premium, rewards, cover, a plan) and not interest, a penalty, a payment fee or
+    ordinary account upkeep.
+    """
+    groups: dict[str, list[FeatureTransaction]] = defaultdict(list)
+    for tx in txs:
+        description = tx.description or ""
+        if (
+            _is_fee(tx)
+            and not _is_interest(tx)
+            and _OPTIONAL_SIGNAL.search(description)
+            and not _PAYMENT_FEE.search(description)
+            and not _UPKEEP.search(description)
+            and not _PENALTY.search(description)
+        ):
+            groups[re.sub(r"\s+", " ", description.strip().lower())].append(tx)
+    series: dict[str, list[FeatureTransaction]] = {}
+    for name, items in groups.items():
+        months = {_month_key(tx.transaction_date) for tx in items}
+        amounts = {tx.amount for tx in items}
+        if len(months) >= 2 and len(items) == len(months) and len(amounts) == 1:
+            series[name] = sorted(items, key=lambda tx: tx.transaction_date)
+    return series
 
 
 def _is_service_charge(tx: FeatureTransaction) -> bool:
@@ -772,7 +867,12 @@ def _price_changes(series_map: dict[str, _Series]) -> tuple[list[ReviewFinding],
 def _fee_breakdown(
     txs: list[FeatureTransaction], month_count: int
 ) -> tuple[ReviewFinding | None, dict[str, Decimal]]:
-    fees = [tx for tx in txs if _is_fee(tx) and not _is_interest(tx)]
+    # An optional recurring charge is raised on its own (see _optional_charges): the bank
+    # bills it, but it may be a choice, unlike the account's own charges.
+    optional = {tx.transaction_id for items in _optional_charge_series(txs).values() for tx in items}
+    fees = [
+        tx for tx in txs if _is_fee(tx) and not _is_interest(tx) and tx.transaction_id not in optional
+    ]
     if not fees:
         return None, {}
     total = sum((tx.amount for tx in fees), _ZERO)
@@ -837,6 +937,23 @@ def _fee_breakdown(
                 # The fee as a share of what was charged, to the nearest half a percent.
                 half_points = (fee_total / charged * 100 / Decimal("0.5"))
                 rates[name] = half_points.quantize(Decimal(1), rounding=ROUND_HALF_UP) * Decimal("0.5")
+    # Charges the bank makes for the account itself (monthly, facility, programme premium)
+    # are named as they are printed, not lumped in as payment fees.
+    upkeep = [tx for tx in other if not _PAYMENT_FEE.search(tx.description or "")]
+    if upkeep:
+        by_name: dict[str, Decimal] = defaultdict(lambda: _ZERO)
+        display: dict[str, str] = {}
+        for tx in upkeep:
+            key = (tx.description or "").strip().lower()
+            display.setdefault(key, (tx.description or "").strip())
+            by_name[key] += tx.amount
+        ordered_upkeep = sorted(by_name.items(), key=lambda item: -item[1])
+        parts.append(
+            "Account charges "
+            + ", ".join(f"{display[key]} {money(amount)}" for key, amount in ordered_upkeep)
+            + "."
+        )
+        other = [tx for tx in other if tx not in upkeep]
     if other:
         names = " and ".join(
             label
@@ -872,7 +989,13 @@ def _fee_breakdown(
         rows=[
             evidence_row(
                 tx,
-                "service charge" if tx in service else "cross-border fee" if tx in cross else "payment fee",
+                "service charge"
+                if tx in service
+                else "cross-border fee"
+                if tx in cross
+                else "account charge"
+                if tx in upkeep
+                else "payment fee",
             )
             for tx in fees
         ],
@@ -889,15 +1012,32 @@ def _implied_overdraft(
     total = sum((tx.amount for tx in interest), _ZERO)
     monthly = (total / month_count).quantize(Decimal(1), rounding=ROUND_HALF_UP)
     sentences = [f"{money(total)} over {month_count} months (about {money(monthly)}/month)."]
+    # A card statement prints a credit limit and no overdraft facility.
+    is_card = ctx.credit_limit is not None and ctx.facility is None
     rates_by_month: dict[str, Decimal] = {}
     balances: list[Decimal] = []
+    # One month's interest can post as more than one line (a main charge and a few cents).
+    # The implied balance comes from the month's whole interest, not from each line.
+    per_month: dict[str, Decimal] = defaultdict(lambda: _ZERO)
+    lines_per_month: dict[str, list[FeatureTransaction]] = defaultdict(list)
     for tx in sorted(interest, key=lambda item: item.transaction_date):
         # Interest posts on the first of the next month, for the month just ended.
         month = _month_key(tx.transaction_date - timedelta(days=1))
+        per_month[month] += tx.amount
+        lines_per_month[month].append(tx)
+    for month, amount in per_month.items():
         rate = ctx.debit_interest_rates.get(month)
         if rate:
             rates_by_month[month] = rate
-            balances.append(tx.amount / (rate / 12 / 100))
+            balances.append(amount / (rate / 12 / 100))
+    for month in sorted(lines_per_month):
+        lines = lines_per_month[month]
+        if len(lines) > 1:
+            parts_text = " and ".join(money(tx.amount) for tx in lines)
+            sentences.append(
+                f"Interest for {_month_name(month)} was posted as {len(lines)} lines "
+                f"({parts_text}); they are counted together."
+            )
     if rates_by_month:
         keys = sorted(rates_by_month)
         first, last = rates_by_month[keys[0]], rates_by_month[keys[-1]]
@@ -907,21 +1047,27 @@ def _implied_overdraft(
                 f"The rate went from {first:.2f}% to **{last:.2f}%** in {_month_name(change_key)}."
             )
         low, high = min(balances), max(balances)
+        limit = ctx.facility or ctx.credit_limit
         near = ""
-        if ctx.facility and high >= ctx.facility * Decimal("0.9"):
-            near = f", at or near the {_kilo(ctx.facility)} limit"
+        if limit and high >= limit * Decimal("0.9"):
+            near = f", at or near the {_kilo(limit)} limit"
+        owed = "balance owed on the card" if is_card else "overdraft"
         sentences.append(
-            f"The interest implies an average overdraft of about "
+            f"The interest implies an average {owed} of about "
             f"R{_round_to(low, 1000) / 1000:.0f}–{_round_to(high, 1000) / 1000:.0f}k{near}."
         )
     return ReviewFinding(
         key="overdraft_interest",
         group="review",
         leak_type="high_cost_credit_leak",
-        title="Overdraft interest",
+        title="Credit card interest" if is_card else "Overdraft interest",
         display="table",
         shows=" ".join(sentences),
-        cannot_show="Whether the cash you move around sits idle elsewhere.",
+        cannot_show=(
+            "Whether paying the card down sooner would avoid this interest."
+            if is_card
+            else "Whether the cash you move around sits idle elsewhere."
+        ),
         figures={"total": total, "months": month_count},
         rows=evidence_rows(interest, "interest"),
     )
@@ -1003,6 +1149,51 @@ def _round_trips(txs: list[FeatureTransaction], ctx: StatementContext) -> Review
             *[evidence_row(tx, "back") for entry in trips for tx in entry[4]],
         ],
     )
+
+
+def _optional_charges(txs: list[FeatureTransaction]) -> list[ReviewFinding]:
+    """Each recurring bank charge that is not account upkeep, with a question about it.
+
+    The bank bills these, but the customer may have chosen them (a rewards programme, a
+    cover, a package), so the statement cannot say whether they are worth what they cost.
+    """
+    findings = []
+    for name, items in _optional_charge_series(txs).items():
+        months = sorted({_month_key(tx.transaction_date) for tx in items})
+        amount = items[0].amount
+        total = sum((tx.amount for tx in items), _ZERO)
+        label = _statement_text(items[0]) or name.title()
+        findings.append(
+            ReviewFinding(
+                key=f"optional_charge:{slug(name)}",
+                group="review",
+                leak_type="subscription_leak",
+                title=f"{label}: a recurring charge from your bank",
+                display="table",
+                shows=(
+                    f"{money(amount)}/month in {_join([_month_name(key, full=False) for key in months])}, "
+                    f"{money(total)} in all. It is separate from the account's own fees."
+                ),
+                cannot_show=f"Whether you get value from what {label} pays for.",
+                questions=[
+                    ask(
+                        f"optional_charge:{slug(name)}",
+                        "subscription_leak",
+                        "subscription_usage",
+                        label,
+                        label,
+                        f"Your bank charges you {money(amount)} a month for {label}. "
+                        "Do you still use what it pays for?",
+                        "Only you can say whether it is worth the cost, so your answer decides "
+                        "whether this is shown.",
+                        signature=f"amt={amount.quantize(Decimal(1))}",
+                    )
+                ],
+                figures={"amount": amount, "total": total, "months": months, "label": label},
+                rows=evidence_rows(items, "recurring charge"),
+            )
+        )
+    return findings
 
 
 def _opaque_billing(series_map: dict[str, _Series]) -> ReviewFinding | None:
@@ -1257,10 +1448,13 @@ def _unknown_recurring(series_map: dict[str, _Series]) -> list[ReviewFinding]:
 
 
 def _delivery_habit(txs: list[FeatureTransaction]) -> ReviewFinding | None:
-    orders = [tx for tx in _purchases(txs) if _DELIVERY.search(tx.description or "")]
+    orders = [tx for tx in _purchases(txs) if delivery_service(tx.description)]
     if len(orders) < 10:
         return None
     total = sum((tx.amount for tx in orders), _ZERO)
+    # Named for the service when there is one, so the customer reads their own app's name.
+    services = sorted({delivery_service(tx.description) or "" for tx in orders})
+    name = services[0] if len(services) == 1 else "Food delivery"
     by_month: dict[str, list[FeatureTransaction]] = defaultdict(list)
     for tx in orders:
         by_month[_month_key(tx.transaction_date)].append(tx)
@@ -1293,10 +1487,27 @@ def _delivery_habit(txs: list[FeatureTransaction]) -> ReviewFinding | None:
         key="food_delivery",
         group="review",
         leak_type="food_spending_leak",
-        title="Uber Eats",
+        title=name,
         display="table",
         shows=" ".join(sentences),
         cannot_show="Delivery and service fees inside each total.",
+        questions=[
+            ask(
+                "food_delivery",
+                "food_spending_leak",
+                "spending_level",
+                name,
+                name,
+                f"Your statements show {len(orders)} {name} orders, {money(total)} in all. "
+                "Is that about what you usually spend on delivery?"
+                if len(services) == 1
+                else f"Your statements show {len(orders)} food delivery orders ({_join(services)}), "
+                f"{money(total)} in all. Is that about what you usually spend on delivery?",
+                "The statements show the amount, not whether it is normal for you, so your "
+                "answer decides whether this is shown.",
+                signature=f"amt={(total / len(orders)).quantize(Decimal(1), rounding=ROUND_HALF_UP)}",
+            )
+        ],
         figures={"orders": len(orders), "total": total},
         rows=evidence_rows(orders, "order"),
     )
@@ -1405,6 +1616,20 @@ def _large_one_off(txs: list[FeatureTransaction], series_map: dict[str, _Series]
             f"{label} on {_short_date(top.transaction_date)}, with no other months like it "
             "(`irregular_transaction_leak`)."
         ),
+        questions=[
+            ask(
+                "large_one_off",
+                "irregular_transaction_leak",
+                "one_off_expected",
+                name,
+                name,
+                f"{name} charged {money(top.amount)} on {_short_date(top.transaction_date)}, "
+                "far more than anything else. Was that planned?",
+                "Only you know whether it was expected, so your answer decides whether this "
+                "is shown.",
+                signature=f"amt={top.amount.quantize(Decimal(1), rounding=ROUND_HALF_UP)}",
+            )
+        ],
         figures={"amount": top.amount},
         rows=[evidence_row(top)],
     )
@@ -1635,8 +1860,15 @@ def build_statement_review(
     from .statement_review_answers import apply_answers, choose_pending, open_questions
 
     ctx = context or StatementContext()
+    # Every figure below is a magnitude; ``transaction_type`` carries the direction. Real
+    # statement rows can hold a signed amount (a debit of -124.99), which made sums and
+    # impacts negative and crashed the finding models (see amount_of in common.py).
     txs = sorted(
-        (tx for tx in transactions if tx.transaction_date is not None),
+        (
+            replace(tx, amount=abs(tx.amount)) if tx.amount < 0 else tx
+            for tx in transactions
+            if tx.transaction_date is not None
+        ),
         key=lambda tx: (tx.transaction_date, tx.transaction_id),
     )
     # The fee-pairing step needs statement order within a day, so keep input order for ties.
@@ -1662,6 +1894,7 @@ def build_statement_review(
         opaque,
         _cloud_overlap(series_map, opaque),
         _insurers(series_map),
+        *_optional_charges(txs),
         *_unknown_recurring(series_map),
         _delivery_habit(txs),
     ]

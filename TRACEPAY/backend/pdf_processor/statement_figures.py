@@ -29,6 +29,7 @@ def _label(text: str) -> str:
 
 _AMOUNT_LABELS = {
     "facility": "facility",
+    "credit limit": "credit_limit",
     "card purchases": "card_purchases",
     "online banking payments": "online_payments",
     "deposits / payments received": "deposits_received",

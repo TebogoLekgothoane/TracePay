@@ -209,7 +209,7 @@ def test_the_question_with_money_at_stake_is_asked_first(result) -> None:
         ("cancelled_in", "Apple"),
         ("payment_purpose", result.questions[2].subject),
     ]
-    assert result.questions_not_shown == 10
+    assert result.questions_not_shown == 13
 
 
 def test_a_question_both_sources_ask_is_asked_once(result) -> None:
@@ -252,3 +252,41 @@ def test_when_answers_cannot_be_read_nothing_is_asked() -> None:
         detection = leak_detection._detect_all(inputs, "user-a", "token")
     assert detection.result.questions == []
     assert any(leak.evidence.get("source") == SOURCE for leak in detection.result.leaks)  # findings unaffected
+
+
+def test_a_signed_statement_amount_does_not_break_the_supporting_rows() -> None:
+    from datetime import date
+    from decimal import Decimal
+
+    from leak_intelligence.review_bridge import _support
+    from leak_intelligence.statement_review import EvidenceRow
+
+    rows = [EvidenceRow("t1", date(2026, 9, 5), "APPLE.COM/BILL", Decimal("-124.99"), "debit")]
+    [support] = _support(rows)
+    assert support.amount == Decimal("124.99")
+    assert support.direction == "debit"
+
+
+def test_signed_debit_amounts_give_the_same_findings_as_positive_ones() -> None:
+    """Real statement rows can hold debits as negative numbers (-124.99).
+
+    Every benchmark customer, re-run with its debits negated, must give the same review
+    findings as with positive amounts. Before amounts were normalised, 51 of them crashed
+    /leak-detections with "estimated_monthly_impact: Input should be greater than or equal to 0".
+    """
+    from dataclasses import replace
+
+    from leak_intelligence.review_bridge import review_to_leaks
+    from leak_intelligence.statement_review import build_statement_review
+    from tests.benchmark.customers import build_customers
+    from tests.benchmark.noisy_customers import build_noisy_customers
+
+    def findings(rows):
+        return [(l.leak_type, l.estimated_monthly_impact) for l in review_to_leaks(build_statement_review(rows), "u")]
+
+    for customer in [*build_customers(), *build_noisy_customers()]:
+        negated = [
+            replace(row, amount=-row.amount) if row.transaction_type == "debit" else row
+            for row in customer.transactions
+        ]
+        assert findings(negated) == findings(customer.transactions), customer.name

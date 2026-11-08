@@ -95,6 +95,20 @@ _OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
         ("moved_back", "A budgeting move I reverse"),
         ("other", "Something else"),
     ),
+    # For a spending habit the rows show but cannot judge (delivery, say).
+    "spending_level": (
+        ("usual", "About what I usually spend"),
+        ("more_than_usual", "More than I usually spend"),
+        ("one_off_reason", "A one-off stretch (a trip, an event, guests)"),
+        ("want_less", "I want to spend less on this"),
+    ),
+    # For one large charge with no other months like it.
+    "one_off_expected": (
+        ("planned", "Planned and expected"),
+        ("unplanned", "Unplanned"),
+        ("refunded", "Refunded or partly refunded"),
+        ("not_mine", "I don't recognise it"),
+    ),
     "bank_account": (
         ("fnb", "FNB"),
         ("absa", "Absa"),
@@ -199,6 +213,13 @@ def _signature(kind: str, leak: LeakDetection) -> str:
     if kind in {"subscription_usage", "insurance_cover", "payment_purpose"}:
         amount = _current_amount(leak)
         return f"amt={amount.quantize(Decimal('1'))}" if amount is not None else ""
+    if kind == "one_off_expected":
+        amount = _dec(leak.evidence.get("transaction_amount"))
+        return f"amt={amount.quantize(Decimal('1'))}" if amount is not None and amount > 0 else ""
+    if kind == "spending_level":
+        # A materially different rise is a different question from the one the user answered.
+        amount = leak.estimated_monthly_impact
+        return f"amt={Decimal(amount).quantize(Decimal('1'))}" if amount and amount > 0 else ""
     return ""
 
 
@@ -399,6 +420,38 @@ def _candidates(leak: LeakDetection, answers: dict[str, StoredAnswer]) -> list[F
                 )
             )
 
+    # Review findings carry their own questions (see statement_review); asking again here
+    # would put the same question to the user twice under two keys.
+    engine_finding = evidence.get("source") != "statement_review"
+
+    if leak.leak_type == "irregular_transaction_leak" and engine_finding:
+        amount_text = _money(evidence.get("transaction_amount"))
+        when = evidence.get("transaction_date")
+        day = _day(when) if when is not None else ""
+        category = evidence.get("category_name")
+        where = f"for {str(category).lower()}" if isinstance(category, str) and category.strip() else "for its category"
+        who = name if name != "this merchant" else "One merchant"
+        found.append(
+            make(
+                "one_off_expected",
+                subject or _level_subject(leak),
+                f"{who} charged {amount_text}{f' on {day}' if day else ''}, far more than is usual {where}. "
+                "Was that planned?",
+                "Only you know whether it was expected, so your answer decides whether this is shown.",
+            )
+        )
+
+    if leak.leak_type in _LEVEL_TYPES and engine_finding:
+        found.append(
+            make(
+                "spending_level",
+                _level_subject(leak),
+                f"{_claim(leak)} Is that normal for you?",
+                "The statements show the amount, not whether it is normal for you, so your answer "
+                "decides whether this is shown.",
+            )
+        )
+
     if leak.leak_type == "bank_fee_leak":
         found.append(
             make(
@@ -409,6 +462,58 @@ def _candidates(leak: LeakDetection, answers: dict[str, StoredAnswer]) -> list[F
             )
         )
     return found
+
+
+# Findings about how much is being spent, where only the customer can say whether it is usual.
+_LEVEL_TYPES = frozenset(
+    {
+        "food_spending_leak",
+        "transport_spending_leak",
+        "coffee_spending_leak",
+        "convenience_store_leak",
+        "weekend_spending_leak",
+        "payday_spending_leak",
+        "spending_escalation_leak",
+    }
+)
+
+
+def _level_subject(leak: LeakDetection) -> str:
+    """A stable subject for a finding that has no merchant: its category, else its type."""
+    evidence = leak.evidence
+    for key in ("merchant_key", "category_name"):
+        value = evidence.get(key)
+        if isinstance(value, str) and value.strip():
+            return subject_key(value)[:80]
+    return subject_key(leak.leak_type)
+
+
+def _sentence(text: str) -> str:
+    cleaned = text.strip().rstrip(".!?")
+    return f"{cleaned}." if cleaned else ""
+
+
+_SENTENCE_END = re.compile(r"(?<=[a-z%)\d])\.\s+(?=[A-Z])")
+
+
+def _claim(leak: LeakDetection) -> str:
+    """What the finding says, in one sentence, for a question to quote.
+
+    Titles are labels ("Post-payday discretionary spending concentration"); a finding's
+    description opens with the figures behind it, so that is quoted when it is short enough
+    to read at a glance, and the title otherwise.
+    """
+    description = (leak.description or "").strip()
+    first = _SENTENCE_END.split(description, maxsplit=1)[0] if description else ""
+    # What the finding excludes is method, not the claim: keep the question short.
+    first = re.split(r",?\s+excluding\b", first, maxsplit=1)[0]
+    title = _sentence(leak.title)
+    # Whichever of the two carries the figures, so the customer can see what they are
+    # being asked about; a sentence with no figure in it is not much to answer.
+    for text in (_sentence(first), title):
+        if text and len(text) <= 240 and re.search(r"\d", text):
+            return text
+    return title
 
 
 def _amount_subject(leak: LeakDetection) -> str | None:
@@ -532,6 +637,19 @@ def _apply_to_leak(
             purpose_edit = _Edit(leak)
             if _apply_purpose(purpose_edit, purpose.answer):
                 return purpose_edit.finish()
+    if leak.evidence.get("source") != "statement_review":
+        # These two have no merchant to key on in every case, so they key on the finding itself.
+        generic = _Edit(leak)
+        level = answers.get(question_key("spending_level", _level_subject(leak)))
+        if leak.leak_type in _LEVEL_TYPES and _answer_applies(level, leak, "spending_level"):
+            assert level is not None
+            if _apply_level(generic, level.answer):
+                return generic.finish()
+        one_off = answers.get(question_key("one_off_expected", subject or _level_subject(leak)))
+        if leak.leak_type == "irregular_transaction_leak" and _answer_applies(one_off, leak, "one_off_expected"):
+            assert one_off is not None
+            if _apply_one_off(generic, one_off.answer):
+                return generic.finish()
     if subject is None:
         return leak
     edit = _Edit(leak)
@@ -718,6 +836,57 @@ def _apply_purpose(edit: _Edit, answer: str) -> bool:
         edit.effect = "none"
     else:
         edit.tell("payment_purpose", answer, "You told us this is something else.")
+    return True
+
+
+def _apply_level(edit: _Edit, answer: str) -> bool:
+    """What the customer says about a spending level. The amounts themselves never change."""
+    if answer == "usual":
+        edit.tell("spending_level", answer, "You told us this is about what you usually spend.")
+        edit.possible = []
+        edit.effect = "resolves"
+        edit.status = "dismissed"
+    elif answer == "more_than_usual":
+        edit.tell("spending_level", answer, "You told us this is more than you usually spend.")
+        edit.effect = "strengthens"
+    elif answer == "one_off_reason":
+        edit.tell("spending_level", answer, "You told us this was a one-off stretch, such as a trip, an event or guests.")
+        edit.effect = "weakens"
+    elif answer == "want_less":
+        edit.tell("spending_level", answer, "You told us you want to spend less on this.")
+        edit.effect = "strengthens"
+    else:
+        return False
+    return True
+
+
+def _apply_one_off(edit: _Edit, answer: str) -> bool:
+    if answer == "planned":
+        edit.tell("one_off_expected", answer, "You told us this charge was planned.")
+        edit.possible = []
+        edit.effect = "resolves"
+        edit.status = "dismissed"
+    elif answer == "refunded":
+        edit.tell("one_off_expected", answer, "You told us this charge was refunded.")
+        edit.possible = []
+        edit.effect = "resolves"
+        edit.status = "resolved"
+    elif answer == "unplanned":
+        edit.tell("one_off_expected", answer, "You told us this charge was unplanned.")
+        edit.effect = "strengthens"
+    elif answer == "not_mine":
+        edit.tell("one_off_expected", answer, "You told us you don't recognise this charge.")
+        edit.possible.insert(
+            0,
+            PossibleLeak(
+                text="This charge may not be yours.",
+                cannot_see=["Who is behind the name on the statement."],
+                check="Ask your bank who collected it and, if you did not authorise it, how to dispute it.",
+            ),
+        )
+        edit.effect = "strengthens"
+    else:
+        return False
     return True
 
 

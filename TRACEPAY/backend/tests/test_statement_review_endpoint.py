@@ -94,9 +94,9 @@ def test_the_endpoint_returns_a_few_questions_in_the_engines_shape() -> None:
         "cancelled_in",
         "payment_purpose",
     ]
-    # 13 are open in all: the review's 9 plus the engine's own for payments it cannot name and
-    # for the gym. Three are asked now.
-    assert payload["questions_not_shown"] == 10
+    # 16 are open in all: the review's 11 plus the engine's own for payments it cannot name,
+    # for the gym and for the payday spending pattern. Three are asked now.
+    assert payload["questions_not_shown"] == 13
     for question in payload["questions"]:
         assert question["question_key"] and question["prompt"] and question["signature"] is not None
         assert question["options"][-1]["value"] == "not_sure"

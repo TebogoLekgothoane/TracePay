@@ -384,6 +384,9 @@ RULES: tuple[Rule, ...] = (
             "SERVICE FEE",
             "BANK FEE",
             "MONTHLY FEE",
+            "FACILITY FEE",
+            # The bank's own monthly rewards-programme premium (Discovery Bank).
+            "VITALITY MONEY PREMIUM",
             "MONTHLY ACC FEE",
             "ACC FEE",
             "ACCOUNT FEE",

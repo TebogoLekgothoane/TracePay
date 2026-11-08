@@ -101,11 +101,45 @@ def merge_continuation_rows(rows: list[list[str]], headers: list[str]) -> list[l
 
     date_index = next((i for i, h in enumerate(headers) if h in _DATE_HEADERS), None)
     desc_index = next((i for i, h in enumerate(headers) if is_description_header(h)), None)
+    def _cell(row: list[str], index: int | None) -> str:
+        return row[index].strip() if index is not None and index < len(row) else ""
+
+    def _has_money(row: list[str]) -> bool:
+        return any(
+            _MONEY_CELL.fullmatch(cell.strip()) and parse_amount(cell) not in (None, Decimal("0"))
+            for index, cell in enumerate(row)
+            if cell.strip() and index != desc_index and (index >= len(headers) or headers[index] not in _TEXT_HEADERS)
+        )
+
     merged: list[list[str]] = []
-    for row in rows:
+    # A tall row can print its details line above the dated line (a payment received:
+    # "Inter account transfer from ..." sits over "17 Mar | Transfer | R21 074.70"). Such a
+    # line belongs to the dated row below it, not to the row above.
+    leading: dict[int, str] = {}
+    for position in range(len(rows) - 1):
+        row, following = rows[position], rows[position + 1]
+        if (
+            desc_index is not None
+            and parse_date(_cell(row, date_index)) is None
+            and _cell(row, desc_index)
+            and not _has_money(row)
+            and parse_date(_cell(following, date_index)) is not None
+            and not _cell(following, desc_index)
+            and _has_money(following)
+        ):
+            leading[position] = _cell(row, desc_index)
+    consumed = {position + 1: text for position, text in leading.items()}
+    for position, row in enumerate(rows):
+        if position in leading:
+            continue
         date_value = row[date_index].strip() if date_index is not None and date_index < len(row) else ""
         if parse_date(date_value) is not None:
-            merged.append(list(row))
+            current = list(row)
+            if position in consumed and desc_index is not None:
+                if desc_index >= len(current):
+                    current.extend([""] * (desc_index - len(current) + 1))
+                current[desc_index] = consumed[position]
+            merged.append(current)
             continue
         if not merged:
             continue

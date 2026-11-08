@@ -114,7 +114,9 @@ export type FindingQuestionKind =
   | "insurance_cover"
   | "bank_account"
   | "payment_purpose"
-  | "transfer_purpose";
+  | "transfer_purpose"
+  | "spending_level"
+  | "one_off_expected";
 
 export type FindingQuestionOption = {
   value: string;

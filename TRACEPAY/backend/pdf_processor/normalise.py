@@ -117,6 +117,9 @@ def _secondary_date(
     return parsed.value
 
 
+_DIRECTION_WORD = r"\b(debit|debited|dr|withdrawal|out|credit|credited|cr|deposit|in)\b"
+
+
 def normalize_row(
     row: list[str],
     headers: list[str],
@@ -224,7 +227,9 @@ def normalize_row(
         elif (
             re.search(r"\b(credit|credited|cr|deposit|in)\b", direction)
             or amount_value.strip().startswith("+")
-            or (unsigned_is_credit and not direction)
+            # A type such as "Transfer" or "Re-direct" names no direction, so it is no
+            # evidence against the table's own rule: debits carry a sign, this one does not.
+            or (unsigned_is_credit and not re.search(_DIRECTION_WORD, direction))
         ):
             signed_amount, transaction_type = abs(amount), "credit"
         else:

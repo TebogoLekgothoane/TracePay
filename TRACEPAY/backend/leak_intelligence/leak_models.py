@@ -157,6 +157,8 @@ QuestionKind = Literal[
     "bank_account",
     "payment_purpose",
     "transfer_purpose",
+    "spending_level",
+    "one_off_expected",
 ]
 
 

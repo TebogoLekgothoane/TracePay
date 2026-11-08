@@ -33,6 +33,8 @@ QUESTION_ORDER = (
     "insurance_cover",
     "transfer_purpose",
     "subscription_usage",
+    "one_off_expected",
+    "spending_level",
     "data_usage",
 )
 
@@ -101,6 +103,12 @@ def apply_answers(
             _transfers(finding, answers)
         elif prefix == "cloud_overlap":
             _usage(finding, answers)
+        elif prefix == "optional_charge":
+            _optional_charge(finding, answers, notes)
+        elif prefix == "food_delivery":
+            _spending_level(finding, answers, notes)
+        elif prefix == "large_one_off":
+            _one_off(finding, answers, notes)
     return findings, notes
 
 
@@ -220,6 +228,70 @@ def _usage(finding: ReviewFinding, answers: dict[str, StoredAnswer]) -> None:
         clause = _USAGE_CLAUSE.get(stored.answer)
         if clause:
             finding.reported.append(clause.format(name=question.subject))
+
+
+def _optional_charge(
+    finding: ReviewFinding, answers: dict[str, StoredAnswer], notes: list[str]
+) -> None:
+    """A charge the customer chose and still uses is not a leak."""
+    for question, stored in _answers_for(finding, "subscription_usage", answers):
+        if stored.answer == "still_use":
+            finding.status = "dismissed"
+            notes.append(f"You told us you still use {question.subject}, so it is not raised.")
+        elif stored.answer == "cancelled":
+            finding.reported.append(
+                f"you already cancelled {question.subject}. Your statements show it charged "
+                f"in {_join_months(finding)}."
+            )
+        elif (clause := _USAGE_CLAUSE.get(stored.answer)) is not None:
+            finding.reported.append(clause.format(name=question.subject))
+
+
+def _spending_level(
+    finding: ReviewFinding, answers: dict[str, StoredAnswer], notes: list[str]
+) -> None:
+    """Someone who says this is their normal level is not leaking; the rows are unchanged."""
+    for question, stored in _answers_for(finding, "spending_level", answers):
+        if stored.answer == "usual":
+            finding.status = "dismissed"
+            notes.append(
+                f"You told us {question.subject} is about what you usually spend, so it is not raised."
+            )
+        elif stored.answer == "more_than_usual":
+            finding.reported.append(f"{question.subject} is more than you usually spend.")
+        elif stored.answer == "one_off_reason":
+            finding.reported.append(
+                f"the {question.subject} spending was a one-off stretch, such as a trip, an event or guests."
+            )
+        elif stored.answer == "want_less":
+            finding.reported.append(f"you want to spend less on {question.subject}.")
+
+
+def _one_off(
+    finding: ReviewFinding, answers: dict[str, StoredAnswer], notes: list[str]
+) -> None:
+    for question, stored in _answers_for(finding, "one_off_expected", answers):
+        amount = money(finding.figures.get("amount", 0))  # type: ignore[arg-type]
+        if stored.answer == "planned":
+            finding.status = "dismissed"
+            notes.append(
+                f"You told us the {amount} {question.subject} charge was planned, so it is not raised."
+            )
+        elif stored.answer == "refunded":
+            finding.status = "resolved"
+            notes.append(
+                f"You told us the {amount} {question.subject} charge was refunded, so it is not raised."
+            )
+        elif stored.answer == "unplanned":
+            finding.reported.append(f"the {amount} {question.subject} charge was unplanned.")
+        elif stored.answer == "not_mine":
+            finding.reported.append(f"you don't recognise the {amount} {question.subject} charge.")
+
+
+def _join_months(finding: ReviewFinding) -> str:
+    months = [str(month) for month in finding.figures.get("months", [])]  # type: ignore[union-attr]
+    labels = [_month_label(month) for month in months]
+    return ", ".join(labels) if labels else "the months above"
 
 
 # ------------------------------------------------------------------- what is still open
