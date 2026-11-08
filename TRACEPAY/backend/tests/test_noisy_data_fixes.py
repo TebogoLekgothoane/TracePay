@@ -118,7 +118,7 @@ def test_a_genuine_price_creep_is_unchanged() -> None:
 
 
 # --------------------------------------- 3. duplicates at an unrecognised merchant
-def _order(tx_id, description="TAKEALOT.COM ORDER 884211", at=time(12, 0), amount="349", day=date(2026, 8, 18)):
+def _order(tx_id, description="ZENDOLO.COM ORDER 884211", at=time(12, 0), amount="349", day=date(2026, 8, 18)):
     return raw(tx_id, amount, day, description, at=at)
 
 
@@ -131,9 +131,9 @@ def test_the_same_charge_twice_in_a_minute_is_found_without_naming_a_merchant() 
     assert leak.estimated_monthly_impact == D("349")
     evidence = leak.evidence
     assert evidence["merchant_key"] is None
-    assert evidence["description_signature"] == "TAKEALOT COM"
+    assert evidence["description_signature"] == "ZENDOLO COM"
     assert "merchant_display_name" not in evidence
-    assert "takealot" not in leak.title.lower()
+    assert "zendolo" not in leak.title.lower()
     assert evidence["evidence_status"] == "possible"
     assert leak.confidence <= 0.70
 
@@ -162,7 +162,7 @@ def test_the_unidentified_duplicate_carries_its_rows_and_its_own_registry_identi
     "rows",
     [
         # Different order references: two orders, not one charge twice.
-        [_order("a"), _order("b", "TAKEALOT.COM ORDER 884377", time(12, 1)), ANCHOR],
+        [_order("a"), _order("b", "ZENDOLO.COM ORDER 884377", time(12, 1)), ANCHOR],
         # No times: a date alone is not enough for an unrecognised payee.
         [_order("a", at=None), _order("b", at=None), ANCHOR],
         # Half an hour apart.
