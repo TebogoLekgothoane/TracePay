@@ -9,7 +9,7 @@ type Props = {
   points: Point[];
   selected: number | null;
   onSelect: (index: number | null) => void;
-  colors: { current: string; previous: string; grid: string; label: string };
+  colors: { up: string; down: string; previous: string; grid: string; label: string };
   height?: number;
 };
 
@@ -18,7 +18,7 @@ const SECTIONS = 3;
 
 const safe = (value: number) => (Number.isFinite(value) && value > 0 ? value : 0);
 
-/** Grouped bars: this period beside the one before it. Tap a pair to read it. */
+/** Grouped bars: this period beside the one before it, red when spending rose and green when it fell. Tap a pair to read it. */
 export function TrendBars({ points, selected, onSelect, colors, height = 190 }: Props) {
   const { width, onLayout } = useChartWidth();
   const count = points.length;
@@ -31,7 +31,7 @@ export function TrendBars({ points, selected, onSelect, colors, height = 190 }: 
   const plotWidth = Math.max(width - PAD.left - PAD.right, 1);
   const plotHeight = Math.max(height - PAD.top - PAD.bottom, 1);
   const slot = plotWidth / count;
-  const barWidth = Math.max(Math.min(slot * 0.26, 14), 4);
+  const barWidth = Math.max(Math.min(slot * 0.3, 16), 4);
   const gap = 3;
   const baseline = PAD.top + plotHeight;
   const labelEvery = Math.max(1, Math.ceil(count / Math.max(Math.floor(plotWidth / 46), 1)));
@@ -65,7 +65,7 @@ export function TrendBars({ points, selected, onSelect, colors, height = 190 }: 
                 y={previousTop}
                 width={barWidth}
                 height={Math.max(baseline - previousTop, 0)}
-                rx={2.5}
+                rx={4}
                 fill={colors.previous}
                 opacity={dimmed ? 0.35 : 1}
               />
@@ -74,8 +74,8 @@ export function TrendBars({ points, selected, onSelect, colors, height = 190 }: 
                 y={currentTop}
                 width={barWidth}
                 height={Math.max(baseline - currentTop, 0)}
-                rx={2.5}
-                fill={colors.current}
+                rx={4}
+                fill={point.current > point.previous ? colors.up : colors.down}
                 opacity={dimmed ? 0.35 : 1}
               />
               {index % labelEvery === 0 ? (

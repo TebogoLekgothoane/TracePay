@@ -14,7 +14,7 @@ const SPARK_AREA = `${SPARK_LINE} L150 60 L0 60 Z`;
 /** Category without its own brand logo gets the title's glyph instead. */
 function titleIcon(title: string) {
   const t = title.toLowerCase();
-  if (t.includes("subscription")) return Layers;
+  if (t.includes("subscription") || t.includes("recurring")) return Layers;
   if (t.includes("airtime") || t.includes("data")) return Smartphone;
   return CreditCard;
 }

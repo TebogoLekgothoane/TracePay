@@ -29,7 +29,7 @@ export const ONBOARDING_INFO_SLIDES: readonly OnboardingInfoSlide[] = [
     id: "leaks",
     title: "We find the leaks you don't see",
     description:
-      "From bank fees to subscriptions, we uncover the hidden leaks draining your money.",
+      "From bank fees to recurring payments, we uncover the hidden leaks draining your money.",
     actionLabel: "Next",
     Illustration: OnboardingLeaks,
     aspectRatio: 1536 / 1024,

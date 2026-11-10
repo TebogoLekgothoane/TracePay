@@ -29,7 +29,10 @@ export function estimatedMonthlyCost(leak: PotentialLeak): number {
 }
 
 export function rankLeaksByMonthlyCost(leaks: PotentialLeak[]): PotentialLeak[] {
-  return [...leaks].sort((a, b) => estimatedMonthlyCost(b) - estimatedMonthlyCost(a));
+  return [...leaks].sort(
+    (a, b) =>
+      (b.priority ?? 0) - (a.priority ?? 0) || estimatedMonthlyCost(b) - estimatedMonthlyCost(a),
+  );
 }
 
 export function totalMonthlyLeaks(leaks: PotentialLeak[]): string {

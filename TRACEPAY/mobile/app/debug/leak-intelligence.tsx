@@ -535,10 +535,18 @@ const STATUS_CHIPS: Record<string, { label: string; container: string; text: str
   possible: { label: "Possible", container: "bg-muted", text: "text-muted-foreground" },
 };
 
+const FINDING_TABS = ["Overview", "Transactions", "Evidence"] as const;
+type FindingTab = (typeof FINDING_TABS)[number];
+
+/**
+ * One finding, laid out like the finding screen in the app: kind and status, the title, the big
+ * amount, a plain summary, then Overview / Transactions / Evidence tabs. Every piece of
+ * information the old card showed is still here, just sorted under a tab.
+ */
 export function FindingCard({ leak }: { leak: LeakDetection }) {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
-  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<FindingTab>("Overview");
   const { evidence } = leak;
   const status = typeof evidence.evidence_status === "string" ? evidence.evidence_status : null;
   const chip = status ? STATUS_CHIPS[status] : undefined;
@@ -546,18 +554,19 @@ export function FindingCard({ leak }: { leak: LeakDetection }) {
   const prompt = verificationPrompt(evidence);
   const merchant = merchantDisplayName(evidence);
   const category = typeof evidence.category_name === "string" ? evidence.category_name : null;
+  const transactionCount = leak.supporting_transaction_count ?? leak.supporting_transactions.length;
 
   return (
-    <View className="rounded-3xl bg-card px-5 py-5">
-      <View className="flex-row items-start justify-between gap-3">
-        <View className="min-w-0 flex-1 flex-row items-start gap-3">
+    <View className="rounded-3xl bg-card px-5 pb-5 pt-5">
+      <View className="flex-row items-center justify-between gap-3">
+        <View className="min-w-0 flex-1 flex-row items-center gap-3">
           <FindingMark category={category} displayName={merchant} />
-          <View className="min-w-0 flex-1">
-            <Text className="text-[12px] font-semibold uppercase tracking-[0.7px] text-muted-foreground">
-              {KIND_LABELS[leak.leak_type] ?? "Finding"}
-            </Text>
-            <Text className="mt-1 text-[17px] font-bold text-foreground">{leak.title}</Text>
-          </View>
+          <Text
+            numberOfLines={1}
+            className="min-w-0 flex-1 text-[12px] font-semibold uppercase tracking-[0.7px] text-muted-foreground"
+          >
+            {KIND_LABELS[leak.leak_type] ?? "Finding"}
+          </Text>
         </View>
         {chip ? (
           <View className={`rounded-full px-3 py-1.5 ${chip.container}`}>
@@ -566,41 +575,71 @@ export function FindingCard({ leak }: { leak: LeakDetection }) {
         ) : null}
       </View>
 
-      <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">{leak.description}</Text>
+      <Text className="mt-4 text-[22px] font-bold leading-[28px] tracking-[-0.4px] text-foreground">
+        {leak.title}
+      </Text>
+      <Text className="mt-3 text-[12px] font-medium text-muted-foreground">{amount.label}</Text>
+      <Text className="mt-0.5 text-[34px] font-bold leading-[40px] tracking-[-0.9px] text-foreground">
+        {amount.value}
+      </Text>
+      <Text className="mt-1 text-[14px] leading-5 text-muted-foreground">{leak.description}</Text>
 
-      <View className="mt-4 rounded-2xl bg-muted/40 px-4 py-3">
-        <Text className="text-[12px] font-medium text-muted-foreground">{amount.label}</Text>
-        <Text className="mt-1 text-[20px] font-bold text-foreground">{amount.value}</Text>
-        {amount.notes.map((note) => (
-          <Text key={note} className="mt-1 text-[13px] leading-5 text-muted-foreground">
-            {note}
-          </Text>
-        ))}
+      <View className="mt-4 flex-row border-b border-border">
+        {FINDING_TABS.map((item) => {
+          const selected = item === tab;
+          return (
+            <Pressable
+              key={item}
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+              onPress={() => setTab(item)}
+              className="flex-1 items-center justify-end pb-3"
+              style={{ minHeight: 40 }}
+            >
+              <Text
+                numberOfLines={1}
+                className={`text-[14px] ${selected ? "font-bold text-foreground" : "font-medium text-muted-foreground"}`}
+              >
+                {item === "Transactions" ? `${item} (${transactionCount})` : item}
+              </Text>
+              <View
+                className="absolute bottom-0 h-[3px] rounded-full"
+                style={{ left: 0, right: 0, backgroundColor: selected ? palette.primary : "transparent" }}
+              />
+            </Pressable>
+          );
+        })}
       </View>
 
-      {prompt ? (
-        <View className="mt-3 rounded-2xl bg-primary/5 px-4 py-3">
-          <Text className="text-[13px] font-semibold text-primary">Worth checking</Text>
-          <Text className="mt-1 text-[13px] leading-5 text-muted-foreground">{prompt}</Text>
+      {tab === "Overview" ? (
+        <View className="mt-4">
+          {amount.notes.length > 0 ? (
+            <View className="rounded-2xl bg-muted px-4 py-3.5">
+              {amount.notes.map((note, index) => (
+                <Text
+                  key={note}
+                  className={`text-[14px] leading-5 text-foreground ${index > 0 ? "mt-1" : ""}`}
+                >
+                  {note}
+                </Text>
+              ))}
+            </View>
+          ) : null}
+
+          {prompt ? (
+            <View className="mt-3 rounded-2xl border border-border px-4 py-3.5">
+              <Text className="text-[14px] font-semibold text-primary">Worth checking</Text>
+              <Text className="mt-1 text-[14px] leading-5 text-muted-foreground">{prompt}</Text>
+            </View>
+          ) : null}
+
+          <FeeBreakdown evidence={evidence} />
+          <LeakClaimsSection claims={leak.claims} />
         </View>
       ) : null}
 
-      <FeeBreakdown evidence={evidence} />
-
-      <LeakClaimsSection claims={leak.claims} />
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
-        className="mt-4 flex-row items-center justify-between rounded-2xl bg-muted/40 px-4 py-3 active:opacity-75"
-        onPress={() => setOpen((current) => !current)}
-      >
-        <Text className="text-[13px] font-semibold text-foreground">
-          {open ? "Hide evidence" : "See the evidence"}
-        </Text>
-        <ChevronDown color={palette.placeholder} size={18} strokeWidth={2} />
-      </Pressable>
-      {open ? <Evidence leak={leak} /> : null}
+      {tab === "Transactions" ? <Transactions leak={leak} /> : null}
+      {tab === "Evidence" ? <Evidence leak={leak} /> : null}
     </View>
   );
 }
@@ -610,8 +649,8 @@ function FeeBreakdown({ evidence }: { evidence: Record<string, unknown> }) {
   const sources = feeSources(evidence);
   if (sources.length === 0) return null;
   return (
-    <View className="mt-3 gap-3 rounded-2xl bg-muted/40 px-4 py-3">
-      <Text className="text-[13px] font-semibold text-foreground">Where the fees come from</Text>
+    <View className="mt-3 gap-3 rounded-2xl border border-border px-4 py-3.5">
+      <Text className="text-[15px] font-bold text-foreground">Where the fees come from</Text>
       {sources.map((source) => (
         <View key={source.label}>
           <View className="flex-row items-start justify-between gap-3">
@@ -695,7 +734,7 @@ function Evidence({ leak }: { leak: LeakDetection }) {
     typeof evidence.increase_calculation === "string" ? evidence.increase_calculation : null;
 
   return (
-    <View className="mt-3">
+    <View className="mt-4">
       {reason ? (
         <Text className="text-[13px] leading-5 text-muted-foreground">
           {reason} · Confidence {formatConfidence(leak.confidence)}
@@ -706,11 +745,11 @@ function Evidence({ leak }: { leak: LeakDetection }) {
       ) : null}
 
       {rows.length ? (
-        <View className="mt-3 gap-2">
-          {rows.map((item) => (
+        <View className="mt-3 rounded-2xl border border-border">
+          {rows.map((item, index) => (
             <View
               key={item.label}
-              className="flex-row items-start gap-3 rounded-xl bg-muted/40 px-3 py-2.5"
+              className={`flex-row items-start gap-3 px-4 py-3 ${index > 0 ? "border-t border-border" : ""}`}
             >
               <Text className="min-w-0 flex-1 text-[13px] text-muted-foreground">{item.label}</Text>
               <Text className="min-w-0 flex-1 text-right text-[13px] font-semibold text-foreground">
@@ -721,7 +760,6 @@ function Evidence({ leak }: { leak: LeakDetection }) {
         </View>
       ) : null}
 
-      <Transactions leak={leak} />
       <LeakEvidenceSection analysis={leak.analysis} />
     </View>
   );
@@ -731,7 +769,7 @@ function Transactions({ leak }: { leak: LeakDetection }) {
   const { evidence } = leak;
   if (leak.supporting_transactions.length === 0) {
     return (
-      <Text className="mt-4 text-[13px] leading-5 text-muted-foreground">
+      <Text className="mt-4 text-[14px] leading-5 text-muted-foreground">
         {typeof evidence.transaction_evidence_reason === "string"
           ? evidence.transaction_evidence_reason
           : "No individual transactions are attached to this finding."}
@@ -740,7 +778,7 @@ function Transactions({ leak }: { leak: LeakDetection }) {
   }
   const groups = groupTransactions(leak);
   return (
-    <View className="mt-4 gap-4">
+    <View className="mt-5 gap-5">
       {groups.map((group) => (
         <View key={group.title}>
           <Text className="text-[12px] font-semibold uppercase tracking-[0.7px] text-muted-foreground">
@@ -748,7 +786,7 @@ function Transactions({ leak }: { leak: LeakDetection }) {
           </Text>
           <View className="mt-2 gap-2">
             {group.rows.map((row) => (
-              <View key={row.transaction_id} className="rounded-xl bg-muted/40 px-3 py-2.5">
+              <View key={row.transaction_id} className="rounded-2xl border border-border px-4 py-3">
                 <View className="flex-row items-start justify-between gap-3">
                   <Text className="text-[12px] text-muted-foreground">{row.date}</Text>
                   <Text className="text-[13px] font-semibold text-foreground">

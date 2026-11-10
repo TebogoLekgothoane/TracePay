@@ -17,10 +17,25 @@ export type ReviewTransaction = {
   markColor?: string;
 };
 
+export type ReviewStepLink = {
+  label: string;
+  url: string;
+};
+
 export type ReviewStep = {
   title: string;
   detail: string;
+  /** Apps or sites the user can open to act on this step. */
+  links?: ReviewStepLink[];
 };
+
+const BANK_APP_LINKS: ReviewStepLink[] = [
+  { label: "FNB", url: "https://www.fnb.co.za/" },
+  { label: "Standard Bank", url: "https://www.standardbank.co.za/" },
+  { label: "Absa", url: "https://www.absa.co.za/" },
+  { label: "Nedbank", url: "https://www.nedbank.co.za/" },
+  { label: "Capitec", url: "https://www.capitecbank.co.za/" },
+];
 
 export type PotentialLeak = {
   id: string;
@@ -31,6 +46,8 @@ export type PotentialLeak = {
   subtitle: string;
   description: string;
   status: ReviewStatus;
+  /** Ranks above findings with a lower (or no) priority, whatever their amount. */
+  priority?: number;
   icon: ReviewIcon;
   why: string;
   evidence: { label: string; value: string }[];
@@ -53,71 +70,107 @@ export const REVIEW_STATUS_LABEL: Record<ReviewStatus, string> = {
 const POTENTIAL_LEAKS: PotentialLeak[] = [
   {
     id: "duplicate",
-    title: "Possible duplicate payment",
-    amount: "R420",
-    subtitle: "Two similar payments to Takealot within 3 days.",
-    description: "Two similar payments to Takealot",
+    title: "Possible duplicate insurance payments",
+    amount: "R17,400",
+    listAmount: "R17,400 over 12 months",
+    subtitle: "Two insurers have been debiting you R1,450 each month.",
+    description: "Possibly paying for the same cover twice",
     status: "new",
+    priority: 2,
     icon: "copy",
-    why: "You made two payments to Takealot for a similar amount within a short period. This may be a duplicate payment.",
+    why: "Discovery Insure and OUTsurance have both debited R1,450 every month for the past 12 months. If these two policies cover the same car or home, you have been paying for the same cover twice, R17,400 in total. Most people only find out when they switch insurers and forget to cancel the old policy.",
     evidence: [
-      { label: "Flag", value: "Potential duplicate" },
-      { label: "Confidence", value: "High" },
+      { label: "Extra paid", value: "R17,400" },
+      { label: "Overlap", value: "12 months" },
     ],
     transactions: [
       {
-        id: "takealot-12",
-        title: "Takealot",
-        subtitle: "12 Oct 2025",
-        amount: "R210",
-        logoDomain: "takealot.com",
-        mark: "T",
+        id: "insure-disc-nov",
+        title: "Discovery Insure",
+        subtitle: "1 Nov 2026 • Debit order",
+        amount: "R1,450",
+        logoDomain: "discovery.co.za",
+        mark: "D",
         markColor: "primary",
       },
       {
-        id: "takealot-15",
-        title: "Takealot",
-        subtitle: "15 Oct 2025",
-        amount: "R210",
-        logoDomain: "takealot.com",
-        mark: "T",
+        id: "insure-out-nov",
+        title: "OUTsurance",
+        subtitle: "3 Nov 2026 • Debit order",
+        amount: "R1,450",
+        logoDomain: "outsurance.co.za",
+        mark: "O",
+        markColor: "primary",
+      },
+      {
+        id: "insure-disc-oct",
+        title: "Discovery Insure",
+        subtitle: "1 Oct 2026 • Debit order",
+        amount: "R1,450",
+        logoDomain: "discovery.co.za",
+        mark: "D",
+        markColor: "primary",
+      },
+      {
+        id: "insure-out-oct",
+        title: "OUTsurance",
+        subtitle: "3 Oct 2026 • Debit order",
+        amount: "R1,450",
+        logoDomain: "outsurance.co.za",
+        mark: "O",
         markColor: "primary",
       },
     ],
     steps: [
       {
-        title: "Check if you received two orders",
-        detail: "Look at your Takealot account or order confirmation emails.",
+        title: "Check what each policy covers",
+        detail: "Log in to both insurers and see what each policy covers. If it's the same car or home, one is a duplicate.",
+        links: [
+          { label: "Discovery Insure", url: "https://www.discovery.co.za/" },
+          { label: "OUTsurance", url: "https://www.outsurance.co.za/" },
+        ],
       },
       {
-        title: "Contact Takealot if needed",
-        detail: "If this was a duplicate, request a refund.",
+        title: "Cancel the policy you don't need",
+        detail: "Keep the policy you want, then ask the other insurer in writing to cancel and refund any premiums paid for overlapping cover.",
+        links: [
+          { label: "Discovery Insure", url: "https://www.discovery.co.za/" },
+          { label: "OUTsurance", url: "https://www.outsurance.co.za/" },
+        ],
       },
       {
-        title: "Monitor your next statement",
-        detail: "We'll check future statements to see if this issue is resolved.",
+        title: "Stop the extra debit order",
+        detail: "Once the cancellation is confirmed, stop that debit order in your banking app so no more premiums are taken.",
+        links: BANK_APP_LINKS,
+      },
+      {
+        title: "Complain if they won't refund",
+        detail: "If an insurer refuses to refund overlapping premiums, you can take it to the insurance ombudsman.",
+        links: [
+          { label: "Ombudsman for Short-term Insurance", url: "https://www.osti.co.za/" },
+        ],
       },
     ],
     known: [
-      "Two payments of R210 to Takealot within 3 days.",
-      "Both transactions have similar descriptions.",
+      "Two insurers each took R1,450 every month for 12 months.",
+      "The two debit orders land two days apart each month.",
     ],
     uncertain: [
-      "We can't confirm whether this was a duplicate or two separate purchases.",
+      "These could be two different vehicles or properties, which would be genuine cover.",
     ],
-    nextCharge: "Not scheduled again",
-    relatedLeakId: null,
+    nextCharge: nextMonthStart(),
+    relatedLeakId: "debit",
   },
   {
     id: "unused-sub",
-    title: "Unused subscription",
+    title: "Unused recurring payment",
     amount: "R199",
     listAmount: "R199 / month",
     subtitle: "Not used in 3+ months.",
     description: "Not used in 3+ months",
     status: "new",
     icon: "refresh",
-    why: "A subscription is still billing you, and there hasn't been matching activity for more than three months.",
+    why: "A recurring payment is still billing you, and there hasn't been matching activity for more than three months.",
     evidence: [
       { label: "Billing", value: "R199 / month" },
       { label: "Last activity", value: "3+ months ago" },
@@ -137,11 +190,13 @@ const POTENTIAL_LEAKS: PotentialLeak[] = [
     steps: [
       {
         title: "Confirm you still want it",
-        detail: "Open the subscription and check the last time you used it.",
+        detail: "Open the recurring payment and check the last time you used it.",
+        links: [{ label: "Showmax", url: "https://www.showmax.com/" }],
       },
       {
         title: "Cancel if it's unused",
         detail: "Follow the cancel guide so the next debit doesn't go through.",
+        links: [{ label: "Showmax account", url: "https://www.showmax.com/" }],
       },
       {
         title: "Watch the next statement",
@@ -185,6 +240,7 @@ const POTENTIAL_LEAKS: PotentialLeak[] = [
       {
         title: "Ask the bank if it looks wrong",
         detail: "A one-off penalty or a plan change can explain a higher fee.",
+        links: BANK_APP_LINKS,
       },
       {
         title: "Review cheaper account options",
@@ -197,46 +253,85 @@ const POTENTIAL_LEAKS: PotentialLeak[] = [
     relatedLeakId: "fees",
   },
   {
-    id: "irregular",
-    title: "Irregular transaction",
-    amount: "R850",
-    subtitle: "Unusual merchant or pattern.",
-    description: "Unusual merchant or pattern",
-    status: "unchanged",
+    id: "loan-increase",
+    title: "Loan repayment went up",
+    amount: "R7,200",
+    listAmount: "R600 / month more",
+    subtitle: "Your WesBank repayment rose from R4,850 to R5,450.",
+    description: "Repayment up R600 a month",
+    status: "new",
+    priority: 1,
     icon: "activity",
-    why: "This payment doesn't match the merchants or amounts you usually have in this category.",
+    why: "Your WesBank vehicle finance debit jumped by R600 in October and stayed there in November. That is R7,200 more a year for the same loan. A higher interest rate, a new fee or an added insurance product can all cause this, and lenders rarely make the change obvious.",
     evidence: [
-      { label: "Amount", value: "R850" },
-      { label: "Pattern", value: "Unusual" },
+      { label: "Was", value: "R4,850 / month" },
+      { label: "Now", value: "R5,450 / month" },
     ],
     transactions: [
       {
-        id: "irregular-row",
-        title: "Card purchase",
-        subtitle: "Outside your usual merchants",
-        amount: "R850",
-        mark: "?",
-        markColor: "secondary",
+        id: "loan-nov",
+        title: "WesBank",
+        subtitle: "1 Nov 2026 • Vehicle finance",
+        amount: "R5,450",
+        trailing: "+R600",
+        logoDomain: "wesbank.co.za",
+        mark: "W",
+        markColor: "warning",
+      },
+      {
+        id: "loan-oct",
+        title: "WesBank",
+        subtitle: "1 Oct 2026 • Vehicle finance",
+        amount: "R5,450",
+        trailing: "+R600",
+        logoDomain: "wesbank.co.za",
+        mark: "W",
+        markColor: "warning",
+      },
+      {
+        id: "loan-sep",
+        title: "WesBank",
+        subtitle: "1 Sep 2026 • Vehicle finance",
+        amount: "R4,850",
+        logoDomain: "wesbank.co.za",
+        mark: "W",
+        markColor: "warning",
       },
     ],
     steps: [
       {
-        title: "Check if you recognise it",
-        detail: "Look at the date and amount against your receipts or cart history.",
+        title: "Ask what changed",
+        detail: "Log in to your loan account or call the lender and ask why the instalment rose. Ask for the new interest rate, any new fees and any insurance added to the loan.",
+        links: [{ label: "WesBank", url: "https://www.wesbank.co.za/" }],
       },
       {
-        title: "Contact your bank if you don't",
-        detail: "Ask them to confirm the merchant before you dispute it.",
+        title: "Remove products you didn't ask for",
+        detail: "If an insurance or service plan was added without your clear agreement, ask for it to be removed and the extra amounts refunded.",
+        links: [{ label: "WesBank", url: "https://www.wesbank.co.za/" }],
       },
       {
-        title: "Leave it if it was you",
-        detail: "Record that you've reviewed it so it stays on your list as handled.",
+        title: "Compare cheaper options",
+        detail: "If the rate itself went up, ask your bank or another lender whether you can refinance at a lower rate.",
+        links: BANK_APP_LINKS,
+      },
+      {
+        title: "Complain if the increase is unfair",
+        detail: "The credit regulator and the banking ombudsman can step in if a lender raised your repayment without proper notice.",
+        links: [
+          { label: "National Credit Regulator", url: "https://www.ncr.org.za/" },
+          { label: "Ombudsman for Banking Services", url: "https://www.obssa.co.za/" },
+        ],
       },
     ],
-    known: ["The amount stands out from your recent spending pattern."],
-    uncertain: ["A new merchant can be a real purchase, not a problem."],
-    nextCharge: "Not scheduled again",
-    relatedLeakId: null,
+    known: [
+      "The same debit rose from R4,850 to R5,450 in October.",
+      "It has stayed at R5,450 for two months since.",
+    ],
+    uncertain: [
+      "We can't see whether the lender sent notice of a rate change.",
+    ],
+    nextCharge: nextMonthStart(),
+    relatedLeakId: "debit",
   },
   {
     id: "inactive-recurring",

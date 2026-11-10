@@ -1,7 +1,7 @@
-import { router, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -9,14 +9,12 @@ import {
   neutralCardStyle,
   neutralPillColor,
 } from "../../../../../src/components/leaks/LeakFlowShell";
-import { Button } from "../../../../../src/components/ui/Button";
 import { InfoSheet } from "../../../../../src/components/ui/Modal";
 import { getActionDetail } from "../../../../../src/features/leaks/fixContent";
 import { COLORS, withAlpha } from "../../../../../src/theme/colors";
 
 export default function FixGuideScreen() {
   const params = useLocalSearchParams<{ id: string; actionId: string }>();
-  const leakId = (Array.isArray(params.id) ? params.id[0] : params.id) ?? "fees";
   const actionId = Array.isArray(params.actionId)
     ? params.actionId[0]
     : params.actionId;
@@ -50,9 +48,26 @@ export default function FixGuideScreen() {
               </View>
               <View className="min-w-0 flex-1">
                 <Text className="text-[14px] font-semibold text-foreground">{step.title}</Text>
-                <Text className="mt-0.5 text-[12px] leading-5 text-muted-foreground">
+                <Text className="mt-0.5 text-[13px] leading-5 text-muted-foreground">
                   {step.description}
                 </Text>
+                {step.link ? (
+                  <Pressable
+                    accessibilityRole="link"
+                    accessibilityLabel={`Open ${step.link.label}`}
+                    onPress={() => {
+                      void Linking.openURL(step.link!.url).catch(() => undefined);
+                    }}
+                    className="mt-2 self-start py-1 active:opacity-60"
+                  >
+                    <Text
+                      className="text-[13px] font-semibold"
+                      style={{ textDecorationLine: "underline", color: "#FDBA74" }}
+                    >
+                      Open {step.link.label} ↗
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
             </View>
           ))}
@@ -68,10 +83,12 @@ export default function FixGuideScreen() {
           </Text>
           <Pressable
             onPress={() => setShowTip(true)}
-            className="mt-3 rounded-2xl px-4 py-3 active:opacity-80"
-            style={{ backgroundColor: neutralPillColor(palette) }}
+            className="mt-3 self-start py-1 active:opacity-60"
           >
-            <Text className="text-[13px] font-semibold text-primary">
+            <Text
+              className="text-[13px] font-semibold"
+              style={{ textDecorationLine: "underline", color: "#FDBA74" }}
+            >
               Quick tip
             </Text>
             <Text className="mt-0.5 text-[12px] text-muted-foreground">
@@ -79,13 +96,6 @@ export default function FixGuideScreen() {
             </Text>
           </Pressable>
         </View>
-
-        <Button
-          className="mt-6"
-          onPress={() => router.push(`/leak/${leakId}/fix/${actionId}/success`)}
-        >
-          {detail.guideCta}
-        </Button>
       </ScrollView>
 
       <InfoSheet

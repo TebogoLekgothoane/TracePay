@@ -41,7 +41,7 @@ export default function SubscriptionDetailScreen() {
   const actions = [
     {
       id: "cancel",
-      title: "Cancel subscription",
+      title: "Cancel recurring payment",
       Icon: XCircle,
       route: `/leak/subs/fix/${cancelActionId}/guide`,
     },
@@ -62,7 +62,7 @@ export default function SubscriptionDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View className="px-5 pt-1">
-          <ScreenHeader className="mb-4" title="Subscription" />
+          <ScreenHeader className="mb-4" title="Recurring Payment" />
 
           <LinearGradient
             colors={[...trace.summaryGradient]}

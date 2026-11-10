@@ -14,6 +14,7 @@ import {
 } from "lucide-react-native";
 
 import type { ImpactTone } from "../../theme/colors";
+import { GUIDE_STEPS } from "./fixGuideSteps";
 
 export type FixActionItem = {
   id: string;
@@ -51,10 +52,17 @@ export type ComparisonRow = {
   values: [string, string, string];
 };
 
+export type GuideLink = {
+  label: string;
+  url: string;
+};
+
 export type GuideStep = {
   id: string;
   title: string;
   description: string;
+  /** Official page that helps with this step. */
+  link?: GuideLink;
 };
 
 export type ActionDetailContent = {
@@ -168,7 +176,7 @@ const SUBS_ACTIONS: FixSection[] = [
     actions: [
       {
         id: "cancel",
-        title: "Cancel unused subscriptions",
+        title: "Cancel unused recurring payments",
         potentialSaving: "R430.00 /month",
         Icon: RefreshCw,
         hasDetailFlow: true,
@@ -1170,7 +1178,7 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
   }),
   alerts: guideAction({
     title: "Get spending alerts",
-    subtitle: "Be notified when a new subscription or unusual debit posts.",
+    subtitle: "Be notified when a new recurring payment or unusual debit posts.",
     savings: "R50.00",
     savingsLabel: "Potential saving",
     whyThisHelps:
@@ -1204,11 +1212,11 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
         id: "5",
         title: "Act the same day on unknown merchants",
         description:
-          "If you see a new subscription name, open TracePay → Leaks and start the cancel guide.",
+          "If you see a new recurring payment name, open TracePay → Leaks and start the cancel guide.",
       },
     ],
     successTitle: "Spending alerts on",
-    successSubtitle: "New subscriptions are harder to miss.",
+    successSubtitle: "New recurring payments are harder to miss.",
     nextSteps: [
       "Keep bank push enabled",
       "Cancel unknown merchants quickly",
@@ -1403,21 +1411,21 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
     ],
   }),
   cancel: guideAction({
-    title: "Cancel unused subscriptions",
+    title: "Cancel unused recurring payments",
     subtitle: "Stop paying for services you barely open.",
     savings: "R430.00",
     savingsLabel: "Potential saving",
     whyThisHelps:
-      "Forgotten subscriptions renew automatically. Cancelling each one in the provider’s account — then confirming the bank debit stops — is the only reliable fix.",
-    guideTitle: "How to cancel unused subscriptions",
+      "Forgotten recurring payments renew automatically. Cancelling each one in the provider’s account — then confirming the bank debit stops — is the only reliable fix.",
+    guideTitle: "How to cancel unused recurring payments",
     guideSubtitle: "Work through each service, then verify your bank feed.",
     helpTitle: "Not sure where you subscribed?",
     helpSubtitle: "Check email receipts, app stores, and your banking merchant names.",
     steps: [
       {
         id: "1",
-        title: "List every active subscription in TracePay",
-        description: "Open Money leaks → Subscriptions and note name, amount, and billing date.",
+        title: "List every active recurring payment in TracePay",
+        description: "Open Money leaks → Recurring Payments and note name, amount, and billing date.",
       },
       {
         id: "2",
@@ -1446,14 +1454,14 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
     successTitle: "Cancellation plan ready",
     successSubtitle: "Work through each unused sub to reclaim up to R430.00.",
     nextSteps: [
-      "Cancel one subscription today",
+      "Cancel one recurring payment today",
       "Save confirmations",
       "Recheck next month’s statement",
     ],
   }),
   limits: guideAction({
     title: "Set spending limits",
-    subtitle: "Cap categories so new subscriptions and debits cannot run wild.",
+    subtitle: "Cap categories so new recurring payments and debits cannot run wild.",
     savings: "R100.00",
     savingsLabel: "Potential saving",
     whyThisHelps:
@@ -1604,6 +1612,12 @@ for (const [id, guide] of Object.entries(SUBSCRIPTION_CANCEL_GUIDES)) {
 
 for (const [id, guide] of Object.entries(DEBIT_PAUSE_GUIDES)) {
   ACTION_DETAILS[`pause-${id}`] = buildPauseDebitDetail(guide);
+}
+
+// Swap in the detailed plain-English steps (with links) wherever we have them.
+for (const [id, steps] of Object.entries(GUIDE_STEPS)) {
+  const detail = ACTION_DETAILS[id];
+  if (detail) detail.steps = steps;
 }
 
 export function getFixContent(leakId: string): FixFlowContent | null {

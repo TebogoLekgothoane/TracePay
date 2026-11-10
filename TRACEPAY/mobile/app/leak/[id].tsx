@@ -59,7 +59,7 @@ const LEAK_CALC_COPY: Record<string, string> = {
   fees:
     "We total monthly account fees, service charges, ATM fees, SMS alerts, and other bank charges from your statements for this period.",
   subs:
-    "We flag recurring subscription merchants and sum what you paid this month, including unused or inactive plans still billing you.",
+    "We flag recurring payment merchants and sum what you paid this month, including unused or inactive plans still billing you.",
   debit:
     "We list active debit-order mandates and sum the amounts collected this month that look unused or higher than needed.",
   airtime:
@@ -68,7 +68,7 @@ const LEAK_CALC_COPY: Record<string, string> = {
     "We total cash withdrawals and paid balance enquiries, especially at other banks’ ATMs where fees are highest.",
 };
 
-const SUBS_TABS = ["Subscriptions", "Upcoming"] as const;
+const SUBS_TABS = ["Recurring Payments", "Upcoming"] as const;
 type SubsTab = (typeof SUBS_TABS)[number];
 
 function daysUntilLabel(days: number): string {
@@ -96,7 +96,7 @@ function LeakDetailContent() {
   const [customRange, setCustomRange] = useState<CustomRange>("Last 14 days");
   const [showCalc, setShowCalc] = useState(false);
   const { unlocked } = useLeakEntitlement();
-  const [subsTab, setSubsTab] = useState<SubsTab>("Subscriptions");
+  const [subsTab, setSubsTab] = useState<SubsTab>("Recurring Payments");
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === "dark" ? "dark" : "light";
@@ -245,7 +245,7 @@ function LeakDetailContent() {
 
   const listTitle =
     detail.listSectionTitle ??
-    (leakId === "debit" ? "Your debit orders" : "Your subscriptions");
+    (leakId === "debit" ? "Your debit orders" : "Your recurring payments");
 
   const openUpgrade = () => router.push("/upgrade");
 
@@ -294,7 +294,6 @@ function LeakDetailContent() {
           <PeriodTabs
             active={period}
             onChange={setPeriod}
-            selectedColor={tone.color}
           />
           {period === "Custom" ? (
             <View className="mt-2 flex-row">
@@ -408,7 +407,7 @@ function LeakDetailContent() {
                   </Text>
                 )}
               </View>
-              {leakId !== "subs" || subsTab === "Subscriptions" ? (
+              {leakId !== "subs" || subsTab === "Recurring Payments" ? (
               <View className="gap-2">
                 {scaledDetail.subscriptions.map((item) => (
                   <Pressable

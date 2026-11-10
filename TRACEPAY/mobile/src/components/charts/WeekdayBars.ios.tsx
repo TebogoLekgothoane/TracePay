@@ -4,13 +4,12 @@ import type { WeekdayAverage } from "../../features/insights/insights-analytics"
 
 type Props = {
   days: WeekdayAverage[];
-  colors: { bar: string; highlight: string };
+  colors: { days: string[] };
   height?: number;
 };
 
-/** Swift Charts bars: average spend for each day of the week, heaviest day emphasised. */
+/** Swift Charts bars: average spend for each day of the week, one solid colour per weekday. */
 export function WeekdayBars({ days, colors, height = 150 }: Props) {
-  const top = days.reduce((best, day) => (day.average > best.average ? day : best), days[0]);
   return (
     <Host style={{ height }}>
       <Chart
@@ -19,9 +18,9 @@ export function WeekdayBars({ days, colors, height = 150 }: Props) {
         data={days.map((day) => ({
           x: day.label,
           y: Math.round(day.average),
-          color: day.weekday === top.weekday && day.average > 0 ? colors.highlight : colors.bar,
+          color: colors.days[day.weekday % colors.days.length],
         }))}
-        barStyle={{ cornerRadius: 3 }}
+        barStyle={{ cornerRadius: 6 }}
         showGrid
       />
     </Host>

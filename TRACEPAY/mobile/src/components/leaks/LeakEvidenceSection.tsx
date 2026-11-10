@@ -101,7 +101,12 @@ export function LeakEvidenceSection({ analysis }: { analysis: LeakAnalysis | nul
               className="mb-1.5 text-[13px] leading-5 text-foreground"
             >
               {coverageLimitLabel(limit)}{" "}
-              <Text className="font-semibold text-primary">See coverage</Text>
+              <Text
+                className="font-semibold"
+                style={{ textDecorationLine: "underline", color: "#FDBA74" }}
+              >
+                See coverage
+              </Text>
             </Text>
           ))}
         </Block>

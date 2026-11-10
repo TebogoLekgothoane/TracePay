@@ -43,6 +43,7 @@ import { useInsightsReport } from "../../src/hooks/useInsightsReport";
 import { useSpendingRhythm } from "../../src/hooks/useSpendingRhythm";
 import type { RhythmSpan } from "../../src/features/dashboard/spending-rhythm";
 import { COLORS, withAlpha } from "../../src/theme/colors";
+import { LEAK_COLORS, LEAK_SERIES } from "../../src/theme/leak-colors";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const SPEND_VIEWS = ["Categories", "Merchants"] as const;
@@ -135,9 +136,9 @@ export default function InsightsScreen() {
     [analytics, report],
   );
 
-  // One hue in steps, biggest first: a rainbow of unrelated colours reads as decoration, not data.
-  const categoryColors = [1, 0.78, 0.6, 0.46, 0.34, 0.24].map((alpha) => withAlpha(palette.primary, alpha));
-  const barColors = { up: palette.destructive, down: palette.success, neutral: palette.mutedForeground };
+  // Colours come from the Leaks tab and category pages (see theme/leak-colors.ts).
+  const categoryColors: string[] = [...LEAK_SERIES];
+  const barColors = { up: LEAK_COLORS.up, down: LEAK_COLORS.down, neutral: palette.mutedForeground };
   const gridColor = withAlpha(palette.mutedForeground, 0.12);
   const slices = breakdown?.slices ?? [];
 
@@ -157,13 +158,13 @@ export default function InsightsScreen() {
   });
 
   const topMerchantAmount = analytics?.merchants[0]?.amount || 1;
-  const merchantItems: RankedBarItem[] = (analytics?.merchants ?? []).map((merchant) => ({
+  const merchantItems: RankedBarItem[] = (analytics?.merchants ?? []).map((merchant, index) => ({
     key: merchant.name,
     label: merchant.name,
     value: formatRandWhole(merchant.amount),
     caption: `${merchant.count} ${merchant.count === 1 ? "payment" : "payments"}`,
     ratio: merchant.amount / topMerchantAmount,
-    color: palette.primary,
+    color: categoryColors[index % categoryColors.length],
   }));
 
   const trendPoints = report?.trend ?? [];
@@ -266,7 +267,7 @@ export default function InsightsScreen() {
                 </Text>
                 <Text
                   className="mt-1 text-[13px] font-medium"
-                  style={{ color: change === null ? palette.mutedForeground : spendingUp ? palette.destructive : palette.success }}
+                  style={{ color: change === null ? palette.mutedForeground : spendingUp ? LEAK_COLORS.up : LEAK_COLORS.down }}
                 >
                   {change === null
                     ? "No earlier period to compare"
@@ -281,7 +282,7 @@ export default function InsightsScreen() {
                     {analytics.drivers.map((driver) => (
                       <View key={driver.name} className="flex-row items-center justify-between">
                         <Text className="text-[14px] text-foreground">{driver.name}</Text>
-                        <Text className="text-[14px] font-semibold" style={{ color: driver.delta > 0 ? palette.destructive : palette.success }}>
+                        <Text className="text-[14px] font-semibold" style={{ color: driver.delta > 0 ? LEAK_COLORS.up : LEAK_COLORS.down }}>
                           {driver.delta > 0 ? "+" : "−"}
                           {formatRandWhole(Math.abs(driver.delta))}
                         </Text>
@@ -294,7 +295,7 @@ export default function InsightsScreen() {
                   <View className="mt-4 border-t border-border/60 pt-4">
                     <View className="flex-row justify-between gap-3">
                       <Text className="text-[12px] text-muted-foreground">Money in {formatRandWhole(cashFlow.income)}</Text>
-                      <Text className="text-[12px] font-semibold" style={{ color: cashFlow.net >= 0 ? palette.success : palette.destructive }}>
+                      <Text className="text-[12px] font-semibold" style={{ color: cashFlow.net >= 0 ? LEAK_COLORS.down : LEAK_COLORS.up }}>
                         {cashFlow.net >= 0
                           ? `${formatRandWhole(cashFlow.net)} left (${Math.round(cashFlow.savingsRate ?? 0)}%)`
                           : `${formatRandWhole(-cashFlow.net)} over`}
@@ -303,7 +304,7 @@ export default function InsightsScreen() {
                     <View className="mt-2">
                       <AnimatedBar
                         ratio={cashFlow.spending / cashFlow.income}
-                        color={cashFlow.net >= 0 ? palette.primary : palette.destructive}
+                        color={cashFlow.net >= 0 ? LEAK_COLORS.purple : LEAK_COLORS.up}
                         track={gridColor}
                         height={8}
                         delay={200}
@@ -414,8 +415,8 @@ export default function InsightsScreen() {
                       totalDays={totalDays}
                       projected={pace.projected}
                       colors={{
-                        line: palette.primary,
-                        previous: withAlpha(palette.mutedForeground, 0.7),
+                        line: LEAK_COLORS.purple,
+                        previous: colorScheme === "dark" ? "#8A8AA0" : "#A8A7BC",
                         grid: gridColor,
                         label: palette.mutedForeground,
                         card: palette.card,
@@ -425,16 +426,16 @@ export default function InsightsScreen() {
                   </View>
                   <View className="mt-3 flex-row flex-wrap items-center gap-x-4 gap-y-1">
                     <View className="flex-row items-center gap-1.5">
-                      <View className="h-2 w-2 rounded-full" style={{ backgroundColor: palette.primary }} />
+                      <View className="h-2 w-2 rounded-full" style={{ backgroundColor: LEAK_COLORS.purple }} />
                       <Text className="text-[12px] text-muted-foreground">This period</Text>
                     </View>
                     <View className="flex-row items-center gap-1.5">
-                      <View className="h-0.5 w-3" style={{ backgroundColor: withAlpha(palette.mutedForeground, 0.7) }} />
+                      <View className="h-0.5 w-3" style={{ backgroundColor: colorScheme === "dark" ? "#8A8AA0" : "#A8A7BC" }} />
                       <Text className="text-[12px] text-muted-foreground">Previous</Text>
                     </View>
                     {pace.projected !== null ? (
                       <View className="flex-row items-center gap-1.5">
-                        <View className="h-0.5 w-3" style={{ backgroundColor: palette.primary, opacity: 0.6 }} />
+                        <View className="h-0.5 w-3" style={{ backgroundColor: LEAK_COLORS.purple, opacity: 0.6 }} />
                         <Text className="text-[12px] text-muted-foreground">Projected</Text>
                       </View>
                     ) : null}
@@ -479,25 +480,26 @@ export default function InsightsScreen() {
                         {selectedDay
                           ? `${shortDate(selectedDay.key)} · ${selectedDay.amount > 0 ? formatRandWhole(selectedDay.amount) : "No spending"}`
                           : analytics.calendar.length >= 35
-                            ? "The last five weeks. Tap a day; darker days cost more."
-                            : "Tap a day. Darker days cost more."}
+                            ? "The last five weeks. Tap a day; green is a light day, red the heaviest."
+                            : "Tap a day; green is a light day, red the heaviest."}
                       </Text>
                       <CalendarHeat
                         days={analytics.calendar}
                         selectedKey={calendarKey}
                         onSelect={setCalendarKey}
                         colors={{
-                          hot: palette.primary,
-                          empty: withAlpha(palette.mutedForeground, 0.1),
+                          tiers: [LEAK_COLORS.down, LEAK_COLORS.yellow, LEAK_COLORS.orange, LEAK_COLORS.up],
+                          empty: palette.muted,
                           text: palette.foreground,
                           textOnHot: "#FFFFFF",
+                          selected: palette.foreground,
                         }}
                       />
                     </>
                   ) : (
                     <>
                       <Text className="mb-4 text-[13px] text-muted-foreground">Average spend on each day of the week.</Text>
-                      <WeekdayBars days={analytics.weekdays} colors={{ bar: withAlpha(palette.primary, 0.3), highlight: palette.primary, grid: gridColor, label: palette.mutedForeground }} />
+                      <WeekdayBars days={analytics.weekdays} colors={{ days: categoryColors.slice(0, 7), grid: gridColor, label: palette.mutedForeground }} />
                     </>
                   )}
                   </ChartBoundary>
@@ -523,7 +525,7 @@ export default function InsightsScreen() {
                   <Text className="mb-3 text-[13px] text-muted-foreground">
                     {trendSelected
                       ? `${trendSelected.label}: ${formatRandWhole(trendSelected.current)} against ${formatRandWhole(trendSelected.previous)} before`
-                      : "Each bar is compared with the same stretch before it."}
+                      : "Grey is the stretch before; red means you spent more, green means less."}
                   </Text>
                   <ChartBoundary key={trendGrain}>
                   <TrendBars
@@ -531,8 +533,9 @@ export default function InsightsScreen() {
                     selected={trendIndex}
                     onSelect={setTrendIndex}
                     colors={{
-                      current: palette.primary,
-                      previous: withAlpha(palette.primary, 0.25),
+                      up: LEAK_COLORS.up,
+                      down: LEAK_COLORS.down,
+                      previous: colorScheme === "dark" ? "#4A4860" : "#C9C7DA",
                       grid: gridColor,
                       label: palette.mutedForeground,
                     }}

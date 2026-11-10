@@ -56,7 +56,7 @@ type Tile = {
 const TILES: Tile[] = [
   { key: "fees", Icon: FileText, label: "Hidden fees", badge: true, x: () => 6, y: 4 },
   { key: "bank", Icon: Landmark, label: "Bank charges", x: (w) => w - TILE_W - 6, y: 0 },
-  { key: "subs", Icon: ShoppingCart, label: "Subscriptions", x: () => 0, y: 88 },
+  { key: "subs", Icon: ShoppingCart, label: "Recurring Payments", x: () => 0, y: 88 },
   { key: "recurring", Icon: Settings, label: "Recurring payments", x: (w) => w - TILE_W, y: 84 },
 ];
 

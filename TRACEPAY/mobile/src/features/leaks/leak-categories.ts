@@ -18,7 +18,7 @@ export const LEAK_CATEGORIES: LeakPreview[] = [
   },
   {
     id: "subs",
-    title: "Subscriptions",
+    title: "Recurring Payments",
     amount: "R430.00",
     change: "↑ 8%",
     changeDirection: "up",

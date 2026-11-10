@@ -16,6 +16,11 @@ import {
   ADD_ACCOUNT_HREF,
   LINKED_ACCOUNTS_HREF,
 } from "../../src/features/accounts/account.navigation";
+import {
+  DEMO_INSIGHTS,
+  DEMO_MODE,
+  demoUpcomingPayments,
+} from "../../src/features/demo/demo-data";
 import type { RhythmSpan } from "../../src/features/dashboard/spending-rhythm";
 import { buildSpendingPatterns } from "../../src/features/insights/spending-patterns";
 import { rankLeaksByMonthlyCost } from "../../src/features/leaks/leak-paywall";
@@ -51,12 +56,19 @@ export default function HomeScreen() {
   const hasUnreadNotifications = notifications.some(
     (notification) => notification.deliveryStatus !== "read",
   );
-  const insights = useMemo(
+  const realInsights = useMemo(
     () =>
       patternData.data?.referenceDate
         ? buildSpendingPatterns(patternData.data.rows, patternData.data.referenceDate).insights
         : [],
     [patternData.data],
+  );
+  // DEMO: fall back to mock data when real data is empty. Remove with features/demo.
+  const insights = DEMO_MODE && realInsights.length === 0 ? DEMO_INSIGHTS : realInsights;
+  const upcomingPayments = useMemo(
+    () =>
+      DEMO_MODE && upcoming.payments.length === 0 ? demoUpcomingPayments() : upcoming.payments,
+    [upcoming.payments],
   );
 
   const hour = new Date().getHours();
@@ -157,9 +169,9 @@ export default function HomeScreen() {
 
           <View className="mt-7">
             <UpcomingPayments
-              payments={upcoming.payments}
-              loading={upcoming.loading}
-              error={upcoming.error}
+              payments={upcomingPayments}
+              loading={upcoming.loading && !DEMO_MODE}
+              error={DEMO_MODE ? null : upcoming.error}
               onSeeAll={() => router.push("/(tabs)/leaks")}
             />
           </View>
@@ -167,7 +179,7 @@ export default function HomeScreen() {
           <View className="mt-7">
             <HomeInsights
               insights={insights}
-              loading={patternData.loading && !patternData.data}
+              loading={patternData.loading && !patternData.data && !DEMO_MODE}
               noData={!patternData.loading && !patternData.data?.referenceDate}
               onSeeAll={() => router.push("/(tabs)/budget")}
             />

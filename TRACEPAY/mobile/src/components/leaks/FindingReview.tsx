@@ -11,7 +11,7 @@ import {
 } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -31,9 +31,8 @@ import {
 } from "../ui/DocumentActionsMenu";
 import { ScreenHeader } from "../ui/ScreenHeader";
 import { resolveMarkColor } from "./LeakFlowShell";
-import { ReviewStatusBadge, statusColor } from "./ReviewVisuals";
 
-const TABS = ["Overview", "Transactions", "Guidance", "History"] as const;
+const TABS = ["Overview", "Guidance"] as const;
 type ReviewTab = (typeof TABS)[number];
 type Phase = "detail" | "steps" | "response";
 
@@ -115,7 +114,7 @@ export function FindingReview(props: FindingReviewProps) {
       <View className="px-5 pt-1">
         <ScreenHeader
           title={
-            phase === "detail" ? props.title : phase === "steps" ? "Next steps" : "Record your response"
+            phase === "detail" ? "" : phase === "steps" ? "Next steps" : "Record your response"
           }
           onBack={back}
           right={
@@ -175,7 +174,6 @@ function DetailPhase(
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
-  const badgeColor = statusColor(scheme, props.status);
 
   return (
     <>
@@ -185,18 +183,19 @@ function DetailPhase(
         showsVerticalScrollIndicator={false}
       >
         <View className="px-5">
-          <Text className="mt-4 text-[34px] font-bold tracking-[-0.8px] text-foreground">
+          <Text
+            accessibilityRole="header"
+            className="mt-5 text-[30px] font-bold leading-[36px] tracking-[-0.6px] text-foreground"
+          >
+            {props.title}
+          </Text>
+          <Text className="mt-3 text-[46px] font-bold leading-[52px] tracking-[-1.2px] text-foreground">
             {props.amount}
           </Text>
-          <Text className="mt-1 text-[15px] leading-5 text-muted-foreground">{props.subtitle}</Text>
-          <View className="mt-4 self-start">
-            <ReviewStatusBadge status={props.status} color={badgeColor} />
-          </View>
-          <View className="mt-4 rounded-2xl bg-muted px-4 py-3">
-            <Text className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Next charge
-            </Text>
-            <Text className="mt-1 text-[16px] font-semibold text-foreground">{props.nextCharge}</Text>
+          <Text className="mt-1 text-[16px] leading-6 text-muted-foreground">{props.subtitle}</Text>
+          <View className="mt-5 rounded-2xl bg-muted px-4 py-3.5">
+            <Text className="text-[14px] text-muted-foreground">Next charge</Text>
+            <Text className="mt-0.5 text-[18px] font-semibold text-foreground">{props.nextCharge}</Text>
           </View>
 
           <View className="mt-8 flex-row border-b border-border">
@@ -215,17 +214,17 @@ function DetailPhase(
                     adjustsFontSizeToFit
                     minimumFontScale={0.75}
                     numberOfLines={1}
-                    className={`text-[13px] ${selected ? "font-bold text-foreground" : "font-medium text-muted-foreground"}`}
+                    className={`text-[15px] ${selected ? "font-bold text-foreground" : "font-medium text-muted-foreground"}`}
                     style={{ width: "100%", textAlign: "center" }}
                   >
                     {item}
                   </Text>
                   <View
-                    className="absolute bottom-0 h-[2px] rounded-full"
+                    className="absolute bottom-0 h-[3px] rounded-full"
                     style={{
-                      left: 8,
-                      right: 8,
-                      backgroundColor: selected ? palette.foreground : "transparent",
+                      left: 0,
+                      right: 0,
+                      backgroundColor: selected ? palette.primary : "transparent",
                     }}
                   />
                 </Pressable>
@@ -235,14 +234,17 @@ function DetailPhase(
 
           {props.tab === "Overview" ? (
             <View className="mt-6">
-              <Text className="text-[17px] font-bold text-foreground">Why this was flagged</Text>
-              <Text className="mt-2 text-[15px] leading-6 text-muted-foreground">{props.why}</Text>
+              <Text className="text-[22px] font-bold tracking-[-0.3px] text-foreground">Why this was flagged</Text>
+              <Text className="mt-2 text-[16px] leading-6 text-muted-foreground">{props.why}</Text>
               {props.evidence.length > 0 ? (
-                <View className="mt-4 flex-row gap-3 rounded-3xl bg-card px-4 py-4">
-                  {props.evidence.map((item) => (
-                    <View key={item.label} className="flex-1">
-                      <Text className="text-[12px] text-muted-foreground">{item.label}</Text>
-                      <Text className="mt-1 text-[15px] font-semibold text-foreground">
+                <View className="mt-5 flex-row rounded-3xl border border-border bg-card py-4">
+                  {props.evidence.map((item, index) => (
+                    <View
+                      key={item.label}
+                      className={`flex-1 px-5 ${index > 0 ? "border-l border-border" : ""}`}
+                    >
+                      <Text className="text-[14px] text-muted-foreground">{item.label}</Text>
+                      <Text className="mt-1 text-[18px] font-semibold text-foreground">
                         {item.value}
                       </Text>
                     </View>
@@ -250,20 +252,15 @@ function DetailPhase(
                 </View>
               ) : null}
               <TransactionList
-                transactions={props.transactions.slice(0, 3)}
+                transactions={props.transactions}
                 onPress={props.onTransactionPress}
               />
             </View>
           ) : null}
 
-          {props.tab === "Transactions" ? (
-            <View className="mt-6">
-              <TransactionList transactions={props.transactions} onPress={props.onTransactionPress} />
-              {props.transactions.length === 0 ? (
-                <Text className="text-[15px] leading-6 text-muted-foreground">
-                  No transactions are attached to this finding yet.
-                </Text>
-              ) : null}
+          {props.tab === "Overview" && props.response ? (
+            <View className="mt-4">
+              <ResponseSummary response={props.response} />
             </View>
           ) : null}
 
@@ -280,22 +277,12 @@ function DetailPhase(
             </View>
           ) : null}
 
-          {props.tab === "History" ? (
-            <View className="mt-6 gap-3">
-              {props.historyExtra}
-              {props.history.map((item) => (
-                <View key={item.title} className="rounded-3xl bg-card px-4 py-4">
-                  <Text className="text-[15px] font-semibold text-foreground">{item.title}</Text>
-                  <Text className="mt-1 text-[14px] leading-5 text-muted-foreground">{item.detail}</Text>
-                </View>
-              ))}
-              <ResponseSummary response={props.response} />
-            </View>
-          ) : null}
         </View>
       </ScrollView>
       <Footer inset={props.bottomInset}>
-        <Button onPress={props.onReview}>Review and take action</Button>
+        <Button onPress={props.onReview} style={{ borderRadius: 20 }}>
+          Review and take action
+        </Button>
       </Footer>
     </>
   );
@@ -466,7 +453,7 @@ function TransactionList({
   if (transactions.length === 0) return null;
   return (
     <View className="mt-6">
-      <Text className="mb-3 text-[17px] font-bold text-foreground">Transactions</Text>
+      <Text className="mb-3 text-[22px] font-bold tracking-[-0.3px] text-foreground">Transactions</Text>
       <View className="gap-2">
         {transactions.map((item) => (
           <TransactionRow key={item.id} item={item} onPress={onPress} />
@@ -492,7 +479,7 @@ function TransactionRow({
       accessibilityRole={onPress ? "button" : undefined}
       disabled={!onPress}
       onPress={() => onPress?.(item.id)}
-      className="flex-row items-center gap-3 rounded-2xl bg-card px-3 py-3 active:opacity-80"
+      className="flex-row items-center gap-3 rounded-2xl border border-border bg-card px-4 py-4 active:opacity-80"
     >
       {item.logoDomain ? (
         <BrandLogo
@@ -512,8 +499,8 @@ function TransactionRow({
         </View>
       )}
       <View className="min-w-0 flex-1">
-        <Text className="text-[15px] font-semibold text-foreground">{item.title}</Text>
-        <Text className="mt-0.5 text-[12px] text-muted-foreground">{item.subtitle}</Text>
+        <Text className="text-[18px] font-semibold text-foreground">{item.title}</Text>
+        <Text className="mt-0.5 text-[15px] text-muted-foreground">{item.subtitle}</Text>
         {item.nextCharge ? (
           <Text className="mt-1 text-[12px] font-medium text-foreground">
             Next charge {item.nextCharge}
@@ -521,7 +508,7 @@ function TransactionRow({
         ) : null}
       </View>
       <View className="items-end">
-        <Text className="text-[15px] font-bold text-foreground">{item.amount}</Text>
+        <Text className="text-[18px] font-bold text-foreground">{item.amount}</Text>
         {item.trailing ? (
           <Text className="mt-0.5 text-[12px] text-muted-foreground">{item.trailing}</Text>
         ) : null}
@@ -534,9 +521,19 @@ function StepList({ steps }: { steps: ReviewStep[] }) {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
 
+  const seenUrls = new Set<string>();
+  const stepsWithUniqueLinks = steps.map((step) => ({
+    ...step,
+    links: (step.links ?? []).filter((link) => {
+      if (seenUrls.has(link.url)) return false;
+      seenUrls.add(link.url);
+      return true;
+    }),
+  }));
+
   return (
     <View className="gap-3">
-      {steps.map((step, index) => (
+      {stepsWithUniqueLinks.map((step, index) => (
         <View key={step.title} className="flex-row gap-3 rounded-3xl bg-card px-4 py-4">
           <View
             className="h-8 w-8 items-center justify-center rounded-full"
@@ -549,6 +546,28 @@ function StepList({ steps }: { steps: ReviewStep[] }) {
           <View className="min-w-0 flex-1">
             <Text className="text-[15px] font-semibold text-foreground">{step.title}</Text>
             <Text className="mt-1 text-[13px] leading-5 text-muted-foreground">{step.detail}</Text>
+            {step.links && step.links.length > 0 ? (
+              <View className="mt-3 flex-row flex-wrap gap-2">
+                {step.links.map((link) => (
+                  <Pressable
+                    key={link.label}
+                    accessibilityRole="link"
+                    accessibilityLabel={`Open ${link.label}`}
+                    onPress={() => {
+                      void Linking.openURL(link.url).catch(() => undefined);
+                    }}
+                    className="py-1 active:opacity-60"
+                  >
+                    <Text
+                      className="text-[13px] font-semibold"
+                      style={{ textDecorationLine: "underline", color: "#FDBA74" }}
+                    >
+                      Open {link.label} ↗
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
           </View>
         </View>
       ))}
@@ -608,10 +627,10 @@ function ResponseSummary({ response }: { response: StoredLeakResponse | null }) 
     ? "Saved"
     : date.toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
   return (
-    <View className="rounded-3xl bg-card px-4 py-4">
-      <Text className="text-[15px] font-semibold text-foreground">Your response</Text>
-      <Text className="mt-1 text-[14px] text-foreground">{ACTION_LABELS[response.action]}</Text>
-      <Text className="mt-0.5 text-[12px] text-muted-foreground">{when}</Text>
+    <View className="rounded-2xl bg-muted px-4 py-4">
+      <Text className="text-[18px] font-bold text-foreground">Your response</Text>
+      <Text className="mt-1 text-[16px] text-foreground">{ACTION_LABELS[response.action]}</Text>
+      <Text className="mt-0.5 text-[15px] text-muted-foreground">{when}</Text>
       {response.note ? (
         <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">{response.note}</Text>
       ) : null}

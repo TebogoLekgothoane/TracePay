@@ -1,4 +1,13 @@
-import { ChevronRight, Lightbulb } from "lucide-react-native";
+import {
+  CalendarDays,
+  ChevronRight,
+  Coins,
+  Lightbulb,
+  Repeat,
+  ShoppingBag,
+  UtensilsCrossed,
+  type LucideIcon,
+} from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { Pressable, Text, View } from "react-native";
 
@@ -13,6 +22,29 @@ type Props = {
   noData: boolean;
   onSeeAll: () => void;
 };
+
+type InsightIcon = { Icon: LucideIcon; color: string };
+
+const INSIGHT_ICONS: [string, InsightIcon][] = [
+  ["takeaway", { Icon: UtensilsCrossed, color: "#F97316" }],
+  ["category", { Icon: ShoppingBag, color: "#8B5CF6" }],
+  ["small", { Icon: Coins, color: "#EAB308" }],
+  ["day", { Icon: CalendarDays, color: "#3B82F6" }],
+  ["weekend", { Icon: CalendarDays, color: "#3B82F6" }],
+  ["repeat", { Icon: Repeat, color: "#14B8A6" }],
+];
+
+const FALLBACK_ICONS: InsightIcon[] = [
+  { Icon: Lightbulb, color: "#F59E0B" },
+  { Icon: Coins, color: "#EC4899" },
+  { Icon: Repeat, color: "#22C55E" },
+  { Icon: CalendarDays, color: "#06B6D4" },
+];
+
+function iconForInsight(id: string, index: number): InsightIcon {
+  const match = INSIGHT_ICONS.find(([key]) => id.includes(key));
+  return match ? match[1] : FALLBACK_ICONS[index % FALLBACK_ICONS.length];
+}
 
 /** "Insights for you" from the user's real recent spending. */
 export function HomeInsights({ insights, loading, noData, onSeeAll }: Props) {
@@ -35,13 +67,15 @@ export function HomeInsights({ insights, loading, noData, onSeeAll }: Props) {
 
       {insights.length > 0 ? (
         <View className="gap-3">
-          {insights.map((insight) => (
+          {insights.map((insight, index) => {
+            const { Icon, color } = iconForInsight(insight.id, index);
+            return (
             <View
               key={insight.id}
               className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5"
             >
               <View className="h-10 w-10 items-center justify-center">
-                <Lightbulb color={palette.primary} size={19} strokeWidth={2.2} />
+                <Icon color={color} size={22} strokeWidth={2.2} />
               </View>
               <View className="min-w-0 flex-1">
                 <Text className="text-[14px] font-semibold text-foreground" numberOfLines={2}>
@@ -55,7 +89,8 @@ export function HomeInsights({ insights, loading, noData, onSeeAll }: Props) {
                 </Text>
               </View>
             </View>
-          ))}
+            );
+          })}
         </View>
       ) : loading ? (
         <SkeletonRows count={2} />

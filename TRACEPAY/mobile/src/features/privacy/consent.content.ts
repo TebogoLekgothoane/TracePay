@@ -18,7 +18,7 @@ export const CONSENT_SECTIONS = [
     title: "Why we need this",
     summary: "To spot hidden fees, show your spending, and alert you to money leaks.",
     details: [
-      "To spot hidden fees and zombie subscriptions.",
+      "To spot hidden fees and zombie recurring payments.",
       "To show spending from your real transactions.",
       "To alert you to new money leaks.",
     ],

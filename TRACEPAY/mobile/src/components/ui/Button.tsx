@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useColorScheme } from "nativewind";
 import { Children, type ReactNode } from "react";
 import {
@@ -11,7 +12,7 @@ import {
   type ViewStyle,
 } from "react-native";
 
-import { COLORS } from "../../theme/colors";
+import { COLORS, TRACEPAY } from "../../theme/colors";
 
 export type ButtonVariant =
   | "primary"
@@ -34,7 +35,8 @@ type Props = Omit<PressableProps, "children" | "style"> & {
 };
 
 const CONTAINER: Record<ButtonVariant, string> = {
-  primary: "bg-primary",
+  // Primary buttons are painted with the summary gradient (see below), not a flat fill.
+  primary: "overflow-hidden",
   secondary: "bg-card",
   outline: "bg-primary/10",
   muted: "bg-muted",
@@ -95,6 +97,15 @@ export function Button({
       style={style}
       {...props}
     >
+      {variant === "primary" ? (
+        <LinearGradient
+          pointerEvents="none"
+          colors={[...TRACEPAY.light.summaryGradient]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
       {loading ? (
         <ActivityIndicator color={spinnerColor} />
       ) : label !== null ? (

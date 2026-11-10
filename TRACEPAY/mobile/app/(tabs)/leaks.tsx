@@ -1,8 +1,9 @@
 import { router, useFocusEffect } from "expo-router";
-import { Download, Info } from "lucide-react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Bell, ChevronRight, Download, Info } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useCallback, useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 
@@ -29,7 +30,7 @@ import {
   listPotentialLeaks,
   type ReviewStatus,
 } from "../../src/features/leaks/potential-leaks";
-import { COLORS } from "../../src/theme/colors";
+import { COLORS, TRACEPAY, withAlpha } from "../../src/theme/colors";
 
 export default function LeaksScreen() {
   const [filter, setFilter] = useState<ReviewStatus | "all">("all");
@@ -69,11 +70,14 @@ export default function LeaksScreen() {
         contentContainerStyle={{ paddingBottom: 120 }}
         showsVerticalScrollIndicator={false}
       >
-        <View className="px-5 pt-">
-          <View className="mb-1 flex-row items-start justify-between">
+        <View className="px-5 pt-2">
+          <View className="flex-row items-start justify-between">
             <View className="flex-1 pr-4">
               <Text className="text-[30px] font-bold tracking-[-0.6px] text-foreground">
                 Leaks
+              </Text>
+              <Text className="mt-0.5 text-[14px] leading-5 text-muted-foreground">
+                Where your money is quietly slipping away.
               </Text>
             </View>
 
@@ -86,7 +90,37 @@ export default function LeaksScreen() {
             </IconButton>
           </View>
 
-
+          {hydrated ? (
+            <View className="mt-5 overflow-hidden rounded-[28px]">
+              <LinearGradient
+                pointerEvents="none"
+                colors={[...TRACEPAY.light.summaryGradient]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <View className="px-5 py-5">
+                <Text className="text-[13px] font-medium" style={{ color: TRACEPAY.light.heroMuted }}>
+                  Estimated monthly leaks
+                </Text>
+                <Text className="mt-1 text-[36px] font-bold tracking-[-1px] text-white">
+                  {findingsTotal}
+                </Text>
+                <View className="mt-4 flex-row gap-2">
+                  <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: TRACEPAY.light.heroSubtle }}>
+                    <Text className="text-[12px] font-semibold text-white">
+                      {leaks.length} {leaks.length === 1 ? "finding" : "findings"}
+                    </Text>
+                  </View>
+                  <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: TRACEPAY.light.heroSubtle }}>
+                    <Text className="text-[12px] font-semibold text-white">
+                      {LEAK_CATEGORIES.length} areas
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          ) : null}
 
           {!hydrated ? (
             <View className="mt-7">
@@ -116,7 +150,7 @@ export default function LeaksScreen() {
             </View>
           ) : (
             <>
-              <Text className="mb-1 mt-7 text-[22px] font-bold tracking-[-0.3px] text-foreground">
+              <Text className="mb-1 mt-8 text-[22px] font-bold tracking-[-0.3px] text-foreground">
                 Leak breakdown
               </Text>
               <Text className="text-[14px] leading-5 text-muted-foreground">
@@ -137,7 +171,7 @@ export default function LeaksScreen() {
 
           {!hydrated ? null : unlocked ? (
             <>
-              <Text className="mb-1 mt-7 text-[22px] font-bold tracking-[-0.3px] text-foreground">
+              <Text className="mb-1 mt-8 text-[22px] font-bold tracking-[-0.3px] text-foreground">
                 Potential leaks
               </Text>
               <Text className="text-[14px] leading-5 text-muted-foreground">
@@ -154,11 +188,18 @@ export default function LeaksScreen() {
                       accessibilityRole="button"
                       accessibilityState={{ selected }}
                       onPress={() => setFilter((current) => (current === status ? "all" : status))}
-                      className="rounded-full px-4 py-2.5 active:opacity-80"
-                      style={{
-                        backgroundColor: selected ? palette.primary : palette.card,
-                      }}
+                      className="overflow-hidden rounded-full px-4 py-2.5 active:opacity-80"
+                      style={{ backgroundColor: selected ? undefined : palette.card }}
                     >
+                      {selected ? (
+                        <LinearGradient
+                          pointerEvents="none"
+                          colors={[...TRACEPAY.light.summaryGradient]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={StyleSheet.absoluteFill}
+                        />
+                      ) : null}
                       <Text
                         className="text-[13px] font-semibold"
                         style={{ color: selected ? "#FFFFFF" : palette.foreground }}
@@ -189,26 +230,35 @@ export default function LeaksScreen() {
 
               <Pressable
                 accessibilityRole="button"
-                className="mt-6 rounded-3xl bg-card px-4 py-4 active:opacity-80"
+                className="mt-6 flex-row items-center gap-3 rounded-[20px] bg-card px-4 py-4 active:opacity-80"
                 onPress={() =>
                   router.push((entitlements?.monitoring.active ? "/monitoring" : "/upgrade") as never)
                 }
               >
-                <Text className="text-[16px] font-bold text-foreground">
-                  {entitlements?.monitoring.active
-                    ? "Monitoring is on"
-                    : "Keep TracePay working for you"}
-                </Text>
-                <Text className="mt-1 text-[13px] leading-5 text-muted-foreground">
-                  {entitlements?.monitoring.active
-                    ? "See your plan, renewal date and recent alerts."
-                    : "Get alerted to new potential leaks as your activity changes. Optional."}
-                </Text>
+                <View
+                  className="h-11 w-11 items-center justify-center rounded-full"
+                  style={{ backgroundColor: withAlpha(palette.primary, 0.12) }}
+                >
+                  <Bell color={palette.primary} size={20} strokeWidth={2} />
+                </View>
+                <View className="min-w-0 flex-1">
+                  <Text className="text-[16px] font-bold text-foreground">
+                    {entitlements?.monitoring.active
+                      ? "Monitoring is on"
+                      : "Keep TracePay working for you"}
+                  </Text>
+                  <Text className="mt-0.5 text-[13px] leading-5 text-muted-foreground">
+                    {entitlements?.monitoring.active
+                      ? "See your plan, renewal date and recent alerts."
+                      : "Get alerted to new potential leaks as your activity changes. Optional."}
+                  </Text>
+                </View>
+                <ChevronRight color={palette.mutedForeground} size={20} />
               </Pressable>
             </>
           ) : (
             <>
-              <Text className="mb-1 mt-7 text-[22px] font-bold tracking-[-0.3px] text-foreground">
+              <Text className="mb-1 mt-8 text-[22px] font-bold tracking-[-0.3px] text-foreground">
                 Biggest findings
               </Text>
               <Text className="text-[14px] leading-5 text-muted-foreground">

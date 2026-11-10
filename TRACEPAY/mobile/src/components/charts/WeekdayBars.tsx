@@ -6,7 +6,7 @@ import { formatAxisRand, niceCeiling, useChartWidth } from "./chart-utils";
 
 type Props = {
   days: WeekdayAverage[];
-  colors: { bar: string; highlight: string; grid: string; label: string };
+  colors: { days: string[]; grid: string; label: string };
   height?: number;
 };
 
@@ -28,12 +28,12 @@ export function WeekdayBars({ days, colors, height = 170 }: Props) {
           data={days.map((day) => ({
             value: day.average,
             label: day.label,
-            frontColor: day.weekday === top.weekday && day.average > 0 ? colors.highlight : colors.bar,
+            frontColor: colors.days[day.weekday % colors.days.length],
             labelTextStyle: { color: colors.label, fontSize: 10 },
             topLabelComponent:
               day.weekday === top.weekday && day.average > 0
                 ? () => (
-                    <Text style={{ color: colors.highlight, fontSize: 10, fontWeight: "700", marginBottom: 3, width: 44, textAlign: "center" }}>
+                    <Text style={{ color: colors.days[day.weekday % colors.days.length], fontSize: 10, fontWeight: "700", marginBottom: 3, width: 44, textAlign: "center" }}>
                       {formatAxisRand(day.average)}
                     </Text>
                   )
@@ -47,8 +47,8 @@ export function WeekdayBars({ days, colors, height = 170 }: Props) {
           spacing={slot - barWidth}
           initialSpacing={(slot - barWidth) / 2}
           endSpacing={0}
-          barBorderTopLeftRadius={3}
-          barBorderTopRightRadius={3}
+          barBorderTopLeftRadius={6}
+          barBorderTopRightRadius={6}
           yAxisLabelWidth={Y_AXIS_WIDTH}
           formatYLabel={(label: string) => formatAxisRand(Number(label))}
           yAxisTextStyle={{ color: colors.label, fontSize: 10 }}
