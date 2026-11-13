@@ -1,8 +1,9 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 
-const DEV_AUTH_API_URL = "http://localhost:4001";
-const DEV_PDF_PROCESSOR_URL = "http://localhost:8001";
+// One FastAPI backend (TRACEPAY/backend) serves auth, phone-reading sync and the financial API.
+const DEV_AUTH_API_URL = "http://localhost:8000";
+const DEV_PDF_PROCESSOR_URL = "http://localhost:8000";
 
 function configuredAuthApiUrl(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_URL;

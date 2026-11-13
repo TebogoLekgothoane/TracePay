@@ -1,4 +1,4 @@
-﻿-- Allow the three commitment findings (overlapping cover, betting and lottery
+-- Allow the three commitment findings (overlapping cover, betting and lottery
 -- spending, high-cost credit) in the persisted finding contract.
 
 alter table public.finding_registry

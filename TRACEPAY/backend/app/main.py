@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field
 
 from app import billing, revenuecat
 from app.auth import require_supabase_user
+from app.auth_routes import register_auth_routes
+from app.ingestion_routes import router as ingestion_router
 from app.behaviour_analysis import build_user_behaviour_analysis
 from app.category_catalog import fetch_category_names
 from app.consolidation_service import build_user_coverage_payload, reconcile_user_transfers
@@ -70,6 +72,8 @@ READ_CHUNK_BYTES = 1024 * 1024
 app = FastAPI(title="TRACEPAY API", version="1.0.0")
 logger = logging.getLogger("tracepay.api")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+register_auth_routes(app)
+app.include_router(ingestion_router)
 
 
 def _reject_oversized_content_length(request: Request) -> None:

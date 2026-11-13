@@ -66,6 +66,12 @@ class Settings(BaseSettings):
     # Billing. Prices are in cents (ZAR), recorded on purchases and shown by the app
     # from /billing/products; keep them equal to the store prices.
     supabase_service_role_key: str = ""
+    # Auth (phone + SMS codes). BulkSMS v2 API token; sender ID is optional.
+    bulksms_token_id: str = ""
+    bulksms_token_secret: str = ""
+    bulksms_sender_id: str = ""
+    # Dedicated HMAC secret for password-reset tokens (min 32 chars). Never reuse the service-role key.
+    auth_reset_token_secret: str = ""
     full_analysis_price_cents: int = 4900
     monitoring_price_cents: int = 29900
     # RevenueCat (in-app purchases). The secret key is a server-side v1 REST key; the app
