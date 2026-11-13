@@ -1,0 +1,146 @@
+[
+  {
+    "id": "fi028-coffee-jul-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-03",
+    "description": "POS PURCHASE SEATTLE COFFEE SANDTON",
+    "amount": "45.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SEATTLE COFFEE",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi028-coffee-jul-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-10",
+    "description": "POS PURCHASE SEATTLE COFFEE SANDTON",
+    "amount": "45.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SEATTLE COFFEE",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi028-coffee-aug-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-05",
+    "description": "POS PURCHASE SEATTLE COFFEE SANDTON",
+    "amount": "48.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SEATTLE COFFEE",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi028-coffee-aug-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-14",
+    "description": "POS PURCHASE SEATTLE COFFEE SANDTON",
+    "amount": "48.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SEATTLE COFFEE",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi028-coffee-sep-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-02",
+    "description": "POS PURCHASE SEATTLE COFFEE SANDTON",
+    "amount": "52.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SEATTLE COFFEE",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi028-coffee-sep-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-09",
+    "description": "POS PURCHASE SEATTLE COFFEE SANDTON",
+    "amount": "52.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SEATTLE COFFEE",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi028-coffee-sep-3",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-18",
+    "description": "POS PURCHASE SEATTLE COFFEE SANDTON",
+    "amount": "52.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SEATTLE COFFEE",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi028-coffee-sep-4",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-25",
+    "description": "POS PURCHASE SEATTLE COFFEE SANDTON",
+    "amount": "52.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "SEATTLE COFFEE",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  }
+]

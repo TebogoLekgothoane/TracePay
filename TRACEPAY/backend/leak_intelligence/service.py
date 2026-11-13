@@ -2,18 +2,49 @@ from collections import Counter, defaultdict
 from decimal import Decimal
 from statistics import median
 
+from .common import ZERO, amount_of, is_purchase_reversal, merchant_group_key
 from .models import FeatureTransaction, SpendingProfile
 
-ZERO = Decimal("0")
 DEFAULT_SMALL_TRANSACTION_THRESHOLD = Decimal("100")
-FOOD_CATEGORIES = {"Groceries", "Restaurants", "Fast Food"}
+# All food spending, including groceries. Used for spending totals.
+FOOD_CATEGORIES = frozenset({"Groceries", "Restaurants", "Fast Food"})
+# Fast Food and Restaurants only. Groceries stay in FOOD_CATEGORIES and do not
+# become convenience-food leaks or frequency recommendations.
+CONVENIENCE_FOOD_CATEGORIES = FOOD_CATEGORIES - frozenset({"Groceries"})
 TRANSPORT_CATEGORIES = {"Ride Hailing", "Public Transport", "Fuel"}
 CASH_WITHDRAWAL_CATEGORIES = {"Cash Withdrawal", "Cash Withdrawals", "ATM Cash Withdrawal"}
-
-
-def _amount(transaction: FeatureTransaction) -> Decimal:
-    """Use an absolute amount so debits and credits can be compared by size."""
-    return abs(Decimal(transaction.amount))
+ESSENTIAL_SPENDING_CATEGORIES = frozenset(
+    {
+        "Groceries",
+        "Fuel",
+        "Public Transport",
+        "Insurance",
+        "Medical",
+        "Healthcare",
+        "Utilities",
+        "Rent",
+        "Accommodation",
+    }
+)
+STREAMING_MERCHANT_KEYS = frozenset(
+    {
+        "netflix",
+        "showmax",
+        "dstv",
+        "multichoice",
+        "disney",
+        "disneyplus",
+        "disney plus",
+        "prime video",
+        "amazon prime",
+        "youtube premium",
+        "apple tv",
+        "hbo",
+        "hbo max",
+        "paramount",
+        "paramount plus",
+    }
+)
 
 
 def _category_amounts(transactions: list[FeatureTransaction]) -> tuple[dict[str, Decimal], dict[str, int]]:
@@ -23,14 +54,21 @@ def _category_amounts(transactions: list[FeatureTransaction]) -> tuple[dict[str,
         result = transaction.categorisation
         if result.transaction_class != "spending" or not result.category_name:
             continue
+        if is_purchase_reversal(transaction):
+            continue
         category = result.category_name
-        spending_by_category[category] += _amount(transaction)
+        spending_by_category[category] += amount_of(transaction)
         count_by_category[category] += 1
     return dict(spending_by_category), dict(count_by_category)
 
 
 def _class_total(transactions: list[FeatureTransaction], transaction_class: str) -> Decimal | None:
-    values = [_amount(item) for item in transactions if item.categorisation.transaction_class == transaction_class]
+    values = [
+        amount_of(item)
+        for item in transactions
+        if item.categorisation.transaction_class == transaction_class
+        and not (transaction_class == "spending" and is_purchase_reversal(item))
+    ]
     return sum(values, ZERO) if values else None
 
 
@@ -41,15 +79,12 @@ def _ratio(numerator: Decimal | None, denominator: Decimal | None) -> Decimal | 
     return numerator / denominator
 
 
-def _merchant_key(transaction: FeatureTransaction) -> str | None:
-    """Use the categoriser's merchant name, or a normalized description as a fallback."""
-    value = transaction.merchant_name or transaction.categorisation.merchant_name or transaction.description
-    normalized = " ".join(value.upper().split())
-    return normalized or None
-
-
 def _recurring_counts(transactions: list[FeatureTransaction]) -> tuple[int | None, int | None]:
-    keys = [key for transaction in transactions if (key := _merchant_key(transaction))]
+    keys = [
+        key
+        for transaction in transactions
+        if not is_purchase_reversal(transaction) and (key := merchant_group_key(transaction))
+    ]
     if not keys:
         return None, None
     counts = Counter(keys)
@@ -79,26 +114,28 @@ def build_spending_profile(
     if not transactions:
         return SpendingProfile()
 
-    amounts = [_amount(item) for item in transactions]
+    amounts = [amount_of(item) for item in transactions]
     income_total = _class_total(transactions, "income")
     spending_total = _class_total(transactions, "spending")
     spending_by_category, count_by_category = _category_amounts(transactions)
     small_values = [
-        _amount(item)
+        amount_of(item)
         for item in transactions
         if item.categorisation.transaction_class == "spending"
-        and _amount(item) <= small_transaction_threshold
+        and not is_purchase_reversal(item)
+        and amount_of(item) <= small_transaction_threshold
     ]
     recurring_merchants, recurring_payments = _recurring_counts(transactions)
     transfer_total = sum(
-        (_amount(item) for item in transactions if item.categorisation.transaction_class in {"internal_transfer", "person_to_person"}),
+        (amount_of(item) for item in transactions if item.categorisation.transaction_class in {"internal_transfer", "person_to_person"}),
         ZERO,
     ) or None
     savings_total = _class_total(transactions, "savings")
     bank_fee_total = _class_total(transactions, "bank_fee")
     cash_values = [
-        _amount(item) for item in transactions
+        amount_of(item) for item in transactions
         if item.categorisation.category_name in CASH_WITHDRAWAL_CATEGORIES
+        and not is_purchase_reversal(item)
     ]
     cash_withdrawal_total = sum(cash_values, ZERO) if cash_values else None
 

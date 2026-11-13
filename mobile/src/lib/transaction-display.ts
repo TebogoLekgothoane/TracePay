@@ -180,14 +180,6 @@ export function enrichParsedTransaction(tx: ParsedTransaction): ParsedTransactio
   return withLogoDomain(withMerchant);
 }
 
-export function getTransactionHeadline(tx: ParsedTransaction): string {
-  return getTransactionDisplay(tx).headline;
-}
-
-export function getTransactionSummary(tx: ParsedTransaction): string {
-  return getTransactionDisplay(tx).summary;
-}
-
 function buildTransactionSummary(enriched: ParsedTransaction): string {
   const parts: string[] = [TYPE_LABELS[enriched.type]];
 

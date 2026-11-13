@@ -43,8 +43,6 @@ def validate_transactions(
         errors.append("No reliable transaction rows were extracted.")
     if extraction_method == "ocr":
         warnings.append("OCR was required. Review every transaction before saving.")
-    if extraction_method == "ai":
-        warnings.append("AI extraction was used. Review transactions if anything looks off.")
     if any(item.balance is not None and abs(item.balance) > 100_000_000 for item in transactions):
         warnings.append("Some balances look unusually large and need review.")
     reconciliation = reconcile_balances(transactions)
@@ -54,7 +52,6 @@ def validate_transactions(
     extraction_signal = {
         "table": 1.0,
         "text": 0.75,
-        "ai": 0.85,
         "ocr": 0.5,
         "unknown": 0.0,
     }.get(extraction_method, 0.0)
@@ -78,3 +75,33 @@ def validate_transactions(
         duplicate_count=duplicates,
         balance_reconciliation=reconciliation,
     )
+
+
+RECONCILIATION_TOLERANCE = Decimal("0.05")
+
+
+def reconcile_opening_closing(
+    opening: Decimal | None,
+    closing: Decimal | None,
+    transactions: list[Transaction],
+    account_type: str | None = None,
+) -> tuple[str, Decimal | None]:
+    """Check opening balance + extracted movements against the closing balance.
+
+    Returns ``(status, difference)``; ``difference`` is closing minus the
+    figure the extracted rows imply, and is ``None`` when not checkable.
+    Amounts are signed from the account holder's side (debits negative). Credit
+    cards print the balance owed as a positive number, so a card is accepted
+    when either the signed chain or the owed chain (owed falls as payments
+    credit the card) closes.
+    """
+    if opening is None or closing is None or not transactions:
+        return "not_available", None
+    net = sum((item.amount for item in transactions), Decimal("0"))
+    candidates = [closing - (opening + net)]
+    if account_type == "credit_card":
+        candidates.append(closing - (opening - net))
+    best = min(candidates, key=abs)
+    if abs(best) <= RECONCILIATION_TOLERANCE:
+        return "verified", Decimal("0")
+    return "mismatch", best

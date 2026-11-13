@@ -1,4 +1,6 @@
 import { getSupabase, isSupabaseConfigured } from "../../lib/supabase";
+import { invalidateQueries } from "../../lib/query-cache";
+import { clearStatementPdfPassword } from "../statement-import/statement-pdf-password.service";
 import { AccountError } from "./account.errors";
 import {
   readAccountBalanceRow,
@@ -14,8 +16,10 @@ import type {
   FinancialAccount,
 } from "./account.types";
 import {
+  isValidAccountName,
   isValidAccountType,
   normalizeCreateAccountInput,
+  sanitizeAccountName,
 } from "./account.validation";
 
 let accountsRequest: Promise<FinancialAccount[]> | null = null;
@@ -273,6 +277,155 @@ export async function createAccount(
   return account;
 }
 
+/**
+ * Remove a statement-import account that never received saved transactions.
+ * Used when setup fails or the user abandons unlock — linked accounts must
+ * only remain after a successful extract + save.
+ */
+export async function discardEmptyImportAccount(
+  accountId: string | null | undefined,
+): Promise<void> {
+  if (!accountId) return;
+
+  const userId = await requireAuthenticatedUserId();
+  const supabase = getSupabase();
+
+  const { data: accountRow, error: accountError } = await supabase
+    .from("accounts")
+    .select("id, connection_source")
+    .eq("id", accountId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (accountError || !accountRow) {
+    return;
+  }
+  if (accountRow.connection_source !== "statement_import") {
+    return;
+  }
+
+  const [{ count: processedCount, error: processedError }, { count: txCount, error: txError }] =
+    await Promise.all([
+      supabase
+        .from("statement_imports")
+        .select("id", { count: "exact", head: true })
+        .eq("account_id", accountId)
+        .eq("user_id", userId)
+        .eq("status", "processed"),
+      supabase
+        .from("transactions")
+        .select("id", { count: "exact", head: true })
+        .eq("account_id", accountId)
+        .eq("user_id", userId),
+    ]);
+
+  if (processedError || txError) {
+    console.warn("[TracePay][accounts] discard_empty_check_failed", {
+      accountId,
+    });
+    return;
+  }
+  if ((processedCount ?? 0) > 0 || (txCount ?? 0) > 0) {
+    return;
+  }
+
+  try {
+    await deleteAccount(accountId);
+    console.info("[TracePay][accounts] discarded_empty_import_account", {
+      accountId,
+    });
+  } catch (error) {
+    console.warn("[TracePay][accounts] discard_empty_failed", {
+      accountId,
+      message: error instanceof Error ? error.message : "unknown",
+    });
+  }
+}
+
+/** Drop statement-import shells with no saved transactions, then return remaining accounts. */
+export async function pruneEmptyStatementImportAccounts(): Promise<
+  FinancialAccount[]
+> {
+  const accounts = await listAccounts();
+  const emptyImports = accounts.filter(
+    (account) => account.connectionSource === "statement_import",
+  );
+  if (emptyImports.length > 0) {
+    await Promise.all(
+      emptyImports.map((account) => discardEmptyImportAccount(account.id)),
+    );
+  }
+  return listAccounts();
+}
+
+export async function hasSavedStatementTransactions(): Promise<boolean> {
+  const accounts = await pruneEmptyStatementImportAccounts();
+  if (accounts.length === 0) {
+    return false;
+  }
+
+  const userId = await requireAuthenticatedUserId();
+  const { count, error } = await getSupabase()
+    .from("transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .limit(1);
+
+  if (error) {
+    return accounts.length > 0;
+  }
+  return (count ?? 0) > 0;
+}
+
+export async function updateAccountName(
+  accountId: string,
+  name: string,
+): Promise<FinancialAccount> {
+  const userId = await requireAuthenticatedUserId();
+  const nextName = sanitizeAccountName(name);
+
+  if (!accountId) {
+    throw new AccountError("Account not found.");
+  }
+  if (!isValidAccountName(nextName)) {
+    throw new AccountError("Enter an account name between 2 and 80 characters.");
+  }
+
+  const mutationId = ++mutationCounter;
+  const { data, error } = await getSupabase()
+    .from("accounts")
+    .update({ name: nextName })
+    .eq("id", accountId)
+    .eq("user_id", userId)
+    .select(
+      "id, user_id, name, institution, account_type, currency, last_four_digits, connection_source, created_at, updated_at",
+    )
+    .single();
+
+  if (error || !data) {
+    throw new AccountError("Could not rename your account. Please try again.");
+  }
+
+  const account = readAccountRow(data);
+  if (!account) {
+    throw new AccountError("Could not read the updated account. Please try again.");
+  }
+
+  if (mutationId === mutationCounter) {
+    const current = getAccountsSnapshot();
+    setAccountsSnapshot({
+      accounts: current.accounts.map((item) =>
+        item.id === account.id ? account : item,
+      ),
+      loading: false,
+      error: null,
+      initialized: true,
+    });
+  }
+
+  return account;
+}
+
 export async function deleteAccount(accountId: string): Promise<void> {
   const userId = await requireAuthenticatedUserId();
 
@@ -280,22 +433,68 @@ export async function deleteAccount(accountId: string): Promise<void> {
     throw new AccountError("Account not found.");
   }
 
+  await clearStatementPdfPassword(accountId);
+
   const supabase = getSupabase();
   const mutationId = ++mutationCounter;
 
+  const fail = (step: string, cause: { code?: string; message?: string } | null) => {
+    console.warn("[TracePay][accounts] delete_failed", {
+      step,
+      accountId,
+      code: cause?.code ?? null,
+      message: cause?.message ?? "no rows deleted",
+    });
+    return new AccountError("Could not remove your account. Please try again.");
+  };
+
   const { data: statements, error: statementsError } = await supabase
     .from("statement_imports")
-    .select("file_path")
+    .select("id, file_path")
     .eq("account_id", accountId)
     .eq("user_id", userId);
 
-  if (statementsError) {
-    throw new AccountError("Could not remove your account. Please try again.");
-  }
+  if (statementsError) throw fail("list_statements", statementsError);
 
+  const statementIds = (statements ?? []).map((row) => row.id as string);
   const filePaths = (statements ?? [])
     .map((row) => (typeof row.file_path === "string" ? row.file_path : null))
     .filter((path): path is string => typeof path === "string" && path.length > 0);
+
+  // A large statement's cascade can time out in a single delete, so clear the
+  // transactions in batches first, then the statements, then the account.
+  const clearTransactions = async (column: "account_id" | "statement_id", values: string[]) => {
+    for (const value of values) {
+      for (;;) {
+        const { data: batch, error: listError } = await supabase
+          .from("transactions")
+          .select("id")
+          .eq(column, value)
+          .eq("user_id", userId)
+          .limit(500);
+        if (listError) throw fail(`list_${column}_transactions`, listError);
+        if (!batch || batch.length === 0) break;
+
+        const { error: batchError } = await supabase
+          .from("transactions")
+          .delete()
+          .in("id", batch.map((row) => row.id as string));
+        if (batchError) throw fail(`delete_${column}_transactions`, batchError);
+      }
+    }
+  };
+
+  await clearTransactions("account_id", [accountId]);
+  await clearTransactions("statement_id", statementIds);
+
+  if (statementIds.length > 0) {
+    const { error: importsError } = await supabase
+      .from("statement_imports")
+      .delete()
+      .in("id", statementIds)
+      .eq("user_id", userId);
+    if (importsError) throw fail("delete_statements", importsError);
+  }
 
   const { data: deletedRows, error } = await supabase
     .from("accounts")
@@ -304,9 +503,8 @@ export async function deleteAccount(accountId: string): Promise<void> {
     .eq("user_id", userId)
     .select("id");
 
-  if (error || !deletedRows || deletedRows.length === 0) {
-    throw new AccountError("Could not remove your account. Please try again.");
-  }
+  if (error || !deletedRows || deletedRows.length === 0) throw fail("delete_account", error);
+  invalidateQueries();
 
   if (filePaths.length > 0) {
     const { error: storageError } = await supabase.storage

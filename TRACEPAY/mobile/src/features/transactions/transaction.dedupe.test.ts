@@ -1,4 +1,7 @@
-import { buildTransactionDedupeKey } from "./transaction.dedupe";
+import {
+  buildOccurrenceDedupeKeys,
+  buildTransactionDedupeKey,
+} from "./transaction.dedupe";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -66,6 +69,53 @@ test("same date and amount with a different description is not a duplicate", () 
       }),
     false,
     "different merchant",
+  );
+});
+
+const airtime = {
+  date: "2026-05-15",
+  description: "VAS - Mobile Purchase for 0634994013 Airtime",
+  amount: -50,
+  type: "debit" as const,
+};
+const airtimeFee = {
+  date: "2026-05-15",
+  description: "Fee: VAS - Mobile Purchase for 0634994013 Airtime",
+  amount: -0.5,
+  type: "debit" as const,
+};
+
+test("identical rows in one statement get distinct keys and none is a duplicate", () => {
+  const keys = buildOccurrenceDedupeKeys("acc", [airtime, airtimeFee, airtime, airtimeFee, airtime]);
+  assertEqual(new Set(keys).size, 5, "every repeated row keeps its own key");
+});
+
+test("first occurrence keeps the legacy key so earlier imports still match", () => {
+  const keys = buildOccurrenceDedupeKeys("acc", [airtime, airtime]);
+  assertEqual(keys[0], buildTransactionDedupeKey("acc", airtime), "legacy key");
+  assert(keys[1].endsWith("|#2"), "second occurrence is numbered");
+});
+
+test("an overlapping re-import matches occurrence by occurrence", () => {
+  const first = buildOccurrenceDedupeKeys("acc", [airtime, airtime, airtime]);
+  const reimport = buildOccurrenceDedupeKeys("acc", [airtime, airtime, airtime, airtime]);
+  const saved = new Set(first);
+  const fresh = reimport.filter((key) => !saved.has(key));
+  assertEqual(fresh.length, 1, "only the genuinely new fourth row is new");
+});
+
+test("rows saved with legacy keys only restore the collapsed repeats on re-import", () => {
+  const legacy = new Set([buildTransactionDedupeKey("acc", airtime)]);
+  const reimport = buildOccurrenceDedupeKeys("acc", [airtime, airtime, airtime]);
+  assertEqual(reimport.filter((key) => !legacy.has(key)).length, 2, "two repeats come back");
+});
+
+test("same row on different days or accounts is not numbered together", () => {
+  const keys = buildOccurrenceDedupeKeys("acc", [airtime, { ...airtime, date: "2026-05-16" }]);
+  assert(!keys[1].includes("|#"), "different day starts at occurrence one");
+  assert(
+    buildOccurrenceDedupeKeys("other", [airtime])[0] !== keys[0],
+    "account is part of the key",
   );
 });
 

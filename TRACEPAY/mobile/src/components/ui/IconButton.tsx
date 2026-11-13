@@ -13,7 +13,7 @@ type Props = Omit<PressableProps, "children"> & {
 };
 
 const VARIANT: Record<IconButtonVariant, string> = {
-  outline: "border border-border bg-card",
+  outline: "bg-card",
   muted: "bg-muted",
   ghost: "bg-transparent",
   soft: "bg-primary/10",

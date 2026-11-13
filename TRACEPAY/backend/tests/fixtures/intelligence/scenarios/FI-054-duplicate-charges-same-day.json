@@ -1,0 +1,56 @@
+[
+  {
+    "id": "fi054-a",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-14",
+    "description": "POS PURCHASE CNA SANDTON",
+    "amount": "250.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CNA",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Shopping"
+    }
+  },
+  {
+    "id": "fi054-b",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-14",
+    "description": "POS PURCHASE CNA SANDTON",
+    "amount": "250.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CNA",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Shopping"
+    }
+  },
+  {
+    "id": "fi054-c",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-20",
+    "description": "POS PURCHASE CHECKERS",
+    "amount": "180.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  }
+]

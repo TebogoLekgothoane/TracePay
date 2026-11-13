@@ -98,23 +98,6 @@ export function FadeInItem({ index = 0, children, className, ...props }: FadeInI
   );
 }
 
-type FadeInViewProps = ViewProps & {
-  children: React.ReactNode;
-};
-
-/** Simple fade-in for a whole screen or section. */
-export function FadeInView({ children, className, ...props }: FadeInViewProps) {
-  return (
-    <Animated.View
-      entering={FadeInDown.duration(360).easing(Easing.out(Easing.cubic))}
-      className={className}
-      {...props}
-    >
-      {children}
-    </Animated.View>
-  );
-}
-
 /** Wrap skeleton placeholders so they fade out cleanly. */
 export function SkeletonPlaceholder({ children, className, ...props }: ViewProps) {
   return (

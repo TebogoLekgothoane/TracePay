@@ -31,12 +31,61 @@ function asAmount(value: unknown): number | null {
   return null;
 }
 
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * Strict ISO calendar date. The processor always sends YYYY-MM-DD, so anything
+ * else (or an impossible day such as 2026-02-30, which Date.parse would
+ * quietly roll over) is rejected instead of being reinterpreted.
+ */
 function asDate(value: unknown): string | null {
-  if (typeof value !== "string" || !value.trim()) {
+  if (typeof value !== "string") {
     return null;
   }
-  const parsed = Date.parse(value);
-  if (!Number.isFinite(parsed)) {
+  const text = value.trim();
+  const match = ISO_DATE.exec(text);
+  if (!match) {
+    return null;
+  }
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return text;
+}
+
+function asOptionalDate(value: unknown): string | null | undefined {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  return asDate(value) ?? undefined;
+}
+
+const DATE_CONFIDENCES = new Set(["high", "medium", "low"]);
+
+function asWarnings(value: unknown): string[] | null {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  if (!Array.isArray(value) || value.length > 20) {
+    return null;
+  }
+  if (value.some((item) => typeof item !== "string" || item.length > 120)) {
+    return null;
+  }
+  return value as string[];
+}
+
+function asTime(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  if (typeof value !== "string" || !/^\d{2}:\d{2}(?::\d{2})?$/.test(value.trim())) {
     return null;
   }
   return value.trim();
@@ -59,6 +108,7 @@ export function parseExtractedTransaction(value: unknown): ExtractedTransaction 
 
   const row = value as Record<string, unknown>;
   const date = asDate(row.date);
+  const transactionTime = asTime(row.transaction_time);
   const description = typeof row.description === "string" ? row.description.trim() : "";
   const amount = asAmount(row.amount);
   const type =
@@ -71,6 +121,9 @@ export function parseExtractedTransaction(value: unknown): ExtractedTransaction 
   if (!date || description.length < 1 || description.length > 500 || amount === null) {
     return null;
   }
+  if (row.transaction_time !== undefined && row.transaction_time !== null && transactionTime === null) {
+    return null;
+  }
   if (type !== "debit" && type !== "credit") {
     return null;
   }
@@ -79,6 +132,32 @@ export function parseExtractedTransaction(value: unknown): ExtractedTransaction 
   const balance =
     rawBalance === undefined || rawBalance === null ? null : asAmount(rawBalance);
   if (rawBalance !== undefined && rawBalance !== null && balance === null) {
+    return null;
+  }
+
+  // Date provenance from the extractor. Optional, but never silently coerced.
+  const bookingDate = asOptionalDate(row.booking_date);
+  const valueDate = asOptionalDate(row.value_date);
+  const dateWarnings = asWarnings(row.date_warnings);
+  const dateConfidence =
+    row.date_confidence === undefined || row.date_confidence === null
+      ? null
+      : typeof row.date_confidence === "string" && DATE_CONFIDENCES.has(row.date_confidence)
+        ? (row.date_confidence as "high" | "medium" | "low")
+        : undefined;
+  const sourceRow =
+    row.source_row === undefined || row.source_row === null
+      ? null
+      : typeof row.source_row === "number" && Number.isInteger(row.source_row) && row.source_row >= 0
+        ? row.source_row
+        : undefined;
+  if (
+    bookingDate === undefined ||
+    valueDate === undefined ||
+    dateWarnings === null ||
+    dateConfidence === undefined ||
+    sourceRow === undefined
+  ) {
     return null;
   }
 
@@ -106,6 +185,7 @@ export function parseExtractedTransaction(value: unknown): ExtractedTransaction 
 
   return {
     date,
+    transaction_time: transactionTime,
     description,
     amount,
     type,
@@ -144,6 +224,15 @@ export function parseExtractedTransaction(value: unknown): ExtractedTransaction 
         : typeof row.reference === "string"
           ? row.reference.trim().slice(0, 80)
           : null,
+    date_text:
+      typeof row.date_text === "string" && row.date_text.trim().length > 0
+        ? row.date_text.trim().slice(0, 40)
+        : null,
+    date_confidence: dateConfidence,
+    date_warnings: dateWarnings,
+    booking_date: bookingDate,
+    value_date: valueDate,
+    source_row: sourceRow,
   };
 }
 

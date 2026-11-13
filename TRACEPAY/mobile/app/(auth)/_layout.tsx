@@ -69,15 +69,15 @@ export default function AuthLayout() {
       />
 
       <Stack.Screen
-        name="financial-accounts-setup"
+        name="consent-form"
         options={{
           headerShown: false,
-          gestureEnabled: false,
+          gestureEnabled: true,
         }}
       />
 
       <Stack.Screen
-        name="import-success"
+        name="financial-accounts-setup"
         options={{
           headerShown: false,
           gestureEnabled: false,
@@ -94,30 +94,6 @@ export default function AuthLayout() {
 
       <Stack.Screen
         name="reset-pin"
-        options={{
-          headerShown: false,
-          gestureEnabled: false,
-        }}
-      />
-
-      <Stack.Screen
-        name="reset-pin-create"
-        options={{
-          headerShown: false,
-          gestureEnabled: false,
-        }}
-      />
-
-      <Stack.Screen
-        name="reset-pin-confirm"
-        options={{
-          headerShown: false,
-          gestureEnabled: false,
-        }}
-      />
-
-      <Stack.Screen
-        name="reset-pin-success"
         options={{
           headerShown: false,
           gestureEnabled: false,

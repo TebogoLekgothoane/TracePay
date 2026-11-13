@@ -11,11 +11,12 @@ import { loadAccountBalances, loadAccounts } from "../features/accounts/account.
 import { useAccountsSnapshot } from "../features/accounts/account.store";
 import { toAccountPreview } from "../features/accounts/account.validation";
 
+/** Last balances seen, so screens that open later show them straight away. */
+let lastBalances: Record<string, AccountBalanceSummary> = {};
+
 export function useAccounts() {
   const snapshot = useAccountsSnapshot();
-  const [balances, setBalances] = useState<Record<string, AccountBalanceSummary>>(
-    {},
-  );
+  const [balances, setBalances] = useState<Record<string, AccountBalanceSummary>>(lastBalances);
 
   const retry = useCallback(() => {
     void loadAccounts(true);
@@ -27,6 +28,7 @@ export function useAccounts() {
       void loadAccounts(false)
         .then((accounts) => loadAccountBalances(accounts.map((account) => account.id)))
         .then((next) => {
+          lastBalances = next;
           if (!cancelled) {
             setBalances(next);
           }

@@ -6,6 +6,11 @@ import {
 } from "./auth.constants";
 import { secureStorage } from "../../lib/secure-storage";
 import { resetAccountsSnapshot } from "../accounts/account.store";
+import { resetRevenueCat } from "../../lib/revenuecat";
+import { resetBilling } from "../billing/billing.store";
+import { invalidateTransactionLists } from "../../hooks/useTransactions";
+import { invalidateTransactionTotals } from "../../hooks/useTransactionTotals";
+import { clearQueryCache } from "../../lib/query-cache";
 import { clearOnboardingCompleted } from "../onboarding/onboarding.service";
 import { clearFinancialAccountsSetupDismissed } from "../accounts/account-setup.service";
 import { AuthError } from "./auth.errors";
@@ -35,6 +40,9 @@ let pendingPassword: string | null = null;
 let pendingPurpose: "signup" | "login" | "reset" | null = null;
 let pendingResetToken: string | null = null;
 let profileRequest: Promise<AuthProfile | null> | null = null;
+/** Set only when the auth server just verified credentials (password/OTP). */
+let freshAuthenticationAt: number | null = null;
+const FRESH_AUTHENTICATION_WINDOW_MS = 5 * 60_000;
 
 type SessionListener = (present: boolean) => void;
 const sessionListeners = new Set<SessionListener>();
@@ -215,6 +223,7 @@ async function persistSession(session: {
     throw new AuthError("Could not save your session. Please try again.");
   }
 
+  freshAuthenticationAt = Date.now();
   emitSessionPresence(true);
 
   try {
@@ -422,6 +431,29 @@ export async function hasAuthSession(): Promise<boolean> {
   return (await getAuthSession()) !== null;
 }
 
+export async function getAuthUserId(): Promise<string | null> {
+  if (!isSupabaseConfigured()) {
+    return null;
+  }
+
+  const { data, error } = await getSupabase().auth.getSession();
+  if (error || !data.session?.user?.id) {
+    return null;
+  }
+  return data.session.user.id;
+}
+
+/**
+ * True once after the auth server verified the user's credentials in this
+ * process. A restored session, an old biometric result or reaching a
+ * post-login screen by deep link never counts.
+ */
+export function consumeFreshAuthentication(): boolean {
+  const at = freshAuthenticationAt;
+  freshAuthenticationAt = null;
+  return at !== null && Date.now() - at <= FRESH_AUTHENTICATION_WINDOW_MS;
+}
+
 export async function getCurrentProfile(): Promise<AuthProfile | null> {
   if (!isSupabaseConfigured()) {
     return null;
@@ -622,10 +654,16 @@ export async function resetLocalClientForFreshSignup(args: {
 
 export async function signOut(): Promise<void> {
   clearPendingCredentials();
+  freshAuthenticationAt = null;
   profileRequest = null;
   profileUpdateRequest = null;
   resetProfileSnapshot();
   resetAccountsSnapshot();
+  resetBilling();
+  await resetRevenueCat();
+  clearQueryCache();
+  invalidateTransactionLists();
+  invalidateTransactionTotals();
   await clearFinancialAccountsSetupDismissed().catch(() => undefined);
 
   if (isSupabaseConfigured()) {

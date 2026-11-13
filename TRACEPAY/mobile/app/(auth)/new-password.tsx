@@ -6,7 +6,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-na
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Button } from "../../src/components/ui/Button";
-import { IconButton } from "../../src/components/ui/IconButton";
+import { ScreenHeader } from "../../src/components/ui/ScreenHeader";
 import { PasswordInput } from "../../src/components/ui/PasswordInput";
 import { getPendingPhone } from "../../src/features/auth/auth.service";
 import { isValidPassword } from "../../src/features/auth/auth.validation";
@@ -64,17 +64,7 @@ export default function Screen() {
         className="flex-1"
       >
         <View className="flex-1 px-7 pt-4">
-          <IconButton
-            accessibilityLabel="Go back"
-            variant="ghost"
-            onPress={() => router.back()}
-          >
-            <Ionicons
-              color={palette.mutedForeground}
-              name="chevron-back"
-              size={22}
-            />
-          </IconButton>
+          <ScreenHeader title="Create a new password" />
 
           <ScrollView
             className="flex-1"
@@ -82,10 +72,7 @@ export default function Screen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <Text className="text-center text-[28px] font-bold text-foreground">
-              Create a new password
-            </Text>
-            <Text className="mt-3 text-center text-[15px] leading-[22px] text-muted-foreground">
+            <Text className="text-[15px] leading-[22px] text-muted-foreground">
               Choose a strong password to keep your TracePay account secure.
             </Text>
 

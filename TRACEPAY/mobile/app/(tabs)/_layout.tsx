@@ -3,7 +3,6 @@ import { useColorScheme } from "nativewind";
 import { View } from "react-native";
 
 import { LiquidTabBar } from "../../src/components/navigation/LiquidTabBar";
-import { TabBarScrollProvider } from "../../src/context/TabBarScrollContext";
 import { COLORS } from "../../src/theme/colors";
 
 export default function TabsLayout() {
@@ -12,7 +11,6 @@ export default function TabsLayout() {
   const background = COLORS[isDark ? "dark" : "light"].background;
 
   return (
-    <TabBarScrollProvider>
       <View
         className={`flex-1 bg-background ${isDark ? "dark" : ""}`}
         style={{ flex: 1, backgroundColor: background }}
@@ -26,14 +24,9 @@ export default function TabsLayout() {
         >
           <Tabs.Screen name="index" options={{ title: "Home" }} />
           <Tabs.Screen name="leaks" options={{ title: "Leaks" }} />
-          <Tabs.Screen name="budget" options={{ href: null, title: "Insights" }} />
-          <Tabs.Screen
-            name="transactions"
-            options={{ title: "Transactions" }}
-          />
+          <Tabs.Screen name="budget" options={{ title: "Insights" }} />
           <Tabs.Screen name="settings" options={{ title: "Profile" }} />
         </Tabs>
       </View>
-    </TabBarScrollProvider>
   );
 }

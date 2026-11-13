@@ -6,12 +6,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../../src/components/ui/Button";
 import { OTPInput } from "../../src/components/ui/OTPInput";
 import { continueAfterAuth } from "../../src/features/auth/auth.navigation";
+import { consumeFreshAuthentication } from "../../src/features/auth/auth.service";
 import { useAppLock } from "../../src/features/security/AppLockProvider";
 import { useAuth } from "../../src/hooks/useAuth";
 
 export default function Screen() {
   const { error, resendPhone, submitting, verifyPhone } = useAuth();
-  const { hasPin, lockApp, unlockApp } = useAppLock();
+  const appLock = useAppLock();
   const params = useLocalSearchParams<{ phone?: string; flow?: string }>();
   const phone = typeof params.phone === "string" ? params.phone : undefined;
   const flow = typeof params.flow === "string" ? params.flow : undefined;
@@ -38,6 +39,8 @@ export default function Screen() {
       }
 
       if (isSignup) {
+        // A brand-new account has no PIN yet; setup unlocks via confirmPin.
+        consumeFreshAuthentication();
         router.replace({
           pathname: "/(auth)/device-security",
           params: { flow: "signup" },
@@ -45,13 +48,13 @@ export default function Screen() {
         return;
       }
 
-      await continueAfterAuth({ hasPin, lockApp, router, unlockApp });
+      await continueAfterAuth({ appLock, router });
     } catch {
       return;
     } finally {
       verifyingRef.current = false;
     }
-  }, [code, hasPin, isReset, isSignup, lockApp, phone, unlockApp, verifyPhone]);
+  }, [appLock, code, isReset, isSignup, phone, verifyPhone]);
 
   const handleResend = async () => {
     try {

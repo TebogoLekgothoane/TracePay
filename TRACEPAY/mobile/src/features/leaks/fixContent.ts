@@ -14,6 +14,7 @@ import {
 } from "lucide-react-native";
 
 import type { ImpactTone } from "../../theme/colors";
+import { GUIDE_STEPS } from "./fixGuideSteps";
 
 export type FixActionItem = {
   id: string;
@@ -51,10 +52,17 @@ export type ComparisonRow = {
   values: [string, string, string];
 };
 
+export type GuideLink = {
+  label: string;
+  url: string;
+};
+
 export type GuideStep = {
   id: string;
   title: string;
   description: string;
+  /** Official page that helps with this step. */
+  link?: GuideLink;
 };
 
 export type ActionDetailContent = {
@@ -67,6 +75,12 @@ export type ActionDetailContent = {
   accounts?: AccountOption[];
   compareRows?: ComparisonRow[];
   topPick?: { name: string; description: string };
+  /** Show the side-by-side South African bank account fee table. */
+  bankComparison?: boolean;
+  /** Show the table of every mobile network's data bundles, cheapest per GB first. */
+  bundleComparison?: boolean;
+  /** Show the table of ways to get cash and what each costs. */
+  cashComparison?: boolean;
   guideTitle: string;
   guideSubtitle: string;
   steps: GuideStep[];
@@ -162,7 +176,7 @@ const SUBS_ACTIONS: FixSection[] = [
     actions: [
       {
         id: "cancel",
-        title: "Cancel unused subscriptions",
+        title: "Cancel unused recurring payments",
         potentialSaving: "R430.00 /month",
         Icon: RefreshCw,
         hasDetailFlow: true,
@@ -201,13 +215,7 @@ const DEBIT_ACTIONS: FixSection[] = [
         Icon: Calendar,
         hasDetailFlow: true,
       },
-      {
-        id: "cancel-debit",
-        title: "Cancel a debit order at your bank",
-        potentialSaving: "R320.75 /month",
-        Icon: CreditCard,
-        hasDetailFlow: true,
-      },
+   
     ],
   },
   {
@@ -763,45 +771,8 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
     savingsLabel: "Potential saving",
     whyThisHelps:
       "Many people stay on legacy accounts with monthly fees they no longer need. A low-fee or zero-fee account can cut recurring charges without changing how you bank day to day.",
-    recommendedTitle: "Recommended accounts",
-    accounts: [
-      {
-        id: "nedbank",
-        name: "Nedbank Savvy Plus",
-        mark: "N",
-        markColor: "success",
-        monthlyFee: "R0.00",
-        tags: ["Free card", "Low fees"],
-        featured: true,
-      },
-      {
-        id: "capitec",
-        name: "Capitec Global One",
-        mark: "C",
-        markColor: "primary",
-        monthlyFee: "R0.00",
-        tags: ["Simple pricing", "No monthly fee"],
-      },
-      {
-        id: "tyme",
-        name: "TymeBank EveryDay",
-        mark: "T",
-        markColor: "warning",
-        monthlyFee: "R0.00",
-        tags: ["Digital first", "Free card"],
-      },
-    ],
-    compareRows: [
-      { label: "Monthly fee", values: ["R0.00", "R0.00", "R0.00"] },
-      { label: "Card", values: ["Free", "Free", "Free"] },
-      { label: "ATM withdrawals", values: ["Free at Nedbank", "Low cost", "Free at TymeBank"] },
-      { label: "Online banking", values: ["Included", "Included", "Included"] },
-      { label: "Debit orders", values: ["Free", "Free", "Free"] },
-    ],
-    topPick: {
-      name: "Nedbank Savvy Plus",
-      description: "Best match for your spending pattern and lowest overall fees.",
-    },
+    recommendedTitle: "Compare accounts",
+    bankComparison: true,
     guideTitle: "How to switch accounts",
     guideSubtitle: "Follow these steps so nothing important gets left behind.",
     helpTitle: "Need help switching safely?",
@@ -845,7 +816,7 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
       "Track your progress in the app",
       "See savings add up on your dashboard",
     ],
-    primaryCta: "Compare accounts",
+    primaryCta: "Compare SA bank accounts",
     compareCta: "See switch steps",
     guideCta: "I've started switching",
     doneCta: "Done",
@@ -902,6 +873,7 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
   }),
   atm: guideAction({
     title: "Use free ATM networks",
+    cashComparison: true,
     subtitle: "Avoid other-bank ATM fees with these habits.",
     savings: "R154.50",
     savingsLabel: "Potential saving",
@@ -1004,44 +976,8 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
     savingsLabel: "Potential saving",
     whyThisHelps:
       "Buying the wrong bundle — or topping up too often — adds up quickly. A bundle that fits your usage avoids out-of-bundle charges and impulse top-ups.",
-    recommendedTitle: "Recommended bundles",
-    accounts: [
-      {
-        id: "vodacom",
-        name: "Vodacom 10GB",
-        mark: "V",
-        markColor: "destructive",
-        monthlyFee: "R149.00",
-        tags: ["Best value", "Rollover data"],
-        featured: true,
-      },
-      {
-        id: "mtn",
-        name: "MTN 8GB",
-        mark: "M",
-        markColor: "warning",
-        monthlyFee: "R139.00",
-        tags: ["Night data", "Social bundles"],
-      },
-      {
-        id: "cellc",
-        name: "Cell C 6GB",
-        mark: "C",
-        markColor: "primary",
-        monthlyFee: "R129.00",
-        tags: ["Lower cost", "Flexible"],
-      },
-    ],
-    compareRows: [
-      { label: "Monthly cost", values: ["R149.00", "R139.00", "R129.00"] },
-      { label: "Data included", values: ["10GB", "8GB", "6GB"] },
-      { label: "Night data", values: ["Unlimited", "5GB", "None"] },
-      { label: "Rollover", values: ["Yes", "Yes", "No"] },
-    ],
-    topPick: {
-      name: "Vodacom 10GB",
-      description: "Best fit for your current usage and lowest risk of out-of-bundle charges.",
-    },
+    recommendedTitle: "Bundle options",
+    bundleComparison: true,
     guideTitle: "How to switch data bundles",
     guideSubtitle: "Check usage, pick a fit, then activate on your network.",
     helpTitle: "Need help activating a bundle?",
@@ -1083,7 +1019,7 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
     nextSteps: [
       "We'll track your data spending",
       "Alert you before out-of-bundle charges",
-      "Suggest better bundles over time",
+      "Show how bundles compare over time",
     ],
     primaryCta: "Compare bundles",
     compareCta: "See activation steps",
@@ -1097,26 +1033,8 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
     savingsLabel: "Potential saving",
     whyThisHelps:
       "Withdrawing at another bank's ATM often costs R8–R15 per withdrawal. Using your home bank's network — or getting cash back at a store — keeps more money in your pocket.",
-    recommendedTitle: "Free ATM options near you",
-    accounts: [
-      {
-        id: "nedbank",
-        name: "Nedbank ATM · Sandton City",
-        mark: "N",
-        markColor: "success",
-        monthlyFee: "Free",
-        tags: ["0.4 km away", "No fee"],
-        featured: true,
-      },
-      {
-        id: "capitec",
-        name: "Capitec ATM · Rosebank",
-        mark: "C",
-        markColor: "primary",
-        monthlyFee: "Free",
-        tags: ["1.2 km away", "Partner network"],
-      },
-    ],
+    recommendedTitle: "Ways to get cash",
+    cashComparison: true,
     guideTitle: "How to avoid ATM fees",
     guideSubtitle: "Simple habits that cut withdrawal costs.",
     helpTitle: "Need a free ATM nearby?",
@@ -1260,7 +1178,7 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
   }),
   alerts: guideAction({
     title: "Get spending alerts",
-    subtitle: "Be notified when a new subscription or unusual debit posts.",
+    subtitle: "Be notified when a new recurring payment or unusual debit posts.",
     savings: "R50.00",
     savingsLabel: "Potential saving",
     whyThisHelps:
@@ -1294,11 +1212,11 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
         id: "5",
         title: "Act the same day on unknown merchants",
         description:
-          "If you see a new subscription name, open TracePay → Leaks and start the cancel guide.",
+          "If you see a new recurring payment name, open TracePay → Leaks and start the cancel guide.",
       },
     ],
     successTitle: "Spending alerts on",
-    successSubtitle: "New subscriptions are harder to miss.",
+    successSubtitle: "New recurring payments are harder to miss.",
     nextSteps: [
       "Keep bank push enabled",
       "Cancel unknown merchants quickly",
@@ -1401,6 +1319,7 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
   }),
   cashback: guideAction({
     title: "Get cash back at stores",
+    cashComparison: true,
     subtitle: "Take cash at the till instead of paying other-bank ATM fees.",
     savings: "R35.00",
     savingsLabel: "Potential saving",
@@ -1492,21 +1411,21 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
     ],
   }),
   cancel: guideAction({
-    title: "Cancel unused subscriptions",
+    title: "Cancel unused recurring payments",
     subtitle: "Stop paying for services you barely open.",
     savings: "R430.00",
     savingsLabel: "Potential saving",
     whyThisHelps:
-      "Forgotten subscriptions renew automatically. Cancelling each one in the provider’s account — then confirming the bank debit stops — is the only reliable fix.",
-    guideTitle: "How to cancel unused subscriptions",
+      "Forgotten recurring payments renew automatically. Cancelling each one in the provider’s account — then confirming the bank debit stops — is the only reliable fix.",
+    guideTitle: "How to cancel unused recurring payments",
     guideSubtitle: "Work through each service, then verify your bank feed.",
     helpTitle: "Not sure where you subscribed?",
     helpSubtitle: "Check email receipts, app stores, and your banking merchant names.",
     steps: [
       {
         id: "1",
-        title: "List every active subscription in TracePay",
-        description: "Open Money leaks → Subscriptions and note name, amount, and billing date.",
+        title: "List every active recurring payment in TracePay",
+        description: "Open Money leaks → Recurring Payments and note name, amount, and billing date.",
       },
       {
         id: "2",
@@ -1535,14 +1454,14 @@ export const ACTION_DETAILS: Record<string, ActionDetailContent> = {
     successTitle: "Cancellation plan ready",
     successSubtitle: "Work through each unused sub to reclaim up to R430.00.",
     nextSteps: [
-      "Cancel one subscription today",
+      "Cancel one recurring payment today",
       "Save confirmations",
       "Recheck next month’s statement",
     ],
   }),
   limits: guideAction({
     title: "Set spending limits",
-    subtitle: "Cap categories so new subscriptions and debits cannot run wild.",
+    subtitle: "Cap categories so new recurring payments and debits cannot run wild.",
     savings: "R100.00",
     savingsLabel: "Potential saving",
     whyThisHelps:
@@ -1695,6 +1614,12 @@ for (const [id, guide] of Object.entries(DEBIT_PAUSE_GUIDES)) {
   ACTION_DETAILS[`pause-${id}`] = buildPauseDebitDetail(guide);
 }
 
+// Swap in the detailed plain-English steps (with links) wherever we have them.
+for (const [id, steps] of Object.entries(GUIDE_STEPS)) {
+  const detail = ACTION_DETAILS[id];
+  if (detail) detail.steps = steps;
+}
+
 export function getFixContent(leakId: string): FixFlowContent | null {
   return FIX_FLOW_CONTENT[leakId] ?? null;
 }
@@ -1704,7 +1629,11 @@ export function getActionDetail(actionId: string): ActionDetailContent | null {
 }
 
 export function hasCompareFlow(detail: ActionDetailContent): boolean {
-  return Boolean(detail.compareRows?.length);
+  return Boolean(detail.bankComparison ||
+      detail.bundleComparison ||
+      detail.cashComparison ||
+      detail.compareRows?.length,
+  );
 }
 
 /** Prefer the step-by-step guide unless the action needs a comparison first. */

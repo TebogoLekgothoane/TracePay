@@ -54,6 +54,35 @@ def test_known_rules(description: str, category: str) -> None:
     assert result.classification_reason
 
 
+def test_card_purchase_prefix_uses_the_recognised_merchant() -> None:
+    mr_d = "PURCHASE: WITH CARD AT EPOS AT MR D FOOD"
+    checkers = "PURCHASE: WITH CARD AT EPOS AT CHECKERS SANDTON"
+    woolworths = "PURCHASE WITH CARD AT EPOS AT WOOLWORTHS SANDTON"
+    north = "PURCHASE: WITH CARD AT EPOS AT NORTH CAFE"
+    south = "PURCHASE: WITH CARD AT EPOS AT SOUTH MARKET"
+    online_mr = "Online Purchase Mr Food"
+    online_uber = "Online Purchase: Uber Eats Johannesburg (Card 7571)"
+
+    mr_d_result = classify_transaction(mr_d, "debit")
+    checkers_result = classify_transaction(checkers, "debit")
+    woolworths_result = classify_transaction(woolworths, "debit")
+
+    assert mr_d_result.category_name == "Fast Food"
+    assert mr_d_result.rule == "merchant:food-delivery"
+    assert mr_d_result.merchant_name == "Mr D"
+    assert extract_merchant_name(mr_d) == "Mr D"
+    assert checkers_result.category_name == "Groceries"
+    assert checkers_result.merchant_name == "Checkers"
+    assert woolworths_result.merchant_name == "Woolworths"
+    assert checkers_result.merchant_name != woolworths_result.merchant_name
+    assert extract_merchant_name(north) != extract_merchant_name(south)
+    assert "With Card At" not in (extract_merchant_name(north) or "")
+    assert "With Card At" not in (extract_merchant_name(south) or "")
+    assert extract_merchant_name(online_mr) == "Mr Food"
+    assert extract_merchant_name(online_uber) == "Uber Eats"
+    assert mr_d == "PURCHASE: WITH CARD AT EPOS AT MR D FOOD"
+
+
 def test_case_and_merchant_variations() -> None:
     assert classify_transaction("woolworths").category_name == "Groceries"
     assert classify_transaction("Woolworths Store 123").category_name == "Groceries"
@@ -78,6 +107,12 @@ def test_netflix_merchant_variations(description: str) -> None:
 def test_unknown_and_amount_independence() -> None:
     assert classify_transaction("RANDOM UNKNOWN MERCHANT").category_name is None
     assert classify_transaction("WOOLWORTHS", "debit").category_name == classify_transaction("WOOLWORTHS", "credit").category_name
+
+
+def test_chatgpt_pos_purchase_is_subscriptions() -> None:
+    result = classify_transaction("POS PURCHASE CHATGPT", "debit")
+    assert result.category_name == "Subscriptions"
+    assert result.merchant_name == "ChatGPT"
 
 
 def test_data_alone_is_not_airtime() -> None:
@@ -107,7 +142,8 @@ def test_non_spending_transaction_classes(description: str, transaction_class: s
 def test_eft_and_generic_purchase_are_not_deterministic_categories() -> None:
     eft = classify_transaction("EFT for CAPITEC J MAPHOSA", "debit")
     purchase = classify_transaction("Purchase at BUCCANEERS", "debit")
-    assert eft.transaction_class == "unknown"
+    assert eft.transaction_class == "person_to_person"
+    assert eft.category_name == "Transfers"
     assert purchase.transaction_class == "unknown"
 
 
@@ -123,6 +159,27 @@ def test_data_bundle_is_airtime_and_data() -> None:
 ])
 def test_common_statement_descriptions(description: str, category: str) -> None:
     assert classify_transaction(description, "debit").category_name == category
+
+
+@pytest.mark.parametrize(
+    ("description", "merchant", "category"),
+    [
+        (
+            "Wild Coast Go Karts East London (Card 4426)",
+            "Wild Coast Go Karts",
+            "Entertainment",
+        ),
+        ("Mr Price Vincent (Card 4426)", "Mr Price", "Shopping"),
+    ],
+)
+def test_card_suffixes_and_locations_do_not_hide_known_merchants(
+    description: str, merchant: str, category: str
+) -> None:
+    result = classify_transaction(description, "debit")
+
+    assert result.merchant_name == merchant
+    assert result.category_name == category
+    assert result.transaction_class == "spending"
 
 
 def test_blank_description_falls_back_to_other(
@@ -195,7 +252,7 @@ def test_merchant_memory_applies_when_rules_miss(monkeypatch: pytest.MonkeyPatch
                 classification_confidence=0.95,
                 classification_reason="Matched known merchant: Buccaneers",
                 merchant_name="Buccaneers",
-                rule="ai:gemini",
+                rule="ai:openrouter",
             )
         }
     )
@@ -211,6 +268,7 @@ def test_merchant_memory_applies_when_rules_miss(monkeypatch: pytest.MonkeyPatch
 
 def test_ai_low_confidence_category_is_preserved(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", True)
+    monkeypatch.setattr("categorisation.service.settings.openai_api_key", "test-openai-key")
 
     def fake_classify_batch(*_args: object, **_kwargs: object) -> dict[str, CategorisationResult]:
         return {"0": CategorisationResult(
@@ -234,6 +292,7 @@ def test_ai_low_confidence_category_is_preserved(monkeypatch: pytest.MonkeyPatch
 
 def test_duplicate_ai_pattern_is_applied_to_every_transaction(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", True)
+    monkeypatch.setattr("categorisation.service.settings.openai_api_key", "test-openai-key")
 
     calls = 0
 
@@ -253,7 +312,12 @@ def test_duplicate_ai_pattern_is_applied_to_every_transaction(monkeypatch: pytes
     monkeypatch.setattr("categorisation.service.classify_batch", fake_classify_batch)
     # Use a description that is no longer deterministic so AI path is exercised.
     transactions = [
-        CategorisableTransaction(str(index), "EFT to T LEKGOTHOANE", Decimal("-50"), "debit")
+        CategorisableTransaction(
+            str(index),
+            "Local payment to T LEKGOTHOANE",
+            Decimal("-50"),
+            "debit",
+        )
         for index in range(3)
     ]
     results = categorise_batch(transactions, LIVE_CATEGORIES)
@@ -264,6 +328,7 @@ def test_duplicate_ai_pattern_is_applied_to_every_transaction(monkeypatch: pytes
 
 def test_partial_ai_batch_maps_hits_and_fallbacks_misses(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", True)
+    monkeypatch.setattr("categorisation.service.settings.openai_api_key", "test-openai-key")
 
     def fake_classify_batch(items: list[object], _category_names: list[str]) -> dict[str, CategorisationResult]:
         # Only return a result for the first candidate; others must fall back.
@@ -276,7 +341,7 @@ def test_partial_ai_batch_maps_hits_and_fallbacks_misses(monkeypatch: pytest.Mon
                 classification_confidence=0.84,
                 classification_reason="Classified by AI based on transaction description",
                 merchant_name="Example",
-                rule="ai:gemini",
+                rule="ai:openrouter",
             )
         }
 
@@ -299,7 +364,8 @@ def test_partial_ai_batch_maps_hits_and_fallbacks_misses(monkeypatch: pytest.Mon
 def test_ai_disabled_still_applies_fallback(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
     monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", False)
     monkeypatch.setattr("categorisation.service.settings.openai_api_key", "openai-test-key")
-    monkeypatch.setattr("categorisation.service.settings.gemini_api_key", "gemini-test-key")
+    monkeypatch.setattr("categorisation.service.settings.openrouter_api_key", "openrouter-test-key")
+    monkeypatch.setattr("categorisation.service.settings.xai_api_key", "")
 
     def fail_if_called(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("AI provider should not be called when disabled")
@@ -318,9 +384,32 @@ def test_ai_disabled_still_applies_fallback(monkeypatch: pytest.MonkeyPatch, cap
     assert "skipped reason=disabled" in " ".join(record.getMessage() for record in caplog.records)
 
 
+def test_no_categorisation_provider_key_means_no_ai_call(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", True)
+    monkeypatch.setattr("categorisation.service.settings.openrouter_api_key", "")
+    monkeypatch.setattr("categorisation.service.settings.openai_api_key", "")
+    monkeypatch.setattr("categorisation.service.settings.xai_api_key", "")
+
+    def fail_if_called(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("No provider may be called without a categorisation provider key")
+
+    monkeypatch.setattr("categorisation.service.classify_batch", fail_if_called)
+    caplog.set_level("WARNING", logger="tracepay.categorisation")
+    result = categorise_batch(
+        [CategorisableTransaction("unknown", "Unknown local merchant", Decimal("-10"), "debit")],
+        LIVE_CATEGORIES,
+    )["unknown"]
+
+    assert result.rule == "fallback:other"
+    assert "expected_env=OPENROUTER_API_KEY|OPENAI_API_KEY|XAI_API_KEY" in " ".join(
+        record.getMessage() for record in caplog.records
+    )
+
+
 def test_ai_enabled_keeps_provider_flow_reachable(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", True)
     monkeypatch.setattr("categorisation.service.settings.openai_api_key", "openai-test-key")
+    monkeypatch.setattr("categorisation.service.settings.xai_api_key", "")
     calls = 0
 
     def classify(items: list[object], _category_names: list[str]) -> dict[str, CategorisationResult]:
@@ -347,7 +436,7 @@ def test_ai_enabled_keeps_provider_flow_reachable(monkeypatch: pytest.MonkeyPatc
 
 def test_openai_failure_returns_empty_results(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "openai-test-key")
-    monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "")
+    monkeypatch.setattr(ai_classifier.settings, "xai_api_key", "")
     monkeypatch.setattr(ai_classifier, "_request_openai", lambda *_args: None)
     assert ai_classifier.classify_batch(
         [ai_classifier.AiTransaction("0", "Purchase at Example", "-10", "debit")],
@@ -357,7 +446,7 @@ def test_openai_failure_returns_empty_results(monkeypatch: pytest.MonkeyPatch) -
 
 def test_openai_success_returns_validated_results(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "openai-test-key")
-    monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "")
+    monkeypatch.setattr(ai_classifier.settings, "xai_api_key", "")
     monkeypatch.setattr(ai_classifier, "_request_openai", lambda *_args: {
         "choices": [{"message": {"content": '{"transactions":[{"transaction_id":"0","transaction_class":"spending","classification_confidence":0.9,"category_name":"Groceries","category_confidence":0.8,"reason":"Merchant purchase","merchant_name":"Example"}]}'}}],
     })
@@ -369,23 +458,276 @@ def test_openai_success_returns_validated_results(monkeypatch: pytest.MonkeyPatc
     assert result.category_name == "Groceries"
 
 
-def test_gemini_success_returns_validated_results(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "gemini-test-key")
+def test_ai_identified_merchant_is_retained_only_with_supported_high_confidence() -> None:
+    parsed = {
+        "transactions": [
+            {
+                "transaction_id": "0",
+                "transaction_class": "spending",
+                "classification_confidence": 0.9,
+                "category_name": "Subscriptions",
+                "category_confidence": 0.9,
+                "reason": "NETFLIX.COM directly identifies the merchant.",
+                "merchant_name": "Netflix",
+                "merchant_identification_status": "identified",
+                "merchant_confidence": 0.92,
+                "evidence": ["NETFLIX.COM"],
+                "alternative_candidates": [],
+                "source_type": "merchant",
+                "payment_mechanism": None,
+                "supporting_text": "NETFLIX.COM",
+                "uncertainty": "identified",
+            }
+        ]
+    }
+
+    results, rejected = ai_classifier._validate_results(
+        parsed,
+        {"Subscriptions"},
+        "openai",
+        {"0"},
+        {"0": "NETFLIX.COM 1234"},
+    )
+
+    assert rejected == 0
+    assert results["0"].merchant_name == "Netflix"
+
+
+@pytest.mark.parametrize(
+    ("merchant_status", "merchant_confidence", "merchant_name"),
+    [
+        ("candidate", 0.92, "Netflix"),
+        ("identified", 0.50, "Netflix"),
+        ("identified", 0.92, "Unrelated Merchant"),
+    ],
+)
+def test_ai_ambiguous_or_unsupported_merchants_stay_unknown(
+    merchant_status: str,
+    merchant_confidence: float,
+    merchant_name: str,
+) -> None:
+    parsed = {
+        "transactions": [
+            {
+                "transaction_id": "0",
+                "transaction_class": "spending",
+                "classification_confidence": 0.8,
+                "category_name": "Shopping",
+                "category_confidence": 0.8,
+                "reason": "The category is independent of merchant identification.",
+                "merchant_name": merchant_name,
+                "merchant_identification_status": merchant_status,
+                "merchant_confidence": merchant_confidence,
+                "evidence": ["ABC SERVICES"],
+                "alternative_candidates": ["ABC Retail"],
+                "source_type": "merchant",
+                "payment_mechanism": None,
+                "supporting_text": "ABC SERVICES",
+                "uncertainty": "identified",
+            }
+        ]
+    }
+
+    results, rejected = ai_classifier._validate_results(
+        parsed,
+        {"Shopping"},
+        "openai",
+        {"0"},
+        {"0": "ABC SERVICES 48291 REF 7712"},
+    )
+
+    assert rejected == 0
+    assert results["0"].merchant_name is None
+    assert results["0"].category_name == "Shopping"
+
+
+def test_verified_ai_merchant_can_be_reused_by_memory(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", True)
+    monkeypatch.setattr("categorisation.service.settings.openai_api_key", "test-openai-key")
+    memory = MerchantMemory()
+
+    def fake_classify_batch(items: list[object], _category_names: list[str]) -> dict[str, CategorisationResult]:
+        return {
+            items[0].transaction_id: CategorisationResult(
+                category_name="Shopping",
+                category_confidence=0.95,
+                transaction_class="spending",
+                classification_confidence=0.95,
+                classification_reason="Description directly names Mystery Mart.",
+                merchant_name="Mystery Mart",
+                rule="ai:openai",
+            )
+        }
+
+    monkeypatch.setattr("categorisation.service.classify_batch", fake_classify_batch)
+    first = categorise_batch(
+        [CategorisableTransaction("0", "MYSTERY MART", Decimal("-10"), "debit")],
+        LIVE_CATEGORIES,
+        merchant_memory=memory,
+    )["0"]
+    monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", False)
+    second = categorise_batch(
+        [CategorisableTransaction("1", "MYSTERY MART", Decimal("-20"), "debit")],
+        LIVE_CATEGORIES,
+        merchant_memory=memory,
+    )["1"]
+
+    assert first.merchant_name == "Mystery Mart"
+    assert second.rule == "merchant_memory"
+    assert second.merchant_name == "Mystery Mart"
+
+
+def test_openrouter_success_returns_validated_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
     monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "")
-    monkeypatch.setattr(ai_classifier, "_request_gemini", lambda *_args: {
-        "candidates": [{"content": {"parts": [{"text": '{"transactions":[{"transaction_id":"0","transaction_class":"spending","classification_confidence":0.91,"category_name":"Groceries","category_confidence":0.88,"reason":"Merchant purchase","merchant_name":"Example"}]}'}]}}],
+    monkeypatch.setattr(ai_classifier.settings, "xai_api_key", "")
+    monkeypatch.setattr(ai_classifier, "_request_openrouter", lambda *_args: {
+        "choices": [{"message": {"content": '{"transactions":[{"transaction_id":"0","transaction_class":"spending","classification_confidence":0.91,"category_name":"Groceries","category_confidence":0.88,"reason":"Merchant purchase","merchant_name":"Example"}]}'} }],
     })
     result = ai_classifier.classify_batch(
         [ai_classifier.AiTransaction("0", "Purchase at Example", "-10", "debit")],
         ["Groceries"],
     )["0"]
-    assert result.rule == "ai:gemini"
+    assert result.rule == "ai:openrouter"
     assert result.category_name == "Groceries"
+
+
+def test_openrouter_request_uses_config_and_sanitizes_transaction_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_model", "provider/model-test")
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_base_url", "https://router.example/v1/")
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_timeout_seconds", 23)
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_http_referer", "https://tracepay.example")
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_title", "TracePay Test")
+
+    class Response:
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"choices": []}'
+
+    seen: dict[str, object] = {}
+
+    def succeed(request: object, *, timeout: int) -> Response:
+        seen["request"] = request
+        seen["timeout"] = timeout
+        return Response()
+
+    monkeypatch.setattr(ai_classifier, "urlopen", succeed)
+    description = "WOOLWORTHS CARD 4111111111111111 REF ABC12345"
+    result = ai_classifier._request_openrouter(
+        ai_classifier._build_instructions(
+            [ai_classifier.AiTransaction("tx-1", description, "-10", "debit")],
+            ["Groceries"],
+        ),
+        ai_classifier._category_schema(),
+        1,
+    )
+
+    request = seen["request"]
+    assert result == {"choices": []}
+    assert seen["timeout"] == 23
+    assert request.full_url == "https://router.example/v1/chat/completions"
+    assert request.get_header("Authorization") == "Bearer openrouter-test-key"
+    assert request.get_header("Http-referer") == "https://tracepay.example"
+    assert request.get_header("X-title") == "TracePay Test"
+    payload = ai_classifier.json.loads(request.data)
+    assert payload["model"] == "provider/model-test"
+    assert payload["response_format"]["json_schema"]["strict"] is True
+    prompt = payload["messages"][0]["content"]
+    assert "WOOLWORTHS" in prompt
+    assert "4111111111111111" not in prompt
+    assert "ABC12345" not in prompt
+
+
+@pytest.mark.parametrize("status", [429, 503])
+def test_openrouter_http_rate_limit_and_unavailable_fail_safely(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    status: int,
+) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
+    sensitive_response = b"raw transaction description: PRIVATE MERCHANT 4111111111111111"
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise ai_classifier.HTTPError(
+            "https://openrouter.ai/api/v1/chat/completions",
+            status,
+            "Unavailable",
+            {},
+            io.BytesIO(sensitive_response),
+        )
+
+    monkeypatch.setattr(ai_classifier, "urlopen", fail)
+    caplog.set_level("ERROR", logger="tracepay.categorisation.ai")
+    assert ai_classifier._request_openrouter("sanitized prompt", {}, 1) is None
+    message = " ".join(record.getMessage() for record in caplog.records)
+    assert f"request_failed provider=openrouter status={status}" in message
+    assert "PRIVATE MERCHANT" not in message
+    assert "4111111111111111" not in message
+
+
+def test_openrouter_timeout_fails_safely(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_timeout_seconds", 17)
+
+    def timeout(*_args: object, **_kwargs: object) -> None:
+        raise TimeoutError
+
+    monkeypatch.setattr(ai_classifier, "urlopen", timeout)
+    caplog.set_level("ERROR", logger="tracepay.categorisation.ai")
+    assert ai_classifier._request_openrouter("sanitized prompt", {}, 1) is None
+    message = " ".join(record.getMessage() for record in caplog.records)
+    assert "request_timeout provider=openrouter" in message
+    assert "timeout_seconds=17" in message
+
+
+def test_openrouter_missing_key_skips_request_and_returns_no_ai_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "")
+    monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "")
+    monkeypatch.setattr(ai_classifier.settings, "xai_api_key", "")
+
+    def forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("HTTP request must not run without an API key")
+
+    monkeypatch.setattr(ai_classifier, "urlopen", forbidden)
+    assert ai_classifier._request_openrouter("sanitized prompt", {}, 1) is None
+    assert ai_classifier.classify_batch(
+        [ai_classifier.AiTransaction("0", "Unknown merchant", "-10", "debit")],
+        ["Groceries"],
+    ) == {}
+
+
+def test_malformed_openrouter_response_uses_safe_classification_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", True)
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
+    monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "")
+    monkeypatch.setattr(ai_classifier.settings, "xai_api_key", "")
+    monkeypatch.setattr(ai_classifier, "_request_openrouter", lambda *_args: {
+        "choices": [{"message": {"content": "not-json"}}],
+    })
+
+    result = categorise_batch(
+        [CategorisableTransaction("unknown", "Obscure local merchant", Decimal("-12"), "debit")],
+        LIVE_CATEGORIES,
+    )["unknown"]
+
+    assert result.transaction_class == "unknown"
+    assert result.category_name == "Other"
+    assert result.rule == "fallback:other"
 
 
 def test_malformed_openai_response_is_rejected_safely(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "openai-test-key")
-    monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "")
+    monkeypatch.setattr(ai_classifier.settings, "xai_api_key", "")
     monkeypatch.setattr(ai_classifier, "_request_openai", lambda *_args: {
         "choices": [{"message": {"content": "not-json"}}],
     })
@@ -423,7 +765,7 @@ def test_openai_response_text_rejects_missing_or_empty_content(payload: dict) ->
 
 def test_invalid_openai_category_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "openai-test-key")
-    monkeypatch.setattr(ai_classifier.settings, "gemini_api_key", "")
+    monkeypatch.setattr(ai_classifier.settings, "xai_api_key", "")
     monkeypatch.setattr(ai_classifier, "_request_openai", lambda *_args: {
         "choices": [{"message": {"content": '{"transactions":[{"transaction_id":"0","transaction_class":"spending","classification_confidence":0.9,"category_name":"Not A Live Category","category_confidence":0.8,"reason":"Invalid","merchant_name":"Example"}]}'}}],
     })
@@ -485,6 +827,89 @@ def test_openai_timeout_fails_cleanly(monkeypatch: pytest.MonkeyPatch, caplog: p
     assert "timeout_seconds=45" in message
 
 
+def test_openrouter_is_preferred_over_openai_and_xai(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
+    monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "openai-test-key")
+    monkeypatch.setattr(ai_classifier.settings, "xai_api_key", "xai-test-key")
+    called: list[str] = []
+
+    def openrouter(*_args: object, **_kwargs: object) -> dict:
+        called.append("openrouter")
+        return {
+            "choices": [{"message": {"content": (
+                '{"transactions":[{"transaction_id":"0","transaction_class":"spending",'
+                '"classification_confidence":0.9,"category_name":"Groceries",'
+                '"category_confidence":0.9,"reason":"ok","merchant_name":"Example",'
+                '"source_type":"merchant","payment_mechanism":"","supporting_text":"",'
+                '"uncertainty":"identified"}]}'
+            )}}]
+        }
+
+    def forbidden(name: str):
+        def _inner(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError(f"{name} should not run when OpenRouter succeeds")
+
+        return _inner
+
+    monkeypatch.setattr(ai_classifier, "_request_openrouter", openrouter)
+    monkeypatch.setattr(ai_classifier, "_request_openai", forbidden("openai"))
+    monkeypatch.setattr(ai_classifier, "_request_xai", forbidden("xai"))
+    result = ai_classifier.classify_batch(
+        [ai_classifier.AiTransaction("0", "Purchase at Example", "-10", "debit")],
+        ["Groceries"],
+    )["0"]
+    assert called == ["openrouter"]
+    assert result.rule == "ai:openrouter"
+
+
+def test_openrouter_failure_uses_configured_compatibility_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ai_classifier.settings, "openrouter_api_key", "openrouter-test-key")
+    monkeypatch.setattr(ai_classifier.settings, "openai_api_key", "openai-test-key")
+    monkeypatch.setattr(ai_classifier.settings, "xai_api_key", "")
+    called: list[str] = []
+
+    def openrouter(*_args: object, **_kwargs: object) -> None:
+        called.append("openrouter")
+        return None
+
+    def openai(*_args: object, **_kwargs: object) -> dict:
+        called.append("openai")
+        return {
+            "choices": [{"message": {"content": (
+                '{"transactions":[{"transaction_id":"0","transaction_class":"spending",'
+                '"classification_confidence":0.9,"category_name":"Groceries",'
+                '"category_confidence":0.9,"reason":"ok","merchant_name":null}]}'
+            )}}]
+        }
+
+    monkeypatch.setattr(ai_classifier, "_request_openrouter", openrouter)
+    monkeypatch.setattr(ai_classifier, "_request_openai", openai)
+    result = ai_classifier.classify_batch(
+        [ai_classifier.AiTransaction("0", "Unknown merchant", "-10", "debit")],
+        ["Groceries"],
+    )["0"]
+
+    assert called == ["openrouter", "openai"]
+    assert result.rule == "ai:openai"
+
+
+def test_google_ai_studio_key_is_not_treated_as_xai() -> None:
+    from app.config import Settings
+
+    configured = Settings(
+        openrouter_api_key="openrouter-key",
+        xai_api_key="AQ.should-not-be-xai",
+        openai_api_key="",
+    )
+    openrouter_loaded, openai_loaded, xai_loaded = configured.categorisation_provider_keys()
+    assert openrouter_loaded is True
+    assert openai_loaded is False
+    assert xai_loaded is False
+    assert configured.xai_api_key == ""
+
+
 def test_reprocessing_is_idempotent_and_does_not_duplicate(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", False)
     items = [
@@ -504,6 +929,7 @@ def test_reprocessing_is_idempotent_and_does_not_duplicate(monkeypatch: pytest.M
 
 def test_pipeline_metrics_cover_mixed_batch(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", True)
+    monkeypatch.setattr("categorisation.service.settings.openai_api_key", "test-openai-key")
 
     def fake_classify_batch(items: list[object], _category_names: list[str]) -> dict[str, CategorisationResult]:
         return {
@@ -513,7 +939,7 @@ def test_pipeline_metrics_cover_mixed_batch(monkeypatch: pytest.MonkeyPatch) -> 
                 transaction_class="spending",
                 classification_confidence=0.82,
                 classification_reason="Classified by AI based on transaction description",
-                rule="ai:gemini",
+                rule="ai:openrouter",
                 merchant_name="MysteryMart",
             )
         }
@@ -528,7 +954,7 @@ def test_pipeline_metrics_cover_mixed_batch(monkeypatch: pytest.MonkeyPatch) -> 
                 classification_confidence=0.95,
                 classification_reason="Matched known merchant: Buccaneers",
                 merchant_name="Buccaneers",
-                rule="ai:gemini",
+                rule="ai:openrouter",
             )
         }
     )
@@ -556,8 +982,16 @@ def test_pipeline_metrics_cover_mixed_batch(monkeypatch: pytest.MonkeyPatch) -> 
 
 @pytest.mark.parametrize(("description", "category", "transaction_class"), [
     ("SMS Notification Fee: 1 notification(s)", "Bank Fees", "bank_fee"),
+    ("Interest Charged", "Bank Fees", "bank_fee"),
+    ("Debit Interest", "Bank Fees", "bank_fee"),
+    ("Overdraft Interest", "Bank Fees", "bank_fee"),
+    ("Overdraft Fee", "Bank Fees", "bank_fee"),
+    ("Overdraft Charge", "Bank Fees", "bank_fee"),
     ("Monthly Account Admin Fee", "Bank Fees", "bank_fee"),
     ("Card Purchase Insufficient Funds Fee: Uber Johannesburg Za", "Bank Fees", "bank_fee"),
+    ("Insufficient Funds Charge", "Bank Fees", "bank_fee"),
+    ("NSF Fee", "Bank Fees", "bank_fee"),
+    ("NSF Charge", "Bank Fees", "bank_fee"),
     ("Banking App External PayShap Payment: Tebogo", "Transfers", "person_to_person"),
     ("Banking App Immediate Payment: Neo Capitec", "Transfers", "person_to_person"),
     ("Live Better Round-up Transfer", "Transfers", "internal_transfer"),
@@ -573,6 +1007,39 @@ def test_capitec_live_failure_patterns(
     result = classify_transaction(description, "debit")
     assert result.category_name == category
     assert result.transaction_class == transaction_class
+
+
+def test_interest_received_stays_income() -> None:
+    result = classify_transaction("Interest Received", "credit")
+    assert result.category_name == "Other Income"
+    assert result.transaction_class == "income"
+    assert result.rule == "description:interest-received"
+
+
+def test_reconcile_fixes_spending_label_on_transfer_category(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", False)
+
+    def fake_classify_batch(_items: list[object], _category_names: list[str]) -> dict[str, CategorisationResult]:
+        return {}
+
+    monkeypatch.setattr("categorisation.service.classify_batch", fake_classify_batch)
+    run = categorise_batch_with_metrics(
+        [
+            CategorisableTransaction(
+                "0",
+                "Banking App Transfer to Tebogo",
+                Decimal("-5000"),
+                "debit",
+                statement_category="Transfer",
+                bank="Capitec",
+            )
+        ],
+        LIVE_CATEGORIES,
+    )
+    result = run.results["0"]
+    assert result.category_name == "Transfers"
+    assert result.transaction_class == "person_to_person"
+    assert result.merchant_name is None
 
 
 def test_weak_statement_category_does_not_override_deterministic_fee() -> None:
@@ -603,7 +1070,7 @@ def test_mapped_statement_category_used_when_rules_miss(monkeypatch: pytest.Monk
         [
             CategorisableTransaction(
                 "0",
-                "Some local cinema purchase",
+                "Some local venue purchase",
                 Decimal("-80"),
                 "debit",
                 statement_category="Movies",
@@ -636,6 +1103,57 @@ def test_generic_statement_other_does_not_win(monkeypatch: pytest.MonkeyPatch) -
     assert result.category_name == "Other"
     assert result.rule == "fallback:other"
     assert result.classification_confidence <= 0.40
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "WOOLWORTHS REFUND",
+        "REVERSAL WOOLWORTHS",
+        "WOOLWORTHS REVERSED",
+        "CANCELLED NETFLIX",
+        "CANCELED NETFLIX",
+        "CORRECTION WOOLWORTHS",
+    ],
+)
+def test_purchase_reversal_batch_does_not_receive_other(
+    monkeypatch: pytest.MonkeyPatch,
+    description: str,
+) -> None:
+    monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", False)
+    result = categorise_batch(
+        [CategorisableTransaction("reversal", description, Decimal("186.40"), "credit")],
+        LIVE_CATEGORIES,
+    )["reversal"]
+    assert result.transaction_class == "unknown"
+    assert result.category_name is None
+    assert result.rule == "description:purchase-reversal"
+    assert result.classification_confidence == 0.95
+
+
+def test_batch_keeps_purchases_income_and_genuine_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("categorisation.service.settings.ai_categorisation_enabled", False)
+    results = categorise_batch(
+        [
+            CategorisableTransaction("purchase", "WOOLWORTHS", Decimal("186.40"), "debit"),
+            CategorisableTransaction("salary", "SALARY ACME", Decimal("22000"), "credit"),
+            CategorisableTransaction("unknown", "Obscure merchant 999", Decimal("9"), "debit"),
+            CategorisableTransaction("refund", "WOOLWORTHS REFUND", Decimal("186.40"), "credit"),
+            CategorisableTransaction("credit", "WOOLWORTHS", Decimal("186.40"), "credit"),
+        ],
+        LIVE_CATEGORIES,
+    )
+    assert results["purchase"].category_name == "Groceries"
+    assert results["purchase"].transaction_class == "spending"
+    assert results["credit"].category_name == "Groceries"
+    assert results["credit"].transaction_class == "spending"
+    assert results["salary"].category_name == "Salary"
+    assert results["salary"].transaction_class == "income"
+    assert results["unknown"].category_name == "Other"
+    assert results["unknown"].rule == "fallback:other"
+    assert results["refund"].category_name is None
+    assert results["refund"].transaction_class == "unknown"
+    assert results["refund"].rule == "description:purchase-reversal"
 
 
 def test_fallback_other_has_low_confidence(monkeypatch: pytest.MonkeyPatch) -> None:

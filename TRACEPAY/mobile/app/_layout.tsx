@@ -2,11 +2,16 @@ import "../src/theme/global.css";
 
 import { BottomSheetModalProvider } from "@expo/ui/community/bottom-sheet";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Stack, useRouter, useSegments } from "expo-router";
+import {
+  Stack,
+  useRootNavigationState,
+  useRouter,
+  useSegments,
+} from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useColorScheme } from "nativewind";
-import { View } from "react-native";
+import { AppState, StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import {
@@ -15,6 +20,7 @@ import {
 } from "../src/components/TracePayAnimatedSplash";
 import { resolveAuthenticatedHomeHref } from "../src/features/auth/auth.navigation";
 import {
+  getAuthUserId,
   hasAuthSession,
   resetLocalClientForFreshSignup,
   subscribeSessionPresence,
@@ -27,6 +33,10 @@ import {
   AppLockProvider,
   useAppLock,
 } from "../src/features/security/AppLockProvider";
+import {
+  classifyRoute,
+  decideRoute,
+} from "../src/features/security/app-lock.policy";
 import { COLORS } from "../src/theme/colors";
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
@@ -42,17 +52,27 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView
-      className={`flex-1 bg-background ${scheme === "dark" ? "dark" : ""}`}
-      style={{ flex: 1, backgroundColor: splashBackground }}
+      style={[styles.root, { backgroundColor: splashBackground }]}
     >
-      <BottomSheetModalProvider>
-        <AppLockProvider>
-          <RootNavigator colorScheme={scheme} />
-        </AppLockProvider>
-      </BottomSheetModalProvider>
+      <View
+        className={scheme === "dark" ? "dark" : undefined}
+        style={[styles.root, { backgroundColor: splashBackground }]}
+      >
+        <BottomSheetModalProvider>
+          <AppLockProvider>
+            <RootNavigator colorScheme={scheme} />
+          </AppLockProvider>
+        </BottomSheetModalProvider>
+      </View>
     </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+});
 
 function RootNavigator({
   colorScheme,
@@ -62,59 +82,21 @@ function RootNavigator({
   const [showAnimatedSplash, setShowAnimatedSplash] = useState(true);
   const [clientResetDone, setClientResetDone] = useState(false);
   const [hasSession, setHasSession] = useState<boolean | null>(null);
-  const { clearDeviceLock, hasPin, isHydrated, isLocked, lockApp } = useAppLock();
+  const {
+    clearDeviceLock,
+    hasPin,
+    isHydrated,
+    isLocked,
+    reconcilePinOwner,
+  } = useAppLock();
+  const navigationState = useRootNavigationState();
+  const navigationReady = Boolean(navigationState?.key);
   const router = useRouter();
   const segments = useSegments();
   const palette = COLORS[colorScheme];
   const isDark = colorScheme === "dark";
 
-  const routeState = useMemo(() => {
-    const group = segments[0];
-    const screen = segments[1];
-    const isAuthRoute = group === "(auth)";
-    const isWelcomeRoute = isAuthRoute && screen === "welcome";
-    const isUnlockRoute = isAuthRoute && screen === "unlock";
-    const isFinancialSetupRoute =
-      isAuthRoute &&
-      [
-        "financial-data-consent",
-        "financial-accounts-setup",
-        "import-success",
-      ].includes(screen ?? "");
-    const isPinSetupRoute =
-      isAuthRoute &&
-      ["device-security", "confirm-pin", "biometric-setup"].includes(
-        screen ?? "",
-      );
-    const isRecoveryRoute =
-      isAuthRoute &&
-      [
-        "otp",
-        "reset-pin",
-        "reset-pin-create",
-        "reset-pin-confirm",
-        "reset-pin-success",
-        "new-password",
-        "password-updated",
-      ].includes(screen ?? "");
-    const isPostPinSetupRoute =
-      isAuthRoute && screen === "biometric-setup";
-    const isProtectedRoute =
-      group === "(tabs)" ||
-      (group !== undefined &&
-        group !== "(auth)" &&
-        group !== "(onboarding)");
-
-    return {
-      isFinancialSetupRoute,
-      isProtectedRoute,
-      isRecoveryRoute,
-      isPostPinSetupRoute,
-      isPinSetupRoute,
-      isUnlockRoute,
-      isWelcomeRoute,
-    };
-  }, [segments]);
+  const route = useMemo(() => classifyRoute(segments), [segments]);
 
   useEffect(() => {
     return subscribeSessionPresence((present) => {
@@ -149,44 +131,65 @@ function RootNavigator({
     let active = true;
     let unsubscribe: (() => void) | undefined;
 
-    void hasAuthSession()
-      .then((present) => {
-        if (!active) {
-          return;
-        }
-        setHasSession(present);
-        if (present && hasPin) {
-          lockApp();
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setHasSession(false);
-        }
-      });
+    const syncSession = () => {
+      // Supabase is the source of truth: getSession refreshes an expired
+      // access token and returns null when the refresh token is revoked or
+      // the session can no longer be refreshed.
+      void hasAuthSession()
+        .then((present) => {
+          if (active) {
+            setHasSession(present);
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setHasSession(false);
+          }
+        });
+    };
+
+    syncSession();
 
     if (isSupabaseConfigured()) {
-      const { data } = getSupabase().auth.onAuthStateChange((event, session) => {
-        if (!active) {
-          return;
-        }
-
-        const present = Boolean(session?.access_token);
-        setHasSession(present);
-
-        // Cold start only — interactive login locks explicitly before unlock.
-        if (present && hasPin && event === "INITIAL_SESSION") {
-          lockApp();
+      const { data } = getSupabase().auth.onAuthStateChange((_event, session) => {
+        if (active) {
+          setHasSession(Boolean(session?.access_token));
         }
       });
       unsubscribe = () => data.subscription.unsubscribe();
     }
 
+    const appStateSubscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        syncSession();
+      }
+    });
+
     return () => {
       active = false;
       unsubscribe?.();
+      appStateSubscription.remove();
     };
-  }, [clientResetDone, hasPin, isHydrated, lockApp]);
+  }, [clientResetDone, isHydrated]);
+
+  // A PIN belongs to one Supabase user. Another account signing in on this
+  // device never inherits it.
+  useEffect(() => {
+    if (!hasSession || !hasPin) {
+      return;
+    }
+    let active = true;
+    void getAuthUserId()
+      .then((userId) => {
+        if (active && userId) {
+          return reconcilePinOwner(userId);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [hasPin, hasSession, reconcilePinOwner]);
 
   const handleAnimatedSplashLayout = useCallback(() => {
     SplashScreen.hideAsync().catch(() => undefined);
@@ -196,42 +199,33 @@ function RootNavigator({
     setShowAnimatedSplash(false);
   }, []);
 
+  const guardReady =
+    navigationReady && isHydrated && clientResetDone && hasSession !== null;
+
+  const decision = useMemo(
+    () =>
+      guardReady
+        ? decideRoute({
+            route,
+            hasSession: hasSession === true,
+            hasPin,
+            isLocked,
+          })
+        : null,
+    [guardReady, hasPin, hasSession, isLocked, route],
+  );
+
   useEffect(() => {
-    if (
-      showAnimatedSplash ||
-      !isHydrated ||
-      !clientResetDone ||
-      hasSession === null
-    ) {
+    if (showAnimatedSplash || !decision) {
       return;
     }
 
-    if (hasSession && hasPin && isLocked) {
-      if (
-        !routeState.isUnlockRoute &&
-        !routeState.isRecoveryRoute &&
-        !routeState.isFinancialSetupRoute &&
-        !routeState.isPostPinSetupRoute &&
-        !routeState.isPinSetupRoute
-      ) {
-        router.replace("/(auth)/unlock");
-      }
+    if (decision.action === "redirect") {
+      router.replace(decision.to);
       return;
     }
 
-    if (!hasSession) {
-      if (
-        routeState.isProtectedRoute ||
-        routeState.isFinancialSetupRoute ||
-        routeState.isUnlockRoute ||
-        routeState.isPinSetupRoute
-      ) {
-        router.replace("/(auth)/welcome");
-      }
-      return;
-    }
-
-    if (routeState.isWelcomeRoute || routeState.isUnlockRoute) {
+    if (decision.action === "home") {
       let active = true;
       void resolveAuthenticatedHomeHref().then((href) => {
         if (active) {
@@ -242,28 +236,35 @@ function RootNavigator({
         active = false;
       };
     }
-  }, [
-    clientResetDone,
-    hasPin,
-    hasSession,
-    isHydrated,
-    isLocked,
-    routeState,
-    router,
-    showAnimatedSplash,
-  ]);
 
+    // Statement upload is required — keep users out of the app until they have an account.
+    if (route === "protected") {
+      let active = true;
+      void resolveAuthenticatedHomeHref().then((href) => {
+        if (active && href !== "/(tabs)") {
+          router.replace(href);
+        }
+      });
+      return () => {
+        active = false;
+      };
+    }
+  }, [decision, route, router, showAnimatedSplash]);
+
+  // Hide whatever is mounted until the guard has decided, and whenever the
+  // current route is about to be replaced (e.g. app content while locked).
   const shouldCoverProtectedContent =
     !showAnimatedSplash &&
-    (!isHydrated ||
-      !clientResetDone ||
-      hasSession === null ||
-      (routeState.isProtectedRoute && isLocked));
+    (!guardReady ||
+      decision?.action === "redirect" ||
+      (route === "protected" && (isLocked || !hasSession) && hasPin));
 
   return (
     <View
-      className={`flex-1 bg-background ${isDark ? "dark" : ""}`}
-      style={{ flex: 1, backgroundColor: palette.background }}
+      style={{
+        flex: 1,
+        backgroundColor: palette.background,
+      }}
     >
       <StatusBar style={isDark ? "light" : "dark"} />
 
@@ -315,8 +316,7 @@ function RootNavigator({
       {shouldCoverProtectedContent ? (
         <View
           pointerEvents="auto"
-          className="absolute inset-0 bg-background"
-          style={{ backgroundColor: palette.background }}
+          style={[StyleSheet.absoluteFill, { backgroundColor: palette.background }]}
         />
       ) : null}
     </View>

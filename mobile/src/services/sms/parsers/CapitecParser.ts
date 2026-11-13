@@ -33,7 +33,6 @@ export const CapitecParser: BankParser = {
 
     // ── Transaction type ─────────────────────────────────────────────────────
     const isCredit   = kind === 'cr' || /^Capitec:\s*CR\b/i.test(body);
-    const isAtm      = kind === 'atm wd' || /ATM\s*WD/i.test(body);
     const isReversal = /reversal|REV\b/i.test(body);
     const type = isReversal ? 'reversal' : isCredit ? 'credit' : 'debit';
 

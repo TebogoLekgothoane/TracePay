@@ -3,7 +3,11 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect } from "expo-router";
 import type { LucideIcon } from "lucide-react-native";
 import {
+  Receipt,
+  Bell,
   ChevronRight,
+  FileText,
+  FlaskConical,
   Globe,
   HelpCircle,
   LogOut,
@@ -40,7 +44,15 @@ const PERSONAL_DETAILS_HREF = "/settings/account";
 const SECURITY_HREF = "/settings/security";
 const PRIVACY_HREF = "/settings/privacy";
 const LANGUAGE_HREF = "/settings/language";
+const STATEMENT_COVERAGE_HREF = "/statements/coverage";
+const TRANSACTIONS_HREF = "/transactions-list";
 const HELP_HREF = "/settings/help";
+const SYNTHETIC_INTELLIGENCE_DEBUG_HREF = "/debug/synthetic-intelligence";
+const LEAKS_DEBUG_HREF = "/debug/leaks";
+const LEAK_INTELLIGENCE_DEBUG_HREF = "/debug/leak-intelligence";
+const SUBSCRIPTIONS_DEBUG_HREF = "/debug/subscriptions";
+const FINANCIAL_REASONING_DEBUG_HREF = "/debug/financial-reasoning";
+const FINANCIAL_RECOMMENDATIONS_DEBUG_HREF = "/debug/financial-recommendations";
 
 type SettingsRow = {
   id: string;
@@ -61,9 +73,21 @@ const ACCOUNT_ROWS: SettingsRow[] = [
   },
   {
     id: "accounts",
-    label: "Linked accounts",
+    label: "My accounts",
     Icon: Wallet,
     href: LINKED_ACCOUNTS_HREF,
+  },
+  {
+    id: "transactions",
+    label: "Transactions",
+    Icon: Receipt,
+    href: TRANSACTIONS_HREF,
+  },
+  {
+    id: "statement-coverage",
+    label: "Statements & coverage",
+    Icon: FileText,
+    href: STATEMENT_COVERAGE_HREF,
   },
   {
     id: "security",
@@ -74,6 +98,13 @@ const ACCOUNT_ROWS: SettingsRow[] = [
 ];
 
 const PREFERENCE_ROWS: SettingsRow[] = [
+  {
+    id: "monitoring",
+    label: "Monitoring",
+    Icon: Bell,
+    href: "/monitoring",
+  },
+
   {
     id: "privacy",
     label: "Privacy & consent",
@@ -214,8 +245,10 @@ export default function ProfileScreen() {
             void (async () => {
               setLoggingOut(true);
               try {
-                await clearDeviceLock();
+                // Sign out first so the guard routes to welcome rather than
+                // briefly to PIN setup once the PIN disappears.
                 await signOut();
+                await clearDeviceLock();
                 router.replace("/(auth)/welcome");
               } catch {
                 Alert.alert("Could not log out", "Please try again.");
@@ -242,6 +275,54 @@ export default function ProfileScreen() {
   const preferenceRows = PREFERENCE_ROWS.map((row) =>
     row.id === "language" ? { ...row, value: languageLabel } : row,
   );
+
+  const developerRows: SettingsRow[] = __DEV__
+    ? [
+        {
+          id: "synthetic-intelligence-debug",
+          label: "Synthetic Intelligence Testing",
+          value: "Dev only",
+          Icon: FlaskConical,
+          href: SYNTHETIC_INTELLIGENCE_DEBUG_HREF,
+        },
+        {
+          id: "leak-intelligence-debug",
+          label: "Leak Intelligence (debug)",
+          value: "Dev only",
+          Icon: FlaskConical,
+          href: LEAK_INTELLIGENCE_DEBUG_HREF,
+        },
+        {
+          id: "subscriptions-debug",
+          label: "Subscriptions (debug)",
+          value: "Dev only",
+          Icon: FlaskConical,
+          href: SUBSCRIPTIONS_DEBUG_HREF,
+        },
+        {
+          id: "leaks-debug",
+          label: "Leaks by category (debug)",
+          value: "Dev only",
+          Icon: FlaskConical,
+          href: LEAKS_DEBUG_HREF,
+        },
+        {
+          id: "financial-reasoning-debug",
+          label: "Financial Reasoning (debug)",
+          value: "Dev only",
+          Icon: FlaskConical,
+          href: FINANCIAL_REASONING_DEBUG_HREF,
+        },
+        {
+          id: "financial-recommendations-debug",
+          label: "Recommendation & Action (debug)",
+          value: "Dev only",
+          Icon: FlaskConical,
+          href: FINANCIAL_RECOMMENDATIONS_DEBUG_HREF,
+        },
+      ]
+    : [];
+
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <TabScrollView
@@ -284,12 +365,18 @@ export default function ProfileScreen() {
             rows={preferenceRows}
             palette={palette}
           />
+          {developerRows.length > 0 ? (
+            <SettingsSection
+              title="Developer"
+              rows={developerRows}
+              palette={palette}
+            />
+          ) : null}
 
           <Button
             className="mt-6"
             loading={loggingOut}
             onPress={handleLogout}
-            size="md"
             variant="destructive"
           >
             <>

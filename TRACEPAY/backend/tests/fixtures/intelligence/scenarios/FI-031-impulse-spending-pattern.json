@@ -1,0 +1,218 @@
+[
+  {
+    "id": "fi031-shop-0-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-06",
+    "description": "POS PURCHASE PICK N PAY SANDTON",
+    "amount": "80.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "PICK N PAY",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Shopping"
+    }
+  },
+  {
+    "id": "fi031-shop-0-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-07",
+    "description": "POS PURCHASE PICK N PAY SANDTON",
+    "amount": "80.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "PICK N PAY",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Shopping"
+    }
+  },
+  {
+    "id": "fi031-shop-1-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-06",
+    "description": "POS PURCHASE PICK N PAY SANDTON",
+    "amount": "80.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "PICK N PAY",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Shopping"
+    }
+  },
+  {
+    "id": "fi031-shop-1-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-07",
+    "description": "POS PURCHASE PICK N PAY SANDTON",
+    "amount": "80.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "PICK N PAY",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Shopping"
+    }
+  },
+  {
+    "id": "fi031-shop-2-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-06",
+    "description": "POS PURCHASE PICK N PAY SANDTON",
+    "amount": "120.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "PICK N PAY",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Shopping"
+    }
+  },
+  {
+    "id": "fi031-shop-2-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-07",
+    "description": "POS PURCHASE PICK N PAY SANDTON",
+    "amount": "120.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "PICK N PAY",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Shopping"
+    }
+  },
+  {
+    "id": "fi031-shop-2-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-08",
+    "description": "POS PURCHASE PICK N PAY SANDTON",
+    "amount": "120.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "PICK N PAY",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Shopping"
+    }
+  },
+  {
+    "id": "fi031-shop-2-3",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-09",
+    "description": "POS PURCHASE PICK N PAY SANDTON",
+    "amount": "120.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "PICK N PAY",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Shopping"
+    }
+  },
+  {
+    "id": "fi031-shop-2-4",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-10",
+    "description": "POS PURCHASE PICK N PAY SANDTON",
+    "amount": "120.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "PICK N PAY",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Shopping"
+    }
+  },
+  {
+    "id": "fi031-shop-2-5",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-11",
+    "description": "POS PURCHASE PICK N PAY SANDTON",
+    "amount": "120.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "PICK N PAY",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Shopping"
+    }
+  },
+  {
+    "id": "fi031-shop-2-6",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-12",
+    "description": "POS PURCHASE PICK N PAY SANDTON",
+    "amount": "120.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "PICK N PAY",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Shopping"
+    }
+  },
+  {
+    "id": "fi031-shop-2-7",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-13",
+    "description": "POS PURCHASE PICK N PAY SANDTON",
+    "amount": "120.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "PICK N PAY",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Shopping"
+    }
+  }
+]

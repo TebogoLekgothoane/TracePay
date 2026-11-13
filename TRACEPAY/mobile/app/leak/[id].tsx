@@ -1,42 +1,45 @@
-import { router, useLocalSearchParams } from "expo-router";
-import type { LucideIcon } from "lucide-react-native";
-import {
-  Banknote,
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
-  CreditCard,
-  FileText,
-  HelpCircle,
-  Info,
-  Landmark,
-  MessageSquare,
-  MoreHorizontal,
-  RefreshCw,
-  Smartphone,
-  Store,
-  Wifi,
-} from "lucide-react-native";
+import { Redirect, router, useLocalSearchParams } from "expo-router";
+import { ChevronLeft, ChevronRight, HelpCircle, Lightbulb } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Circle, Path, Rect } from "react-native-svg";
 
-import { FixActionsList } from "../../src/components/leaks/FixActionsList";
+import { ForYouSection } from "../../src/components/dashboard/ForYouSection";
+import { FindingReview } from "../../src/components/leaks/FindingReview";
+import { listHiddenLeaks, yearlyCost } from "../../src/features/leaks/hidden-leaks";
+import { HiddenLeaksSection } from "../../src/components/leaks/HiddenLeaksSection";
 import { resolveMarkColor } from "../../src/components/leaks/LeakFlowShell";
 import { PeriodTabs } from "../../src/components/insights/PeriodTabs";
 import { BrandLogo } from "../../src/components/ui/BrandLogo";
 import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
-import { InfoSheet, SelectionSheet } from "../../src/components/ui/Modal";
+import { ChoiceMenu } from "../../src/components/ui/ChoiceMenu";
+import { InfoSheet } from "../../src/components/ui/Modal";
 import { SimpleBrandLogo } from "../../src/components/ui/SimpleBrandLogo";
+import type { ActionType } from "../../src/features/guidance/finding-guidance.model";
+import { useForYouCards } from "../../src/features/for-you/for-you.preferences";
+import type { ForYouCard } from "../../src/features/for-you/for-you.types";
 import {
-  getFixContent,
+  readLeakResponse,
+  saveLeakResponse,
+  type StoredLeakResponse,
+} from "../../src/features/leaks/leak-response.store";
+import { useLeakEntitlement } from "../../src/features/leaks/leak-entitlement.store";
+import { SegmentToggle } from "../../src/components/ui/SegmentToggle";
+import { isLeakLocked } from "../../src/features/leaks/leak-paywall";
+import {
+  LEAK_DETAILS,
+} from "../../src/features/leaks/leak-details";
+import { getPotentialLeak, listPotentialLeaks } from "../../src/features/leaks/potential-leaks";
+import {
   getFixRoute,
+  getPrimaryFixActionId,
 } from "../../src/features/leaks/fixContent";
 import {
   CUSTOM_RANGES,
+  formatRandAmount,
+  parseRandAmount,
   periodChangeLabel,
   periodFactor,
   scaleRandAmount,
@@ -44,17 +47,19 @@ import {
   type Period,
 } from "../../src/features/insights/period";
 import {
+  listUpcomingSubscriptions,
+  type UpcomingSubscription,
+} from "../../src/features/leaks/subscriptions.catalog";
+import {
   COLORS,
-  type ImpactTone,
   getImpactToneStyles,
-  withAlpha,
 } from "../../src/theme/colors";
 
 const LEAK_CALC_COPY: Record<string, string> = {
   fees:
     "We total monthly account fees, service charges, ATM fees, SMS alerts, and other bank charges from your statements for this period.",
   subs:
-    "We flag recurring subscription merchants and sum what you paid this month, including unused or inactive plans still billing you.",
+    "We flag recurring payment merchants and sum what you paid this month, including unused or inactive plans still billing you.",
   debit:
     "We list active debit-order mandates and sum the amounts collected this month that look unused or higher than needed.",
   airtime:
@@ -63,444 +68,58 @@ const LEAK_CALC_COPY: Record<string, string> = {
     "We total cash withdrawals and paid balance enquiries, especially at other banks’ ATMs where fees are highest.",
 };
 
-type BreakdownItem = {
-  id: string;
-  title: string;
-  description: string;
-  amount: string;
-  percent: string;
-  Icon: LucideIcon;
-};
+const SUBS_TABS = ["Recurring Payments", "Upcoming"] as const;
+type SubsTab = (typeof SUBS_TABS)[number];
 
-type SubscriptionItem = {
-  id: string;
-  name: string;
-  category: string;
-  billing: string;
-  amount: string;
-  status: "Active" | "Inactive";
-  /** Simple Icons brand id and/or Hunter domain for logo lookup. */
-  brandId?: string;
-  logoDomain?: string;
-  mark: string;
-  markColor: string;
-};
-
-type LeakDetail = {
-  title: string;
-  subtitle: string;
-  HeaderIcon: LucideIcon;
-  impact: ImpactTone;
-  amount: string;
-  onLabel: string;
-  changeLabel: string;
-  percentOfLeaks: string;
-  variant: "breakdown" | "subscriptions";
-  listSectionTitle?: string;
-  breakdown?: BreakdownItem[];
-  didYouKnow?: string;
-  subscriptions?: SubscriptionItem[];
-  ctaTitle: string;
-  ctaSubtitle: string;
-  ctaButton: string;
-};
-
-const LEAK_DETAILS: Record<string, LeakDetail> = {
-  fees: {
-    title: "Bank fees",
-    subtitle: "Unnecessary bank charges",
-    HeaderIcon: FileText,
-    impact: "high",
-    amount: "R712.50",
-    onLabel: "on bank fees",
-    changeLabel: "↑ 18% vs last month",
-    percentOfLeaks: "39%",
-    variant: "breakdown",
-    breakdown: [
-      {
-        id: "monthly",
-        title: "Monthly account fee",
-        description: "Recurring monthly charge",
-        amount: "R165.00",
-        percent: "23%",
-        Icon: Calendar,
-      },
-      {
-        id: "service",
-        title: "Service fees",
-        description: "General account charges",
-        amount: "R248.40",
-        percent: "35%",
-        Icon: CreditCard,
-      },
-      {
-        id: "atm",
-        title: "ATM fees",
-        description: "Cash withdrawals",
-        amount: "R154.50",
-        percent: "22%",
-        Icon: Landmark,
-      },
-      {
-        id: "sms",
-        title: "SMS notifications",
-        description: "Transaction alerts",
-        amount: "R72.00",
-        percent: "10%",
-        Icon: MessageSquare,
-      },
-      {
-        id: "other",
-        title: "Other fees",
-        description: "Miscellaneous charges",
-        amount: "R72.60",
-        percent: "10%",
-        Icon: MoreHorizontal,
-      },
-    ],
-    didYouKnow:
-      "You could save up to R712.50 this month by cutting unnecessary bank charges.",
-    ctaTitle: "Stop these bank fees",
-    ctaSubtitle: "Open the first step-by-step guide",
-    ctaButton: "Start fixing",
-  },
-  subs: {
-    title: "Subscriptions",
-    subtitle: "Unused or forgotten subscriptions",
-    HeaderIcon: RefreshCw,
-    impact: "mediumWarm",
-    amount: "R430.00",
-    onLabel: "on subscriptions",
-    changeLabel: "↓ 8% vs last month",
-    percentOfLeaks: "24%",
-    variant: "subscriptions",
-    subscriptions: [
-      {
-        id: "netflix",
-        name: "Netflix",
-        category: "Entertainment",
-        billing: "Billed monthly",
-        amount: "R159.00",
-        status: "Active",
-        brandId: "netflix",
-        logoDomain: "netflix.com",
-        mark: "N",
-        markColor: "destructive",
-      },
-      {
-        id: "showmax",
-        name: "Showmax",
-        category: "Entertainment",
-        billing: "Billed monthly",
-        amount: "R99.00",
-        status: "Active",
-        logoDomain: "showmax.com",
-        mark: "S",
-        markColor: "primary",
-      },
-      {
-        id: "spotify",
-        name: "Spotify Premium",
-        category: "Music",
-        billing: "Billed monthly",
-        amount: "R69.00",
-        status: "Active",
-        brandId: "spotify",
-        logoDomain: "spotify.com",
-        mark: "♪",
-        markColor: "success",
-      },
-      {
-        id: "adobe",
-        name: "Adobe Acrobat",
-        category: "Productivity",
-        billing: "Billed yearly",
-        amount: "R519.00",
-        status: "Inactive",
-        logoDomain: "adobe.com",
-        mark: "A",
-        markColor: "destructive",
-      },
-      {
-        id: "canva",
-        name: "Canva Pro",
-        category: "Design",
-        billing: "Billed yearly",
-        amount: "R599.00",
-        status: "Inactive",
-        logoDomain: "canva.com",
-        mark: "C",
-        markColor: "secondary",
-      },
-    ],
-    ctaTitle: "Cancel what you don't use",
-    ctaSubtitle: "Open step-by-step cancel guides",
-    ctaButton: "Start cancelling",
-  },
-  debit: {
-    title: "Debit orders",
-    subtitle: "Could be paused or cancelled",
-    HeaderIcon: Calendar,
-    impact: "mediumCool",
-    amount: "R320.75",
-    onLabel: "on debit orders",
-    changeLabel: "↑ 5% vs last month",
-    percentOfLeaks: "18%",
-    variant: "subscriptions",
-    listSectionTitle: "Your debit orders",
-    subscriptions: [
-      {
-        id: "dstv",
-        name: "DSTV Premium",
-        category: "Entertainment",
-        billing: "Billed monthly",
-        amount: "R899.00",
-        status: "Active",
-        logoDomain: "dstv.com",
-        mark: "D",
-        markColor: "primary",
-      },
-      {
-        id: "gym",
-        name: "Gym membership",
-        category: "Health",
-        billing: "Billed monthly",
-        amount: "R450.00",
-        status: "Active",
-        mark: "G",
-        markColor: "success",
-      },
-      {
-        id: "insurance",
-        name: "Insurance premium",
-        category: "Insurance",
-        billing: "Billed monthly",
-        amount: "R320.75",
-        status: "Active",
-        mark: "I",
-        markColor: "secondary",
-      },
-    ],
-    ctaTitle: "Stop unused debit orders",
-    ctaSubtitle: "Open step-by-step pause guides",
-    ctaButton: "Start pausing",
-  },
-  airtime: {
-    title: "Airtime & data",
-    subtitle: "Higher than usual spending",
-    HeaderIcon: Banknote,
-    impact: "lowTeal",
-    amount: "R206.15",
-    onLabel: "on airtime & data",
-    changeLabel: "↑ 12% vs last month",
-    percentOfLeaks: "11%",
-    variant: "breakdown",
-    breakdown: [
-      {
-        id: "data",
-        title: "Mobile data",
-        description: "Monthly bundles & top-ups",
-        amount: "R99.00",
-        percent: "48%",
-        Icon: Wifi,
-      },
-      {
-        id: "airtime",
-        title: "Airtime purchases",
-        description: "Prepaid top-ups",
-        amount: "R67.15",
-        percent: "33%",
-        Icon: Smartphone,
-      },
-      {
-        id: "out-of-bundle",
-        title: "Out-of-bundle",
-        description: "Extra data usage charges",
-        amount: "R40.00",
-        percent: "19%",
-        Icon: MoreHorizontal,
-      },
-    ],
-    didYouKnow:
-      "You could save up to R206.15 by matching your bundle to real usage and avoiding out-of-bundle charges.",
-    ctaTitle: "Cut airtime & data costs",
-    ctaSubtitle: "Open the first step-by-step guide",
-    ctaButton: "Start fixing",
-  },
-  atm: {
-    title: "Cash withdrawals",
-    subtitle: "High ATM fees",
-    HeaderIcon: Landmark,
-    impact: "lowBlue",
-    amount: "R150.00",
-    onLabel: "on cash withdrawals",
-    changeLabel: "↑ 22% vs last month",
-    percentOfLeaks: "8%",
-    variant: "breakdown",
-    breakdown: [
-      {
-        id: "other-bank",
-        title: "Other bank ATMs",
-        description: "Withdrawals at non-home ATMs",
-        amount: "R85.00",
-        percent: "57%",
-        Icon: Landmark,
-      },
-      {
-        id: "retail",
-        title: "Retail cash backs",
-        description: "Cash at till points",
-        amount: "R35.00",
-        percent: "23%",
-        Icon: Store,
-      },
-      {
-        id: "balance",
-        title: "Balance enquiries",
-        description: "Paid balance checks",
-        amount: "R30.00",
-        percent: "20%",
-        Icon: HelpCircle,
-      },
-    ],
-    didYouKnow:
-      "You could save up to R150.00 by using your bank's ATMs and skipping paid balance enquiries.",
-    ctaTitle: "Reduce withdrawal fees",
-    ctaSubtitle: "Open the first step-by-step guide",
-    ctaButton: "Start fixing",
-  },
-};
-
-/** Map a breakdown line item to that leak's fix action (never cross-leak). */
-const BREAKDOWN_FIX_ACTION: Record<string, Record<string, string>> = {
-  fees: {
-    monthly: "account",
-    service: "services",
-    atm: "atm",
-    sms: "sms",
-    other: "services",
-  },
-  airtime: {
-    data: "bundle",
-    airtime: "topups",
-    "out-of-bundle": "data-alerts",
-  },
-  atm: {
-    "other-bank": "home-atm",
-    retail: "cashback",
-    balance: "balance",
-  },
-};
-
-function ReceiptIllustration({ accent, primary }: { accent: string; primary: string }) {
-  return (
-    <Svg width={92} height={88} viewBox="0 0 92 88">
-      <Rect x="18" y="8" width="56" height="72" rx="8" fill={withAlpha(accent, 0.25)} />
-      <Rect x="26" y="18" width="32" height="4" rx="2" fill={withAlpha(primary, 0.5)} />
-      <Rect x="26" y="28" width="40" height="3" rx="1.5" fill={withAlpha(primary, 0.35)} />
-      <Rect x="26" y="36" width="36" height="3" rx="1.5" fill={withAlpha(primary, 0.35)} />
-      <Circle cx="62" cy="62" r="14" fill={withAlpha(accent, 0.35)} />
-      <Circle cx="62" cy="62" r="8" fill={accent} />
-    </Svg>
-  );
-}
-
-function SubscriptionBoxIllustration({
-  accent,
-  primary,
-}: {
-  accent: string;
-  primary: string;
-}) {
-  return (
-    <Svg width={92} height={88} viewBox="0 0 92 88">
-      <Path d="M16 34 L46 18 L76 34 V68 C76 72 73 74 69 74 H23 C19 74 16 72 16 68 Z" fill={withAlpha(accent, 0.3)} />
-      <Rect x="28" y="8" width="16" height="16" rx="4" fill={primary} />
-      <Rect x="52" y="12" width="14" height="14" rx="3" fill={accent} />
-      <Circle cx="40" cy="52" r="8" fill={withAlpha(primary, 0.55)} />
-      <Circle cx="58" cy="48" r="7" fill={withAlpha(accent, 0.65)} />
-    </Svg>
-  );
-}
-
-function DebitCalendarIllustration({
-  accent,
-  primary,
-}: {
-  accent: string;
-  primary: string;
-}) {
-  return (
-    <Svg width={92} height={88} viewBox="0 0 92 88">
-      <Rect x="20" y="14" width="52" height="60" rx="10" fill={withAlpha(accent, 0.25)} />
-      <Rect x="20" y="14" width="52" height="16" rx="10" fill={accent} />
-      <Circle cx="32" cy="40" r="4" fill={withAlpha(primary, 0.5)} />
-      <Circle cx="46" cy="40" r="4" fill={withAlpha(primary, 0.5)} />
-      <Circle cx="60" cy="40" r="4" fill={withAlpha(primary, 0.5)} />
-      <Circle cx="32" cy="54" r="4" fill={withAlpha(primary, 0.35)} />
-      <Circle cx="46" cy="54" r="4" fill={primary} />
-      <Circle cx="60" cy="54" r="4" fill={withAlpha(primary, 0.35)} />
-    </Svg>
-  );
-}
-
-function AirtimeIllustration({ accent, primary }: { accent: string; primary: string }) {
-  return (
-    <Svg width={92} height={88} viewBox="0 0 92 88">
-      <Rect x="28" y="10" width="36" height="68" rx="10" fill={withAlpha(accent, 0.25)} />
-      <Rect x="36" y="18" width="20" height="4" rx="2" fill={withAlpha(primary, 0.45)} />
-      <Circle cx="46" cy="68" r="5" fill={withAlpha(primary, 0.35)} />
-      <Path
-        d="M46 28 C52 34 56 40 56 48 C56 56 52 62 46 68"
-        stroke={accent}
-        strokeWidth={3}
-        fill="none"
-      />
-      <Path
-        d="M38 32 C42 36 44 40 44 46 C44 52 42 56 38 60"
-        stroke={withAlpha(accent, 0.55)}
-        strokeWidth={2.5}
-        fill="none"
-      />
-      <Path
-        d="M54 32 C58 36 60 40 60 46 C60 52 58 56 54 60"
-        stroke={withAlpha(accent, 0.55)}
-        strokeWidth={2.5}
-        fill="none"
-      />
-    </Svg>
-  );
-}
-
-function AtmIllustration({ accent, primary }: { accent: string; primary: string }) {
-  return (
-    <Svg width={92} height={88} viewBox="0 0 92 88">
-      <Rect x="18" y="14" width="56" height="62" rx="10" fill={withAlpha(accent, 0.25)} />
-      <Rect x="28" y="24" width="36" height="18" rx="4" fill={withAlpha(primary, 0.35)} />
-      <Rect x="34" y="48" width="24" height="6" rx={3} fill={accent} />
-      <Rect x="38" y="58" width="16" height="10" rx={2} fill={withAlpha(primary, 0.45)} />
-      <Circle cx="46" cy="33" r="4" fill={accent} />
-    </Svg>
-  );
+function daysUntilLabel(days: number): string {
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  return `In ${days} days`;
 }
 
 export default function LeakDetailScreen() {
   const params = useLocalSearchParams<{ id: string; view?: string }>();
   const leakId = Array.isArray(params.id) ? params.id[0] : params.id;
-  const view = Array.isArray(params.view) ? params.view[0] : params.view;
+  const { unlocked, hydrated } = useLeakEntitlement();
+
+  if (!hydrated) return null;
+  if (leakId && isLeakLocked(listPotentialLeaks(), leakId, unlocked)) {
+    return <Redirect href="/upgrade" />;
+  }
+  return <LeakDetailContent />;
+}
+
+function LeakDetailContent() {
+  const params = useLocalSearchParams<{ id: string; view?: string; filter?: string }>();
+  const leakId = Array.isArray(params.id) ? params.id[0] : params.id;
   const [period, setPeriod] = useState<Period>("This month");
   const [customRange, setCustomRange] = useState<CustomRange>("Last 14 days");
-  const [showCustomSheet, setShowCustomSheet] = useState(false);
   const [showCalc, setShowCalc] = useState(false);
+  const { unlocked } = useLeakEntitlement();
+  const [subsTab, setSubsTab] = useState<SubsTab>("Recurring Payments");
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
 
   const detail = leakId ? LEAK_DETAILS[leakId] : undefined;
-  const fixContent = leakId ? getFixContent(leakId) : null;
+  const potential = leakId ? getPotentialLeak(leakId) : null;
+  const upcomingSubscriptions = useMemo(() => listUpcomingSubscriptions(), []);
   const tone = getImpactToneStyles(scheme, detail?.impact ?? "high");
   const factor = periodFactor(period, customRange);
+  const [response, setResponse] = useState<StoredLeakResponse | null>(null);
+  const [savingResponse, setSavingResponse] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const { cards: forYouCards, ignore: ignoreForYouCard } = useForYouCards();
+  const openForYouCard = useCallback((card: ForYouCard) => {
+    router.push(card.href as never);
+  }, []);
+  const dismissForYouCard = useCallback(
+    (cardId: string) => {
+      void ignoreForYouCard(cardId);
+    },
+    [ignoreForYouCard],
+  );
 
   const scaledDetail = useMemo(() => {
     if (!detail) return null;
@@ -531,20 +150,80 @@ export default function LeakDetailScreen() {
     };
   }, [detail, factor, period]);
 
-  const handlePeriodChange = (next: Period) => {
-    setPeriod(next);
-    if (next === "Custom") setShowCustomSheet(true);
-  };
+  useEffect(() => {
+    if (!leakId || !potential) return;
+    let active = true;
+    void readLeakResponse(leakId).then((value) => {
+      if (active) setResponse(value);
+    });
+    return () => {
+      active = false;
+    };
+  }, [leakId, potential]);
 
-  const heroSurface = useMemo(
-    () =>
-      scheme === "dark"
-        ? withAlpha(tone.color, 0.16)
-        : withAlpha(tone.color, 0.1),
-    [scheme, tone.color],
+  const onSaveResponse = useCallback(
+    async (action: ActionType, note: string) => {
+      if (!leakId || savingResponse) return false;
+      setSavingResponse(true);
+      setSaveError(null);
+      try {
+        const saved = await saveLeakResponse(leakId, action, note);
+        setResponse(saved);
+        return true;
+      } catch (caught) {
+        setSaveError(
+          caught instanceof Error ? caught.message : "The response could not be saved.",
+        );
+        return false;
+      } finally {
+        setSavingResponse(false);
+      }
+    },
+    [leakId, savingResponse],
   );
 
-  if (!leakId || !detail || !fixContent || !scaledDetail) {
+  const openGuide = (targetLeakId: string) => {
+    const actionId = getPrimaryFixActionId(targetLeakId);
+    if (!actionId) return;
+    router.push(getFixRoute(targetLeakId, actionId) as never);
+  };
+
+  if (potential) {
+    return (
+      <FindingReview
+        amount={potential.amount}
+        evidence={potential.evidence}
+        history={[
+          {
+            title: "Status",
+            detail:
+              "This label is how the finding looks now. Saving a response does not change it.",
+          },
+        ]}
+        icon={potential.icon}
+        known={potential.known}
+        response={response}
+        saveError={saveError}
+        saving={savingResponse}
+        status={potential.status}
+        steps={potential.steps}
+        subtitle={potential.subtitle}
+        title={potential.title}
+        transactions={potential.transactions}
+        uncertain={potential.uncertain}
+        nextCharge={potential.nextCharge}
+        why={potential.why}
+        onOpenGuide={
+          potential.relatedLeakId
+            ? () => openGuide(potential.relatedLeakId as string)
+            : undefined
+        }
+        onSave={onSaveResponse}
+      />
+    );
+  }
+
+  if (!leakId || !detail || !scaledDetail) {
     return (
       <SafeAreaView
         className="flex-1 items-center justify-center bg-background px-5"
@@ -553,30 +232,26 @@ export default function LeakDetailScreen() {
         <Text className="text-center text-[16px] font-semibold text-foreground">
           This leak could not be found.
         </Text>
-        <Button className="mt-4" size="md" onPress={() => router.back()}>
+        <Button className="mt-4" onPress={() => router.back()}>
           Go back
         </Button>
       </SafeAreaView>
     );
   }
 
-  const isCompact = view === "summary" && leakId === "fees";
+  const hiddenLeaks = listHiddenLeaks(leakId);
+  const yearlyAtThisRate = parseRandAmount(detail.amount) * 12;
+  const avoidableYearly = hiddenLeaks.reduce((sum, leak) => sum + yearlyCost(leak), 0);
+
   const listTitle =
     detail.listSectionTitle ??
-    (leakId === "debit" ? "Your debit orders" : "Your subscriptions");
-  const compactChange =
-    period === "This month"
-      ? "+18%"
-      : period === "Last month"
-        ? "-6%"
-        : period === "3 months"
-          ? "+11%"
-          : "Custom";
+    (leakId === "debit" ? "Your debit orders" : "Your recurring payments");
 
-  const openBreakdownFix = (itemId: string) => {
-    const actionId = BREAKDOWN_FIX_ACTION[leakId]?.[itemId];
-    if (!actionId) return;
-    router.push(getFixRoute(leakId, actionId) as never);
+  const openUpgrade = () => router.push("/upgrade");
+
+  const openLineItem = (itemId: string) => {
+    const query = `period=${encodeURIComponent(period)}&range=${encodeURIComponent(customRange)}`;
+    router.push(`/leak/${leakId}/item/${itemId}?${query}` as never);
   };
 
   return (
@@ -598,9 +273,6 @@ export default function LeakDetailScreen() {
             </IconButton>
 
             <View className="min-w-0 flex-1 flex-row items-start gap-3">
-              <View className="h-11 w-11 items-center justify-center">
-                <detail.HeaderIcon color={tone.color} size={22} strokeWidth={2.2} />
-              </View>
               <View className="min-w-0 flex-1">
                 <Text className="text-[24px] font-bold text-foreground">{detail.title}</Text>
                 <Text className="mt-0.5 text-[13px] text-muted-foreground">
@@ -621,110 +293,69 @@ export default function LeakDetailScreen() {
 
           <PeriodTabs
             active={period}
-            onChange={handlePeriodChange}
-            selectedColor={tone.color}
+            onChange={setPeriod}
           />
           {period === "Custom" ? (
-            <Pressable
-              onPress={() => setShowCustomSheet(true)}
-              className="mt-2 self-start rounded-full bg-muted px-3 py-1.5 active:opacity-75"
-            >
-              <Text className="text-[12px] font-medium text-foreground">
-                Range: {customRange}
-              </Text>
-            </Pressable>
+            <View className="mt-2 flex-row">
+              <ChoiceMenu
+                value={customRange}
+                options={CUSTOM_RANGES}
+                onChange={setCustomRange}
+                accessibilityLabel="Custom range"
+              />
+            </View>
           ) : null}
 
-          {isCompact ? (
-            <View className="mt-5 flex-row gap-3">
-              {[
-                { label: "You paid", value: scaledDetail.amount },
-                { label: "vs last month", value: compactChange },
-                { label: "Frequency", value: "Monthly" },
-              ].map((stat) => (
-                <View key={stat.label} className="flex-1 rounded-2xl bg-muted p-3">
-                  <Text className="text-[11px] text-muted-foreground">{stat.label}</Text>
-                  <Text className="mt-1 text-[15px] font-bold text-foreground">
-                    {stat.value}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <View
-              className="mt-5 overflow-hidden rounded-3xl p-5"
-              style={{ backgroundColor: heroSurface }}
-            >
-              <View className="flex-row">
-                <View className="flex-1 pr-2">
-                  <Text className="text-[13px] text-muted-foreground">
-                    {scaledDetail.variant === "subscriptions"
-                      ? "You're paying"
-                      : "You leaked"}
-                  </Text>
-                  <Text className="mt-1 text-[34px] font-bold tracking-[-0.8px] text-foreground">
-                    {scaledDetail.amount}
-                  </Text>
-                  <Text className="mt-1 text-[13px] text-muted-foreground">
-                    {scaledDetail.onLabel}
-                  </Text>
-                  <View
-                    className="mt-2 self-start rounded-full px-3 py-1"
-                    style={{ backgroundColor: withAlpha(tone.color, 0.14) }}
-                  >
-                    <Text className="text-[12px] font-semibold" style={{ color: tone.color }}>
-                      {scaledDetail.changeLabel}
-                    </Text>
-                  </View>
-                  <Text className="mt-3 text-[12px] text-muted-foreground">
-                    That&apos;s{" "}
-                    <Text className="font-bold" style={{ color: tone.color }}>
-                      {scaledDetail.percentOfLeaks}
-                    </Text>{" "}
-                    of your total leaks
-                  </Text>
-                  <Pressable
-                    onPress={() => setShowCalc(true)}
-                    accessibilityRole="button"
-                    accessibilityLabel="How we calculate"
-                    className="mt-2 flex-row items-center gap-1 self-start active:opacity-75"
-                  >
-                    <Info color={palette.mutedForeground} size={13} strokeWidth={2} />
-                    <Text className="text-[12px] font-medium text-muted-foreground">
-                      How we calculate
-                    </Text>
-                  </Pressable>
-                </View>
+          {/* The answer first: what this category costs, where it is heading, what is avoidable. */}
+          <View className="mt-5 rounded-3xl bg-card p-5">
+            <Text className="text-[13px] text-muted-foreground">
+              Lost {scaledDetail.onLabel} · {period.toLowerCase()}
+            </Text>
+            <Text className="mt-1.5 text-[34px] font-bold tracking-[-0.8px] text-foreground">
+              {scaledDetail.amount}
+            </Text>
+            <Text className="mt-1 text-[13px] font-semibold" style={{ color: tone.color }}>
+              {scaledDetail.changeLabel}
+            </Text>
 
-                <View className="justify-center">
-                  {scaledDetail.variant === "breakdown" ? (
-                    leakId === "airtime" ? (
-                      <AirtimeIllustration accent={tone.color} primary={palette.primary} />
-                    ) : leakId === "atm" ? (
-                      <AtmIllustration accent={tone.color} primary={palette.primary} />
-                    ) : (
-                      <ReceiptIllustration accent={tone.color} primary={palette.primary} />
-                    )
-                  ) : leakId === "debit" ? (
-                    <DebitCalendarIllustration accent={tone.color} primary={palette.primary} />
-                  ) : (
-                    <SubscriptionBoxIllustration accent={tone.color} primary={palette.primary} />
-                  )}
-                </View>
+            <View className="mt-4 flex-row border-t border-border/60 pt-4">
+              <View className="flex-1">
+                <Text className="text-[12px] text-muted-foreground">At this rate, a year</Text>
+                <Text className="mt-0.5 text-[17px] font-bold text-foreground">
+                  {formatRandAmount(yearlyAtThisRate)}
+                </Text>
+              </View>
+              <View className="flex-1">
+                <Text className="text-[12px] text-muted-foreground">
+                  {avoidableYearly > 0 ? "Could be avoided" : "Findings"}
+                </Text>
+                <Text className="mt-0.5 text-[17px] font-bold text-foreground">
+                  {avoidableYearly > 0
+                    ? `${formatRandAmount(avoidableYearly)} a year`
+                    : String(scaledDetail.breakdown?.length ?? scaledDetail.subscriptions?.length ?? 0)}
+                </Text>
               </View>
             </View>
-          )}
+          </View>
+
+          <HiddenLeaksSection
+            leaks={hiddenLeaks}
+            color={tone.color}
+            onOpenGuide={getPrimaryFixActionId(leakId) ? () => openGuide(leakId) : undefined}
+            locked={!unlocked}
+            onUnlock={openUpgrade}
+          />
 
           {scaledDetail.variant === "breakdown" && scaledDetail.breakdown ? (
             <>
               <Text className="mb-3 mt-7 text-[17px] font-bold text-foreground">
-                Where it comes from
+                Where it goes
               </Text>
               <View className="gap-2">
                 {scaledDetail.breakdown.map((item) => (
                   <Pressable
                     key={item.id}
-                    onPress={() => openBreakdownFix(item.id)}
+                    onPress={() => openLineItem(item.id)}
                     className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-75"
                   >
                     <View className="h-10 w-10 items-center justify-center">
@@ -737,15 +368,24 @@ export default function LeakDetailScreen() {
                       <Text className="mt-0.5 text-[12px] text-muted-foreground">
                         {item.description}
                       </Text>
+                      <View
+                        className="mt-2 h-1 overflow-hidden rounded-full"
+                        style={{ backgroundColor: palette.surfaceSoft }}
+                      >
+                        <View
+                          className="h-1 rounded-full"
+                          style={{
+                            width: `${Math.min(100, Math.max(4, Number.parseFloat(item.percent) || 0))}%`,
+                            backgroundColor: tone.color,
+                          }}
+                        />
+                      </View>
                     </View>
                     <View className="items-end">
                       <Text className="text-[14px] font-bold text-foreground">
                         {item.amount}
                       </Text>
-                      <Text
-                        className="mt-0.5 text-[11px] font-semibold"
-                        style={{ color: tone.color }}
-                      >
+                      <Text className="mt-0.5 text-[11px] font-medium text-muted-foreground">
                         {item.percent}
                       </Text>
                     </View>
@@ -753,24 +393,21 @@ export default function LeakDetailScreen() {
                   </Pressable>
                 ))}
               </View>
-              {scaledDetail.didYouKnow ? (
-                <View
-                  className="mt-4 rounded-3xl p-4"
-                  style={{ backgroundColor: palette.surfaceSoft }}
-                >
-                  <Text className="text-[13px] leading-5 text-foreground">
-                    {scaledDetail.didYouKnow}
-                  </Text>
-                </View>
-              ) : null}
             </>
           ) : null}
 
           {scaledDetail.variant === "subscriptions" && scaledDetail.subscriptions ? (
             <>
-              <Text className="mb-3 mt-7 text-[17px] font-bold text-foreground">
-                {listTitle}
-              </Text>
+              <View className="mb-3 mt-7 flex-row items-center justify-between gap-3">
+                {leakId === "subs" ? (
+                  <SegmentToggle value={subsTab} options={SUBS_TABS} onChange={setSubsTab} />
+                ) : (
+                  <Text className="text-[17px] font-bold text-foreground">
+                    {listTitle} ({scaledDetail.subscriptions.length})
+                  </Text>
+                )}
+              </View>
+              {leakId !== "subs" || subsTab === "Recurring Payments" ? (
               <View className="gap-2">
                 {scaledDetail.subscriptions.map((item) => (
                   <Pressable
@@ -781,7 +418,7 @@ export default function LeakDetailScreen() {
                         return;
                       }
                       if (leakId === "debit") {
-                        router.push(getFixRoute(leakId, `pause-${item.id}`) as never);
+                        openLineItem(item.id);
                       }
                     }}
                     className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-75"
@@ -838,20 +475,38 @@ export default function LeakDetailScreen() {
                   </Pressable>
                 ))}
               </View>
+              ) : null}
+              {leakId === "subs" && subsTab === "Upcoming" ? (
+                <UpcomingSubscriptionsSection
+                  items={upcomingSubscriptions}
+                  palette={palette}
+                />
+              ) : null}
             </>
           ) : null}
 
-          <Text className="mb-2 mt-8 text-[17px] font-bold text-foreground">
-            How to stop this
-          </Text>
-          <Text className="mb-4 text-[13px] leading-5 text-muted-foreground">
-            Follow the steps for this leak only. Tap an action to see exactly what to do.
-          </Text>
-          <FixActionsList
-            leakId={leakId}
-            sections={fixContent.sections}
-            impact={fixContent.impact}
+          <ReduceTipCard
+            title="Stop the drain"
+            body={
+              scaledDetail.didYouKnow ??
+              `You're paying ${scaledDetail.amount} ${scaledDetail.onLabel}. Review the items above and stop what you don't need.`
+            }
+            color={tone.color}
+            palette={palette}
+            onPress={getPrimaryFixActionId(leakId) ? () => openGuide(leakId) : undefined}
           />
+
+
+
+          {leakId === "subs" && forYouCards.length > 0 ? (
+            <View className="mt-7">
+              <ForYouSection
+                cards={forYouCards}
+                onAction={openForYouCard}
+                onIgnore={dismissForYouCard}
+              />
+            </View>
+          ) : null}
         </View>
       </ScrollView>
 
@@ -864,17 +519,102 @@ export default function LeakDetailScreen() {
         }
         onClose={() => setShowCalc(false)}
       />
-      <SelectionSheet
-        visible={showCustomSheet}
-        title="Custom range"
-        selected={customRange}
-        onSelect={setCustomRange}
-        onClose={() => setShowCustomSheet(false)}
-        options={CUSTOM_RANGES.map((range) => ({
-          value: range,
-          label: range,
-        }))}
-      />
     </SafeAreaView>
+  );
+}
+
+function ReduceTipCard({
+  title,
+  body,
+  color,
+  palette,
+  onPress,
+}: {
+  title: string;
+  body: string;
+  color: string;
+  palette: typeof COLORS.light | typeof COLORS.dark;
+  onPress?: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole={onPress ? "button" : undefined}
+      disabled={!onPress}
+      onPress={onPress}
+      className="mt-5 flex-row items-center gap-3 rounded-2xl px-4 py-3.5 active:opacity-80"
+      style={{ backgroundColor: palette.surfaceSoft }}
+    >
+      <Lightbulb color={color} size={22} strokeWidth={2.2} />
+      <View className="min-w-0 flex-1">
+        <Text className="text-[14px] font-bold text-foreground">{title}</Text>
+        <Text className="mt-0.5 text-[12px] leading-[17px] text-muted-foreground">{body}</Text>
+      </View>
+      {onPress ? <ChevronRight color={palette.placeholder} size={16} strokeWidth={2} /> : null}
+    </Pressable>
+  );
+}
+
+function UpcomingSubscriptionsSection({
+  items,
+  palette,
+}: {
+  items: UpcomingSubscription[];
+  palette: typeof COLORS.light | typeof COLORS.dark;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <View>
+      <View className="gap-2">
+        {items.map((item) => {
+          const markColor = resolveMarkColor(palette, item.markColor);
+          return (
+            <Pressable
+              key={item.id}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.name}, next charge ${item.nextChargeLabel}`}
+              className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-80"
+              onPress={() => router.push(`/leak/subscription/${item.id}`)}
+            >
+              {item.logoDomain ? (
+                <BrandLogo
+                  name={item.name}
+                  logoDomain={item.logoDomain}
+                  size={38}
+                  fallbackColor={markColor}
+                  shape="squircle"
+                />
+              ) : item.brandId ? (
+                <SimpleBrandLogo
+                  name={item.name}
+                  brandId={item.brandId}
+                  size={38}
+                  fallbackColor={markColor}
+                  shape="squircle"
+                />
+              ) : (
+                <View className="h-[38px] w-[38px] items-center justify-center rounded-xl bg-muted">
+                  <Text className="text-[14px] font-bold" style={{ color: markColor }}>
+                    {item.mark}
+                  </Text>
+                </View>
+              )}
+              <View className="min-w-0 flex-1">
+                <Text className="text-[14px] font-semibold text-foreground" numberOfLines={1}>
+                  {item.name}
+                </Text>
+                <Text className="mt-0.5 text-[12px] text-muted-foreground">
+                  {item.nextChargeLabel} · {daysUntilLabel(item.daysUntil)}
+                </Text>
+              </View>
+              <View className="items-end">
+                <Text className="text-[14px] font-bold text-foreground">{item.amount}</Text>
+                <Text className="mt-0.5 text-[11px] font-semibold text-primary">Upcoming</Text>
+              </View>
+              <ChevronRight color={palette.placeholder} size={16} strokeWidth={2} />
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
   );
 }

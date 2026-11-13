@@ -1,6 +1,7 @@
 import "react-native-url-polyfill/auto";
 
 import * as SecureStore from "expo-secure-store";
+import { AppState } from "react-native";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 function readEnv(value: string | undefined): string {
@@ -92,6 +93,20 @@ export function getSupabase(): SupabaseClient {
         persistSession: true,
         detectSessionInUrl: false,
       },
+    });
+
+    // Supabase's recommended React Native setup: refresh tokens only while
+    // the app is in the foreground, and resume refreshing on return.
+    const supabase = client;
+    if (AppState.currentState === "active") {
+      void supabase.auth.startAutoRefresh();
+    }
+    AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        void supabase.auth.startAutoRefresh();
+      } else {
+        void supabase.auth.stopAutoRefresh();
+      }
     });
   }
 

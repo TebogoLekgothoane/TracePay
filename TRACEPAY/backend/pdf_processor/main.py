@@ -1,17 +1,14 @@
 import logging
 from pathlib import PurePath
 
-from .ai_extract import (
-    AiExtractionError,
-    ai_extraction_available,
-    extract_transactions_with_ai,
-)
 from .extract import ExtractionError, extract_layers
+from .mirrored_sections import drop_mirrored_text, has_mirrored_sections, is_mirror_table
 from .models import ProcessingResult, StatementBalance, Transaction, ValidationResult
-from .normalise import normalize_row, parse_text_rows
-from .statement_schema import resolve_extracted_statement
+from .normalise import normalize_row, parse_text_rows, split_same_row_fee, table_marks_debits_with_sign
+from .statement_schema import period_from_text, resolve_extracted_statement, statement_has_no_activity
 from .tables import align_row_to_headers, is_transaction_table, merge_continuation_rows, table_headers
-from .validate import validate_transactions
+from .text_chain import text_chain_transactions
+from .validate import reconcile_opening_closing, validate_transactions
 from categorisation.service import CategorisableTransaction, categorise_batch
 
 
@@ -20,6 +17,8 @@ class PdfProcessingError(ValueError):
 
 
 logger = logging.getLogger("tracepay.pdf")
+
+NO_ACTIVITY_MESSAGE = "No transactions in this period."
 
 
 def process_pdf(
@@ -45,11 +44,23 @@ def process_pdf(
     except ExtractionError as error:
         raise PdfProcessingError(str(error)) from error
 
+    mirrored = has_mirrored_sections(text)
+    if mirrored:
+        text = drop_mirrored_text(text)
+        logger.info("pdf_mirrored_sections_dropped")
+
     transactions: list[Transaction] = []
     rows_rejected = 0
     ai_statement = None
+    # Only a period printed on the statement can place year-less dates.
+    header_period = period_from_text(text)
 
-    if raw.extraction_method != "unknown":
+    chain_transactions = text_chain_transactions(text) if raw.extraction_method == "text" else None
+    if chain_transactions is not None:
+        transactions = chain_transactions
+        raw = raw.model_copy(update={"rows_found": len(transactions)})
+        logger.info("pdf_text_chain_used transactions=%s", len(transactions))
+    elif raw.extraction_method != "unknown":
         table_rows_detected = 0
         if tables:
             for table_index, table in enumerate(tables, start=1):
@@ -60,6 +71,9 @@ def process_pdf(
                         table_index,
                         headers,
                     )
+                    continue
+                if mirrored and is_mirror_table(headers):
+                    logger.info("pdf_table_skipped table=%s reason=mirrored_section", table_index)
                     continue
                 data_rows = table[header_index + 1 :]
                 aligned_headers = headers
@@ -77,14 +91,28 @@ def process_pdf(
                     len(merged_rows),
                 )
                 table_rows_detected += len(merged_rows)
+                unsigned_is_credit = table_marks_debits_with_sign(merged_rows, aligned_headers)
                 for row in merged_rows:
-                    transaction = normalize_row(row, aligned_headers, len(transactions) + 1)
+                    transaction = normalize_row(
+                        row,
+                        aligned_headers,
+                        len(transactions) + 1,
+                        unsigned_is_credit=unsigned_is_credit,
+                        period=header_period,
+                    )
                     if transaction:
-                        transactions.append(transaction)
+                        previous_balance = next(
+                            (item.balance for item in reversed(transactions) if item.balance is not None),
+                            None,
+                        )
+                        split = split_same_row_fee(transaction, row, aligned_headers, previous_balance)
+                        transactions.extend(split or [transaction])
+                        if split:
+                            table_rows_detected += 1
             raw = raw.model_copy(update={"rows_found": table_rows_detected})
         rows_rejected = max(raw.rows_found - len(transactions), 0)
         if not transactions:
-            transactions, detected_rows = parse_text_rows(text)
+            transactions, detected_rows = parse_text_rows(text, period=header_period)
             raw = raw.model_copy(update={"rows_found": detected_rows})
             rows_rejected = max(detected_rows - len(transactions), 0)
 
@@ -95,54 +123,11 @@ def process_pdf(
         rows_rejected,
     )
 
-    if _needs_ai_fallback(raw.extraction_method, classical_validation, transactions):
-        logger.info(
-            "[AI_EXTRACT] fallback_triggered method=%s confidence=%s transactions=%s rejected=%s reconciliation=%s",
-            raw.extraction_method,
-            classical_validation.confidence,
-            len(transactions),
-            classical_validation.rows_rejected,
-            classical_validation.balance_reconciliation,
-        )
-        try:
-            ai_transactions, ai_statement = extract_transactions_with_ai(
-                content,
-                password=password,
-                page_count_hint=raw.pages,
-            )
-            ai_validation = validate_transactions(
-                ai_transactions,
-                "ai",
-                len(ai_transactions),
-                0,
-            )
-            if _prefer_ai_result(classical_validation, transactions, ai_validation, ai_transactions):
-                transactions = ai_transactions
-                rows_rejected = 0
-                raw = raw.model_copy(
-                    update={
-                        "extraction_method": "ai",
-                        "extraction_confidence": ai_validation.confidence,
-                        "rows_found": len(ai_transactions),
-                    },
-                )
-                logger.info(
-                    "[AI_EXTRACT] fallback_accepted ai_transactions=%s ai_confidence=%s",
-                    len(ai_transactions),
-                    ai_validation.confidence,
-                )
-            else:
-                logger.info(
-                    "[AI_EXTRACT] fallback_rejected keeping_classical classical=%s ai=%s",
-                    len(transactions),
-                    len(ai_transactions),
-                )
-        except AiExtractionError as error:
-            logger.warning("[AI_EXTRACT] fallback_failed reason=%s", error)
-            if raw.extraction_method == "unknown" and not transactions:
-                raise PdfProcessingError(
-                    "The PDF could not be read reliably. Classical extraction failed and AI fallback was unavailable.",
-                ) from error
+    # Statements are read by the deterministic extractors and OCR only; the PDF is never
+    # sent to an AI provider.
+    no_activity = not transactions and statement_has_no_activity(text)
+    if no_activity:
+        logger.info("pdf_statement_no_activity method=%s", raw.extraction_method)
 
     if raw.extraction_method == "unknown" and not transactions:
         raise PdfProcessingError(
@@ -174,12 +159,21 @@ def process_pdf(
         _with_category(transaction, classifications[str(index)], catalog)
         for index, transaction in enumerate(transactions)
     ]
-    validation = validate_transactions(
-        transactions,
-        raw.extraction_method,
-        raw.rows_found or len(transactions),
-        rows_rejected,
-    )
+    if no_activity:
+        validation = ValidationResult(
+            status="valid",
+            confidence=1.0,
+            warnings=[NO_ACTIVITY_MESSAGE],
+            transaction_count=0,
+            no_activity=True,
+        )
+    else:
+        validation = validate_transactions(
+            transactions,
+            raw.extraction_method,
+            raw.rows_found or len(transactions),
+            rows_rejected,
+        )
     statement = resolve_extracted_statement(
         text,
         transactions,
@@ -192,6 +186,33 @@ def process_pdf(
         closing_balance=ai_statement.closing_balance if ai_statement else None,
         source_filename=filename,
     )
+    if not no_activity:
+        reconciliation, difference = reconcile_opening_closing(
+            statement.opening_balance,
+            statement.closing_balance,
+            transactions,
+            statement.account_type,
+        )
+        uncertain_dates = sum(1 for item in transactions if item.date_confidence != "high")
+        extra_warnings = list(validation.warnings)
+        if reconciliation == "mismatch":
+            extra_warnings.append(
+                "Opening balance plus extracted transactions does not equal the closing balance; "
+                "some activity may be missing or misread."
+            )
+        if uncertain_dates:
+            extra_warnings.append(
+                f"{uncertain_dates} transaction date(s) could not be read with full confidence."
+            )
+        validation = validation.model_copy(
+            update={
+                "opening_closing_reconciliation": reconciliation,
+                "reconciliation_difference": difference,
+                "transactions_with_uncertain_dates": uncertain_dates,
+                "warnings": extra_warnings,
+                "status": "warning" if extra_warnings and validation.status == "valid" else validation.status,
+            }
+        )
     statement_balance = StatementBalance(
         amount=statement.closing_balance,
         as_of_date=statement.statement_end_date,
@@ -242,49 +263,3 @@ def _with_category(transaction: Transaction, classification, catalog: dict[str, 
             "merchant_name": classification.merchant_name or transaction.merchant_name,
         },
     )
-
-
-def _needs_ai_fallback(
-    extraction_method: str,
-    validation: ValidationResult,
-    transactions: list[Transaction],
-) -> bool:
-    if not ai_extraction_available():
-        return False
-    if extraction_method == "unknown" or not transactions:
-        return True
-    detected = validation.rows_detected or len(transactions)
-    if extraction_method in {"table", "text"} and detected > 0 and len(transactions) / detected >= 0.8:
-        logger.info(
-            "[AI_EXTRACT] skipped_usable_classical method=%s transactions=%s confidence=%s",
-            extraction_method,
-            len(transactions),
-            validation.confidence,
-        )
-        return False
-    if validation.confidence < 0.65:
-        return True
-    if validation.balance_reconciliation == "mismatch":
-        return True
-    if validation.rows_detected > 0 and validation.rows_rejected / validation.rows_detected >= 0.2:
-        return True
-    return False
-
-
-def _prefer_ai_result(
-    classical: ValidationResult,
-    classical_transactions: list[Transaction],
-    ai: ValidationResult,
-    ai_transactions: list[Transaction],
-) -> bool:
-    if not classical_transactions:
-        return bool(ai_transactions)
-    if not ai_transactions:
-        return False
-    if ai.confidence > classical.confidence:
-        return True
-    if len(ai_transactions) > len(classical_transactions) and ai.confidence >= classical.confidence - 0.05:
-        return True
-    if classical.balance_reconciliation == "mismatch" and ai.balance_reconciliation != "mismatch":
-        return True
-    return False

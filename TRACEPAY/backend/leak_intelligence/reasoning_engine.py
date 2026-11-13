@@ -1,0 +1,1447 @@
+"""Deterministic root-cause analysis for detected potential financial leaks."""
+
+from __future__ import annotations
+
+import hashlib
+import re
+from dataclasses import dataclass, field
+from datetime import date
+from decimal import Decimal
+
+from .behaviour_models import BehaviourAnalysisResult, BehaviourObservation
+from .leak_models import LeakDetection, LeakDetectionResult
+from .leak_scoring import support_ratio
+from .merchant_display import (
+    debit_order_leak_title,
+    duplicate_leak_title,
+    is_reliable_merchant_display_name,
+    merchant_display_name_for,
+    recurring_leak_title,
+    repeated_payments_title,
+    spending_increase_title,
+)
+from .models import (
+    CategoryFeature,
+    FinancialFeatureSnapshot,
+    MerchantFeature,
+)
+from .periods import completed_months
+from .reasoning_models import (
+    AnalysisStatus,
+    Avoidability,
+    FinancialReasoning,
+    FinancialReasoningResult,
+    ImpactAssessment,
+    Persistence,
+    RootCauseType,
+)
+
+REASONING_VERSION = "1.0"
+MATERIAL_COUNT_CHANGE = Decimal("0.20")
+MATERIAL_AVERAGE_CHANGE = Decimal("0.15")
+DRIVER_DOMINANCE = Decimal("0.70")
+ZERO = Decimal("0")
+
+_RECURRING_LEAK_TYPES = {
+    "subscription_leak",
+    "recurring_payment_leak",
+    "unknown_recurring_payment",
+}
+_CATEGORY_LEAK_TYPES = {
+    "airtime_data_leak",
+    "food_spending_leak",
+    "transport_spending_leak",
+}
+_HABIT_AND_PATTERN_LEAK_TYPES = {
+    "coffee_spending_leak",
+    "convenience_store_leak",
+    "weekend_spending_leak",
+    "payday_spending_leak",
+    "gambling_spending_leak",
+}
+_COMMITMENT_STACK_LEAK_TYPES = {
+    "overlapping_cover_leak",
+    "high_cost_credit_leak",
+    "recurring_transfer_leak",
+}
+
+
+@dataclass
+class _Draft:
+    root_cause_type: RootCauseType
+    title: str
+    explanation: str
+    evidence: dict[str, object]
+    persistence: Persistence
+    analysis_status: AnalysisStatus = "supported"
+    competing_explanations: list[RootCauseType] = field(default_factory=list)
+    evidence_strength: Decimal = Decimal("0.70")
+    support: Decimal = Decimal("0.80")
+
+
+def analyze_financial_reasoning(
+    snapshot: FinancialFeatureSnapshot,
+    behaviours: BehaviourAnalysisResult,
+    leaks: LeakDetectionResult,
+) -> FinancialReasoningResult:
+    """Explain each detected pattern without recommendations or invented causes."""
+    _validate_user_scope(snapshot, behaviours, leaks)
+    observations = {
+        observation.observation_id: observation
+        for observation in behaviours.observations
+    }
+    analyses = [
+        _reason_about_leak(snapshot, leak, observations)
+        for leak in leaks.leaks
+    ]
+    return FinancialReasoningResult(
+        user_id=snapshot.user_id,
+        transaction_count=snapshot.transaction_count,
+        period_start=snapshot.date_start,
+        period_end=snapshot.date_end,
+        reasoning_version=REASONING_VERSION,
+        potential_leaks_analyzed=len(leaks.leaks),
+        analyses=analyses,
+    )
+
+
+def _validate_user_scope(
+    snapshot: FinancialFeatureSnapshot,
+    behaviours: BehaviourAnalysisResult,
+    leaks: LeakDetectionResult,
+) -> None:
+    if len({snapshot.user_id, behaviours.user_id, leaks.user_id}) != 1:
+        raise ValueError("Financial reasoning inputs must belong to the same user.")
+
+
+def _reason_about_leak(
+    snapshot: FinancialFeatureSnapshot,
+    leak: LeakDetection,
+    observations: dict[str, BehaviourObservation],
+) -> FinancialReasoning:
+    related = [
+        observations[observation_id]
+        for observation_id in leak.supporting_behavior_ids
+        if observation_id in observations
+    ]
+    if leak.leak_type == "duplicate_payment_leak":
+        draft = _duplicate_reasoning(leak)
+    elif leak.leak_type == "duplicate_debit_order_leak":
+        draft = _duplicate_debit_order_reasoning(leak)
+    elif leak.leak_type == "duplicate_streaming_leak":
+        draft = _duplicate_streaming_reasoning(leak)
+    elif leak.leak_type == "penalty_fee_leak":
+        draft = _penalty_reasoning(leak)
+    elif leak.leak_type in _COMMITMENT_STACK_LEAK_TYPES:
+        draft = _commitment_reasoning(leak)
+    elif leak.leak_type in _RECURRING_LEAK_TYPES:
+        draft = _recurring_reasoning(snapshot, leak, related)
+    elif leak.leak_type == "inactive_recurring_payment_leak":
+        draft = _inactive_recurring_reasoning(snapshot, leak, related)
+    elif leak.leak_type == "irregular_transaction_leak":
+        draft = _irregular_transaction_reasoning(leak)
+    elif leak.leak_type == "bank_fee_leak":
+        draft = _fee_reasoning(snapshot, leak)
+    elif leak.leak_type == "cash_usage_leak":
+        draft = _cash_reasoning(snapshot, leak)
+    elif leak.leak_type in _HABIT_AND_PATTERN_LEAK_TYPES:
+        draft = _habit_or_pattern_reasoning(snapshot, leak)
+    elif (
+        leak.leak_type == "spending_escalation_leak"
+        or leak.leak_type in _CATEGORY_LEAK_TYPES
+    ):
+        draft = _escalation_reasoning(snapshot, leak, related, observations.values())
+    else:
+        draft = _insufficient_reasoning(snapshot, leak)
+
+    avoidability, avoidability_confidence, recoverable = _avoidability(
+        snapshot, leak, draft
+    )
+    confidence = _root_cause_confidence(snapshot, related, draft)
+    return FinancialReasoning(
+        reasoning_id=_reasoning_id(leak.leak_id, draft.root_cause_type),
+        leak_id=leak.leak_id,
+        root_cause_type=draft.root_cause_type,
+        title=draft.title,
+        explanation=draft.explanation,
+        confidence=confidence,
+        evidence=draft.evidence,
+        supporting_behavior_ids=leak.supporting_behavior_ids,
+        supporting_feature_references=[
+            _safe_feature_reference(reference)
+            for reference in leak.supporting_feature_references
+        ],
+        impact_assessment=ImpactAssessment(
+            detected_amount=leak.estimated_monthly_impact,
+            detected_annual_amount=leak.estimated_annual_impact,
+            impact_kind=leak.impact_kind,
+            potentially_avoidable_amount=None,
+            potentially_avoidable_annual_amount=None,
+            recoverable_amount=recoverable,
+            avoidability_confidence=avoidability_confidence,
+        ),
+        avoidability=avoidability,
+        persistence=draft.persistence,
+        analysis_status=draft.analysis_status,
+        competing_explanations=draft.competing_explanations,
+    )
+
+
+def _escalation_reasoning(
+    snapshot: FinancialFeatureSnapshot,
+    leak: LeakDetection,
+    related: list[BehaviourObservation],
+    all_observations,
+) -> _Draft:
+    metrics = _change_metrics(leak.evidence)
+    series = _series_for_leak(snapshot, leak, related)
+    persistence = classify_persistence(series)
+    category = _text(leak.evidence.get("category_name"))
+    feature = _category_feature(snapshot, category)
+    feature_support = (
+        support_ratio(feature.confidence_support) if feature else Decimal("0.80")
+    )
+    if metrics is None:
+        return _insufficient_draft(
+            persistence,
+            "The spending increase is measurable, but totals and transaction counts "
+            "are insufficient to distinguish frequency from transaction-value changes.",
+        )
+
+    previous_total, current_total, previous_count, current_count = metrics
+    previous_average = previous_total / previous_count
+    current_average = current_total / current_count
+    count_change = _relative_change(previous_count, current_count)
+    average_change = _relative_change(previous_average, current_average)
+    frequency_contribution = max(
+        ZERO, (current_count - previous_count) * previous_average
+    )
+    amount_contribution = max(
+        ZERO, current_count * (current_average - previous_average)
+    )
+    positive_contribution = frequency_contribution + amount_contribution
+    frequency_share = (
+        frequency_contribution / positive_contribution
+        if positive_contribution > ZERO
+        else ZERO
+    )
+    amount_share = (
+        amount_contribution / positive_contribution
+        if positive_contribution > ZERO
+        else ZERO
+    )
+    change_amount = current_total - previous_total
+    evidence: dict[str, object] = {
+        "previous_total": previous_total,
+        "current_total": current_total,
+        "absolute_change": change_amount,
+        "percentage_change": _percentage_change(previous_total, current_total),
+        "previous_transaction_count": previous_count,
+        "current_transaction_count": current_count,
+        "previous_average_transaction_amount": previous_average,
+        "current_average_transaction_amount": current_average,
+        "transaction_count_change_percentage": count_change * Decimal("100"),
+        "average_amount_change_percentage": average_change * Decimal("100"),
+        "frequency_contribution_share": frequency_share,
+        "amount_contribution_share": amount_share,
+        "category": category,
+    }
+    for key in (
+        "top_category_contributors",
+        "top_merchant_contributors",
+        "cause_identified",
+        "contributor_explanation",
+        "amounts_not_additive_with_category_findings",
+    ):
+        value = leak.evidence.get(key)
+        if value is not None:
+            evidence[key] = value
+    evidence.update(_source_evidence(leak))
+    source_title = _spending_source_title(leak, category, change_amount)
+
+    frequency_material = count_change >= MATERIAL_COUNT_CHANGE
+    amount_material = average_change >= MATERIAL_AVERAGE_CHANGE
+    if frequency_material and amount_material:
+        return _Draft(
+            root_cause_type="transaction_pattern",
+            title=source_title or "Frequency and average transaction value increased",
+            explanation=(
+                "The detected increase is supported by both more transactions and "
+                "a higher average transaction value. Both explanations materially "
+                "contributed, so neither is treated as the sole cause."
+            ),
+            evidence=evidence,
+            persistence=persistence,
+            analysis_status="competing_explanations",
+            competing_explanations=["frequency_increase", "amount_increase"],
+            evidence_strength=Decimal("0.82"),
+            support=feature_support,
+        )
+
+    price_evidence = _price_increase_evidence(
+        snapshot, leak, category, all_observations
+    )
+    if (
+        amount_material
+        and not frequency_material
+        and price_evidence is not None
+    ):
+        return _Draft(
+            root_cause_type="price_increase",
+            title=source_title or "Average transaction value increased",
+            explanation=(
+                "The spending increase aligns with a higher average transaction "
+                "value at a contributing merchant while transaction frequency "
+                "remained relatively stable. This does not establish that the "
+                "merchant changed its prices."
+            ),
+            evidence={**evidence, **price_evidence},
+            persistence=persistence,
+            evidence_strength=Decimal("0.84"),
+            support=feature_support,
+        )
+
+    if frequency_material and (
+        frequency_share >= DRIVER_DOMINANCE or not amount_material
+    ):
+        return _Draft(
+            root_cause_type="frequency_increase",
+            title=source_title or "Transaction frequency increased",
+            explanation=(
+                "The spending increase was primarily associated with more "
+                "transactions; average transaction value did not increase enough "
+                "to provide a stronger alternative explanation."
+            ),
+            evidence=evidence,
+            persistence=persistence,
+            evidence_strength=Decimal("0.86"),
+            support=feature_support,
+        )
+
+    if amount_material and (
+        amount_share >= DRIVER_DOMINANCE or not frequency_material
+    ):
+        return _Draft(
+            root_cause_type="amount_increase",
+            title=source_title or "Average transaction value increased",
+            explanation=(
+                "The spending increase was primarily associated with a higher "
+                "average transaction value while transaction frequency remained "
+                "relatively stable."
+            ),
+            evidence=evidence,
+            persistence=persistence,
+            evidence_strength=Decimal("0.82"),
+            support=feature_support,
+        )
+
+    if category:
+        return _Draft(
+            root_cause_type="category_growth",
+            title=source_title or f"{category} spending increased",
+            explanation=(
+                "The category total increased materially, but changes in frequency "
+                "and average transaction value do not identify one dominant driver."
+            ),
+            evidence=evidence,
+            persistence=persistence,
+            analysis_status="competing_explanations",
+            competing_explanations=["frequency_increase", "amount_increase"],
+            evidence_strength=Decimal("0.62"),
+            support=feature_support,
+        )
+    cause_note = ""
+    if leak.evidence.get("cause_identified") is False:
+        cause_note = (
+            " Supported category or merchant contributors were not identified "
+            "from comparable periods."
+        )
+    return _insufficient_draft(
+        persistence,
+        "The overall spending increase is statistically supported, but the "
+        "available aggregate evidence does not identify one dominant driver."
+        + cause_note,
+        evidence,
+    )
+
+
+def _recurring_reasoning(
+    snapshot: FinancialFeatureSnapshot,
+    leak: LeakDetection,
+    related: list[BehaviourObservation],
+) -> _Draft:
+    merchant = _merchant_for_recurring(snapshot, leak, related)
+    recurrence = merchant.recurrence if merchant else None
+    observation_count = _integer(leak.evidence.get("observation_count"))
+    interval = _decimal(leak.evidence.get("average_interval_days"))
+    average_amount = _decimal(leak.evidence.get("average_amount"))
+    strength = _text(leak.evidence.get("recurrence_strength")) or "unknown"
+    first_observed = _date(leak.evidence.get("first_observed_date"))
+    last_observed = _date(leak.evidence.get("last_observed_date"))
+    duration_days = (
+        (last_observed - first_observed).days
+        if first_observed and last_observed
+        else None
+    )
+    series = _merchant_series(snapshot, merchant)
+    persistence = classify_persistence(series)
+    if persistence == "insufficient_history" and duration_days is not None:
+        persistence = "persistent" if duration_days >= 28 else "new"
+    evidence: dict[str, object] = {
+        "observation_count": observation_count,
+        "average_interval_days": interval,
+        "average_payment": average_amount,
+        "recurrence_strength": strength,
+        "first_observed_date": first_observed,
+        "last_observed_date": last_observed,
+        "duration_days": duration_days,
+    }
+    evidence.update(_source_evidence(leak))
+    if recurrence:
+        evidence.update(
+            {
+                "interval_variation": recurrence.interval_variance,
+                "amount_variation": recurrence.amount_variance,
+            }
+        )
+    for key in (
+        "price_change_focus",
+        "previous_average_amount",
+        "latest_amount",
+        "amount_change",
+        "amount_change_percentage",
+        "baseline_interval_days",
+        "current_interval_days",
+        "interval_change_days",
+    ):
+        value = leak.evidence.get(key)
+        if value is not None:
+            evidence[key] = value
+    if observation_count is None or observation_count < 3 or interval is None:
+        return _insufficient_draft(
+            persistence,
+            "A recurring payment was detected, but the available history is "
+            "insufficient to characterize the commitment reliably.",
+            evidence,
+        )
+    if evidence.get("price_change_focus") is not None:
+        persistence = "increasing"
+    support = (
+        support_ratio(merchant.confidence_support)
+        if merchant
+        else Decimal("0.70")
+    )
+    merchant_name = _text(evidence.get("merchant_key"))
+    if leak.evidence.get("finding_focus") == "subscription_review":
+        title = recurring_leak_title(
+            subscription=True,
+            merchant_name=merchant_name,
+            average_amount=average_amount,
+        )
+        explanation = (
+            "Subscription-category payments followed a billing-like interval with a "
+            "stable amount pattern. This may warrant review, but the data does not "
+            "show whether the service is still used or forgotten."
+        )
+    elif leak.evidence.get("finding_focus") == "debit_order_review":
+        title = debit_order_leak_title(merchant_name=merchant_name)
+        explanation = (
+            "Payments described as debit orders followed a billing-like interval. "
+            "This may warrant review, but the data does not show whether the "
+            "underlying service is unused or no longer necessary."
+        )
+    elif leak.evidence.get("finding_focus") == "repeated_payments_detected":
+        title = repeated_payments_title(
+            merchant_name=merchant_name,
+            average_amount=average_amount,
+        )
+        explanation = (
+            "Repeated payments followed a relatively stable interval and amount, but "
+            "the evidence is not strong enough to assert a subscription or recurring "
+            "bill. Treat this as a review cue only."
+        )
+    else:
+        title = recurring_leak_title(
+            subscription=False,
+            merchant_name=merchant_name,
+            average_amount=average_amount,
+        )
+        explanation = (
+            "Payments followed a billing-like interval with a sufficiently stable "
+            "amount pattern. This supports a recurring financial commitment, but "
+            "does not indicate whether the payment is wanted or avoidable."
+        )
+    if evidence.get("price_change_focus") is not None:
+        explanation += (
+            " The latest observed charge was higher than the prior average, which "
+            "reflects observed amounts without proving an official price change."
+        )
+    if (
+        evidence.get("baseline_interval_days") is not None
+        and evidence.get("current_interval_days") is not None
+    ):
+        explanation += (
+            " The observed billing interval also shifted compared with earlier "
+            "payments."
+        )
+    return _Draft(
+        root_cause_type="recurring_commitment",
+        title=title,
+        explanation=explanation,
+        evidence=evidence,
+        persistence=persistence,
+        evidence_strength=(
+            Decimal("0.90") if strength == "high" else Decimal("0.74")
+        ),
+        support=support,
+    )
+
+
+def _fee_reasoning(
+    snapshot: FinancialFeatureSnapshot,
+    leak: LeakDetection,
+) -> _Draft:
+    fees = snapshot.fees
+    months = completed_months(snapshot)
+    series = [month.bank_fee_total for month in months]
+    subtypes = {
+        "atm_fee_total": fees.atm_fee_total,
+        "transaction_fee_total": fees.transaction_fee_total,
+        "account_fee_total": fees.account_fee_total,
+        "sms_fee_total": fees.sms_fee_total,
+        "immediate_payment_fee_total": fees.immediate_payment_fee_total,
+        "balance_enquiry_fee_total": fees.balance_enquiry_fee_total,
+    }
+    identified = {
+        key: value for key, value in subtypes.items() if value not in (None, ZERO)
+    }
+    focus = leak.evidence.get("finding_focus")
+    if focus == "atm_balance_enquiry":
+        return _Draft(
+            root_cause_type="fee_accumulation",
+            title="Repeated ATM balance enquiry fees",
+            explanation=(
+                "Multiple balance enquiry charges were classified from transaction "
+                "descriptions. The pattern may indicate avoidable ATM usage, but the "
+                "data does not establish digital banking availability or that each "
+                "fee was unnecessary."
+            ),
+            evidence={
+                "fee_transaction_count": fees.bank_fee_transaction_count,
+                "balance_enquiry_fee_total": fees.balance_enquiry_fee_total,
+                "monthly_average_fee": leak.evidence.get("monthly_average_fee"),
+            },
+            persistence=classify_persistence(series),
+            evidence_strength=Decimal("0.82"),
+        )
+    if focus == "sms_banking":
+        return _Draft(
+            root_cause_type="fee_accumulation",
+            title="Repeated SMS banking charges",
+            explanation=(
+                "Multiple SMS banking or notification fees were classified from "
+                "transaction descriptions. The pattern may represent an avoidable "
+                "banking cost, but the data does not establish that SMS alerts were "
+                "unnecessary or that a free channel was available."
+            ),
+            evidence={
+                "fee_transaction_count": fees.bank_fee_transaction_count,
+                "sms_fee_total": fees.sms_fee_total,
+                "monthly_average_fee": leak.evidence.get("monthly_average_fee"),
+            },
+            persistence=classify_persistence(series),
+            evidence_strength=Decimal("0.82"),
+        )
+    if focus == "interest_charges":
+        return _Draft(
+            root_cause_type="fee_accumulation",
+            title="Interest charges were observed",
+            explanation=(
+                "Transactions described as interest charges were observed and may "
+                "warrant review."
+            ),
+            evidence={
+                "interest_charge_count": fees.interest_charge_count,
+                "interest_charge_total": fees.interest_charge_total,
+                "completed_month_count": len(months),
+                "monthly_average_fee": leak.evidence.get("monthly_average_fee"),
+            },
+            persistence=classify_persistence(series),
+            evidence_strength=Decimal("0.82"),
+        )
+    if focus == "overdraft_fee_pattern":
+        return _Draft(
+            root_cause_type="fee_accumulation",
+            title="Repeated overdraft fees were observed",
+            explanation=(
+                "Fees described as overdraft fees were observed and may warrant review."
+            ),
+            evidence={
+                "overdraft_fee_count": fees.overdraft_fee_count,
+                "overdraft_fee_total": fees.overdraft_fee_total,
+                "completed_month_count": len(months),
+                "monthly_average_fee": leak.evidence.get("monthly_average_fee"),
+            },
+            persistence=classify_persistence(series),
+            evidence_strength=Decimal("0.82"),
+        )
+    if focus == "insufficient_funds_charges":
+        return _Draft(
+            root_cause_type="fee_accumulation",
+            title="Repeated insufficient-funds charges were observed",
+            explanation=(
+                "Fees described as insufficient-funds charges were observed and may "
+                "warrant review."
+            ),
+            evidence={
+                "insufficient_funds_fee_count": fees.insufficient_funds_fee_count,
+                "insufficient_funds_fee_total": fees.insufficient_funds_fee_total,
+                "completed_month_count": len(months),
+                "monthly_average_fee": leak.evidence.get("monthly_average_fee"),
+            },
+            persistence=classify_persistence(series),
+            evidence_strength=Decimal("0.82"),
+        )
+    if focus == "foreign_transaction_fee":
+        return _Draft(
+            root_cause_type="fee_accumulation",
+            title="Repeated foreign transaction fees were observed",
+            explanation=(
+                "Fees described as foreign transaction fees were observed and may "
+                "warrant review."
+            ),
+            evidence={
+                "foreign_transaction_fee_count": fees.foreign_transaction_fee_count,
+                "foreign_transaction_fee_total": fees.foreign_transaction_fee_total,
+                "completed_month_count": len(months),
+                "monthly_average_fee": leak.evidence.get("monthly_average_fee"),
+            },
+            persistence=classify_persistence(series),
+            evidence_strength=Decimal("0.82"),
+        )
+    if focus == "recurring_merchant_fee_change":
+        return _Draft(
+            root_cause_type="fee_accumulation",
+            title="Repeated card fees increased",
+            explanation=(
+                "Repeated card fees increased over the observed period compared with "
+                "the prior baseline. This reflects observed fee amounts only."
+            ),
+            evidence={
+                "card_fee_transaction_count": fees.card_fee_transaction_count,
+                "card_fee_total": fees.card_fee_total,
+                "previous_amount": leak.evidence.get("previous_amount"),
+                "current_amount": leak.evidence.get("current_amount"),
+                "fee_change_amount": leak.evidence.get("fee_change_amount"),
+                "completed_month_count": len(months),
+                "monthly_average_fee": leak.evidence.get("monthly_average_fee"),
+            },
+            persistence=classify_persistence(series),
+            evidence_strength=Decimal("0.84"),
+        )
+    if focus == "monthly_banking_fee_trend":
+        return _Draft(
+            root_cause_type="fee_accumulation",
+            title="Monthly banking fees increased over time",
+            explanation=(
+                "Completed monthly banking-fee totals rose materially compared with "
+                "the prior baseline period. This is an overall fee trend rather than "
+                "one specific charge type, and it does not establish that lower fees "
+                "were available."
+            ),
+            evidence={
+                "fee_transaction_count": fees.bank_fee_transaction_count,
+                "monthly_average_fee": leak.evidence.get("monthly_average_fee"),
+                "fee_change_amount": leak.evidence.get("fee_change_amount"),
+                "completed_month_fee_totals": leak.evidence.get(
+                    "completed_month_fee_totals"
+                ),
+            },
+            persistence=classify_persistence(series),
+            evidence_strength=Decimal("0.84"),
+        )
+    evidence = {
+        "fee_transaction_count": fees.bank_fee_transaction_count,
+        "fee_total": fees.bank_fee_total,
+        "average_fee": fees.bank_fee_average,
+        "monthly_average_fee": leak.evidence.get("monthly_average_fee"),
+        "identified_fee_subtypes": identified,
+    }
+    if identified:
+        labels = ", ".join(
+            key.removesuffix("_total").replace("_", " ")
+            for key in sorted(identified)
+        )
+        explanation = (
+            "Banking fee activity accumulated across the observed period. "
+            f"Identifiable fee categories were: {labels}. The data supports these "
+            "categories but does not establish that every fee was optional."
+        )
+        strength = Decimal("0.84")
+    else:
+        explanation = (
+            "Banking fee activity accumulated and increased, but the available "
+            "classification evidence does not reliably identify one fee subtype."
+        )
+        strength = Decimal("0.66")
+    return _Draft(
+        root_cause_type="fee_accumulation",
+        title="Banking fee activity accumulated",
+        explanation=explanation,
+        evidence=evidence,
+        persistence=classify_persistence(series),
+        evidence_strength=strength,
+    )
+
+
+def _cash_reasoning(
+    snapshot: FinancialFeatureSnapshot,
+    leak: LeakDetection,
+) -> _Draft:
+    cash = snapshot.cash
+    focus = leak.evidence.get("finding_focus")
+    if focus == "atm_withdrawal_fee_stacking":
+        title = "Repeated ATM withdrawals carried stacked transaction fees"
+        explanation = (
+            "Multiple cash withdrawals coincided with repeated ATM fee charges. "
+            "The evidence links fees to withdrawal activity without proving that "
+            "lower-cost payment methods were available or that the fees were avoidable."
+        )
+    elif focus == "cash_dependency":
+        title = "Cash withdrawals were a meaningful share of spending"
+        explanation = (
+            "Cash withdrawals represent a meaningful share of observed spending. "
+            "The evidence describes that share without establishing that the "
+            "withdrawals were unnecessary."
+        )
+    else:
+        title = "Repeated cash withdrawals carried ATM fee costs"
+        explanation = (
+            "Repeated cash-withdrawal activity coincided with identifiable ATM fee "
+            "costs. The evidence links the detected amount to that transaction "
+            "pattern without determining whether the withdrawals were avoidable."
+        )
+    return _Draft(
+        root_cause_type="transaction_pattern",
+        title=title,
+        explanation=explanation,
+        evidence={
+            "cash_withdrawal_count": cash.cash_withdrawal_count,
+            "cash_withdrawal_total": cash.cash_withdrawal_total,
+            "atm_fee_count": cash.atm_fee_count,
+            "atm_fee_total": cash.atm_fee_total,
+        },
+        persistence=classify_persistence(
+            [month.cash_withdrawal_total for month in completed_months(snapshot)]
+        ),
+        evidence_strength=Decimal("0.82"),
+    )
+
+
+def _duplicate_reasoning(leak: LeakDetection) -> _Draft:
+    count = _integer(leak.evidence.get("transaction_count_in_group"))
+    date_span = _integer(leak.evidence.get("date_span_days"))
+    amount = _decimal(leak.evidence.get("candidate_amount"))
+    merchant_name = _text(leak.evidence.get("merchant_key"))
+    display_merchant = (
+        merchant_name if is_reliable_merchant_display_name(merchant_name) else None
+    )
+    evidence: dict[str, object] = {
+        "potential_duplicate_amount": amount,
+        "matching_transaction_count": count,
+        "date_span_days": date_span,
+        "verification_required": True,
+        "match_basis": leak.evidence.get("match_basis"),
+        "potential_not_confirmed_savings": True,
+        "uncertainty": leak.evidence.get("uncertainty"),
+    }
+    evidence.update(_source_evidence(leak))
+    observed = _text(leak.evidence.get("observed_date"))
+    if observed:
+        evidence["observed_date"] = observed
+    min_gap = _integer(leak.evidence.get("min_time_gap_minutes"))
+    if min_gap is not None:
+        evidence["min_time_gap_minutes"] = min_gap
+    return _Draft(
+        root_cause_type="potential_duplicate",
+        title=duplicate_leak_title(merchant_name=display_merchant, amount=amount),
+        explanation=(
+            "Multiple transactions shared the same merchant grouping, amount and "
+            "calendar day. Matching those fields alone does not establish a "
+            "duplicate, accidental purchase, fraud, merchant error or recoverable "
+            "amount. Manual verification is required."
+        ),
+        evidence=evidence,
+        persistence="new",
+        analysis_status="verification_required",
+        evidence_strength=Decimal("0.62"),
+    )
+
+
+def _duplicate_debit_order_reasoning(leak: LeakDetection) -> _Draft:
+    count = _integer(leak.evidence.get("transaction_count_in_group"))
+    date_span = _integer(leak.evidence.get("date_span_days"))
+    amount = _decimal(leak.evidence.get("candidate_amount"))
+    evidence: dict[str, object] = {
+        "potential_duplicate_amount": amount,
+        "matching_transaction_count": count,
+        "date_span_days": date_span,
+        "billing_date_shift_days": _integer(leak.evidence.get("billing_date_shift_days")),
+        "amount_variance": _decimal(leak.evidence.get("amount_variance")),
+        "recurring_debit_order_count": _integer(leak.evidence.get("recurring_debit_order_count")),
+        "recurring_debit_order_months": _integer(leak.evidence.get("recurring_debit_order_months")),
+        "verification_required": True,
+        "match_basis": leak.evidence.get("match_basis"),
+        "potential_not_confirmed_savings": True,
+        "uncertainty": leak.evidence.get("uncertainty"),
+    }
+    evidence.update(_source_evidence(leak))
+    observed = _text(leak.evidence.get("observed_date"))
+    if observed:
+        evidence["observed_date"] = observed
+    return _Draft(
+        root_cause_type="potential_duplicate",
+        title=leak.title,
+        explanation=(
+            "Two or more debit-order collections for the same merchant occurred within "
+            "the same billing cycle alongside established recurring debit-order history. "
+            "This may reflect a double collection, an arrears catch-up, or separate "
+            "mandates, and requires verification before disputing the debit order."
+        ),
+        evidence={key: value for key, value in evidence.items() if value is not None},
+        persistence="new",
+        analysis_status="verification_required",
+        evidence_strength=Decimal("0.66"),
+    )
+
+
+def _duplicate_streaming_reasoning(leak: LeakDetection) -> _Draft:
+    evidence: dict[str, object] = {
+        "finding_focus": "duplicate_streaming_services",
+        "streaming_subcategory": leak.evidence.get("streaming_subcategory"),
+        "active_streaming_service_count": _integer(
+            leak.evidence.get("active_streaming_service_count")
+        ),
+        "streaming_merchants": leak.evidence.get("streaming_merchants"),
+        "streaming_service_names": leak.evidence.get("streaming_service_names"),
+        "combined_monthly_streaming_spend": _decimal(
+            leak.evidence.get("combined_monthly_streaming_spend")
+        ),
+        "overlapping_months": leak.evidence.get("overlapping_months"),
+        "overlapping_month_count": _integer(leak.evidence.get("overlapping_month_count")),
+        "verification_required": True,
+    }
+    return _Draft(
+        root_cause_type="recurring_commitment",
+        title=leak.title,
+        explanation=(
+            "Multiple recurring streaming subscriptions in the same media category were "
+            "active across overlapping billing months. Statement data shows concurrent "
+            "recurring charges but cannot determine household usage or whether all "
+            "subscriptions are intentionally kept."
+        ),
+        evidence={key: value for key, value in evidence.items() if value is not None},
+        persistence="persistent",
+        analysis_status="supported",
+        evidence_strength=Decimal("0.78"),
+    )
+
+
+def _penalty_reasoning(leak: LeakDetection) -> _Draft:
+    evidence = {
+        key: value
+        for key, value in {
+            "finding_focus": leak.evidence.get("finding_focus"),
+            "merchant_key": leak.evidence.get("merchant_key"),
+            "penalty_wording": leak.evidence.get("penalty_wording"),
+            "penalty_count": _integer(leak.evidence.get("penalty_count")),
+            "penalty_months": leak.evidence.get("penalty_months"),
+            "observed_total_paid": _decimal(leak.evidence.get("observed_total_paid")),
+        }.items()
+        if value is not None
+    }
+    repeated = bool(leak.evidence.get("repeated_across_months"))
+    return _Draft(
+        root_cause_type="fee_accumulation",
+        title=leak.title,
+        explanation=(
+            "Penalty charges were applied by a provider in more than one month. The statement "
+            "shows the charges but not why the payments were late."
+            if repeated
+            else "A penalty charge was applied by a provider. The statement shows the charge but "
+            "not why the payment was late."
+        ),
+        evidence=evidence,
+        persistence="persistent" if repeated else "new",
+        analysis_status="supported",
+        evidence_strength=Decimal("0.80"),
+    )
+
+
+def _commitment_reasoning(leak: LeakDetection) -> _Draft:
+    """Overlapping cover and credit repayments: facts from the statement, no verdict."""
+    evidence = {
+        key: value
+        for key, value in {
+            "finding_focus": leak.evidence.get("finding_focus"),
+            "provider_count": _integer(leak.evidence.get("provider_count")),
+            "provider_names": leak.evidence.get("provider_names"),
+            "combined_merchants": leak.evidence.get("combined_merchants"),
+            "overlapping_months": leak.evidence.get("overlapping_months"),
+            "overlapping_month_count": _integer(leak.evidence.get("overlapping_month_count")),
+            "merchant_key": leak.evidence.get("merchant_key"),
+            "verification_required": True,
+        }.items()
+        if value is not None
+    }
+    if leak.leak_type == "overlapping_cover_leak":
+        explanation = (
+            "Funeral or life cover was paid to more than one provider across overlapping "
+            "months. The statement shows the premiums but not who or what each policy "
+            "covers, so it cannot say whether the cover is deliberate or overlaps."
+        )
+    elif leak.leak_type == "recurring_transfer_leak":
+        explanation = (
+            "Payments of a similar amount went to the same recipient on a regular cadence. "
+            "The statement does not show what they are for, so it cannot say whether they are "
+            "a deliberate commitment such as rent, support, a stokvel or a loan."
+        )
+    else:
+        explanation = (
+            "Repayments to credit providers were running at the same time, or went to a "
+            "lender in the short-term credit category. The statement shows the repayments "
+            "but not the interest rate or the balance, so it cannot say what the credit costs."
+        )
+    return _Draft(
+        root_cause_type="recurring_commitment",
+        title=leak.title,
+        explanation=explanation,
+        evidence=evidence,
+        persistence="persistent",
+        analysis_status="verification_required",
+        evidence_strength=Decimal("0.66"),
+    )
+
+
+def _habit_or_pattern_reasoning(
+    snapshot: FinancialFeatureSnapshot,
+    leak: LeakDetection,
+) -> _Draft:
+    evidence: dict[str, object] = dict(leak.evidence)
+    evidence.update(_source_evidence(leak))
+    persistence: Persistence = (
+        "persistent" if leak.impact_kind == "recurring" else "temporary"
+    )
+    if leak.leak_type == "coffee_spending_leak":
+        explanation = (
+            "Frequent small-to-medium cafe and coffee purchases accumulated into a "
+            "measurable monthly outlay across the observed period. This reflects "
+            "cumulative transaction frequency rather than a single large charge."
+        )
+    elif leak.leak_type == "convenience_store_leak":
+        explanation = (
+            "Repeated convenience-store and forecourt quick-stop visits accumulated "
+            "into a material monthly spend total across the observed period."
+        )
+    elif leak.leak_type == "gambling_spending_leak":
+        explanation = (
+            "Payments to betting and lottery operators repeated across several months and "
+            "added up to a measurable monthly outlay. The statement shows what was paid in, "
+            "not winnings or withdrawals."
+        )
+    elif leak.leak_type == "weekend_spending_leak":
+        explanation = (
+            "Calendar-normalised discretionary spending per weekend day materially "
+            "exceeded weekday discretionary spending after excluding fixed bills, "
+            "debit orders, and essential groceries."
+        )
+    else:
+        explanation = (
+            "A substantial share of discretionary spending occurred within the "
+            "three-day window immediately following salary credits across multiple "
+            "pay cycles, after controlling for essential bills and debit orders."
+        )
+    return _Draft(
+        root_cause_type="transaction_pattern",
+        title=leak.title,
+        explanation=explanation,
+        evidence=evidence,
+        persistence=persistence,
+        analysis_status="supported",
+        evidence_strength=Decimal("0.76"),
+    )
+
+
+def _inactive_recurring_reasoning(
+    snapshot: FinancialFeatureSnapshot,
+    leak: LeakDetection,
+    related: list[BehaviourObservation],
+) -> _Draft:
+    merchant = _merchant_for_recurring(snapshot, leak, related)
+    support = (
+        support_ratio(merchant.confidence_support)
+        if merchant
+        else Decimal("0.70")
+    )
+    last_observed = _date(leak.evidence.get("last_observed_date"))
+    expected_interval = _decimal(leak.evidence.get("expected_interval_days"))
+    days_since = _integer(leak.evidence.get("days_since_last_observed"))
+    observation_count = _integer(leak.evidence.get("observation_count"))
+    evidence: dict[str, object] = {
+        "last_observed_date": last_observed,
+        "expected_interval_days": expected_interval,
+        "days_since_last_observed": days_since,
+        "observation_count": observation_count,
+        "verification_required": True,
+        "not_proof_of_cancellation": True,
+    }
+    evidence.update(_source_evidence(leak))
+    merchant_display = _text(evidence.get("merchant_display_name")) or _text(
+        evidence.get("merchant_key")
+    )
+    title = (
+        f"Inactive recurring payment at {merchant_display}"
+        if merchant_display
+        else "Inactive recurring payment"
+    )
+    return _Draft(
+        root_cause_type="recurring_commitment",
+        title=title,
+        explanation=(
+            "A previously regular payment was not observed within its expected billing "
+            "window. This may reflect a delayed charge, a changed billing description, "
+            "or a stopped service, and requires verification rather than assuming "
+            "cancellation."
+        ),
+        evidence={key: value for key, value in evidence.items() if value is not None},
+        persistence="temporary",
+        analysis_status="verification_required",
+        evidence_strength=Decimal("0.72"),
+        support=support,
+    )
+
+
+def _irregular_transaction_reasoning(leak: LeakDetection) -> _Draft:
+    amount = _decimal(leak.evidence.get("transaction_amount"))
+    category = _text(leak.evidence.get("category_name"))
+    median_amount = _decimal(leak.evidence.get("category_median_amount"))
+    difference = _decimal(leak.evidence.get("difference_from_baseline"))
+    multiple = _decimal(leak.evidence.get("amount_multiple_of_category_median"))
+    sample_size = _integer(leak.evidence.get("baseline_sample_size"))
+    tx_date = _date(leak.evidence.get("transaction_date"))
+    tx_time = _text(leak.evidence.get("transaction_time"))
+    evidence: dict[str, object] = {
+        "transaction_amount": amount,
+        "category_name": category,
+        "category_median_amount": median_amount,
+        "difference_from_baseline": difference,
+        "amount_multiple_of_category_median": multiple,
+        "baseline_sample_size": sample_size,
+        "transaction_date": tx_date,
+        "transaction_time": tx_time,
+        "verification_required": True,
+        "not_proof_of_fraud": True,
+    }
+    evidence.update(_source_evidence(leak))
+    merchant_display = _text(evidence.get("merchant_display_name"))
+    title = (
+        f"Unusual transaction at {merchant_display}"
+        if merchant_display
+        else "Unusual transaction for category baseline"
+    )
+    return _Draft(
+        root_cause_type="transaction_pattern",
+        title=title,
+        explanation=(
+            "A single transaction was at least three times the category median and "
+            "at least R500 across the observed baseline. This may be a legitimate "
+            "one-off purchase and requires verification; it is not evidence of fraud."
+        ),
+        evidence={key: value for key, value in evidence.items() if value is not None},
+        persistence="new",
+        analysis_status="verification_required",
+        evidence_strength=Decimal("0.65"),
+    )
+
+
+def _insufficient_reasoning(
+    snapshot: FinancialFeatureSnapshot,
+    leak: LeakDetection,
+) -> _Draft:
+    return _insufficient_draft(
+        classify_persistence(_series_for_leak(snapshot, leak, [])),
+        "The detected financial pattern is supported, but the available aggregate "
+        "history is insufficient to determine the underlying cause.",
+    )
+
+
+def _insufficient_draft(
+    persistence: Persistence,
+    explanation: str,
+    evidence: dict[str, object] | None = None,
+) -> _Draft:
+    return _Draft(
+        root_cause_type="insufficient_evidence",
+        title="Underlying cause could not be determined",
+        explanation=explanation,
+        evidence=evidence or {},
+        persistence=persistence,
+        analysis_status="insufficient_evidence",
+        evidence_strength=Decimal("0.35"),
+        support=Decimal("0.60"),
+    )
+
+
+def _change_metrics(
+    evidence: dict[str, object],
+) -> tuple[Decimal, Decimal, Decimal, Decimal] | None:
+    values = (
+        _decimal(evidence.get("previous_amount")),
+        _decimal(evidence.get("current_amount")),
+        _decimal(evidence.get("transaction_count_previous")),
+        _decimal(evidence.get("transaction_count_current")),
+    )
+    if any(value is None or value <= ZERO for value in values):
+        return None
+    previous, current, previous_count, current_count = values
+    assert previous is not None
+    assert current is not None
+    assert previous_count is not None
+    assert current_count is not None
+    return previous, current, previous_count, current_count
+
+
+def _price_increase_evidence(
+    snapshot: FinancialFeatureSnapshot,
+    leak: LeakDetection,
+    category: str | None,
+    observations,
+) -> dict[str, object] | None:
+    if not category:
+        return None
+    current_period = _text(leak.evidence.get("current_period"))
+    current_total = _decimal(leak.evidence.get("current_amount"))
+    if not current_period or current_total in (None, ZERO):
+        return None
+    candidates = []
+    for observation in observations:
+        if observation.behavior_type != "price_increase_pattern":
+            continue
+        merchant_key = _text(observation.evidence.get("merchant_key"))
+        merchant = _merchant_feature(snapshot, merchant_key)
+        if (
+            merchant is None
+            or merchant.merchant_category_transaction_count.get(category, 0) == 0
+            or not _stable_frequency(merchant)
+        ):
+            continue
+        contribution = merchant.merchant_monthly_totals.get(current_period, ZERO)
+        if contribution / current_total < Decimal("0.50"):
+            continue
+        candidates.append((observation, contribution / current_total))
+    if not candidates:
+        return None
+    observation, share = max(candidates, key=lambda item: item[1])
+    return {
+        "contributing_merchant_share": share,
+        "merchant_previous_average_amount": observation.evidence.get(
+            "average_previous_amount"
+        ),
+        "merchant_latest_amount": observation.evidence.get("latest_amount"),
+        "merchant_amount_change_percentage": observation.evidence.get(
+            "change_percentage"
+        ),
+        "merchant_frequency_stable": True,
+    }
+
+
+def _stable_frequency(merchant: MerchantFeature) -> bool:
+    counts = list(merchant.merchant_monthly_transaction_count.values())
+    if len(counts) < 2:
+        return False
+    average = Decimal(sum(counts)) / Decimal(len(counts))
+    if average == ZERO:
+        return False
+    return (Decimal(max(counts)) - Decimal(min(counts))) / average <= Decimal("0.25")
+
+
+def _series_for_leak(
+    snapshot: FinancialFeatureSnapshot,
+    leak: LeakDetection,
+    related: list[BehaviourObservation],
+) -> list[Decimal]:
+    months = completed_months(snapshot)
+    if leak.leak_type == "bank_fee_leak":
+        return [month.bank_fee_total for month in months]
+    if leak.leak_type == "cash_usage_leak":
+        return [month.cash_withdrawal_total for month in months]
+    if leak.leak_type == "spending_escalation_leak":
+        return [month.total_outflow for month in months]
+    if leak.leak_type in _CATEGORY_LEAK_TYPES:
+        category = _text(leak.evidence.get("category_name"))
+        return [
+            month.category_totals.get(category, ZERO) if category else ZERO
+            for month in months
+        ]
+    if leak.leak_type in _RECURRING_LEAK_TYPES or leak.leak_type == "inactive_recurring_payment_leak":
+        merchant = _merchant_for_recurring(snapshot, leak, related)
+        return _merchant_series(snapshot, merchant)
+    return []
+
+
+def _merchant_series(
+    snapshot: FinancialFeatureSnapshot,
+    merchant: MerchantFeature | None,
+) -> list[Decimal]:
+    if merchant is None:
+        return []
+    return [
+        merchant.merchant_monthly_totals.get(month.month, ZERO)
+        for month in completed_months(snapshot)
+    ]
+
+
+def classify_persistence(series: list[Decimal]) -> Persistence:
+    """Classify a completed-period amount series without extrapolating it."""
+    if len(series) < 2:
+        return "insufficient_history"
+    previous = series[:-1]
+    current = series[-1]
+    if current > ZERO and not any(value > ZERO for value in previous):
+        return "new"
+    active_periods = sum(value > ZERO for value in series)
+    if len(series) >= 3:
+        recent = series[-3:]
+        prior = recent[:-1]
+        prior_average = sum(prior, ZERO) / Decimal(len(prior))
+        if (
+            prior_average > ZERO
+            and _relative_range(prior) <= Decimal("0.15")
+            and current >= prior_average * Decimal("1.20")
+        ):
+            return "temporary"
+        if _directional(recent, increasing=True):
+            return "increasing"
+        if _directional(recent, increasing=False):
+            return "declining"
+    if active_periods >= 2:
+        return "persistent"
+    return "temporary"
+
+
+def _directional(values: list[Decimal], *, increasing: bool) -> bool:
+    if len(values) < 3 or any(value <= ZERO for value in values):
+        return False
+    first, second, third = values
+    if increasing:
+        return (
+            second >= first * Decimal("1.05")
+            and third >= second * Decimal("1.05")
+        )
+    return (
+        second <= first * Decimal("0.95")
+        and third <= second * Decimal("0.95")
+    )
+
+
+def _relative_range(values: list[Decimal]) -> Decimal:
+    average = sum(values, ZERO) / Decimal(len(values))
+    if average == ZERO:
+        return ZERO
+    return (max(values) - min(values)) / average
+
+
+def _avoidability(
+    snapshot: FinancialFeatureSnapshot,
+    leak: LeakDetection,
+    draft: _Draft,
+) -> tuple[Avoidability, float | None, Decimal | None]:
+    if draft.root_cause_type == "potential_duplicate":
+        # Same merchant, amount, and day is a verification candidate only.
+        return "unknown", None, None
+    if leak.leak_type == "bank_fee_leak":
+        fees = snapshot.fees
+        optional_total = sum(
+            (
+                fees.atm_fee_total or ZERO,
+                fees.transaction_fee_total or ZERO,
+                fees.immediate_payment_fee_total or ZERO,
+                fees.sms_fee_total or ZERO,
+            ),
+            ZERO,
+        )
+        if optional_total > ZERO and fees.bank_fee_transaction_count >= 2:
+            return "medium", 0.62, None
+        return "unknown", None, None
+    if leak.leak_type == "cash_usage_leak":
+        return "medium", 0.56, None
+    if leak.leak_type in _CATEGORY_LEAK_TYPES or leak.leak_type in _HABIT_AND_PATTERN_LEAK_TYPES:
+        return "medium", 0.54, None
+    if leak.leak_type == "duplicate_streaming_leak":
+        return "medium", 0.58, None
+    return "unknown", None, None
+
+
+def _root_cause_confidence(
+    snapshot: FinancialFeatureSnapshot,
+    related: list[BehaviourObservation],
+    draft: _Draft,
+) -> float:
+    history = min(
+        Decimal("1"), Decimal(len(completed_months(snapshot))) / Decimal("6")
+    )
+    observation_score = (
+        Decimal(str(sum(item.confidence for item in related) / len(related)))
+        if related
+        else Decimal("0.55")
+    )
+    score = (
+        Decimal("0.20")
+        + Decimal("0.24") * draft.support
+        + Decimal("0.16") * history
+        + Decimal("0.26") * draft.evidence_strength
+        + Decimal("0.14") * observation_score
+    )
+    if draft.analysis_status == "competing_explanations":
+        score -= Decimal("0.10")
+    if draft.analysis_status == "insufficient_evidence":
+        score = min(score, Decimal("0.52"))
+    return round(float(max(Decimal("0.30"), min(Decimal("0.92"), score))), 2)
+
+
+def _source_evidence(leak: LeakDetection) -> dict[str, object]:
+    """Pass through safe merchant/source fields already present on the leak."""
+    evidence: dict[str, object] = {}
+    merchant_key = _text(leak.evidence.get("merchant_key"))
+    if merchant_key:
+        evidence["merchant_key"] = merchant_key
+        display = _text(leak.evidence.get("merchant_display_name"))
+        evidence["merchant_display_name"] = display or merchant_display_name_for(
+            merchant_key
+        )
+    focus = _text(leak.evidence.get("finding_focus"))
+    if focus:
+        evidence["finding_focus"] = focus
+    category = _text(leak.evidence.get("category_name"))
+    if category and "category" not in evidence:
+        evidence.setdefault("category_name", category)
+    return {key: value for key, value in evidence.items() if value is not None}
+
+
+def _spending_source_title(
+    leak: LeakDetection,
+    category: str | None,
+    change_amount: Decimal | None,
+) -> str | None:
+    merchant_key = _text(leak.evidence.get("merchant_key"))
+    if merchant_key:
+        return spending_increase_title(
+            source=merchant_key,
+            change_amount=change_amount,
+            source_is_merchant=True,
+        )
+    if category:
+        return spending_increase_title(
+            source=category,
+            change_amount=change_amount,
+            source_is_merchant=False,
+        )
+    return None
+
+
+def _merchant_for_recurring(
+    snapshot: FinancialFeatureSnapshot,
+    leak: LeakDetection,
+    related: list[BehaviourObservation],
+) -> MerchantFeature | None:
+    merchant_key = _text(leak.evidence.get("merchant_key"))
+    if not merchant_key:
+        merchant_key = next(
+            (
+                _text(observation.evidence.get("merchant_key"))
+                for observation in related
+                if observation.behavior_type == "recurring_payment_pattern"
+            ),
+            None,
+        )
+    return _merchant_feature(snapshot, merchant_key)
+
+
+def _merchant_feature(
+    snapshot: FinancialFeatureSnapshot,
+    merchant_key: str | None,
+) -> MerchantFeature | None:
+    if not merchant_key:
+        return None
+    return next(
+        (
+            merchant
+            for merchant in snapshot.merchants
+            if merchant.merchant_name == merchant_key
+        ),
+        None,
+    )
+
+
+def _category_feature(
+    snapshot: FinancialFeatureSnapshot,
+    category: str | None,
+) -> CategoryFeature | None:
+    if not category:
+        return None
+    return next(
+        (
+            feature
+            for feature in snapshot.categories
+            if feature.category_name == category
+        ),
+        None,
+    )
+
+
+def _reasoning_id(leak_id: str, root_cause_type: RootCauseType) -> str:
+    value = f"{leak_id}|{root_cause_type}|{REASONING_VERSION}"
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:32]
+
+
+def _safe_feature_reference(reference: str) -> str:
+    """Keep structural provenance without exposing merchant/category subjects."""
+    return re.sub(r"\[[^\]]+\]", "[*]", reference)
+
+
+def _relative_change(previous: Decimal, current: Decimal) -> Decimal:
+    if previous == ZERO:
+        return ZERO
+    return (current - previous) / previous
+
+
+def _percentage_change(previous: Decimal, current: Decimal) -> Decimal:
+    return _relative_change(previous, current) * Decimal("100")
+
+
+def _decimal(value: object) -> Decimal | None:
+    try:
+        parsed = Decimal(str(value)) if value is not None else None
+    except Exception:
+        return None
+    return parsed if parsed is not None and parsed.is_finite() else None
+
+
+def _integer(value: object) -> int | None:
+    parsed = _decimal(value)
+    return int(parsed) if parsed is not None else None
+
+
+def _text(value: object) -> str | None:
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _date(value: object) -> date | None:
+    if isinstance(value, date):
+        return value
+    if not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None

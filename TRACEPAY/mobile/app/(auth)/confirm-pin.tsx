@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 
 import { PinEntryScreen } from "../../src/components/auth/PinEntryScreen";
 import { authFlowParams } from "../../src/features/auth/auth.navigation";
+import { getAuthUserId } from "../../src/features/auth/auth.service";
 import { useAppLock } from "../../src/features/security/AppLockProvider";
 
 export default function ConfirmPinScreen() {
@@ -23,7 +24,8 @@ export default function ConfirmPinScreen() {
     setErrorMessage(null);
 
     try {
-      const matches = await confirmPin(pin);
+      const userId = await getAuthUserId().catch(() => null);
+      const matches = await confirmPin(pin, userId);
       if (!matches) {
         void Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Error,
@@ -37,6 +39,10 @@ export default function ConfirmPinScreen() {
       void Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
       );
+      if (params.flow === "change") {
+        router.back();
+        return;
+      }
       router.replace({
         pathname: "/(auth)/biometric-setup",
         params: authFlowParams(params.flow),

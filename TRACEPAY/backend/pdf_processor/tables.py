@@ -10,6 +10,10 @@ logger = logging.getLogger("tracepay.pdf.tables")
 
 _DATE_HEADERS = {"date", "transaction date", "value date", "trans date"}
 _DESCRIPTION_HEADERS = {"description", "details", "narration", "narrative", "merchant"}
+# A money cell holds only an amount ("-3 000.00", "R1,250.00 Cr", "-20.00 *"),
+# never prose like "* Includes VAT at 15%".
+_MONEY_CELL = re.compile(r"[\s*R()+\-]*\d[\d\s,.]*[\s*()\-]*(?:cr|dr)?\s*\**", re.IGNORECASE)
+_TEXT_HEADERS = {"category", "reference", "ref", "type", "transaction type"}
 _AMOUNT_HEADERS = {
     "amount",
     "debit",
@@ -35,7 +39,8 @@ def normalize_table(table: Any) -> list[list[str]]:
 
 
 def is_description_header(header: str) -> bool:
-    return header in _DESCRIPTION_HEADERS or header.startswith("description")
+    # "transaction description" (ABSA) as well as "description*" variants.
+    return header in _DESCRIPTION_HEADERS or header.startswith("description") or header.endswith(" description")
 
 
 def is_transaction_table(headers: list[str]) -> bool:
@@ -57,7 +62,12 @@ def table_headers(rows: list[list[str]]) -> tuple[int, list[str]]:
 def canonical_header(value: str) -> str:
     header = re.sub(r"\([^)]*\)|\[[^]]*\]", "", value.casefold())
     header = " ".join(header.replace("_", " ").replace("/", " ").split())
-    return header.rstrip("*").strip()
+    header = header.rstrip("*").strip()
+    # Camelot sometimes breaks a short header word ("D\nate").
+    compact = header.replace(" ", "")
+    if compact != header and compact in _DATE_HEADERS | _AMOUNT_HEADERS | {"balance", "description", "details"}:
+        return compact
+    return header
 
 
 def align_row_to_headers(row: list[str], headers: list[str]) -> tuple[list[str], list[str]]:
@@ -91,20 +101,61 @@ def merge_continuation_rows(rows: list[list[str]], headers: list[str]) -> list[l
 
     date_index = next((i for i, h in enumerate(headers) if h in _DATE_HEADERS), None)
     desc_index = next((i for i, h in enumerate(headers) if is_description_header(h)), None)
+    def _cell(row: list[str], index: int | None) -> str:
+        return row[index].strip() if index is not None and index < len(row) else ""
+
+    def _has_money(row: list[str]) -> bool:
+        return any(
+            _MONEY_CELL.fullmatch(cell.strip()) and parse_amount(cell) not in (None, Decimal("0"))
+            for index, cell in enumerate(row)
+            if cell.strip() and index != desc_index and (index >= len(headers) or headers[index] not in _TEXT_HEADERS)
+        )
+
     merged: list[list[str]] = []
-    for row in rows:
+    # A tall row can print its details line above the dated line (a payment received:
+    # "Inter account transfer from ..." sits over "17 Mar | Transfer | R21 074.70"). Such a
+    # line belongs to the dated row below it, not to the row above.
+    leading: dict[int, str] = {}
+    for position in range(len(rows) - 1):
+        row, following = rows[position], rows[position + 1]
+        if (
+            desc_index is not None
+            and parse_date(_cell(row, date_index)) is None
+            and _cell(row, desc_index)
+            and not _has_money(row)
+            and parse_date(_cell(following, date_index)) is not None
+            and not _cell(following, desc_index)
+            and _has_money(following)
+        ):
+            leading[position] = _cell(row, desc_index)
+    consumed = {position + 1: text for position, text in leading.items()}
+    for position, row in enumerate(rows):
+        if position in leading:
+            continue
         date_value = row[date_index].strip() if date_index is not None and date_index < len(row) else ""
         if parse_date(date_value) is not None:
-            merged.append(list(row))
+            current = list(row)
+            if position in consumed and desc_index is not None:
+                if desc_index >= len(current):
+                    current.extend([""] * (desc_index - len(current) + 1))
+                current[desc_index] = consumed[position]
+            merged.append(current)
             continue
         if not merged:
             continue
+        # Only money columns count: a wrapped reference number in the
+        # description ("2715149863") is text, not an amount.
         has_amount = any(
-            parse_amount(cell) not in (None, Decimal("0")) for cell in row if cell.strip()
+            _MONEY_CELL.fullmatch(cell.strip()) and parse_amount(cell) not in (None, Decimal("0"))
+            for index, cell in enumerate(row)
+            if cell.strip() and index != desc_index and (index >= len(headers) or headers[index] not in _TEXT_HEADERS)
         )
         extra = row[desc_index].strip() if desc_index is not None and desc_index < len(row) else ""
-        if has_amount or not extra or desc_index is None:
+        if has_amount or desc_index is None:
             merged.append(list(row))
+            continue
+        if not extra:
+            # Undated, amountless, no description: a wrapped category or page footer.
             continue
         current = list(merged[-1])
         if desc_index >= len(current):

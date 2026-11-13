@@ -1,5 +1,7 @@
 import type { FinancialAccount } from "./account.types";
 import {
+  formatAccountActivityLabel,
+  formatAccountCardTitle,
   formatAccountHeading,
   formatAccountSubtitle,
   formatStatementCount,
@@ -40,6 +42,16 @@ test("account heading uses the bank, nickname stays in the subtitle", () => {
   const fnb = account();
   assertEqual(formatAccountHeading(fnb), "FNB", "heading");
   assertEqual(formatAccountSubtitle(fnb), "Everyday Cheque · Cheque · ••••4821", "subtitle");
+  assertEqual(
+    formatAccountCardTitle(fnb),
+    "Everyday Cheque •••• 4821",
+    "card title",
+  );
+  assertEqual(
+    formatAccountActivityLabel(682, 1),
+    "682 transactions · 1 import",
+    "activity",
+  );
 });
 
 test("last 4 digits remain optional", () => {

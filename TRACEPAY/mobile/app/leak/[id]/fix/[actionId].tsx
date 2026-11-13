@@ -3,30 +3,24 @@ import { ChevronRight } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Circle, Path, Rect } from "react-native-svg";
 
+import { BankComparisonTable } from "../../../../src/components/leaks/BankComparisonTable";
 import {
   LeakFlowShell,
+  neutralCardStyle,
+  neutralPillColor,
   resolveMarkColor,
 } from "../../../../src/components/leaks/LeakFlowShell";
+import { BundleComparisonTable } from "../../../../src/components/leaks/BundleComparisonTable";
+import { CashOptionsTable } from "../../../../src/components/leaks/CashOptionsTable";
+import { ComparisonCard } from "../../../../src/components/leaks/ComparisonCard";
+import { LeakHero } from "../../../../src/components/leaks/LeakHero";
 import { Button } from "../../../../src/components/ui/Button";
 import {
   getActionDetail,
   hasCompareFlow,
 } from "../../../../src/features/leaks/fixContent";
-import { COLORS, TRACEPAY, withAlpha } from "../../../../src/theme/colors";
-
-function PiggyHero({ accent, primary }: { accent: string; primary: string }) {
-  return (
-    <Svg width={88} height={80} viewBox="0 0 88 80">
-      <Circle cx="44" cy="42" r="26" fill={withAlpha(accent, 0.22)} />
-      <Circle cx="62" cy="28" r="7" fill={withAlpha(primary, 0.35)} />
-      <Circle cx="26" cy="28" r="7" fill={withAlpha(primary, 0.35)} />
-      <Rect x="36" y="18" width="16" height="10" rx="5" fill={accent} />
-      <Path d="M34 40 H54" stroke={primary} strokeWidth={3} strokeLinecap="round" />
-    </Svg>
-  );
-}
+import { COLORS, withAlpha } from "../../../../src/theme/colors";
 
 export default function FixActionDetailScreen() {
   const { id, actionId } = useLocalSearchParams<{ id: string; actionId: string }>();
@@ -36,17 +30,13 @@ export default function FixActionDetailScreen() {
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
-  const trace = TRACEPAY[scheme];
-  const heroSurface =
-    scheme === "dark" ? withAlpha(palette.primary, 0.16) : withAlpha(palette.primary, 0.1);
 
   if (!detail) {
     return null;
   }
 
-  const nextRoute = hasCompareFlow(detail)
-    ? `/leak/${leakId}/fix/${actionId}/compare`
-    : `/leak/${leakId}/fix/${actionId}/guide`;
+  // Comparisons are shown right here, so the button always goes on to the steps.
+  const nextRoute = `/leak/${leakId}/fix/${actionId}/guide`;
 
   return (
     <LeakFlowShell title={detail.title} subtitle={detail.subtitle}>
@@ -54,20 +44,10 @@ export default function FixActionDetailScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
       >
-        <View
-          className="mt-5 flex-row items-center gap-3 rounded-3xl p-5"
-          style={{ backgroundColor: heroSurface }}
-        >
-          <View className="flex-1">
-            <Text className="text-[13px] text-muted-foreground">{detail.savingsLabel}</Text>
-            <Text className="mt-1 text-[32px] font-bold text-foreground">{detail.savings}</Text>
-            <Text className="mt-0.5 text-[13px] text-muted-foreground">every month</Text>
-          </View>
-          <PiggyHero accent={trace.splashAccentPink} primary={palette.primary} />
-        </View>
+        <LeakHero label={detail.savingsLabel} amount={detail.savings} caption="every month" />
 
         <Text className="mb-2 mt-7 text-[17px] font-bold text-foreground">Why this helps</Text>
-        <View className="rounded-3xl bg-muted p-4">
+        <View className="rounded-3xl bg-card p-4" style={neutralCardStyle(palette)}>
           <Text className="text-[14px] leading-6 text-foreground">{detail.whyThisHelps}</Text>
         </View>
 
@@ -91,24 +71,9 @@ export default function FixActionDetailScreen() {
                     </Text>
                   </View>
                   <View className="min-w-0 flex-1">
-                    <View className="flex-row flex-wrap items-center gap-2">
-                      <Text className="text-[14px] font-semibold text-foreground">
-                        {account.name}
-                      </Text>
-                      {account.featured ? (
-                        <View
-                          className="rounded-full px-2 py-0.5"
-                          style={{ backgroundColor: withAlpha(palette.success, 0.14) }}
-                        >
-                          <Text
-                            className="text-[10px] font-semibold"
-                            style={{ color: palette.success }}
-                          >
-                            Top pick
-                          </Text>
-                        </View>
-                      ) : null}
-                    </View>
+                    <Text className="text-[14px] font-semibold text-foreground">
+                      {account.name}
+                    </Text>
                     <Text className="mt-0.5 text-[12px] text-muted-foreground">
                       {account.monthlyFee} monthly
                     </Text>
@@ -117,7 +82,7 @@ export default function FixActionDetailScreen() {
                         <View
                           key={tag}
                           className="rounded-full px-2 py-0.5"
-                          style={{ backgroundColor: withAlpha(palette.primary, 0.1) }}
+                          style={{ backgroundColor: neutralPillColor(palette) }}
                         >
                           <Text className="text-[10px] font-medium text-primary">{tag}</Text>
                         </View>
@@ -131,12 +96,49 @@ export default function FixActionDetailScreen() {
           </>
         ) : null}
 
+        {detail.bankComparison ? (
+          <>
+            <Text className="mb-1 mt-7 text-[17px] font-bold text-foreground">
+              Compare South African bank accounts
+            </Text>
+            <Text className="text-[13px] leading-5 text-muted-foreground">
+              Monthly fees for entry-level accounts. Scroll sideways for more columns.
+            </Text>
+            <BankComparisonTable />
+          </>
+        ) : null}
+
+        {detail.bundleComparison ? (
+          <>
+            <Text className="mb-1 mt-7 text-[17px] font-bold text-foreground">
+              Compare data bundles
+            </Text>
+            <Text className="text-[13px] leading-5 text-muted-foreground">
+              Vodacom, MTN, Cell C, Telkom, Rain and the cheaper network resellers, cheapest per GB first.
+            </Text>
+            <BundleComparisonTable />
+          </>
+        ) : null}
+
+        {detail.cashComparison ? (
+          <>
+            <Text className="mb-1 mt-7 text-[17px] font-bold text-foreground">
+              Compare ways to get cash
+            </Text>
+            <Text className="text-[13px] leading-5 text-muted-foreground">
+              What each option usually costs, so you can see the difference.
+            </Text>
+            <CashOptionsTable />
+          </>
+        ) : null}
+
+        <ComparisonCard detail={detail} />
+
         <Button
           className="mt-6"
-          size="md"
           onPress={() => router.push(nextRoute as never)}
         >
-          {hasCompareFlow(detail) ? detail.primaryCta : "Show step-by-step guide"}
+          {hasCompareFlow(detail) ? detail.compareCta : "Show step-by-step guide"}
         </Button>
       </ScrollView>
     </LeakFlowShell>

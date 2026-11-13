@@ -15,14 +15,6 @@ export const BANK_SENDERS: Record<string, RegExp[]> = {
   OLDMUTUAL: [/^OLD\s*MUTUAL$/i, /^OLDMUTUAL$/i],
 };
 
-export const ALL_BANK_SENDER_REGEX: RegExp = new RegExp(
-  Object.values(BANK_SENDERS)
-    .flat()
-    .map((r) => r.source)
-    .join('|'),
-  'i'
-);
-
 // ─── Merchant → category keyword map ─────────────────────────────────────────
 
 export const CATEGORY_KEYWORDS: Record<TransactionCategory, RegExp> = {

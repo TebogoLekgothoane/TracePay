@@ -141,8 +141,15 @@ function toParsedTransaction(reading: ReadingRow): ParsedTransactionRow | null {
 export async function parseIngestionReadings(
   client: SupabaseClient,
   readings: readonly ReadingRow[],
+  authenticatedUserId: string,
 ): Promise<void> {
-  const parsed = readings.map(toParsedTransaction).filter((row): row is ParsedTransactionRow => Boolean(row));
+  if (!authenticatedUserId.trim()) {
+    throw new Error("Authenticated user is required.");
+  }
+
+  const parsed = readings
+    .map((reading) => toParsedTransaction({ ...reading, user_id: authenticatedUserId }))
+    .filter((row): row is ParsedTransactionRow => Boolean(row));
   if (parsed.length === 0) {
     return;
   }

@@ -6,6 +6,18 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "web/dashboard"],
       "port": 3000
+    },
+    {
+      "name": "tracepay-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "3200", "--directory", "TRACEPAY/website"],
+      "port": 3200
+    },
+    {
+      "name": "website",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "tracepay-website", "--", "--port", "3100"],
+      "port": 3100
     }
   ]
 }

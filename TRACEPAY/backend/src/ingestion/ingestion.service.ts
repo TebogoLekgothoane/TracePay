@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { AuthHttpError } from "../auth/auth.types.js";
 import { getAdminClient, getUserClient } from "../supabase.js";
 import {
@@ -148,7 +150,27 @@ function validateReading(value: unknown): ValidReading {
   };
 }
 
-function validateBatch(body: IngestionBatchBody): ValidReading[] {
+const USER_ID_FIELDS = ["user_id", "userId"] as const;
+
+function rejectForeignUserId(value: unknown, userId: string): void {
+  const record = readObject(value);
+  for (const key of USER_ID_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(record, key)) {
+      continue;
+    }
+    const claimed = record[key];
+    if (claimed == null || claimed === "") {
+      continue;
+    }
+    if (typeof claimed === "string" && claimed.trim() === userId) {
+      continue;
+    }
+    throw new AuthHttpError(400, "user_id does not match the signed-in user.");
+  }
+}
+
+function validateBatch(body: IngestionBatchBody, userId: string): ValidReading[] {
+  rejectForeignUserId(body, userId);
   if (!Array.isArray(body.readings)) {
     throw new AuthHttpError(400, "readings must be an array.");
   }
@@ -159,17 +181,36 @@ function validateBatch(body: IngestionBatchBody): ValidReading[] {
     throw new AuthHttpError(400, `Send no more than ${MAX_BATCH_SIZE} readings at once.`);
   }
 
-  return body.readings.map(validateReading);
+  return body.readings.map((reading) => {
+    rejectForeignUserId(reading, userId);
+    return validateReading(reading);
+  });
 }
 
-export async function ingestReadings(userId: string, body: IngestionBatchBody): Promise<IngestionResult> {
-  const readings = validateBatch(body).map((reading) => ({
-    ...reading,
+export async function ingestReadings(
+  userId: string,
+  body: IngestionBatchBody,
+  client: SupabaseClient = getAdminClient(),
+): Promise<IngestionResult> {
+  if (!userId.trim()) {
+    throw new AuthHttpError(401, "Sign in to sync phone readings.");
+  }
+
+  const updatedAt = new Date().toISOString();
+  const readings = validateBatch(body, userId).map((reading) => ({
+    client_id: reading.client_id,
+    source: reading.source,
+    received_at: reading.received_at,
+    sender: reading.sender,
+    app_identifier: reading.app_identifier,
+    title: reading.title,
+    body: reading.body,
+    metadata: reading.metadata,
     user_id: userId,
-    updated_at: new Date().toISOString(),
+    updated_at: updatedAt,
   }));
 
-  const admin = getAdminClient();
+  const admin = client;
   const { data, error } = await admin
     .from("ingestion_readings")
     .upsert(readings, { onConflict: "user_id,source,client_id" })
@@ -180,8 +221,16 @@ export async function ingestReadings(userId: string, body: IngestionBatchBody): 
   }
 
   const stored = (data as StoredReading[]) ?? [];
+  if (stored.some((reading) => reading.user_id !== userId)) {
+    throw new AuthHttpError(500, "Could not sync phone readings. Please try again.");
+  }
+
   try {
-    await parseIngestionReadings(admin, stored);
+    await parseIngestionReadings(
+      admin,
+      stored.map((reading) => ({ ...reading, user_id: userId })),
+      userId,
+    );
   } catch (parseError) {
     console.error("[ingestion] parse persistence failed", {
       message: parseError instanceof Error ? parseError.message : "unknown",

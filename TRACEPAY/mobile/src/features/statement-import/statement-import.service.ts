@@ -1,17 +1,50 @@
 import type { DocumentPickerAsset } from "expo-document-picker";
+import { invalidateQueries } from "../../lib/query-cache";
 import * as Crypto from "expo-crypto";
 
-import { requireAccountForImport } from "../accounts/account.service";
+import { noteImportCompleted } from "../notifications/import-reminder.scheduler";
+import { listAccounts, requireAccountForImport } from "../accounts/account.service";
 import type { FinancialAccount } from "../accounts/account.types";
 import { getPdfProcessorBaseUrl } from "../../constants/config";
+import { requestTransferReconciliation } from "../../api/statement-coverage.api";
 import { getSupabase } from "../../lib/supabase";
-import { buildTransactionDedupeKey } from "../transactions/transaction.dedupe";
 import { hashStatementContent, readPdfBytes } from "../transactions/statement-file";
+import {
+  assertExtractedBankMatchesSelected,
+  assertKnownStatementBankKey,
+  normalizeStatementBankKey,
+} from "./statement-bank";
+import {
+  accountMismatchMessage,
+  ACCOUNT_UNCONFIRMED_NOTE,
+  assessStatementAccount,
+  belongsToOtherAccountMessage,
+} from "./statement-account";
+import { readPrintedFigures, type PrintedFigures } from "./statement-import.figures";
+import {
+  buildImportRpcRows,
+  buildImportRpcStatement,
+  describeImportFailure,
+  summariseImportResult,
+  type ImportRpcResult,
+  type StatementImportSummary,
+} from "./statement-import.persist";
+import {
+  isExpectedImportNotice,
+  isNoTransactionsImportMessage,
+  NO_ACTIVITY_IN_PERIOD_MESSAGE,
+  NO_TRANSACTIONS_FOUND_MESSAGE,
+} from "./statement-import.messages";
 import {
   STATEMENT_IMPORT_STAGE_RATIO,
   type StatementImportProgress,
   type StatementImportStage,
 } from "./statement-import.progress";
+import {
+  FindingReconciliationError,
+  postFindingReconciliation,
+  shouldReconcileSavedImport,
+} from "./statement-import.reconciliation";
 import { requireValidExtractedTransactions } from "./statement-import.validation";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -21,6 +54,7 @@ export type { StatementImportProgress, StatementImportStage };
 
 export type ExtractedTransaction = {
   date: string;
+  transaction_time?: string | null;
   description: string;
   amount: number | string;
   type: "debit" | "credit";
@@ -34,6 +68,13 @@ export type ExtractedTransaction = {
   classification_reason?: string | null;
   merchant_name?: string | null;
   reference?: string | null;
+  /** The date exactly as the statement printed it, and how sure the parse is. */
+  date_text?: string | null;
+  date_confidence?: "high" | "medium" | "low" | null;
+  date_warnings?: string[];
+  booking_date?: string | null;
+  value_date?: string | null;
+  source_row?: number | null;
 };
 
 export type PdfStatementPreview = {
@@ -53,6 +94,13 @@ export type PdfStatementPreview = {
   balanceReconciliation: "verified" | "not_available" | "mismatch";
   rowsDetected: number;
   rowsRejected: number;
+  findingSummary?: {
+    inserted: number;
+    newFindings: number;
+    updatedFindings: number;
+  };
+  /** What the import did to the consolidated history; set once saved. */
+  importSummary?: StatementImportSummary;
   statement: {
     bank: string | null;
     accountNumberLast4: string | null;
@@ -61,6 +109,15 @@ export type PdfStatementPreview = {
     statementEndDate: string | null;
     openingBalance: number | null;
     closingBalance: number | null;
+    /** `declared`: printed on the statement. `inferred`: taken from the first and last transaction. */
+    periodSource: "declared" | "inferred" | "unknown" | null;
+    openingClosingReconciliation: "verified" | "not_available" | "mismatch" | null;
+    reconciliationDifference: number | null;
+    /**
+     * Figures the statement printed outside its rows (interest rates, facility, summary
+     * totals), exactly as read. Null when it printed none; never estimated.
+     */
+    printedFigures: PrintedFigures | null;
   };
 };
 
@@ -94,7 +151,29 @@ export type PreparePdfStatementOptions = {
   password?: string;
   resume?: PdfImportResume | null;
   onProgress?: (progress: StatementImportProgress) => void;
+  /** Abort in-flight upload/extract when the user cancels tracing. */
+  signal?: AbortSignal;
+  /**
+   * Skip the per-statement findings run. A batch caller reconciles once after
+   * the last statement, since each run already covers the user's whole history.
+   */
+  deferReconciliation?: boolean;
 };
+
+export const PDF_IMPORT_CANCELLED_MESSAGE = "PDF processing was cancelled.";
+
+export function isPdfImportCancelled(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /PDF processing was cancelled/i.test(error.message)
+  );
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw new Error(PDF_IMPORT_CANCELLED_MESSAGE);
+  }
+}
 
 function reportProgress(
   onProgress: PreparePdfStatementOptions["onProgress"],
@@ -112,6 +191,8 @@ export function isPdfPasswordChallenge(
   return value instanceof PdfPasswordChallengeError;
 }
 
+export { FindingReconciliationError, isFindingReconciliationError } from "./statement-import.reconciliation";
+
 type ProcessorPreviewPayload = {
   detail?: string;
   raw_extraction?: { extraction_method?: string };
@@ -123,6 +204,9 @@ type ProcessorPreviewPayload = {
     rows_detected?: number;
     rows_rejected?: number;
     balance_reconciliation?: "verified" | "not_available" | "mismatch";
+    opening_closing_reconciliation?: "verified" | "not_available" | "mismatch";
+    reconciliation_difference?: number | string | null;
+    no_activity?: boolean;
   };
   statement_balance?: {
     amount?: number | string | null;
@@ -138,6 +222,8 @@ type ProcessorPreviewPayload = {
     opening_balance?: number | string | null;
     closing_balance?: number | string | null;
     balance_source?: "closing_balance" | "running_balance" | "unavailable";
+    period_source?: "declared" | "inferred" | "unknown";
+    printed_figures?: Record<string, unknown> | null;
   };
   transactions?: ExtractedTransaction[];
 };
@@ -235,6 +321,20 @@ function readExtractedStatement(
       readOptionalDate(raw?.statement_end_date) ?? statementBalance.asOfDate,
     openingBalance: readOptionalNumber(raw?.opening_balance),
     closingBalance: closing,
+    periodSource:
+      raw?.period_source === "declared" ||
+      raw?.period_source === "inferred" ||
+      raw?.period_source === "unknown"
+        ? raw.period_source
+        : null,
+    openingClosingReconciliation:
+      payload.validation?.opening_closing_reconciliation === "verified" ||
+      payload.validation?.opening_closing_reconciliation === "mismatch" ||
+      payload.validation?.opening_closing_reconciliation === "not_available"
+        ? payload.validation.opening_closing_reconciliation
+        : null,
+    reconciliationDifference: readOptionalNumber(payload.validation?.reconciliation_difference),
+    printedFigures: readPrintedFigures(raw?.printed_figures),
   };
 }
 
@@ -263,32 +363,50 @@ function postPdfToProcessor(
   accessToken: string,
   file: { uri: string; name: string },
   password: string | undefined,
+  signal?: AbortSignal,
 ): Promise<{ status: number; payload: ProcessorPreviewPayload }> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error(PDF_IMPORT_CANCELLED_MESSAGE));
+      return;
+    }
+
     const request = new XMLHttpRequest();
     let timedOut = false;
+    let userCancelled = false;
 
     const timeout = setTimeout(() => {
       timedOut = true;
       request.abort();
     }, PDF_PROCESSOR_TIMEOUT_MS);
 
-    request.onerror = () => {
+    const onSignalAbort = () => {
+      userCancelled = true;
+      request.abort();
+    };
+    signal?.addEventListener("abort", onSignalAbort, { once: true });
+
+    const clearListeners = () => {
       clearTimeout(timeout);
+      signal?.removeEventListener("abort", onSignalAbort);
+    };
+
+    request.onerror = () => {
+      clearListeners();
       reject(new Error("Could not reach the PDF processor."));
     };
     request.onabort = () => {
-      clearTimeout(timeout);
+      clearListeners();
       reject(
         new Error(
-          timedOut
+          timedOut && !userCancelled
             ? "PDF processing timed out after 300 seconds. Check that the processor is running and reachable, then try again."
-            : "PDF processing was cancelled.",
+            : PDF_IMPORT_CANCELLED_MESSAGE,
         ),
       );
     };
     request.onload = () => {
-      clearTimeout(timeout);
+      clearListeners();
       try {
         resolve({
           status: request.status,
@@ -300,17 +418,23 @@ function postPdfToProcessor(
     };
 
     const form = new FormData();
+    const trimmedPassword = password?.trim() ?? "";
+    // Append password before the file — some Android FormData builds drop
+    // trailing string parts after a { uri } file part.
+    if (trimmedPassword) {
+      form.append("password", trimmedPassword);
+    }
     form.append("file", {
       uri: file.uri,
       name: file.name,
       type: "application/pdf",
     } as unknown as Blob);
-    if (password?.trim()) {
-      form.append("password", password);
-    }
 
     request.open("POST", url);
     request.setRequestHeader("Authorization", `Bearer ${accessToken}`);
+    if (trimmedPassword) {
+      request.setRequestHeader("X-TracePay-Pdf-Password", trimmedPassword);
+    }
     request.send(form);
   });
 }
@@ -343,87 +467,150 @@ function passwordChallengeFromDetail(
   return null;
 }
 
+function isEmptyStatementOutcome(message: string): boolean {
+  return isNoTransactionsImportMessage(message);
+}
+
 async function failAndCleanup(
   statementId: string,
   filePath: string,
   message: string,
 ): Promise<never> {
-  console.error("[TracePay][statement] cleanup_failed_import", {
-    statementId,
-    message,
-  });
+  const userMessage = isEmptyStatementOutcome(message)
+    ? NO_TRANSACTIONS_FOUND_MESSAGE
+    : message;
+  if (isExpectedImportNotice(userMessage)) {
+    console.info("[TracePay][statement] import_notice", {
+      statementId,
+      message: userMessage,
+    });
+  } else {
+    console.error("[TracePay][statement] cleanup_failed_import", {
+      statementId,
+      message: userMessage,
+    });
+  }
   const supabase = getSupabase();
   await supabase
     .from("statement_imports")
-    .update({ status: "failed", error_message: message })
+    .update({ status: "failed", error_message: userMessage })
     .eq("id", statementId);
   await supabase.from("transactions").delete().eq("statement_id", statementId);
   await supabase.storage.from("statements").remove([filePath]);
-  throw new Error(message);
+  throw new Error(userMessage);
 }
 
-async function assertStatementPeriodNotDuplicate(
-  accountId: string,
-  statementId: string,
-  startDate: string | null,
-  endDate: string | null,
-): Promise<void> {
-  if (!startDate || !endDate) {
-    return;
-  }
+/**
+ * Releases only abandoned attempts for this account. It must not touch other
+ * in-flight imports: several statements can be processed in one session.
+ */
+async function releaseStaleAttempts(accountId: string, keepId: string | null): Promise<void> {
   const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from("statement_imports")
-    .select("id, file_name, statement_start_date, statement_end_date")
-    .eq("account_id", accountId)
-    .eq("status", "processed")
-    .eq("statement_start_date", startDate)
-    .eq("statement_end_date", endDate)
-    .neq("id", statementId)
-    .maybeSingle();
-
+  const { error } = await supabase.rpc("release_stale_statement_attempts", {
+    p_account_id: accountId,
+    p_keep_id: keepId,
+  });
   if (error) {
-    throw new Error("Existing statements could not be checked for duplicates.");
-  }
-  if (data) {
-    throw new Error(
-      `A statement for ${startDate} to ${endDate} is already imported${
-        typeof data.file_name === "string" ? ` as "${data.file_name}"` : ""
-      }. Overlapping statements are allowed; this exact period is already saved.`,
-    );
+    console.warn("[TracePay][statement] release_stale_attempts_failed", {
+      message: error.message,
+    });
   }
 }
 
-async function loadCanonicalDedupeMap(
-  userId: string,
-  accountId: string,
-): Promise<Map<string, string>> {
-  const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from("transactions")
-    .select("id, dedupe_key")
-    .eq("user_id", userId)
-    .eq("account_id", accountId)
-    .eq("is_duplicate", false)
-    .not("dedupe_key", "is", null);
-
-  if (error) {
-    throw new Error("Existing transactions could not be checked for duplicates.");
-  }
-
-  const map = new Map<string, string>();
-  for (const row of data ?? []) {
-    if (typeof row.dedupe_key === "string" && typeof row.id === "string") {
-      map.set(row.dedupe_key, row.id);
+async function loadCategoryIds(names: string[]): Promise<Map<string, string>> {
+  const categoryIds = new Map<string, string>();
+  if (names.length === 0) return categoryIds;
+  const { data: categories, error: categoryError } = await getSupabase()
+    .from("categories")
+    .select("id,name")
+    .in("name", names);
+  if (categoryError) throw new Error("Categories could not be loaded.");
+  for (const category of categories ?? []) {
+    if (typeof category.id === "string" && typeof category.name === "string") {
+      categoryIds.set(category.name, category.id);
     }
   }
-  return map;
+  const missing = names.filter((name) => !categoryIds.has(name));
+  if (missing.length > 0) {
+    throw new Error(`The categories could not be resolved: ${missing.join(", ")}.`);
+  }
+  return categoryIds;
+}
+
+const FINDING_REGISTRY_TIMEOUT_MS = 60_000;
+
+async function currentAccessToken(): Promise<string> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.auth.getSession();
+  if (error || !data.session?.access_token) {
+    return "";
+  }
+  return data.session.access_token;
+}
+
+export async function retryFindingReconciliation(
+  statementImportId: string,
+): Promise<{ newFindings: number; updatedFindings: number }> {
+  return postFindingReconciliation({
+    statementImportId,
+    accessToken: await currentAccessToken(),
+    baseUrl: getPdfProcessorBaseUrl(),
+    timeoutMs: FINDING_REGISTRY_TIMEOUT_MS,
+  });
+}
+
+type PersistResult = {
+  /** New transactions added to the consolidated history. */
+  inserted: number;
+  /** Rows already imported from another statement or an earlier run. */
+  duplicates: number;
+  summary: StatementImportSummary;
+  accountNote: string | null;
+  newFindings: number;
+  updatedFindings: number;
+};
+
+/**
+ * Compare the statement's own account identity with the account the user
+ * chose. A disagreement stops the import: saving someone's transactions under
+ * the wrong account would corrupt both accounts' coverage and totals.
+ */
+async function confirmStatementAccount(
+  account: FinancialAccount,
+  preview: PdfStatementPreview,
+): Promise<{ adoptLastFour: string | null; note: string | null }> {
+  const accounts = await listAccounts();
+  const verdict = assessStatementAccount(
+    account,
+    accounts,
+    preview.statement.accountNumberLast4,
+  );
+  switch (verdict.status) {
+    case "mismatch":
+      throw new Error(
+        accountMismatchMessage(verdict.accountLastFour, verdict.statementLastFour),
+      );
+    case "belongs_to_other_account":
+      throw new Error(
+        belongsToOtherAccountMessage(
+          preview.statement.accountNumberLast4 ?? "",
+          verdict.accountName,
+        ),
+      );
+    case "adopt_last4":
+      return { adoptLastFour: verdict.lastFour, note: null };
+    case "unconfirmed":
+      return { adoptLastFour: null, note: ACCOUNT_UNCONFIRMED_NOTE };
+    default:
+      return { adoptLastFour: null, note: null };
+  }
 }
 
 async function persistPreview(
   preview: PdfStatementPreview,
   account: FinancialAccount,
-): Promise<{ inserted: number; duplicates: number }> {
+  deferReconciliation = false,
+): Promise<PersistResult> {
   console.info("[TracePay][statement] persist_started", {
     statementId: preview.statementId,
     transactionCount: preview.transactions.length,
@@ -434,205 +621,106 @@ async function persistPreview(
   if (userError || !userData.user) {
     throw new Error("Sign in before saving transactions.");
   }
-  console.info("[TracePay][statement] connected_account_ready", {
-    accountId: account.id,
-    accountName: account.name,
-  });
 
-  await assertStatementPeriodNotDuplicate(
-    account.id,
-    preview.statementId,
-    preview.statement.statementStartDate,
-    preview.statement.statementEndDate,
-  );
+  assertExtractedBankMatchesSelected(account.institution, preview.statement.bank);
+  const accountCheck = await confirmStatementAccount(account, preview);
 
-  const canonicalKeys = await loadCanonicalDedupeMap(userData.user.id, account.id);
-  const categoryNames = [
+  const categoryIds = await loadCategoryIds([
     ...new Set(
       preview.transactions
         .map((transaction) => transaction.category_name)
         .filter((name): name is string => Boolean(name)),
     ),
-  ];
-  const categoryIds = new Map<string, string>();
-  if (categoryNames.length > 0) {
-    const { data: categories, error: categoryError } = await supabase
-      .from("categories")
-      .select("id,name")
-      .in("name", categoryNames);
-    if (categoryError) throw new Error("Categories could not be loaded.");
-    for (const category of categories ?? []) {
-      if (typeof category.id === "string" && typeof category.name === "string") {
-        categoryIds.set(category.name, category.id);
-      }
-    }
-    const missingCategories = categoryNames.filter(
-      (name) => !categoryIds.has(name),
-    );
-    if (missingCategories.length > 0) {
-      throw new Error(
-        `The categories could not be resolved: ${missingCategories.join(", ")}.`,
-      );
-    }
-  }
+  ]);
 
-  let duplicateCount = 0;
-  const batchKeys = new Map(canonicalKeys);
-  const rows = preview.transactions.map((transaction) => {
-    const dedupeKey = buildTransactionDedupeKey(account.id, transaction);
-    const duplicateOf = batchKeys.get(dedupeKey) ?? null;
-    const isDuplicate = Boolean(duplicateOf);
-    const rowId = Crypto.randomUUID();
-    if (isDuplicate) {
-      duplicateCount += 1;
-    } else {
-      batchKeys.set(dedupeKey, rowId);
-    }
-    return {
-      id: rowId,
-      user_id: userData.user.id,
-      account_id: account.id,
-      statement_id: preview.statementId,
-      date: transaction.date,
-      description: transaction.description,
-      amount: transaction.amount,
-      type: transaction.type,
-      balance: transaction.balance ?? null,
-      currency: transaction.currency ?? null,
-      source: "statement",
-      dedupe_key: dedupeKey,
-      is_duplicate: isDuplicate,
-      duplicate_of: duplicateOf,
-      category_id: transaction.category_name
-        ? (categoryIds.get(transaction.category_name) ?? null)
-        : null,
-      category_source: "automatic",
-      category_confidence: transaction.category_confidence ?? 0,
-      category_rule: transaction.category_rule ?? null,
-      categorized_at: transaction.category_name
-        ? new Date().toISOString()
-        : null,
-      transaction_class: transaction.transaction_class ?? "unknown",
-      classification_confidence: transaction.classification_confidence ?? 0,
-      classification_reason: transaction.classification_reason ?? null,
-      merchant_name: transaction.merchant_name ?? null,
-      reference: transaction.reference ?? null,
-      extraction_method: preview.extractionMethod,
-    };
+  // One transaction: dedupe against the user's whole history, insert, and mark
+  // the statement processed. The database serialises imports per account, so
+  // two uploads cannot both decide the same row is new.
+  const { data, error } = await supabase.rpc("import_statement_transactions", {
+    p_statement_id: preview.statementId,
+    p_rows: buildImportRpcRows(preview.transactions, categoryIds, preview.extractionMethod),
+    p_statement: buildImportRpcStatement(preview),
+    p_replace: false,
   });
-  let { error } = await supabase.from("transactions").insert(rows);
-  if (
-    error &&
-    /merchant_name|reference|extraction_method|transaction_class|classification_confidence|classification_reason/i.test(
-      error.message ?? "",
-    )
-  ) {
-    console.warn("[TracePay][statement] optional_columns_missing", {
-      code: error.code ?? null,
-    });
-    const legacyRows = rows.map(
-      ({
-        transaction_class: _transactionClass,
-        classification_confidence: _classificationConfidence,
-        classification_reason: _classificationReason,
-        merchant_name: _merchantName,
-        reference: _reference,
-        extraction_method: _extractionMethod,
-        ...row
-      }) => row,
-    );
-    ({ error } = await supabase.from("transactions").insert(legacyRows));
-  }
   if (error) {
     console.error("[TracePay][statement] transaction_insert_failed", {
       code: error.code ?? null,
       message: error.message ?? "unknown",
-      details: error.details ?? null,
-      hint: error.hint ?? null,
     });
-    throw new Error(
-      `The extracted transactions could not be saved${error.code ? ` (${error.code})` : ""}.`,
-    );
+    throw new Error(describeImportFailure(error));
   }
-  const databaseUpdates = rows.filter((row) => row.category_id).length;
-  console.info("[CATEGORISATION] database_updates", {
-    statementId: preview.statementId,
-    databaseUpdates,
-    unknownAfterAi: preview.transactions.filter(
-      (transaction) =>
-        !transaction.category_name &&
-        (transaction.transaction_class ?? "unknown") === "unknown",
-    ).length,
-  });
-  const statementUpdate = {
-    account_id: account.id,
-    status: "processed" as const,
-    extraction_method: preview.extractionMethod,
-    transaction_count: rows.length - duplicateCount,
-    processed_at: new Date().toISOString(),
-    closing_balance: preview.statement.closingBalance ?? preview.statementBalance.amount,
-    opening_balance: preview.statement.openingBalance,
-    statement_start_date: preview.statement.statementStartDate,
-    statement_end_date:
-      preview.statement.statementEndDate ?? preview.statementBalance.asOfDate,
-    extracted_bank: preview.statement.bank,
-    extracted_last4: preview.statement.accountNumberLast4,
-    balance_as_of:
-      preview.statement.statementEndDate ?? preview.statementBalance.asOfDate,
-    balance_source: preview.statementBalance.source,
-    balance_reconciliation: preview.balanceReconciliation,
-    extraction_confidence: preview.confidence,
-    rows_detected: preview.rowsDetected,
-    rows_rejected: preview.rowsRejected,
-  };
-  let { error: updateError } = await supabase
-    .from("statement_imports")
-    .update(statementUpdate)
-    .eq("id", preview.statementId);
-  if (
-    updateError &&
-    /opening_balance|statement_start_date|statement_end_date|extracted_bank|extracted_last4/i.test(
-      updateError.message ?? "",
-    )
-  ) {
-    const {
-      opening_balance: _opening,
-      statement_start_date: _start,
-      statement_end_date: _end,
-      extracted_bank: _bank,
-      extracted_last4: _last4,
-      ...legacyUpdate
-    } = statementUpdate;
-    ({ error: updateError } = await supabase
-      .from("statement_imports")
-      .update(legacyUpdate)
-      .eq("id", preview.statementId));
-  }
-  if (updateError) {
-    if (updateError.code === "23505") {
-      throw new Error(
-        "A statement for this account and date range is already imported.",
-      );
-    }
-    throw new Error("The statement could not be marked as processed.");
-  }
+  const result = data as ImportRpcResult;
+  // New transactions: every cached chart and list must refresh on its next visit.
+  invalidateQueries();
+  const summary = summariseImportResult(result);
 
-  await supabase.rpc("link_internal_transfers").then(({ error: linkError }) => {
-    if (linkError) {
-      console.warn("[TracePay][statement] link_internal_transfers_skipped", {
-        message: linkError.message,
+  if (accountCheck.adoptLastFour) {
+    // The account now has a verified identity; later statements are checked against it.
+    const { error: adoptError } = await supabase
+      .from("accounts")
+      .update({ last_four_digits: accountCheck.adoptLastFour })
+      .eq("id", account.id);
+    if (adoptError) {
+      console.warn("[TracePay][statement] account_last4_not_saved", {
+        code: adoptError.code ?? null,
       });
     }
-  });
+  }
+
+  // Keep what the statement printed outside its rows, so a later report can check the rows
+  // against the bank's own totals. Best effort: the import is already saved without it.
+  if (preview.statement.printedFigures) {
+    const { error: figuresError } = await supabase
+      .from("statement_imports")
+      .update({ printed_figures: preview.statement.printedFigures })
+      .eq("id", preview.statementId);
+    if (figuresError) {
+      console.warn("[TracePay][statement] printed_figures_not_saved", {
+        code: figuresError.code ?? null,
+      });
+    }
+  }
+
+  // Link own-account transfers and refunds now that this statement is in.
+  // Evidence-based and best effort; analysis re-derives the same decision.
+  await requestTransferReconciliation();
 
   console.info("[TracePay][statement] persist_completed", {
     statementId: preview.statementId,
-    transactionCount: rows.length - duplicateCount,
-    duplicateCount,
+    newTransactions: summary.newTransactions,
+    overlapDuplicates: summary.overlapDuplicates,
+    possibleDuplicates: summary.possibleDuplicates,
   });
+  void noteImportCompleted();
+  let newFindings = 0;
+  let updatedFindings = 0;
+  if (
+    !deferReconciliation &&
+    shouldReconcileSavedImport("processed", summary.newTransactions)
+  ) {
+    try {
+      const counts = await retryFindingReconciliation(preview.statementId);
+      newFindings = counts.newFindings;
+      updatedFindings = counts.updatedFindings;
+    } catch (reconcileError) {
+      const message =
+        reconcileError instanceof FindingReconciliationError
+          ? reconcileError.message
+          : "Finding reconciliation could not finish. Your statement is saved. Try again.";
+      throw new FindingReconciliationError(
+        preview.statementId,
+        message,
+        summary.newTransactions,
+      );
+    }
+  }
   return {
-    inserted: rows.length - duplicateCount,
-    duplicates: duplicateCount,
+    inserted: summary.newTransactions,
+    duplicates: summary.overlapDuplicates,
+    summary,
+    accountNote: accountCheck.note,
+    newFindings,
+    updatedFindings,
   };
 }
 
@@ -641,6 +729,7 @@ export async function preparePdfStatement(
   options: PreparePdfStatementOptions,
 ): Promise<PdfStatementPreview> {
   const onProgress = options.onProgress;
+  const signal = options.signal;
   const name = asset.name || "statement.pdf";
   console.info("[TracePay][statement] import_started", {
     filename: name,
@@ -659,6 +748,7 @@ export async function preparePdfStatement(
     throw new Error("PDF statements must be smaller than 20 MB.");
   }
 
+  throwIfAborted(signal);
   reportProgress(onProgress, "preparing");
 
   const supabase = getSupabase();
@@ -675,7 +765,7 @@ export async function preparePdfStatement(
     throw new Error("Sign in before importing a statement.");
   }
 
-  const account = await requireAccountForImport(options.accountId);
+  let account = await requireAccountForImport(options.accountId);
 
   const id = options.resume?.statementId ?? Crypto.randomUUID();
   const filePath =
@@ -683,6 +773,38 @@ export async function preparePdfStatement(
   const isResume = Boolean(options.resume?.statementId && options.resume.filePath);
   let recordCreated = isResume;
   try {
+    // Resume must persist against the statement's original account or RLS rejects inserts.
+    if (isResume && options.resume) {
+      const { data: existingStatement, error: resumeLookupError } = await supabase
+        .from("statement_imports")
+        .select("account_id")
+        .eq("id", options.resume.statementId)
+        .eq("user_id", userData.user.id)
+        .maybeSingle();
+      if (resumeLookupError) {
+        throw new Error("Could not resume this statement import.");
+      }
+      const resumeAccountId =
+        typeof existingStatement?.account_id === "string"
+          ? existingStatement.account_id
+          : null;
+      if (!resumeAccountId) {
+        throw new Error("This statement import is no longer available. Choose the PDF again.");
+      }
+      if (resumeAccountId !== account.id) {
+        account = await requireAccountForImport(resumeAccountId);
+        console.info("[TracePay][statement] resume_account_rebound", {
+          statementId: options.resume.statementId,
+          accountId: account.id,
+        });
+      }
+    }
+
+    // The bank must be known so the statement can be matched to the right
+    // account, but a bank no longer limits how many statements may be added.
+    const bankKey = assertKnownStatementBankKey(account.institution);
+    await releaseStaleAttempts(account.id, isResume ? id : null);
+
     const fileBytes = await readPdfBytes(asset.uri);
     const fileSize = asset.size ?? fileBytes.byteLength;
     if (fileSize <= 0 || fileSize > MAX_FILE_SIZE) {
@@ -706,6 +828,7 @@ export async function preparePdfStatement(
     }
 
     if (!isResume) {
+      throwIfAborted(signal);
       reportProgress(onProgress, "uploading");
       const { error: uploadError } = await supabase.storage
         .from("statements")
@@ -716,6 +839,7 @@ export async function preparePdfStatement(
       if (uploadError) {
         throw new Error("The statement could not be uploaded securely.");
       }
+      throwIfAborted(signal);
       console.info("[TracePay][statement] storage_upload_completed", {
         statementId: id,
         sizeBytes: fileSize,
@@ -732,6 +856,7 @@ export async function preparePdfStatement(
           content_hash: contentHash,
           format: "pdf",
           status: "uploaded",
+          bank_key: bankKey,
         });
       if (importError) {
         await supabase.storage.from("statements").remove([filePath]);
@@ -764,6 +889,7 @@ export async function preparePdfStatement(
         "The PDF processor is not configured yet.",
       );
     }
+    throwIfAborted(signal);
     reportProgress(onProgress, "extracting");
     console.info("[TracePay][statement] processor_request_started", {
       statementId: id,
@@ -774,7 +900,9 @@ export async function preparePdfStatement(
       sessionData.session.access_token,
       { uri: asset.uri, name },
       options.password,
+      signal,
     );
+    throwIfAborted(signal);
     const validation = payload.validation;
     console.info("[TracePay][statement] processor_request_completed", {
       statementId: id,
@@ -804,6 +932,12 @@ export async function preparePdfStatement(
         })
         .eq("id", id);
       throw passwordChallenge;
+    }
+
+    if (httpStatus >= 200 && httpStatus < 300 && validation?.no_activity) {
+      // Nothing to save; keeping the import would also block a later
+      // statement for the same period as a duplicate.
+      return await failAndCleanup(id, filePath, NO_ACTIVITY_IN_PERIOD_MESSAGE);
     }
 
     if (
@@ -870,11 +1004,30 @@ export async function preparePdfStatement(
       );
     }
     reportProgress(onProgress, "saving");
-    const persistResult = await persistPreview(preview, account);
+    const persistResult = await persistPreview(
+      preview,
+      account,
+      options.deferReconciliation === true,
+    );
+    preview.findingSummary = {
+      inserted: persistResult.inserted,
+      newFindings: persistResult.newFindings,
+      updatedFindings: persistResult.updatedFindings,
+    };
+    preview.importSummary = persistResult.summary;
+    if (persistResult.accountNote) {
+      preview.warnings = [...preview.warnings, persistResult.accountNote];
+    }
     if (persistResult.duplicates > 0) {
       preview.warnings = [
         ...preview.warnings,
-        `${persistResult.duplicates} overlapping transaction${persistResult.duplicates === 1 ? "" : "s"} were kept as duplicates and excluded from totals.`,
+        `${persistResult.duplicates} transaction${persistResult.duplicates === 1 ? " was" : "s were"} already in your history from an overlapping statement and ${persistResult.duplicates === 1 ? "is" : "are"} not counted twice.`,
+      ];
+    }
+    if (persistResult.summary.possibleDuplicates > 0) {
+      preview.warnings = [
+        ...preview.warnings,
+        `${persistResult.summary.possibleDuplicates} transaction${persistResult.summary.possibleDuplicates === 1 ? " might" : "s might"} also appear in another statement. ${persistResult.summary.possibleDuplicates === 1 ? "It was" : "They were"} kept and flagged for review.`,
       ];
     }
     console.info("[TracePay][statement] import_completed", {
@@ -885,13 +1038,39 @@ export async function preparePdfStatement(
     });
     return preview;
   } catch (error) {
-    if (isPdfPasswordChallenge(error)) {
+    if (isPdfPasswordChallenge(error) || error instanceof FindingReconciliationError) {
       throw error;
     }
-    console.error("[TracePay][statement] import_failed", {
-      statementId: id,
-      message: errorMessage(error, "PDF processing failed."),
-    });
+    if (isPdfImportCancelled(error)) {
+      console.info("[TracePay][statement] import_cancelled", {
+        statementId: id,
+      });
+      if (recordCreated) {
+        const supabase = getSupabase();
+        await supabase
+          .from("statement_imports")
+          .update({
+            status: "failed",
+            error_message: PDF_IMPORT_CANCELLED_MESSAGE,
+          })
+          .eq("id", id);
+        await supabase.from("transactions").delete().eq("statement_id", id);
+        await supabase.storage.from("statements").remove([filePath]);
+      }
+      throw error;
+    }
+    const failedMessage = errorMessage(error, "PDF processing failed.");
+    if (isExpectedImportNotice(failedMessage)) {
+      console.info("[TracePay][statement] import_notice", {
+        statementId: id,
+        message: failedMessage,
+      });
+    } else {
+      console.error("[TracePay][statement] import_failed", {
+        statementId: id,
+        message: failedMessage,
+      });
+    }
     if (recordCreated) {
       return await failAndCleanup(
         id,

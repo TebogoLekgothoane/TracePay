@@ -10,7 +10,7 @@ import {
   type StoredTransaction,
 } from './mapParsedTransaction';
 import { pipelineError, pipelineLog } from '@/lib/pipeline-log';
-import type { LifecycleLeak } from '../../../lib/backend-client';
+import type { LifecycleLeak } from '@/lib/backend';
 
 const DATABASE_NAME = 'tracepay-transactions.db';
 const DATABASE_KEY_NAME = 'tracepay_transactions_database_key_v1';

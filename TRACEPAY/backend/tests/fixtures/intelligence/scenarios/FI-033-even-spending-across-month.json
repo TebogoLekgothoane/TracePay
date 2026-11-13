@@ -1,0 +1,218 @@
+[
+  {
+    "id": "fi033-neg-income-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-25",
+    "description": "SALARY ACME PAYROLL",
+    "amount": "15000.00",
+    "type": "credit",
+    "is_duplicate": false,
+    "merchant_name": "ACME PAYROLL",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "income",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Salary"
+    }
+  },
+  {
+    "id": "fi033-neg-spend-0-8",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-08",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "250.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi033-neg-spend-0-15",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-15",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "250.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi033-neg-spend-0-22",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-22",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "250.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi033-neg-income-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-25",
+    "description": "SALARY ACME PAYROLL",
+    "amount": "15000.00",
+    "type": "credit",
+    "is_duplicate": false,
+    "merchant_name": "ACME PAYROLL",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "income",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Salary"
+    }
+  },
+  {
+    "id": "fi033-neg-spend-1-8",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-08",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "250.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi033-neg-spend-1-15",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-15",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "250.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi033-neg-spend-1-22",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-22",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "250.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi033-neg-income-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-25",
+    "description": "SALARY ACME PAYROLL",
+    "amount": "15000.00",
+    "type": "credit",
+    "is_duplicate": false,
+    "merchant_name": "ACME PAYROLL",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "income",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Salary"
+    }
+  },
+  {
+    "id": "fi033-neg-spend-2-8",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-08",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "250.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi033-neg-spend-2-15",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-15",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "250.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi033-neg-spend-2-22",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-22",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "250.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  }
+]

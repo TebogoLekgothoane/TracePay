@@ -1,0 +1,38 @@
+[
+  {
+    "id": "fi018-flat-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-01",
+    "description": "DEBIT ORDER NETFLIX.COM",
+    "amount": "199.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "NETFLIX",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Subscriptions"
+    }
+  },
+  {
+    "id": "fi018-flat-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-01",
+    "description": "DEBIT ORDER NETFLIX.COM",
+    "amount": "199.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "NETFLIX",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Subscriptions"
+    }
+  }
+]

@@ -1,13 +1,24 @@
 import { router } from "expo-router";
-import { ChevronLeft } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { COLORS } from "../../theme/colors";
+import { COLORS, withAlpha } from "../../theme/colors";
 import { Button } from "../ui/Button";
-import { IconButton } from "../ui/IconButton";
+import { ScreenHeader } from "../ui/ScreenHeader";
+
+type Palette = (typeof COLORS)["light"] | (typeof COLORS)["dark"];
+
+/** A plain white card with a hairline edge: the neutral surface for notes on the fix pages. */
+export function neutralCardStyle(palette: Palette) {
+  return { borderWidth: 1, borderColor: withAlpha(palette.foreground, 0.08) } as const;
+}
+
+/** A neutral grey tint for small pills, in place of a purple one. */
+export function neutralPillColor(palette: Palette) {
+  return withAlpha(palette.foreground, 0.07);
+}
 
 type ShellProps = {
   title: string;
@@ -30,31 +41,15 @@ export function LeakFlowShell({
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
       <View className="flex-1 px-5 pt-1">
-        <IconButton
-          accessibilityLabel="Go back"
-          className="mb-3 self-start"
-          variant="muted"
-          onPress={onBack ?? (() => router.back())}
-        >
-          <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
-        </IconButton>
-
-        <Text className="text-[28px] font-bold tracking-[-0.5px] text-foreground">
-          {title}
-        </Text>
-        {subtitle ? (
-          <Text className="mt-1 text-[14px] leading-5 text-muted-foreground">
-            {subtitle}
-          </Text>
-        ) : null}
+        <ScreenHeader title={title} subtitle={subtitle} onBack={onBack ?? (() => router.back())} />
 
         <View className="flex-1">{children}</View>
       </View>
 
       {footer ? (
         <View
-          className="px-5 py-4"
-          style={{ backgroundColor: palette.surfaceSoft }}
+          className="bg-card px-5 py-4"
+          style={{ borderTopWidth: 1, borderTopColor: withAlpha(palette.foreground, 0.08) }}
         >
           {footer}
         </View>
@@ -84,7 +79,7 @@ export function LeakPrimaryFooter({
           {subtitle}
         </Text>
       </View>
-      <Button onPress={onPress} size="sm">
+      <Button onPress={onPress}>
         {buttonLabel}
       </Button>
     </View>

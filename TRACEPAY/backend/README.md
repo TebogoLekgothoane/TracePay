@@ -3,7 +3,7 @@
 The backend currently has two focused processes:
 
 1. **Auth (Node.js + TypeScript)** in `src/auth` — signup, login, Twilio SMS OTP.
-2. **Statement extraction API (Python)** in `pdf_processor/` — PDF inspection, table extraction, OCR fallback, normalization, and validation.
+2. **Financial API (Python)** in `app/` and `leak_intelligence/` — statement extraction, categorisation, and deterministic financial intelligence.
 
 Do **not** put Twilio secrets or auth backend logic in the React Native app.
 
@@ -34,12 +34,35 @@ Twilio env vars: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and either `TWILIO_V
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-The Python API intentionally starts with extraction only. It does not write to Supabase or run ML yet.
+The Python API reads the signed-in user's stored transactions and returns analysis. It does not persist leak, reasoning, or recommendation rows. Intelligence decisions are deterministic. AI does not decide leaks.
+
+Stored transactions move through this pipeline:
+
+```text
+Transactions → Categorisation → Financial Feature Engine → Behaviour Analysis
+→ Leak Detection → Financial Reasoning → Financial Recommendations
+```
+
+Statement PDFs are never sent to an AI provider: extraction is deterministic (PyMuPDF, Camelot, OCR) only. AI categorisation is a separate flag and defaults to off. It runs only for transactions left unknown after deterministic rules, merchant memory, and statement-category mapping. It sends sanitized descriptions, amounts, and transaction types in batches of 50 to OpenRouter first, then uses configured direct OpenAI and xAI providers if needed. Responses are constrained to the live category schema and validated before use; provider failures leave the transaction on the normal unknown/`Other` fallback path. Gemini remains configured for PDF extraction only and is not a categorisation provider.
+
+To enable categorisation, set `AI_CATEGORISATION_ENABLED=true`, `OPENROUTER_API_KEY`, and optionally `OPENROUTER_MODEL` (default `openai/gpt-4o-mini`). `OPENROUTER_TIMEOUT_SECONDS` controls request timeout. The OpenRouter key is optional at runtime: if it is missing, unavailable, or returns unusable output, the configured OpenAI/xAI compatibility providers are tried; if none return a valid classification, deterministic fallback behavior is used. Remove any categorisation-specific reliance on `GEMINI_API_KEY`; keep that key only if optional AI PDF extraction still uses Gemini. No migration or production secret change is required by this code update.
 
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/health` | Health check |
 | POST | `/extraction/preview` | Extract and validate a PDF without importing it |
+| POST | `/categorisation/reprocess` | Reclassify stored transactions |
+| GET | `/financial-features` | Completed-period financial features |
+| GET | `/behaviour-analysis` | Behaviour observations |
+| GET | `/leak-detections` | Deterministic leak findings, with an `analysis` block per finding (accounts, date range, amount status, coverage limits) |
+| GET | `/statement-coverage` | Which accounts and periods the uploaded statements cover; gaps, overlaps, problems |
+| POST | `/consolidation/reconcile` | Link own-account transfers and refunds from evidence; idempotent |
+| GET | `/financial-reasoning` | Evidence-backed explanations of those findings |
+| GET | `/financial-recommendations` | Review actions derived from reasoning |
+
+Statements from every bank and account are consolidated into one chronological history; see [docs/multi-account-consolidation.md](docs/multi-account-consolidation.md) for the data model, date handling, deduplication, transfer rules, coverage and limitations. Apply `supabase/migrations/202610250001_multi_statement_consolidation.sql` before deploying this version; run `npm run test:db` to exercise the migrations against a real PostgreSQL.
+
+Deferred catalogue items stay deferred because the current data model lacks the evidence they need. FI-031 Impulse Spending Pattern is deferred: a shopping increase does not prove impulse intent. FI-054 Duplicate Charges is covered by FI-040 duplicate merchant payments. The canonical FI catalogue file is not in this repository, so untitled ids are not reconstructed. See `tests/fixtures/intelligence/coverage_gaps.json`.
 
 The extraction response uses one canonical transaction shape for both file types:
 
@@ -47,7 +70,7 @@ The extraction response uses one canonical transaction shape for both file types
 transaction_date, description, amount, transaction_type, currency, balance
 ```
 
-PDF processing tries PyMuPDF first, then Camelot for structured tables in text-based PDFs. Scanned pages are preprocessed with OpenCV/Pillow and read with PaddleOCR 3.x; Tesseract is only used when PaddleOCR fails or returns low confidence. The response includes `extraction_method` and `extraction_confidence` plus normalized transactions and a validation result. The mobile app uploads the original PDF to the private `statements` bucket and stores only normalized `pdf` transactions in PostgreSQL.
+PDF processing tries PyMuPDF first, then Camelot for structured tables in text-based PDFs. Scanned pages are preprocessed with OpenCV/Pillow and read with PaddleOCR 3.x; Tesseract is only used when PaddleOCR fails or returns low confidence. There is no AI-assisted PDF extraction: if classical extraction and OCR cannot read a statement, the upload fails rather than sending the PDF to a third party. `AI_CATEGORISATION_ENABLED` only classifies unknown transactions after extraction and never receives the statement PDF. The response includes `extraction_method` and `extraction_confidence` plus normalized transactions and a validation result. The mobile app uploads the original PDF to the private `statements` bucket and stores only normalized `pdf` transactions in PostgreSQL.
 
 Install the Python dependencies before starting the extraction API:
 

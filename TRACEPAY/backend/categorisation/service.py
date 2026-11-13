@@ -11,11 +11,22 @@ from app.config import settings
 from categorisation.ai_classifier import AiTransaction, classify_batch
 from categorisation.bank_category_map import map_bank_category
 from categorisation.classifier import classify_transaction
+from categorisation.rules import PURCHASE_REVERSAL_RULE
 from categorisation.constants import FALLBACK_CATEGORY, FALLBACK_CONFIDENCE
+from categorisation.merchant_directory import MerchantDirectory, entry_for, pattern_key_for
 from categorisation.merchant_memory import MerchantMemory, fetch_merchant_memory
 from categorisation.models import CategorisationResult
-from categorisation.normalize import normalize_description, normalize_for_matching
-from categorisation.resolve import ensure_complete_classification, resolve_category_name
+from categorisation.normalize import (
+    is_bank_boilerplate_label,
+    normalize_description,
+    normalize_for_matching,
+)
+from categorisation.resolve import (
+    ensure_complete_classification,
+    reconcile_with_deterministic_evidence,
+    resolve_category_name,
+)
+from categorisation.source_identity import identify_source, trusted_merchant_for_memory
 
 logger = logging.getLogger("tracepay.categorisation")
 BATCH_SIZE = 50
@@ -48,6 +59,7 @@ class CategorisationMetrics:
     invalid_ai_results: int
     uncategorised_transactions: int
     categorised_transactions: int
+    directory_matches: int = 0
 
 
 @dataclass
@@ -62,12 +74,14 @@ def categorise_batch(
     *,
     access_token: str | None = None,
     merchant_memory: MerchantMemory | None = None,
+    merchant_directory: MerchantDirectory | None = None,
 ) -> dict[str, CategorisationResult]:
     return categorise_batch_with_metrics(
         transactions,
         category_names,
         access_token=access_token,
         merchant_memory=merchant_memory,
+        merchant_directory=merchant_directory,
     ).results
 
 
@@ -77,9 +91,10 @@ def categorise_batch_with_metrics(
     *,
     access_token: str | None = None,
     merchant_memory: MerchantMemory | None = None,
+    merchant_directory: MerchantDirectory | None = None,
 ) -> CategorisationRun:
     catalog = set(category_names or [])
-    memory = merchant_memory or fetch_merchant_memory(access_token)
+    memory = merchant_memory if merchant_memory is not None else fetch_merchant_memory(access_token)
     results: dict[str, CategorisationResult] = {}
     source_by_id: dict[str, str] = {}
 
@@ -90,22 +105,43 @@ def categorise_batch_with_metrics(
 
     for item in transactions:
         deterministic = classify_transaction(item.description, item.transaction_type)
+        if deterministic.rule == PURCHASE_REVERSAL_RULE:
+            results[item.transaction_id] = deterministic
+            source_by_id[item.transaction_id] = "deterministic"
+            deterministic_matches += 1
+            _log_classification(item.transaction_id, deterministic, "deterministic")
+            continue
         if deterministic.transaction_class != "unknown" or deterministic.category_name:
+            identity = identify_source(item.description)
+            merchant_name = (
+                identity.merchant_name
+                if identity.source_type == "merchant"
+                else None
+            )
             resolved = ensure_complete_classification(
-                deterministic,
+                deterministic.model_copy(update={"merchant_name": merchant_name}),
                 catalog,
-                merchant_name=deterministic.merchant_name,
+                merchant_name=merchant_name,
             )
             results[item.transaction_id] = resolved
             source_by_id[item.transaction_id] = "deterministic"
             deterministic_matches += 1
-            memory.remember(resolved.merchant_name, resolved)
+            trusted = trusted_merchant_for_memory(identity)
+            memory.remember(trusted, resolved)
             _log_classification(item.transaction_id, resolved, "deterministic")
             continue
 
-        remembered = memory.get(deterministic.merchant_name) or memory.get(
-            normalize_for_matching(item.description)
-        )
+        remembered = None
+        identity = identify_source(item.description)
+        trusted_lookup = trusted_merchant_for_memory(identity)
+        if trusted_lookup:
+            remembered = memory.get(trusted_lookup)
+        if remembered is None and deterministic.merchant_name and not is_bank_boilerplate_label(
+            deterministic.merchant_name
+        ):
+            remembered = memory.get(deterministic.merchant_name)
+        if remembered is None:
+            remembered = memory.get(normalize_for_matching(item.description))
         if remembered is not None and remembered.category_name not in {None, FALLBACK_CATEGORY}:
             remembered_result = ensure_complete_classification(
                 remembered.model_copy(
@@ -161,19 +197,43 @@ def categorise_batch_with_metrics(
     ai_requests = 0
     invalid_ai_results = 0
     ai_enabled = settings.ai_categorisation_enabled
-    has_provider_key = bool(settings.gemini_api_key.strip() or settings.openai_api_key.strip())
+    openrouter_loaded, openai_loaded, xai_loaded = settings.categorisation_provider_keys()
+    has_provider_key = openrouter_loaded or openai_loaded or xai_loaded
+
+    # Shared directory first: a description any user already taught us costs no AI call. Only
+    # debit (spending) candidates are looked up; people, transfers and income are never shared.
+    directory = merchant_directory if merchant_directory is not None else MerchantDirectory()
+    directory_keys: dict[str, str | None] = {
+        item.transaction_id: pattern_key_for(item.description)
+        for item in unknown_items
+        if item.transaction_type == "debit"
+    }
+    directory_hits = directory.lookup([key for key in directory_keys.values() if key])
+    directory_patterns: set[tuple[str, str]] = set()
+    for item in unknown_items:
+        key = directory_keys.get(item.transaction_id)
+        if key and key in directory_hits:
+            ai_results[item.transaction_id] = directory_hits[key]
+            directory_patterns.add(
+                (normalize_for_matching(item.description) or normalize_description(item.description), item.transaction_type)
+            )
+    ai_items = [item for item in unknown_items if item.transaction_id not in ai_results]
+    directory_matches = len(unknown_items) - len(ai_items)
 
     if not ai_enabled:
         logger.info("[AI] skipped reason=disabled config=AI_CATEGORISATION_ENABLED")
-    elif not unknown_items:
-        logger.info("[AI] requests=0 reason=no_candidates")
+    elif not ai_items:
+        logger.info("[AI] requests=0 reason=no_candidates directory_matches=%s", directory_matches)
     elif not has_provider_key:
-        logger.warning("[AI] requests=0 reason=missing_api_keys expected_env=GEMINI_API_KEY|OPENAI_API_KEY")
+        logger.warning(
+            "[AI] requests=0 reason=missing_api_keys expected_env=OPENROUTER_API_KEY|OPENAI_API_KEY|XAI_API_KEY"
+        )
     elif not catalog:
         logger.warning("[AI] requests=0 reason=empty_live_category_catalog")
     else:
-        for offset in range(0, len(unknown_items), BATCH_SIZE):
-            batch = unknown_items[offset : offset + BATCH_SIZE]
+        learned = []
+        for offset in range(0, len(ai_items), BATCH_SIZE):
+            batch = ai_items[offset : offset + BATCH_SIZE]
             ai_requests += 1
             logger.info("[AI] requests=%s batch_size=%s", ai_requests, len(batch))
             batch_results = classify_batch(batch, sorted(catalog))
@@ -181,6 +241,13 @@ def categorise_batch_with_metrics(
             if missing > 0:
                 invalid_ai_results += missing
             ai_results.update(batch_results)
+            for candidate in batch:
+                result = batch_results.get(candidate.transaction_id)
+                entry = entry_for(candidate.description, result) if result is not None and candidate.transaction_type == "debit" else None
+                if entry is not None:
+                    learned.append(entry)
+        if learned:
+            directory.store(learned)
 
     ai_result_by_pattern = {
         (
@@ -203,24 +270,60 @@ def categorise_batch_with_metrics(
         )
         ai_result = ai_result_by_pattern.get(pattern)
         if ai_result is not None:
+            identity = identify_source(item.description)
+            deterministic_merchant = (
+                identity.merchant_name if identity.source_type == "merchant" else None
+            )
+            ai_merchant = ai_result.merchant_name
+            if ai_merchant and is_bank_boilerplate_label(ai_merchant):
+                ai_merchant = None
             resolved = ensure_complete_classification(
-                ai_result,
+                ai_result.model_copy(update={"merchant_name": ai_merchant}),
                 catalog,
-                merchant_name=current.merchant_name or ai_result.merchant_name,
+                merchant_name=deterministic_merchant or ai_merchant,
             )
             results[item.transaction_id] = resolved
-            source_by_id[item.transaction_id] = "ai"
-            memory.remember(resolved.merchant_name, resolved)
-            _log_classification(item.transaction_id, resolved, "ai")
+            source_by_id[item.transaction_id] = "directory" if pattern in directory_patterns else "ai"
+            trusted = deterministic_merchant or ai_merchant
+            if trusted:
+                memory.remember(trusted, resolved)
+            _log_classification(item.transaction_id, resolved, source_by_id[item.transaction_id])
             continue
 
-        fallback = _fallback_other(current, catalog)
+        fallback = _fallback_other(
+            current.model_copy(
+                update={
+                    "merchant_name": (
+                        current.merchant_name
+                        if identify_source(item.description).source_type == "merchant"
+                        else None
+                    )
+                }
+            ),
+            catalog,
+        )
         results[item.transaction_id] = fallback
         source_by_id[item.transaction_id] = "fallback"
         fallback_classifications += 1
         _log_classification(item.transaction_id, fallback, "fallback")
 
+    for item in transactions:
+        current = results[item.transaction_id]
+        reconciled = reconcile_with_deterministic_evidence(
+            item.description,
+            item.transaction_type,
+            current,
+        )
+        if reconciled != current:
+            results[item.transaction_id] = ensure_complete_classification(
+                reconciled,
+                catalog,
+                merchant_name=reconciled.merchant_name,
+            )
+
     for transaction_id, result in list(results.items()):
+        if result.rule == PURCHASE_REVERSAL_RULE:
+            continue
         resolved_name = resolve_category_name(result.category_name, catalog) if catalog else result.category_name
         if resolved_name != result.category_name or result.category_name is None:
             results[transaction_id] = ensure_complete_classification(
@@ -262,6 +365,7 @@ def categorise_batch_with_metrics(
         invalid_ai_results=invalid_ai_results,
         uncategorised_transactions=uncategorised,
         categorised_transactions=len(transactions) - uncategorised,
+        directory_matches=directory_matches,
     )
 
     by_source = Counter(source_by_id.values())

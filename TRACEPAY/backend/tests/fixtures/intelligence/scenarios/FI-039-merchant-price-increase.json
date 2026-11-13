@@ -1,0 +1,56 @@
+[
+  {
+    "id": "fi039-steers-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-12",
+    "description": "POS PURCHASE STEERS SANDTON",
+    "amount": "120.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "STEERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi039-steers-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-12",
+    "description": "POS PURCHASE STEERS SANDTON",
+    "amount": "160.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "STEERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  },
+  {
+    "id": "fi039-steers-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-12",
+    "description": "POS PURCHASE STEERS SANDTON",
+    "amount": "220.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "STEERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Restaurants"
+    }
+  }
+]

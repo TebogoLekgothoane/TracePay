@@ -64,7 +64,7 @@ await test("JSON limit is derived from documented field caps and exceeds 32kb", 
 });
 
 await test("parseIngestionReadings succeeds when upsert has no error", async () => {
-  await parseIngestionReadings(mockClient({ error: null }) as never, [reading]);
+  await parseIngestionReadings(mockClient({ error: null }) as never, [reading], "user-1");
 });
 
 await test("parseIngestionReadings throws when parsed_transactions upsert fails", async () => {
@@ -73,6 +73,7 @@ await test("parseIngestionReadings throws when parsed_transactions upsert fails"
       parseIngestionReadings(
         mockClient({ error: { message: "permission denied", code: "42501" } }) as never,
         [reading],
+        "user-1",
       ),
     /Could not store parsed transactions/,
   );
@@ -90,14 +91,34 @@ await test("parseIngestionReadings no-ops when nothing is parseable", async () =
       };
     },
   };
-  await parseIngestionReadings(client as never, [
-    {
-      ...reading,
-      body: "hello from a friend",
-      sender: "MOM",
-    },
-  ]);
+  await parseIngestionReadings(
+    client as never,
+    [
+      {
+        ...reading,
+        body: "hello from a friend",
+        sender: "MOM",
+      },
+    ],
+    "user-1",
+  );
   assert.equal(upsertCalled, false);
+});
+
+await test("parsed transactions are stored under the authenticated user", async () => {
+  let storedUserId = "";
+  const client = {
+    from() {
+      return {
+        upsert(rows: Array<{ user_id: string }>) {
+          storedUserId = rows[0]?.user_id ?? "";
+          return Promise.resolve({ error: null });
+        },
+      };
+    },
+  };
+  await parseIngestionReadings(client as never, [{ ...reading, user_id: "user-b" }], "user-a");
+  assert.equal(storedUserId, "user-a");
 });
 
 console.log("ingestion parser tests passed");

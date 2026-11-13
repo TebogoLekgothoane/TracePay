@@ -1,0 +1,590 @@
+import { formatCoverageRange } from "../statement-coverage/statement-coverage.format";
+import type {
+  LeakAccountPattern,
+  LeakAmountStatus,
+  LeakAnalysis,
+  LeakConfidenceLevel,
+  LeakDetection,
+  LeakImpactKind,
+  LeakNearMiss,
+  LeakValueGroup,
+} from "./leak-intelligence.types";
+
+const currencyFormatter = new Intl.NumberFormat("en-ZA", {
+  style: "currency",
+  currency: "ZAR",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+const EVIDENCE_LABELS: Record<string, string> = {
+  previous_amount: "Previous monthly baseline",
+  current_amount: "Current month",
+  change_amount: "Change",
+  change_percentage: "Change percentage",
+  monthly_average_fee: "Average monthly fees",
+  bank_fee_transaction_count: "Fee transactions",
+  bank_fee_ratio: "Fee share of spending",
+  fee_change_amount: "Fee increase",
+  observation_count: "Observations",
+  average_interval_days: "Average interval",
+  average_amount: "Average payment",
+  recurrence_strength: "Recurrence strength",
+  category_name: "Category",
+  category_transaction_count: "Category transactions",
+  cash_withdrawal_count: "Cash withdrawals",
+  cash_withdrawal_total: "Cash withdrawal total",
+  atm_fee_total: "ATM fee total",
+  candidate_amount: "Potential duplicate amount",
+  transaction_count_in_group: "Transactions in group",
+  date_span_days: "Date span",
+  verification_required: "Verification required",
+  transaction_amount: "Actual transaction amount",
+  merchant_display_name: "Merchant",
+  original_description: "Statement description",
+  transaction_date: "Transaction date",
+  transaction_time: "Transaction time",
+  transaction_type: "Transaction type",
+  baseline_sample_size: "Baseline sample size",
+  category_median_amount: "Baseline median amount",
+  difference_from_baseline: "Difference from baseline",
+  amount_multiple_of_category_median: "Amount / baseline median",
+  outlier_rule: "Outlier rule",
+  confidence_basis: "Confidence basis",
+  confidence_is_calibrated: "Confidence calibrated",
+  transaction_id: "Internal transaction reference",
+  first_observed_date: "First observed",
+  last_observed_date: "Last observed",
+  billing_date_shift_days: "Billing date shift",
+  amount_variance: "Amount variance",
+  recurring_debit_order_count: "Recurring debit-order collections",
+  recurring_debit_order_months: "Recurring debit-order months",
+  active_streaming_service_count: "Active streaming services",
+  combined_monthly_streaming_spend: "Combined monthly streaming spend",
+  overlapping_month_count: "Overlapping billing months",
+  coffee_transaction_count: "Coffee transactions",
+  coffee_total_amount: "Total coffee spend",
+  monthly_coffee_spend: "Average monthly coffee spend",
+  convenience_store_transaction_count: "Convenience-store visits",
+  convenience_store_total_amount: "Total convenience-store spend",
+  monthly_convenience_spend: "Average monthly convenience-store spend",
+  discretionary_weekend_total: "Discretionary weekend spend",
+  discretionary_weekday_total: "Discretionary weekday spend",
+  discretionary_weekend_daily_average: "Discretionary weekend daily average",
+  discretionary_weekday_daily_average: "Discretionary weekday daily average",
+  active_weekend_count: "Active weekends",
+  salary_event_count: "Salary events",
+  salary_cycles_with_discretionary_spike: "Pay cycles with post-payday spike",
+  post_salary_discretionary_total: "Post-payday discretionary spend",
+  post_salary_essential_total: "Post-payday essential obligations",
+  post_salary_discretionary_transaction_count: "Post-payday discretionary transactions",
+};
+
+const CURRENCY_KEYS = new Set([
+  "previous_amount",
+  "current_amount",
+  "change_amount",
+  "monthly_average_fee",
+  "fee_change_amount",
+  "average_amount",
+  "cash_withdrawal_total",
+  "atm_fee_total",
+  "candidate_amount",
+  "transaction_amount",
+  "category_median_amount",
+  "difference_from_baseline",
+  "amount_variance",
+  "combined_monthly_streaming_spend",
+  "coffee_total_amount",
+  "monthly_coffee_spend",
+  "convenience_store_total_amount",
+  "monthly_convenience_spend",
+  "discretionary_weekend_total",
+  "discretionary_weekday_total",
+  "discretionary_weekend_daily_average",
+  "discretionary_weekday_daily_average",
+  "post_salary_discretionary_total",
+  "post_salary_essential_total",
+]);
+
+const PERCENT_KEYS = new Set([
+  "change_percentage",
+  "bank_fee_ratio",
+]);
+
+const SENSITIVE_EVIDENCE_KEYS = /(?:account|card|phone|reference|description|transaction_id|merchant_key|merchant_display_name|subject|token|fingerprint)/i;
+
+const CARD_PURCHASE_BOILERPLATE = /^(?:purchase\s+)?with\s+card\s+at(?:\s+epos(?:\s+at)?)?$/i;
+const BANK_BOILERPLATE_LABEL =
+  /^(?:purchase\s+)?with\s+card\s+at(?:\s+epos(?:\s+at)?)?$|^(?:recurring\s+payment(?:\s+from)?|money\s+transferred(?:\s+(?:in|out))?(?:\s+(?:for|from))?)(?:\s+\w{1,2})?$/i;
+
+export const DUPLICATE_MATCH_DISCLAIMER =
+  "These transactions match on merchant, amount, and date. This is not a confirmed duplicate and not a guaranteed recovery.";
+
+export const RECOGNISED_LEAK_CATEGORIES = [
+  "groceries",
+  "shopping",
+  "transport",
+  "fuel",
+  "airtime & data",
+  "airtime",
+  "subscriptions",
+  "internal transfer",
+  "transfer",
+  "dining",
+  "food",
+  "restaurants",
+  "fast food",
+  "ride hailing",
+  "public transport",
+] as const;
+
+export type EvidenceRow = {
+  label: string;
+  value: string;
+};
+
+function finiteNumber(value: unknown): number | null {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value)
+        : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function formatCurrency(value: unknown): string {
+  const amount = finiteNumber(value);
+  return amount === null ? "Not available" : currencyFormatter.format(amount);
+}
+
+export function formatConfidence(value: number): string {
+  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
+}
+
+export function formatImpactKind(value: LeakImpactKind): string {
+  switch (value) {
+    case "recurring":
+      return "Recurring";
+    case "one_time":
+      return "One-time";
+    default:
+      return "Estimated";
+  }
+}
+
+/** Primary impact row label — one-time findings are not monthly. */
+export function formatPrimaryImpactLabel(impactKind: LeakImpactKind): string {
+  return impactKind === "one_time" ? "Potential amount" : "Monthly impact";
+}
+
+function plainAmount(value: unknown): string {
+  const amount = finiteNumber(value);
+  return amount === null ? "n/a" : `R${amount.toFixed(2)}`;
+}
+
+export type FeeSource = {
+  label: string;
+  count: number;
+  total: number;
+  detail: string;
+  check: string;
+};
+
+/** The kinds of fee behind a bank-fee finding, largest first. Malformed rows are dropped. */
+export function feeSources(evidence: Record<string, unknown>): FeeSource[] {
+  const raw = evidence.fee_sources;
+  if (!Array.isArray(raw)) return [];
+  const rows: FeeSource[] = [];
+  for (const entry of raw as unknown[]) {
+    const row = (entry ?? {}) as Record<string, unknown>;
+    const total = finiteNumber(row.total);
+    const count = finiteNumber(row.count);
+    if (typeof row.label !== "string" || total === null || count === null) continue;
+    rows.push({
+      label: row.label,
+      count,
+      total,
+      detail: typeof row.detail === "string" ? row.detail : "",
+      check: typeof row.check === "string" ? row.check : "",
+    });
+  }
+  return rows;
+}
+
+/**
+ * A plain-text report for tuning the detection rules: what was raised and what was
+ * looked at and left out. Merchant names, amounts and dates only. Never a bank
+ * description, an account number or a transaction id.
+ */
+export function formatTuningReport(result: {
+  period_start: string | null;
+  period_end: string | null;
+  transaction_count: number;
+  detector_version: string;
+  leaks: readonly LeakDetection[];
+  near_misses?: readonly LeakNearMiss[];
+}): string {
+  const lines: string[] = [
+    "TracePay tuning report",
+    `Period: ${result.period_start ?? "?"} to ${result.period_end ?? "?"} · ${result.transaction_count} transactions · detector ${result.detector_version}`,
+    "",
+    `Raised (${result.leaks.length})`,
+  ];
+  for (const leak of result.leaks) {
+    const merchant = merchantDisplayName(leak.evidence) ?? "no merchant";
+    const basis = leak.impact_kind === "one_time" ? "once" : "a month";
+    const status =
+      typeof leak.evidence.evidence_status === "string" ? leak.evidence.evidence_status : "n/a";
+    const others = Array.isArray(leak.evidence.other_regular_amounts)
+      ? leak.evidence.other_regular_amounts.map(plainAmount).join(", ")
+      : "";
+    // The numbers behind the amount, so an odd figure can be explained without guessing.
+    const how: string[] = [];
+    const count = finiteNumber(leak.evidence.observation_count);
+    if (count !== null) how.push(`${count} charges`);
+    if (finiteNumber(leak.evidence.typical_amount) !== null)
+      how.push(`typical ${plainAmount(leak.evidence.typical_amount)}`);
+    if (finiteNumber(leak.evidence.latest_amount) !== null)
+      how.push(`latest ${plainAmount(leak.evidence.latest_amount)}`);
+    if (finiteNumber(leak.evidence.service_cost_monthly) !== null)
+      how.push(`service ${plainAmount(leak.evidence.service_cost_monthly)}`);
+    if (typeof leak.evidence.headline_impact_basis === "string")
+      how.push(`headline ${leak.evidence.headline_impact_basis}`);
+    if (leak.evidence.recurrence_basis === "dominant_amount") how.push("read from one regular amount");
+    // Bank fees: what the amount is made of.
+    if (typeof leak.evidence.finding_focus === "string" && leak.leak_type === "bank_fee_leak")
+      how.push(`focus ${leak.evidence.finding_focus}`);
+    const feeCount = finiteNumber(leak.evidence.bank_fee_transaction_count);
+    if (feeCount !== null) how.push(`${feeCount} fees`);
+    if (finiteNumber(leak.evidence.monthly_average_fee) !== null)
+      how.push(`monthly average ${plainAmount(leak.evidence.monthly_average_fee)}`);
+    if (finiteNumber(leak.evidence.fee_change_amount) !== null)
+      how.push(`rise ${plainAmount(leak.evidence.fee_change_amount)}`);
+    if (finiteNumber(leak.evidence.recurring_fee_total) !== null)
+      how.push(`recurring fees ${plainAmount(leak.evidence.recurring_fee_total)}`);
+    if (finiteNumber(leak.evidence.one_off_fee_total) !== null)
+      how.push(`one-off fees ${plainAmount(leak.evidence.one_off_fee_total)}`);
+    if (Array.isArray(leak.evidence.top_fee_sources) && leak.evidence.top_fee_sources.length) {
+      const sources = (leak.evidence.top_fee_sources as unknown[])
+        .map((entry) => {
+          const row = entry as { label?: unknown; count?: unknown; total?: unknown };
+          return typeof row.label === "string" && finiteNumber(row.total) !== null
+            ? `${row.label} x${String(row.count)} ${plainAmount(row.total)}`
+            : null;
+        })
+        .filter((text): text is string => text !== null);
+      if (sources.length) how.push(`biggest fees: ${sources.join(" | ")}`);
+    }
+    if (typeof leak.evidence.last_observed_date === "string")
+      how.push(`last ${leak.evidence.last_observed_date}`);
+    lines.push(
+      `- [${leak.value_group ?? "review"}] ${leak.leak_type} · ${merchant} · ${plainAmount(
+        leak.estimated_monthly_impact,
+      )} ${basis} · confidence ${formatConfidence(leak.confidence)} · ${status}` +
+        (how.length ? ` · (${how.join("; ")})` : "") +
+        (others ? ` · also repeats monthly at: ${others}` : ""),
+    );
+    for (const source of feeSources(leak.evidence)) {
+      lines.push(
+        `    · ${source.label} x${source.count} ${plainAmount(source.total)}` +
+          (source.detail ? ` — ${source.detail}` : "") +
+          (source.check ? ` Check: ${source.check}` : ""),
+      );
+    }
+  }
+  const misses = result.near_misses ?? [];
+  lines.push("", `Looked at, not raised (${misses.length})`);
+  for (const miss of misses) {
+    const name =
+      miss.merchant_display_name ??
+      miss.merchant ??
+      (miss.leak_type === "bank_fee_leak" ? "bank fees" : "unknown merchant");
+    lines.push(
+      `- ${miss.leak_type} · ${miss.reason_code} · ${name} · ${plainAmount(miss.amount)}` +
+        (miss.dates.length ? ` · ${miss.dates.join(", ")}` : "") +
+        ` — ${miss.reason}`,
+    );
+  }
+  return lines.join("\n");
+}
+
+export const VALUE_GROUPS: readonly {
+  key: LeakValueGroup;
+  title: string;
+  blurb: string;
+}[] = [
+  {
+    key: "recoverable",
+    title: "Potentially recoverable",
+    blurb: "Money you may be able to get back or save.",
+  },
+  {
+    key: "review",
+    title: "Worth reviewing",
+    blurb: "Payments that may be unnecessary. You decide.",
+  },
+  {
+    key: "commitment",
+    title: "Where your money goes",
+    blurb: "Commitments and spending habits. Not money lost.",
+  },
+];
+
+/**
+ * Splits findings into the three groups, in a fixed order and without ever adding the
+ * groups together. A finding with no group (an older backend) is read as worth reviewing.
+ */
+export function groupFindingsByValue<T extends { value_group?: LeakValueGroup | null }>(
+  leaks: readonly T[],
+): { key: LeakValueGroup; title: string; blurb: string; leaks: T[] }[] {
+  return VALUE_GROUPS.map((group) => ({
+    ...group,
+    leaks: leaks.filter((leak) => (leak.value_group ?? "review") === group.key),
+  })).filter((group) => group.leaks.length > 0);
+}
+
+/** Share ratios from the API are fractions (0–1); percentages may also appear in behaviour evidence. */
+export function formatPercentValue(value: unknown, key?: string): string {
+  const numeric = finiteNumber(value);
+  if (numeric === null) {
+    return "Not available";
+  }
+  const asPercent =
+    key === "bank_fee_ratio" || (key !== "change_percentage" && numeric >= 0 && numeric <= 1)
+      ? numeric * 100
+      : numeric;
+  return `${asPercent.toFixed(2)}%`;
+}
+
+export function formatEvidence(evidence: Record<string, unknown>): EvidenceRow[] {
+  return Object.entries(evidence)
+    .filter(
+      ([key, value]) =>
+        key in EVIDENCE_LABELS &&
+        !SENSITIVE_EVIDENCE_KEYS.test(key) &&
+        value !== null &&
+        value !== undefined,
+    )
+    .map(([key, value]) => ({
+      label: EVIDENCE_LABELS[key] ?? key,
+      value: formatEvidenceValue(key, value),
+    }));
+}
+
+function formatEvidenceValue(key: string, value: unknown): string {
+  if (CURRENCY_KEYS.has(key)) {
+    return formatCurrency(value);
+  }
+  if (PERCENT_KEYS.has(key)) {
+    if (key === "change_percentage") {
+      const numeric = finiteNumber(value);
+      if (numeric === null) {
+        return "Not available";
+      }
+      return `${numeric >= 0 ? "+" : ""}${numeric.toFixed(2)}%`;
+    }
+    return formatPercentValue(value, key);
+  }
+  if (
+    key === "average_interval_days" ||
+    key === "date_span_days" ||
+    key === "billing_date_shift_days"
+  ) {
+    const numeric = finiteNumber(value);
+    return numeric === null ? "Not available" : `${numeric.toFixed(0)} days`;
+  }
+  if (typeof value === "boolean") {
+    return value ? "Yes" : "No";
+  }
+  if (typeof value === "number" || typeof value === "string") {
+    return String(value);
+  }
+  return "Available";
+}
+
+export function isCardPurchaseBoilerplate(value: string): boolean {
+  return CARD_PURCHASE_BOILERPLATE.test(value.trim());
+}
+
+export function isBankBoilerplateLabel(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return true;
+  }
+  return BANK_BOILERPLATE_LABEL.test(trimmed);
+}
+
+export function merchantDisplayName(evidence: Record<string, unknown>): string | null {
+  const value = evidence.merchant_display_name;
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed || isCardPurchaseBoilerplate(trimmed) || isBankBoilerplateLabel(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
+export function recognisedCategoryKey(category: string | null | undefined): string | null {
+  const key = category?.trim().toLowerCase() ?? "";
+  return (RECOGNISED_LEAK_CATEGORIES as readonly string[]).includes(key) ? key : null;
+}
+
+export function formatDuplicateFinding(leak: {
+  evidence: Record<string, unknown>;
+  estimated_monthly_impact: number | string;
+}): { rows: EvidenceRow[]; disclaimer: string } {
+  const { evidence } = leak;
+  const rows: EvidenceRow[] = [];
+  const merchant = merchantDisplayName(evidence);
+  if (merchant) {
+    rows.push({ label: "Merchant", value: merchant });
+  }
+  if (typeof evidence.observed_date === "string" && evidence.observed_date.trim()) {
+    rows.push({ label: "Transaction date", value: evidence.observed_date });
+  }
+  if (
+    typeof evidence.transaction_count_in_group === "number" ||
+    typeof evidence.transaction_count_in_group === "string"
+  ) {
+    rows.push({
+      label: "Matching transactions",
+      value: String(evidence.transaction_count_in_group),
+    });
+  }
+  rows.push({
+    label: "Amount per transaction",
+    value: formatCurrency(evidence.candidate_amount),
+  });
+  rows.push({
+    label: "Candidate amount",
+    value: formatCurrency(leak.estimated_monthly_impact),
+  });
+  return { rows, disclaimer: DUPLICATE_MATCH_DISCLAIMER };
+}
+
+export function formatFindingEvidence(
+  leakType: string,
+  evidence: Record<string, unknown>,
+): EvidenceRow[] {
+  const rows = formatEvidence(evidence);
+  const merchant = merchantDisplayName(evidence);
+  if (
+    leakType === "duplicate_payment_leak" ||
+    leakType === "duplicate_debit_order_leak" ||
+    !merchant
+  ) {
+    return rows;
+  }
+  return [{ label: "Merchant", value: merchant }, ...rows];
+}
+
+export function formatIrregularFinding(evidence: Record<string, unknown>): EvidenceRow[] {
+  const safeKeys = [
+    "merchant_display_name",
+    "transaction_amount",
+    "transaction_date",
+    "transaction_time",
+    "original_description",
+    "category_name",
+    "transaction_type",
+    "category_transaction_count",
+    "baseline_sample_size",
+    "category_median_amount",
+    "difference_from_baseline",
+    "amount_multiple_of_category_median",
+    "outlier_rule",
+    "confidence_basis",
+    "confidence_is_calibrated",
+    "verification_required",
+  ];
+  return safeKeys.flatMap((key) => {
+    const value = evidence[key];
+    if (value === null || value === undefined || value === "") {
+      if (key === "merchant_display_name") return [{ label: "Merchant", value: "Unknown merchant" }];
+      if (key === "transaction_time") return [{ label: "Transaction time", value: "Time not available" }];
+      return [];
+    }
+    return [{ label: EVIDENCE_LABELS[key] ?? key, value: formatEvidenceValue(key, value) }];
+  });
+}
+
+
+// ---- Evidence (analysis block) helpers ----
+
+export function amountStatusLabel(status: LeakAmountStatus): string {
+  switch (status) {
+    case "confirmed":
+      return "Confirmed from your transactions";
+    case "potentially_duplicated":
+      return "Possibly a duplicate — please verify";
+    default:
+      return "Estimated";
+  }
+}
+
+/** Only a confirmed amount may be described as a saving; the rest are never confirmed. */
+export function isConfirmedAmount(status: LeakAmountStatus): boolean {
+  return status === "confirmed";
+}
+
+export function confidenceLevelLabel(level: LeakConfidenceLevel | null): string {
+  switch (level) {
+    case "high":
+      return "High confidence";
+    case "medium":
+      return "Medium confidence";
+    case "low":
+      return "Low confidence";
+    default:
+      return "Confidence not available";
+  }
+}
+
+/** Plain explanation for patterns that need one; null when nothing extra is needed. */
+export function accountPatternExplanation(pattern: LeakAccountPattern | null): string | null {
+  switch (pattern) {
+    case "sequential_move":
+      return "This looks like a payment that moved from one account to another, so it is counted once, not twice.";
+    case "concurrent_charges":
+      return "The same kind of charge appears on more than one account at the same time. Check whether you are paying twice.";
+    case "unrelated_accounts":
+      return "These charges are on different accounts and may be unrelated, so they are not treated as one problem.";
+    case "consolidated_across_accounts":
+      return "Matching activity from more than one account was combined into this finding.";
+    default:
+      return null;
+  }
+}
+
+export function formatAnalysisDateRange(analysis: LeakAnalysis): string | null {
+  if (!analysis.date_range_start || !analysis.date_range_end) return null;
+  return formatCoverageRange(analysis.date_range_start, analysis.date_range_end);
+}
+
+export function formatAnalysisAmount(amount: number | string | null, currency: string | null): string {
+  const value = finiteNumber(amount);
+  if (value === null) return "Not available";
+  if (!currency || currency.toUpperCase() === "ZAR") return currencyFormatter.format(value);
+  try {
+    return new Intl.NumberFormat("en-ZA", { style: "currency", currency: currency.toUpperCase() }).format(value);
+  } catch {
+    return `${currency} ${value.toFixed(2)}`;
+  }
+}
+
+export function notCountedInTotalNote(analysis: LeakAnalysis): string | null {
+  return analysis.counted_in_total
+    ? null
+    : "Part of a larger finding — not added to your total again.";
+}
+
+export function coverageLimitLabel(limit: LeakAnalysis["coverage_limits"][number]): string {
+  const where = limit.account_label ?? "";
+  const when = limit.start && limit.end ? formatCoverageRange(limit.start, limit.end) : "";
+  const head = [where, when].filter(Boolean).join(" · ");
+  return head ? `${head}: ${limit.message}` : limit.message;
+}

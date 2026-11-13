@@ -1,0 +1,84 @@
+import { getPdfProcessorBaseUrl } from "../constants/config";
+import { parseEntitlements, parseProducts } from "../features/billing/billing.parse";
+import type { BillingEntitlements, BillingProducts } from "../features/billing/billing.types";
+import { getSupabase, isSupabaseConfigured } from "../lib/supabase";
+
+export class BillingApiError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = "BillingApiError";
+  }
+}
+
+const TIMEOUT_MS = 20_000;
+
+async function accessToken(): Promise<string> {
+  if (!isSupabaseConfigured()) throw new BillingApiError("Supabase is not configured.");
+  const { data, error } = await getSupabase().auth.getSession();
+  if (error || !data.session?.access_token) {
+    throw new BillingApiError("Sign in again to continue.", 401);
+  }
+  return data.session.access_token;
+}
+
+async function call(path: string, init?: { method?: string; body?: unknown }): Promise<unknown> {
+  const baseUrl = getPdfProcessorBaseUrl();
+  if (!baseUrl) throw new BillingApiError("Payments are not configured.");
+  const token = await accessToken();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const response = await fetch(`${baseUrl}${path}`, {
+      method: init?.method ?? "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+        ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: init?.body ? JSON.stringify(init.body) : undefined,
+      signal: controller.signal,
+    });
+    const payload: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      const raw = payload && typeof payload === "object" ? (payload as { detail?: unknown }).detail : null;
+      if (raw && typeof raw === "object") {
+        const { code, message } = raw as { code?: unknown; message?: unknown };
+        throw new BillingApiError(
+          typeof message === "string" ? message : "Payments are temporarily unavailable.",
+          response.status,
+          typeof code === "string" ? code : undefined,
+        );
+      }
+      throw new BillingApiError(
+        typeof raw === "string" ? raw : "Payments are temporarily unavailable.",
+        response.status,
+      );
+    }
+    return payload;
+  } catch (error) {
+    if (error instanceof BillingApiError) throw error;
+    if (controller.signal.aborted) {
+      throw new BillingApiError("That took too long. Please try again.");
+    }
+    throw new BillingApiError("Could not reach TracePay. Check your connection and try again.");
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function fetchBillingProducts(): Promise<BillingProducts> {
+  return parseProducts(await call("/billing/products"));
+}
+
+export async function fetchEntitlements(): Promise<BillingEntitlements> {
+  return parseEntitlements(await call("/billing/entitlements"));
+}
+
+/** Ask the backend to re-read the user's store purchases from RevenueCat. */
+export async function syncStorePurchases(): Promise<BillingEntitlements> {
+  return parseEntitlements(await call("/billing/revenuecat/sync", { method: "POST" }));
+}

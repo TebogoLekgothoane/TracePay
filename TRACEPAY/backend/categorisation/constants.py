@@ -73,3 +73,29 @@ MERCHANT_MEMORY_AI_MIN_CONFIDENCE = 0.90
 # Cap confidence for weak/generic statement mappings.
 WEAK_STATEMENT_CONFIDENCE_CAP = 0.75
 FALLBACK_CONFIDENCE = 0.35
+
+NON_SPENDING_TRANSACTION_CLASSES = frozenset(
+    {
+        "income",
+        "internal_transfer",
+        "person_to_person",
+        "savings",
+        "investment",
+        "bank_fee",
+    }
+)
+
+# Spending categories that must never feed purchase-outlier or discretionary-spend features.
+NON_SPENDING_CATEGORY_NAMES = frozenset(
+    {
+        "Transfers",
+        "Savings",
+        "Other Income",
+        "Salary",
+        "Income",
+        "Bank Fees",
+        "Cash Withdrawal",
+        "Cash Withdrawals",
+        "ATM Cash Withdrawal",
+    }
+)

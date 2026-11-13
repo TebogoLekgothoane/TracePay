@@ -13,7 +13,7 @@ from categorisation.constants import (
     MERCHANT_MEMORY_MIN_CONFIDENCE,
 )
 from categorisation.models import CategorisationResult
-from categorisation.normalize import merchant_key
+from categorisation.normalize import is_bank_boilerplate_label, merchant_key
 
 logger = logging.getLogger("tracepay.categorisation.memory")
 
@@ -55,6 +55,10 @@ def _eligible_for_memory(result: CategorisationResult) -> bool:
     if result.category_name.casefold() == "other":
         return False
     if (result.rule or "").startswith("fallback"):
+        return False
+    if result.merchant_name and is_bank_boilerplate_label(result.merchant_name):
+        return False
+    if result.merchant_name and not merchant_key(result.merchant_name):
         return False
     confidence = max(result.classification_confidence, result.category_confidence)
     if (result.rule or "").startswith("ai:"):

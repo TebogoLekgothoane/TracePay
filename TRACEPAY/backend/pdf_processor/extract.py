@@ -7,6 +7,7 @@ from .models import RawExtraction
 from .normalise import has_usable_structured_text
 from .ocr import ocr_page_images
 from .tables import extract_camelot_tables
+from .text_chain import text_chain_transactions
 
 logger = logging.getLogger("tracepay.pdf.extract")
 
@@ -51,7 +52,12 @@ def extract_layers(content: bytes, password: str | None = None) -> tuple[RawExtr
     method = "unknown"
     confidence = 0.0
 
-    if has_usable_structured_text(text):
+    if text_chain_transactions(text) is not None:
+        # Balance-chain-verified text rows; table readers drop or repeat rows.
+        method = "text"
+        confidence = 1.0
+        logger.info("pdf_text_chain pages=%s useful_chars=%s", pymupdf.pages, useful_text)
+    elif has_usable_structured_text(text):
         method = "text"
         confidence = _TEXT_METHOD_CONFIDENCE
         logger.info("pdf_pymupdf_structured_text pages=%s useful_chars=%s", pymupdf.pages, useful_text)
@@ -192,9 +198,84 @@ def _render_pdf_pages(content: bytes) -> list[Any]:
         document.close()
 
 
-def _decrypt_if_needed(content: bytes, password: str | None) -> bytes:
+def _password_candidates(password: str) -> list[str]:
+    """Build unlock attempts (banks differ: full ID vs last 6 digits, spaces, etc.)."""
+    raw = password.strip()
+    candidates: list[str] = []
+    if raw:
+        candidates.append(raw)
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if digits and digits not in candidates:
+        candidates.append(digits)
+    # Full SA ID pasted → also try Standard Bank's last-6 convention.
+    if len(digits) == 13:
+        last_six = digits[-6:]
+        if last_six not in candidates:
+            candidates.append(last_six)
+    return candidates
+
+
+def _decrypt_with_pikepdf(content: bytes, candidates: list[str]) -> bytes | None:
+    try:
+        import pikepdf
+    except ImportError:
+        return None
+
+    for candidate in candidates:
+        try:
+            # Empty string is intentional — many SA bank PDFs use an empty user password.
+            with pikepdf.open(io.BytesIO(content), password=candidate) as pdf:
+                output = io.BytesIO()
+                pdf.save(output)
+                return output.getvalue()
+        except pikepdf.PasswordError:
+            continue
+        except Exception as error:
+            logger.warning("pikepdf_decrypt_failed error_type=%s", type(error).__name__)
+            return None
+    return None
+
+
+def _decrypt_with_pypdf(content: bytes, candidates: list[str]) -> bytes | None:
     try:
         from pypdf import PdfReader, PdfWriter
+    except ImportError as error:
+        raise ExtractionError("pypdf is not installed.") from error
+
+    try:
+        probe = PdfReader(io.BytesIO(content), strict=False)
+    except Exception as error:
+        raise ExtractionError("The PDF could not be opened.") from error
+    if not probe.is_encrypted:
+        return content
+
+    for candidate in candidates:
+        try:
+            reader = PdfReader(io.BytesIO(content), strict=False)
+            decrypted = reader.decrypt(candidate)
+        except Exception:
+            continue
+        if not decrypted:
+            continue
+        output = io.BytesIO()
+        writer = PdfWriter()
+        for page in reader.pages:
+            writer.add_page(page)
+        writer.write(output)
+        return output.getvalue()
+    return None
+
+
+def _try_decrypt(content: bytes, candidates: list[str]) -> bytes | None:
+    decrypted = _decrypt_with_pikepdf(content, candidates)
+    if decrypted is not None:
+        return decrypted
+    return _decrypt_with_pypdf(content, candidates)
+
+
+def _decrypt_if_needed(content: bytes, password: str | None) -> bytes:
+    try:
+        from pypdf import PdfReader
     except ImportError as error:
         raise ExtractionError("pypdf is not installed.") from error
 
@@ -204,18 +285,28 @@ def _decrypt_if_needed(content: bytes, password: str | None) -> bytes:
         raise ExtractionError("The PDF could not be opened.") from error
     if not reader.is_encrypted:
         return content
-    if not password:
-        raise PasswordRequiredError("This PDF is password protected. Please enter the password to continue.")
-    try:
-        decrypted = reader.decrypt(password)
-    except Exception as error:
-        raise InvalidPasswordError("The PDF password is incorrect. Please try again.") from error
-    if not decrypted:
-        raise InvalidPasswordError("The PDF password is incorrect. Please try again.")
 
-    output = io.BytesIO()
-    writer = PdfWriter()
-    for page in reader.pages:
-        writer.add_page(page)
-    writer.write(output)
-    return output.getvalue()
+    # Many SA bank statements (incl. Standard Bank) are encrypted with an empty
+    # user password. Phone Files opens them without a prompt; try that first.
+    empty_unlock = _try_decrypt(content, [""])
+    if empty_unlock is not None:
+        logger.info("pdf_decrypt_empty_user_password")
+        return empty_unlock
+
+    if not password or not password.strip():
+        raise PasswordRequiredError(
+            "This PDF is password protected. Please enter the password to continue."
+        )
+
+    candidates = _password_candidates(password)
+    logger.info(
+        "pdf_decrypt_attempt candidates=%s password_len=%s",
+        len(candidates),
+        len(password.strip()),
+    )
+
+    decrypted = _try_decrypt(content, candidates)
+    if decrypted is not None:
+        return decrypted
+
+    raise InvalidPasswordError("The PDF password is incorrect. Please try again.")

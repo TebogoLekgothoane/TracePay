@@ -7,24 +7,22 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Droplets, Home, List, User } from "lucide-react-native";
+import { Droplets, Home, Lightbulb, User } from "lucide-react-native";
 
-import { useTabBarScroll } from "../../context/TabBarScrollContext";
 import { COLORS } from "../../theme/colors";
-import { GradientTabIcon } from "./GradientTabIcon";
 
 type LiquidTabBarProps = {
   state: {
     index: number;
     routes: { key: string; name: string }[];
   };
-  navigation: { navigate: (name: string) => void };
+  navigateToTab: (routeKey: string) => void;
 };
 
 const TAB_ITEMS = [
   { key: "index", label: "Home", Icon: Home },
   { key: "leaks", label: "Leaks", Icon: Droplets },
-  { key: "transactions", label: "Transactions", Icon: List },
+  { key: "budget", label: "Insights", Icon: Lightbulb },
   { key: "settings", label: "Profile", Icon: User },
 ] as const;
 
@@ -35,15 +33,11 @@ const INNER_WIDTH = BAR_WIDTH - PAD_X * 2;
 const SLOT = INNER_WIDTH / TAB_ITEMS.length;
 const BLOB = 44;
 
-const GRADIENT_LIGHT = ["#F651C2", "#7955E7", "#327DFC"] as const;
-const GRADIENT_DARK = ["#F651C2", "#A78BFA", "#327DFC"] as const;
-
-export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
+export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const palette = COLORS[isDark ? "dark" : "light"];
-  const { tabBarOffset } = useTabBarScroll();
 
   const visibleIndex = TAB_ITEMS.findIndex(
     (item) => item.key === state.routes[state.index]?.name,
@@ -61,10 +55,6 @@ export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
     });
   }, [activeIndex, progress]);
 
-  const containerStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: tabBarOffset.value }],
-  }));
-
   const blobStyle = useAnimatedStyle(() => {
     const x = PAD_X + progress.value * SLOT + (SLOT - BLOB) / 2;
     const dist = Math.abs(progress.value - Math.round(progress.value));
@@ -77,16 +67,13 @@ export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
   });
 
   return (
-    <Animated.View
+    <View
       pointerEvents="box-none"
       className="absolute bottom-0 left-0 right-0 items-center"
-      style={[
-        { paddingBottom: Math.max(insets.bottom, 14) },
-        containerStyle,
-      ]}
+      style={{ paddingBottom: Math.max(insets.bottom, 14) }}
     >
       <View
-        className="overflow-hidden rounded-full border border-border/50 bg-card/95"
+        className="overflow-hidden rounded-full border border-border bg-card"
         style={{
           width: BAR_WIDTH,
           height: BAR_HEIGHT,
@@ -107,9 +94,7 @@ export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
               width: BLOB,
               height: BLOB,
               borderRadius: BLOB / 2,
-              backgroundColor: isDark
-                ? "rgba(167, 139, 250, 0.14)"
-                : "rgba(121, 85, 231, 0.1)",
+              backgroundColor: palette.surfaceSoft,
             },
             blobStyle,
           ]}
@@ -143,7 +128,10 @@ export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
                   accessibilityLabel={item.label}
                   accessibilityRole="button"
                   accessibilityState={focused ? { selected: true } : {}}
-                  onPress={() => navigation.navigate(item.key)}
+                  onPress={() => {
+                    const route = state.routes.find((candidate) => candidate.name === item.key);
+                    if (route) navigateToTab(route.key);
+                  }}
                   style={{
                     width: BLOB,
                     height: BLOB,
@@ -152,11 +140,9 @@ export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
                     borderRadius: BLOB / 2,
                   }}
                 >
-                  <GradientTabIcon
-                    Icon={item.Icon}
-                    focused={focused}
-                    inactiveColor={palette.mutedForeground}
-                    colors={isDark ? GRADIENT_DARK : GRADIENT_LIGHT}
+                  <item.Icon
+                    color={focused ? palette.primary : palette.mutedForeground}
+                    size={24}
                     strokeWidth={focused ? 2.4 : 2}
                   />
                 </Pressable>
@@ -165,6 +151,6 @@ export function LiquidTabBar({ state, navigation }: LiquidTabBarProps) {
           })}
         </View>
       </View>
-    </Animated.View>
+    </View>
   );
 }

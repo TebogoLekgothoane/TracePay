@@ -5,6 +5,7 @@ from decimal import Decimal
 from .models import ExtractedStatement, Transaction
 from .normalise import parse_amount, parse_date
 from .statement_balance import resolve_statement_balance
+from .statement_figures import extract_printed_figures
 
 _BANK_ALIASES = (
     ("gotyme", "GoTyme"),
@@ -22,14 +23,17 @@ _BANK_ALIASES = (
     ("fnb", "FNB"),
 )
 
+# Whole-word label on the same line as the number, which may be spaced ("10 28 300 663 1")
+# or masked ("****1234"); the label must not match inside words like "MYMOACC".
 _LAST4 = re.compile(
-    r"(?:account(?:\s*number)?|acc(?:ount)?(?:\s*no\.?)?|a/c)[^\d]{0,24}(?:\*+|x+|•+)?\s*(\d{4})\b",
+    r"\b(?:account(?:[ \t]*(?:number|no\.?))?|acc[ \t]*no\.?|a/c(?:[ \t]*no\.?)?)(?![a-z])"
+    r"[ \t:#.\-]*((?:[\d*xX•]+[ \t]?)+)",
     re.IGNORECASE,
 )
 _PERIOD = re.compile(
     r"(?:period|statement\s+period|from)\s*[:\-]?\s*"
     r"(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}-\d{1,2}-\d{1,2}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4})"
-    r"\s*(?:to|-|–|—)\s*"
+    r"\s*(?:to|-|–|—)\s*:?\s*"
     r"(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}-\d{1,2}-\d{1,2}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4})",
     re.IGNORECASE,
 )
@@ -73,10 +77,16 @@ def resolve_extracted_statement(
         parsed_start, parsed_end = _period_from_text(header)
         start = start or parsed_start
         end = end or parsed_end
+    # A period read from the statement is evidence of coverage. One taken from
+    # the first and last transaction is not: the days at either edge may hold
+    # activity that was never extracted.
+    period_source = "declared" if start is not None and end is not None else "unknown"
     if start is None and transactions:
         start = min(item.date for item in transactions)
+        period_source = "inferred"
     if end is None and transactions:
         end = max(item.date for item in transactions)
+        period_source = "inferred"
 
     opening = opening_balance if opening_balance is not None else _labelled_amount(text, _OPENING)
     balance = resolve_statement_balance(text, transactions)
@@ -95,7 +105,14 @@ def resolve_extracted_statement(
         opening_balance=opening,
         closing_balance=closing,
         balance_source=balance.source if closing is not None else "unavailable",
+        period_source=period_source,
+        printed_figures=extract_printed_figures(text),
     )
+
+
+def period_from_text(text: str) -> tuple[date | None, date | None]:
+    """The statement period printed in the header, if any (never inferred)."""
+    return _period_from_text((text or "")[:2000])
 
 
 def _bank_from_text(text: str, source_filename: str | None = None) -> str | None:
@@ -113,9 +130,39 @@ def _filename_text(source_filename: str | None) -> str:
     return stem.replace("_", " ").replace("-", " ")
 
 
+_ACTIVITY_TOTALS = (
+    re.compile(r"^(?:total\s+)?(?:payments|debits?|money\s+out|withdrawals)\b[\s:]*(.*)$", re.IGNORECASE),
+    re.compile(r"^(?:total\s+)?(?:deposits|credits?|money\s+in)\b[\s:]*(.*)$", re.IGNORECASE),
+)
+_PLAIN_MONEY = re.compile(r"(?:R|ZAR)?\s*(-?(?:\d{1,3}(?:[,\s]\d{3})+|\d+)(?:\.\d{2})?)", re.IGNORECASE)
+
+
+def statement_has_no_activity(text: str) -> bool:
+    """True when the printed summary shows zero money out and zero money in.
+
+    Every labelled total must be zero, and both sides must be printed, so an
+    unreadable statement is never mistaken for an empty one.
+    """
+    lines = [line.strip() for line in text.splitlines()]
+    totals: list[list[Decimal]] = [[], []]
+    for index, line in enumerate(lines):
+        for side, label in enumerate(_ACTIVITY_TOTALS):
+            match = label.match(line)
+            if not match:
+                continue
+            candidate = match.group(1) or (lines[index + 1] if index + 1 < len(lines) else "")
+            money = _PLAIN_MONEY.fullmatch(candidate)
+            if money:
+                totals[side].append(Decimal(re.sub(r"[,\s]", "", money.group(1))))
+    return all(totals) and all(amount == 0 for side in totals for amount in side)
+
+
 def _last4_from_text(text: str) -> str | None:
-    match = _LAST4.search(text)
-    return match.group(1) if match else None
+    for match in _LAST4.finditer(text):
+        last4 = _digits4(match.group(1))
+        if last4:
+            return last4
+    return None
 
 
 def _digits4(value: str | None) -> str | None:

@@ -1,0 +1,164 @@
+[
+  {
+    "id": "fi003-edge-0-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-02",
+    "description": "IMMEDIATE PAYMENT FEE",
+    "amount": "8.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "fi003-edge-0-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-03",
+    "description": "IMMEDIATE PAYMENT FEE",
+    "amount": "8.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "fi003-edge-0-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-04",
+    "description": "IMMEDIATE PAYMENT FEE",
+    "amount": "8.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "fi003-edge-1-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-02",
+    "description": "IMMEDIATE PAYMENT FEE",
+    "amount": "8.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "fi003-edge-1-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-03",
+    "description": "IMMEDIATE PAYMENT FEE",
+    "amount": "8.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "fi003-edge-1-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-04",
+    "description": "IMMEDIATE PAYMENT FEE",
+    "amount": "8.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "fi003-edge-2-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-02",
+    "description": "IMMEDIATE PAYMENT FEE",
+    "amount": "8.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "fi003-edge-2-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-03",
+    "description": "IMMEDIATE PAYMENT FEE",
+    "amount": "8.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  },
+  {
+    "id": "fi003-edge-2-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-04",
+    "description": "IMMEDIATE PAYMENT FEE",
+    "amount": "8.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": null,
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "bank_fee",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Bank Fees"
+    }
+  }
+]

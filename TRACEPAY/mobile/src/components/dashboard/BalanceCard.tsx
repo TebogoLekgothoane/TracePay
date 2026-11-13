@@ -1,152 +1,189 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { BarChart3, Eye, ScanSearch } from "lucide-react-native";
+import { ArrowRight, Eye, EyeOff, Plus, Upload } from "lucide-react-native";
 import { Pressable, Text, View } from "react-native";
-import Svg, { Path } from "react-native-svg";
 
+import { TRACEPAY } from "../../theme/colors";
+import { InstitutionLogo } from "../accounts/InstitutionLogo";
 import { Button } from "../ui/Button";
+import { Skeleton } from "../ui/Skeleton";
+import type { AccountPreview } from "./AccountsCard";
 
 type Props = {
+  heading: string;
   balance: string;
-  sourceLabel: string;
-  changeLabel: string;
-  warningLabel?: string | null;
+  metaLabel: string;
+  accounts: AccountPreview[];
   hidden?: boolean;
+  loading?: boolean;
   onToggleVisibility?: () => void;
-  onScanLeaks?: () => void;
-  onViewInsights?: () => void;
+  onImportStatement?: () => void;
+  onViewAccounts?: () => void;
+  onAddAccount?: () => void;
 };
+
+const MAX_CHIPS = 3;
 
 function BalanceAmount({ balance, hidden }: { balance: string; hidden: boolean }) {
   if (hidden) {
     return (
-      <Text className="text-[34px] font-bold tracking-[-1px] text-white">
-        R ••••••
-      </Text>
+      <Text className="text-[38px] font-bold tracking-[-1px] text-white">R ••••••</Text>
     );
   }
 
   const match = balance.match(/^(R\s?[\d,]+)([.,][\d]+)?$/);
   if (!match) {
     return (
-      <Text className="text-[34px] font-bold tracking-[-1px] text-white">
-        {balance}
-      </Text>
+      <Text className="text-[34px] font-bold tracking-[-1px] text-white">{balance}</Text>
     );
   }
 
   return (
     <Text className="font-bold tracking-[-1px] text-white">
-      <Text className="text-[34px]">{match[1]}</Text>
-      {match[2] ? (
-        <Text className="text-[22px]">{match[2]}</Text>
-      ) : null}
+      <Text className="text-[38px]">{match[1]}</Text>
+      {match[2] ? <Text className="text-[24px] text-white/80">{match[2]}</Text> : null}
     </Text>
   );
 }
 
-function BalanceWaves() {
+/** Overlapping bank logos for the connected accounts, with a "+N" for the rest. */
+function AccountChips({
+  accounts,
+  onAddAccount,
+}: {
+  accounts: AccountPreview[];
+  onAddAccount?: () => void;
+}) {
+  const shown = accounts.slice(0, MAX_CHIPS);
+  const extra = accounts.length - shown.length;
   return (
-    <View className="absolute -right-2 top-6 opacity-50" pointerEvents="none">
-      <Svg width={160} height={120} viewBox="0 0 160 120">
-        <Path
-          d="M0 60 C30 20 60 80 90 40 C110 20 130 50 160 30"
-          stroke="#A78BFA"
-          strokeWidth={3}
-          fill="none"
-          opacity={0.6}
-        />
-        <Path
-          d="M0 80 C40 50 70 100 110 70 C130 55 145 75 160 60"
-          stroke="#7C3AED"
-          strokeWidth={2.5}
-          fill="none"
-          opacity={0.4}
-        />
-        <Path
-          d="M0 95 C35 70 75 110 120 85 C140 72 150 90 160 78"
-          stroke="#C084FC"
-          strokeWidth={2}
-          fill="none"
-          opacity={0.35}
-        />
-      </Svg>
-    </View>
+    <View className="flex-row items-center">
+      {shown.map((account, index) => (
+        <View
+          key={account.id}
+          className="rounded-full border-2"
+          style={{
+            marginLeft: index === 0 ? 0 : -10,
+            borderColor: TRACEPAY.light.summaryGradient[1],
+          }}
+        >
+          <InstitutionLogo
+            name={account.name}
+            logoDomain={account.logoDomain}
+            color={account.color}
+            size={34}
+          />
+        </View>
+      ))}
+      {extra > 0 ? (
+        <View
+          className="h-[38px] w-[38px] items-center justify-center rounded-full border-2 bg-white/15"
+          style={{ marginLeft: -10, borderColor: TRACEPAY.light.summaryGradient[1] }}
+        >
+          <Text className="text-[12px] font-semibold text-white">+{extra}</Text>
+        </View>
+      ) : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Add another bank"
+        hitSlop={6}
+        className="h-[38px] w-[38px] justify-center active:opacity-70"
+        style={{ marginLeft: accounts.length > 0 ? 0 : 6 }}
+    onPress={onAddAccount}
+  >
+    <Plus color="#FFFFFF" size={18} strokeWidth={2.4} />
+  </Pressable>
+</View>
   );
 }
 
 export function BalanceCard({
+  heading,
   balance,
-  sourceLabel,
-  changeLabel,
-  warningLabel = null,
+  metaLabel,
+  accounts,
   hidden = false,
+  loading = false,
   onToggleVisibility,
-  onScanLeaks,
-  onViewInsights,
+  onImportStatement,
+  onViewAccounts,
+  onAddAccount,
 }: Props) {
   return (
     <LinearGradient
-      colors={["#1E1245", "#161028", "#0F0A1C"]}
+      colors={[...TRACEPAY.light.summaryGradient]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={{
-        borderRadius: 24,
-        padding: 20,
+        borderRadius: 28,
+        paddingHorizontal: 20,
+        paddingTop: 20,
+        paddingBottom: 20,
         overflow: "hidden",
       }}
     >
-      <BalanceWaves />
+      <View className="flex-row items-start justify-between gap-3">
+        {loading ? (
+          <View className="min-w-0 flex-1 gap-2.5 py-1">
+            <Skeleton onDark width={130} height={13} />
+            <Skeleton onDark width={190} height={34} radius={10} />
+            <Skeleton onDark width={150} height={11} />
+          </View>
+        ) : (
+          <View className="min-w-0 flex-1">
+            <Text className="text-[13px] font-medium text-white/70">{heading}</Text>
+            <View className="mt-1.5">
+              <BalanceAmount balance={balance} hidden={hidden} />
+            </View>
+            <Text className="mt-1.5 text-[12px] leading-5 text-white/60" numberOfLines={2}>
+              {metaLabel}
+            </Text>
+          </View>
+        )}
 
-      <Pressable
-        onPress={onToggleVisibility}
-        className="flex-row items-center gap-2 self-start active:opacity-70"
-      >
-        <Text className="text-[13px] text-white/70">Statement balance</Text>
-        <Eye color="rgba(255,255,255,0.7)" size={15} strokeWidth={2} />
-      </Pressable>
+        <View className="items-end gap-3">
+        <View className="flex-row gap-2">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Import a statement"
+            hitSlop={8}
+            className="h-10 w-10 items-center justify-center rounded-full bg-white/10 active:opacity-70"
+            onPress={onImportStatement}
+          >
+            <Upload color="rgba(255,255,255,0.85)" size={17} strokeWidth={2} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={hidden ? "Show balances" : "Hide balances"}
+            hitSlop={8}
+            className="h-10 w-10 items-center justify-center rounded-full bg-white/10 active:opacity-70"
+            onPress={onToggleVisibility}
+          >
+            {hidden ? (
+              <EyeOff color="rgba(255,255,255,0.85)" size={18} strokeWidth={2} />
+            ) : (
+              <Eye color="rgba(255,255,255,0.85)" size={18} strokeWidth={2} />
+            )}
+          </Pressable>
+        </View>
 
-      <Text className="mt-1 text-[12px] text-white/55">{sourceLabel}</Text>
-
-      <View className="mt-2.5">
-        <BalanceAmount balance={balance} hidden={hidden} />
+        {loading ? (
+          <Skeleton onDark width={34} height={34} circle />
+        ) : accounts.length > 0 ? (
+          <AccountChips accounts={accounts} onAddAccount={onAddAccount ?? onImportStatement} />
+        ) : null}
+        </View>
       </View>
 
-      {warningLabel ? (
-        <Text className="mt-2 text-[12px] leading-5 text-amber-200/90">
-          {warningLabel}
-        </Text>
+      {!loading && accounts.length === 0 ? (
+        <View className="mt-5 flex-row items-center">
+          <Button className="flex-1" onPress={onImportStatement}>
+            <>
+              <Upload color="#FFFFFF" size={17} strokeWidth={2.2} />
+              <Text className="text-[14px] font-semibold text-white">Add a statement</Text>
+            </>
+          </Button>
+        </View>
       ) : null}
-
-      <View className="mt-2.5 self-start rounded-full bg-emerald-500/15 px-3 py-1.5">
-        <Text className="text-[12px] font-semibold text-emerald-400">
-          {changeLabel}
-        </Text>
-      </View>
-
-      <View className="mt-5 flex-row gap-3">
-        <Button className="flex-1" size="md" onPress={onScanLeaks}>
-          <>
-            <ScanSearch color="#FFFFFF" size={18} strokeWidth={2} />
-            <Text className="text-[14px] font-semibold text-white">
-              Scan new leaks
-            </Text>
-          </>
-        </Button>
-
-        <Button
-          className="flex-1 border-white/20 bg-white/5"
-          size="md"
-          variant="secondary"
-          onPress={onViewInsights}
-        >
-          <>
-            <BarChart3 color="#FFFFFF" size={18} strokeWidth={2} />
-            <Text className="text-[14px] font-semibold text-white/90">
-              View Insights
-            </Text>
-          </>
-        </Button>
-      </View>
     </LinearGradient>
   );
 }

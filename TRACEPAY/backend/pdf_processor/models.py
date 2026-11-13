@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 from typing import Literal
 
@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, computed_field
 
 class RawExtraction(BaseModel):
     pages: int
-    extraction_method: Literal["text", "table", "ocr", "ai", "unknown"]
+    extraction_method: Literal["text", "table", "ocr", "unknown"]
     extraction_confidence: float = Field(default=0, ge=0, le=1)
     raw_text_available: bool
     useful_text_characters: int
@@ -17,6 +17,7 @@ class RawExtraction(BaseModel):
 
 class Transaction(BaseModel):
     date: date
+    transaction_time: time | None = None
     description: str = Field(min_length=1, max_length=500)
     amount: Decimal
     type: Literal["debit", "credit"]
@@ -36,6 +37,14 @@ class Transaction(BaseModel):
     classification_reason: str | None = None
     merchant_name: str | None = None
     reference: str | None = None
+    # Date provenance. ``date`` is the transaction date as the statement shows
+    # it; the original text, how sure the parse is, and any other dates the
+    # statement printed are kept so nothing is silently normalised away.
+    date_text: str | None = None
+    date_confidence: Literal["high", "medium", "low"] = "high"
+    date_warnings: list[str] = Field(default_factory=list)
+    booking_date: date | None = None
+    value_date: date | None = None
 
     @computed_field
     @property
@@ -58,12 +67,49 @@ class ValidationResult(BaseModel):
     rows_rejected: int = 0
     duplicate_count: int = 0
     balance_reconciliation: Literal["verified", "not_available", "mismatch"] = "not_available"
+    # The statement's own summary shows no money in or out for the period.
+    no_activity: bool = False
+    # Opening balance + extracted movements vs closing balance, using the
+    # account type's balance convention. ``None`` difference means not checked.
+    opening_closing_reconciliation: Literal["verified", "not_available", "mismatch"] = (
+        "not_available"
+    )
+    reconciliation_difference: Decimal | None = None
+    transactions_with_uncertain_dates: int = 0
 
 
 class StatementBalance(BaseModel):
     amount: Decimal | None = None
     as_of_date: date | None = None
     source: Literal["closing_balance", "running_balance", "unavailable"] = "unavailable"
+
+
+class PrintedFigures(BaseModel):
+    """Figures a statement prints outside its transaction rows.
+
+    Each one is read only when its label is on the statement, and is ``None`` otherwise,
+    so a missing figure is never filled in from a guess. They let a later review check
+    the rows against the bank's own totals and state a rate or a limit as printed.
+    """
+
+    # The statement's own date, e.g. 30 June 2026. Which month the figures belong to.
+    statement_date: date | None = None
+    # Percent per year, as printed ("10.50%" is 10.50).
+    debit_interest_rate: Decimal | None = None
+    credit_interest_rate: Decimal | None = None
+    facility: Decimal | None = None
+    # A credit card's limit. Printed on card statements, where an overdraft facility is not.
+    credit_limit: Decimal | None = None
+    # The account summary: what the bank says it charged or paid for the period.
+    card_purchases: Decimal | None = None
+    online_payments: Decimal | None = None
+    deposits_received: Decimal | None = None
+    fees_total: Decimal | None = None
+    interest_paid: Decimal | None = None
+    interest_received: Decimal | None = None
+
+    def is_empty(self) -> bool:
+        return all(value is None for value in self.model_dump().values())
 
 
 class ExtractedStatement(BaseModel):
@@ -77,6 +123,11 @@ class ExtractedStatement(BaseModel):
     balance_source: Literal["closing_balance", "running_balance", "unavailable"] = (
         "unavailable"
     )
+    # ``declared``: printed on the statement. ``inferred``: taken from the
+    # first and last extracted transaction, so it proves nothing about days
+    # at either edge. ``unknown``: no dates at all.
+    period_source: Literal["declared", "inferred", "unknown"] = "unknown"
+    printed_figures: PrintedFigures | None = None
 
 
 class ProcessingResult(BaseModel):

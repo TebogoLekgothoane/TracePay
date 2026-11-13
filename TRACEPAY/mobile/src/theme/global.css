@@ -4,13 +4,13 @@
 
 @layer base {
   :root {
-    --background: 250 249 254;
+    --background: 242 241 248;
     --foreground: 23 24 45;
     --card: 255 255 255;
     --card-foreground: 23 24 45;
-    --muted: 238 234 253;
+    --muted: 233 232 242;
     --muted-foreground: 119 120 140;
-    --primary: 121 85 231;
+    --primary: 109 63 224;
     --primary-foreground: 255 255 255;
     --secondary: 50 125 252;
     --secondary-foreground: 255 255 255;
@@ -20,32 +20,35 @@
     --destructive-foreground: 255 255 255;
     --warning: 249 115 22;
     --success: 20 184 166;
-    --border: 200 189 240;
+    --border: 224 226 232;
     --input: 255 255 255;
-    --input-border: 200 189 240;
-    --ring: 121 85 231;
-    --placeholder: 183 177 202;
-    --surface-soft: 238 234 253;
+    --input-border: 214 217 224;
+    --ring: 109 63 224;
+    --placeholder: 160 163 175;
+    --surface-soft: 233 232 242;
     --pin-empty: 91 96 112;
-    --pin-filled: 121 85 231;
-    --key-pressed: 116 84 219;
+    --pin-filled: 109 63 224;
+    --key-pressed: 109 63 224;
+    --hero-foreground: 255 255 255;
+    --hero-muted: 255 255 255;
+    --hero-subtle: 255 255 255;
 
-    --trace-background: 250 249 254;
+    --trace-background: 242 241 248;
     --trace-foreground: 23 24 45;
     --trace-muted: 119 120 140;
-    --trace-border: 200 189 240;
-    --trace-purple: 121 85 231;
+    --trace-border: 224 226 232;
+    --trace-purple: 109 63 224;
   }
 
   @media (prefers-color-scheme: dark) {
     :root {
-      --background: 11 11 15;
+      --background: 5 5 5;
       --foreground: 255 255 255;
-      --card: 22 22 28;
+      --card: 26 25 36;
       --card-foreground: 255 255 255;
-      --muted: 28 28 34;
-      --muted-foreground: 154 154 164;
-      --primary: 167 139 250;
+      --muted: 38 37 50;
+      --muted-foreground: 156 156 160;
+      --primary: 123 77 234;
       --primary-foreground: 255 255 255;
       --secondary: 50 125 252;
       --secondary-foreground: 255 255 255;
@@ -55,33 +58,36 @@
       --destructive-foreground: 255 255 255;
       --warning: 251 146 60;
       --success: 45 212 191;
-      --border: 42 42 50;
-      --input: 22 22 28;
-      --input-border: 58 58 68;
-      --ring: 167 139 250;
-      --placeholder: 107 113 133;
-      --surface-soft: 167 139 250;
+      --border: 40 40 40;
+      --input: 17 17 17;
+      --input-border: 58 58 58;
+      --ring: 123 77 234;
+      --placeholder: 112 112 116;
+      --surface-soft: 38 37 50;
       --pin-empty: 91 96 112;
-      --pin-filled: 155 123 255;
-      --key-pressed: 167 139 250;
+      --pin-filled: 123 77 234;
+      --key-pressed: 123 77 234;
+      --hero-foreground: 255 255 255;
+      --hero-muted: 255 255 255;
+      --hero-subtle: 255 255 255;
 
-      --trace-background: 11 11 15;
+      --trace-background: 5 5 5;
       --trace-foreground: 255 255 255;
-      --trace-muted: 154 154 164;
-      --trace-border: 42 42 50;
-      --trace-purple: 167 139 250;
+      --trace-muted: 156 156 160;
+      --trace-border: 40 40 40;
+      --trace-purple: 123 77 234;
     }
   }
 
   .dark,
   .dark:root {
-    --background: 11 11 15;
+    --background: 5 5 5;
     --foreground: 255 255 255;
-    --card: 22 22 28;
+    --card: 26 25 36;
     --card-foreground: 255 255 255;
-    --muted: 28 28 34;
-    --muted-foreground: 154 154 164;
-    --primary: 167 139 250;
+    --muted: 38 37 50;
+    --muted-foreground: 156 156 160;
+    --primary: 123 77 234;
     --primary-foreground: 255 255 255;
     --secondary: 50 125 252;
     --secondary-foreground: 255 255 255;
@@ -91,20 +97,23 @@
     --destructive-foreground: 255 255 255;
     --warning: 251 146 60;
     --success: 45 212 191;
-    --border: 42 42 50;
-    --input: 22 22 28;
-    --input-border: 58 58 68;
-    --ring: 167 139 250;
-    --placeholder: 107 113 133;
-    --surface-soft: 167 139 250;
+    --border: 40 40 40;
+    --input: 17 17 17;
+    --input-border: 58 58 58;
+    --ring: 123 77 234;
+    --placeholder: 112 112 116;
+    --surface-soft: 38 37 50;
     --pin-empty: 91 96 112;
-    --pin-filled: 155 123 255;
-    --key-pressed: 167 139 250;
+    --pin-filled: 123 77 234;
+    --key-pressed: 123 77 234;
+    --hero-foreground: 255 255 255;
+    --hero-muted: 255 255 255;
+    --hero-subtle: 255 255 255;
 
-    --trace-background: 11 11 15;
+    --trace-background: 5 5 5;
     --trace-foreground: 255 255 255;
-    --trace-muted: 154 154 164;
-    --trace-border: 42 42 50;
-    --trace-purple: 167 139 250;
+    --trace-muted: 156 156 160;
+    --trace-border: 40 40 40;
+    --trace-purple: 123 77 234;
   }
 }

@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useState } from "react";
 import {
+  Image,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -15,16 +16,14 @@ import Animated, {
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import AssembledTracePayIcon from "../../../assets/icons/assembled TracePay icon.svg";
-import PayWordmark from "../../../assets/wordmark/PAY.svg";
-import TraceWordmark from "../../../assets/wordmark/trace white wordmark.svg";
+import { TracePayMark as AssembledTracePayIcon } from "../ui/TracePayMark";
 import { continueAfterAuth } from "../../features/auth/auth.navigation";
 import { getPendingPhone } from "../../features/auth/auth.service";
 import { useAppLock } from "../../features/security/AppLockProvider";
 import { useAuth } from "../../hooks/useAuth";
 import { TRACEPAY } from "../../theme/colors";
+import { LOGO, LOGO_ASPECT } from "../../theme/logo";
 import { Button } from "../ui/Button";
-import { TRACEPAY_ICON_COMPOSITION } from "../tracePayIconComposition";
 import {
   WelcomeAuthForm,
   type WelcomeAuthMode,
@@ -41,35 +40,17 @@ function usePalette() {
 }
 
 function WelcomeWordmark({ width }: { width: number }) {
-  const palette = usePalette();
-  const height = width * (632 / 1897);
-  const columnWidth = (width - 8) / 2;
+  const { colorScheme } = useColorScheme();
+  const art = LOGO[colorScheme === "dark" ? "dark" : "light"];
 
   return (
-    <View
+    <Image
       accessibilityLabel="TRACEPAY"
-      className="relative mt-2"
-      style={{ width, height }}
-    >
-      <View className="absolute left-0 top-0" style={{ width: columnWidth, height }}>
-        <TraceWordmark
-          width={columnWidth}
-          height={height}
-          color={palette.foreground}
-          preserveAspectRatio="xMidYMid meet"
-        />
-      </View>
-      <View
-        className="absolute top-0"
-        style={{ left: columnWidth - 12, width: columnWidth, height }}
-      >
-        <PayWordmark
-          width={columnWidth}
-          height={height}
-          preserveAspectRatio="xMidYMid meet"
-        />
-      </View>
-    </View>
+      className="mt-2"
+      source={art.wordmark}
+      style={{ width, height: width / LOGO_ASPECT.wordmark }}
+      resizeMode="contain"
+    />
   );
 }
 
@@ -82,8 +63,7 @@ function WelcomeLogo({
 }) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
-  const height =
-    size * (TRACEPAY_ICON_COMPOSITION.height / TRACEPAY_ICON_COMPOSITION.width);
+  const height = size / LOGO_ASPECT.mark;
   const palette = usePalette();
 
   return (
@@ -97,7 +77,7 @@ function WelcomeLogo({
           ...(isDark
             ? {}
             : {
-                shadowColor: palette.accent,
+                shadowColor: palette.primary,
                 shadowOffset: { width: 0, height: 0 },
                 shadowOpacity: 0.28,
                 shadowRadius: size > 100 ? 28 : 14,
@@ -125,7 +105,7 @@ export function WelcomeScreen() {
   const compactScale = compactLogoSize / heroLogoSize;
 
   const { error, requestReset, setError, signIn, signUp, submitting } = useAuth();
-  const { hasPin, lockApp, unlockApp } = useAppLock();
+  const appLock = useAppLock();
   const [authMode, setAuthMode] = useState<WelcomeAuthMode | null>(null);
   const sheetOpen = authMode !== null;
   /** 0 = hero (sheet closed), 1 = compact (sheet open). Scrubs with sheet drag. */
@@ -153,7 +133,7 @@ export function WelcomeScreen() {
   }));
 
   const continueAfterLogin = () => {
-    void continueAfterAuth({ hasPin, lockApp, router, unlockApp });
+    void continueAfterAuth({ appLock, router });
   };
 
   const openSheet = (mode: WelcomeAuthMode) => {

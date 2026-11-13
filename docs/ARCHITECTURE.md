@@ -1,65 +1,50 @@
-# TracePay – Architecture (Hackathon)
+# TracePay architecture
 
-## Overview
+TracePay financial intelligence lives in `TRACEPAY/backend`. It reads transactions that already belong to the signed-in user and returns analysis. It does not persist leak, reasoning, or recommendation rows.
 
-TracePay is a hackathon project built in teams. This document describes how the **deployed backend**, **frontend–backend linkage**, and **Open Banking API** fit together.
+## Intelligence pipeline
 
----
+```text
+Transactions
+→ Categorisation
+→ Financial Feature Engine
+→ Behaviour Analysis
+→ Leak Detection
+→ Financial Reasoning
+→ Financial Recommendations
+```
 
-## 1. Deployed Backend (FastAPI or Node.js)
+Each stage consumes the previous stage's structured output.
 
-- **Current implementation:** Python **FastAPI** backend in `web/backend/`.
-- **Alternative:** A **Node.js** backend could be used instead; the mobile app and dashboard talk to a single backend API, so the backend language is interchangeable as long as the API contract is the same.
+- **Transactions** are the user's stored statement rows.
+- **Categorisation** assigns a category and transaction class.
+- **Financial Feature Engine** builds completed-month totals, fee totals, merchant recurrence, and related features.
+- **Behaviour Analysis** records observed patterns such as fee accumulation, price change, and payday concentration.
+- **Leak Detection** turns supported patterns into leak findings.
+- **Financial Reasoning** explains a finding from the evidence already attached to it.
+- **Financial Recommendations** turn a supported explanation into a review action. They do not move money or contact a bank.
 
-**Backend responsibilities:**
+Intelligence is deterministic. The same transactions produce the same features, behaviours, leaks, explanations, and recommendations. AI is not making leak decisions.
 
-- Auth (register, login, tokens).
-- Open Banking flows: consent creation, account listing, transaction fetch (see §3).
-- Forensic analysis: `/analyze` (transaction list → money leaks, health score).
-- Mobile-specific: `/mobile/freeze`, `/mobile/frozen`, `/mobile/unfreeze`.
-- MTN MoMo, voice, ML, admin, etc. as implemented.
+`AI_PDF_EXTRACTION_ENABLED` and `AI_CATEGORISATION_ENABLED` default to off and are independent. PDF extraction AI, when enabled, can receive a statement PDF only after classical extraction fails. Categorisation AI receives sanitized descriptions only. Neither path selects a leak, an explanation, or a recommendation.
 
-**Deployment:** The backend is expected to be **deployed** (e.g. Railway, Render, Fly.io, or similar) so the mobile app and dashboard can call it via a public base URL (e.g. `https://tracepay-api.example.com`).
+## Catalogue boundary
 
----
+Deferred FI items stay deferred because the current data model lacks the evidence they require. They are listed in `TRACEPAY/backend/tests/fixtures/intelligence/coverage_gaps.json`.
 
-## 2. Frontend ↔ Backend (API linkage)
+FI-031 Impulse Spending Pattern is intentionally deferred. A shopping or spending increase does not prove impulse intent, and the data model has no reliable impulse-intent signal.
 
-| Client        | Role                                      | How it talks to the backend                |
-|---------------|-------------------------------------------|--------------------------------------------|
-| **Mobile app** (Expo) | Primary user app (analysis, freeze, open banking) | `lib/backend-client.ts` – base URL from `EXPO_PUBLIC_BACKEND_URL` |
-| **Dashboard** (Next.js) | Web dashboard (admin, accounts, auth)     | `lib/api.ts` – base URL from `NEXT_PUBLIC_API_URL` |
+FI-054 Duplicate Charges is covered by FI-040. Same-day duplicate merchant payments use `duplicate_payment_leak`. There is no separate duplicate-charge detector.
 
-**Linkage in practice:**
+The canonical FI-001 to FI-062 catalogue file is not in this repository. `web/tracepayvisiondev.md` is absent. These ids have no title or definition in the repo and are not reconstructed here: FI-001, FI-002, FI-006, FI-007, FI-008, FI-009, FI-010, FI-011, FI-012, FI-014, FI-019, FI-020, FI-021, FI-022, FI-024, FI-028.
 
-- Both clients use the **same backend API** (same base URL once deployed).
-- Mobile: set `EXPO_PUBLIC_BACKEND_URL` to the deployed backend URL; all backend/Open Banking calls go through `backend-client.ts`.
-- Dashboard: set `NEXT_PUBLIC_API_URL` to the same URL; existing `ApiClient` in `web/dashboard/lib/api.ts` handles auth and API calls.
-- **Supabase** (mobile `lib/api.ts`) is used for **app state** (settings, subscriptions, freeze toggles, category accounts, etc.). Backend is used for **auth, open banking, analysis, and mobile freeze/unfreeze** when wired.
+## Processes
 
----
+| Process | Location | Role |
+|---|---|---|
+| Auth | `TRACEPAY/backend` Node server | Signup, login, SMS OTP |
+| Financial API | `TRACEPAY/backend` FastAPI | Extraction, categorisation, and the intelligence pipeline |
+| Mobile | `TRACEPAY/mobile` | Stores normalized transactions and calls the financial API with the user token |
+| Database | Supabase | User-scoped transaction storage. Row access follows the signed-in user |
 
-## 3. Open Banking API (other team member)
-
-- **Open Banking integration** (sandbox or live bank APIs – consent, accounts, transactions) is expected to be implemented and provided by **another team member** for the hackathon.
-- The **backend** (`web/backend`) is the place that integrates with that Open Banking API:
-  - Backend exposes routes such as `/open-banking/consent`, `/open-banking/accounts`, `/open-banking/fetch-transactions`.
-  - Backend uses an **Open Banking client** (e.g. `open_banking_client.py` / sandbox config) that talks to the **external Open Banking API** (credentials, base URL, etc. configured via env).
-- **Frontends (mobile + dashboard)** do **not** call the Open Banking API directly; they call **our backend**, which then calls the Open Banking API.
-
-So:
-
-- **Our backend** = single point of integration with the Open Banking API.
-- **Other team member** = provides/owns the Open Banking API integration (client, credentials, endpoints) inside or alongside the backend.
-
----
-
-## Summary
-
-| Layer              | What it is / who owns it |
-|--------------------|---------------------------|
-| **Deployed backend** | FastAPI (or Node.js) in `web/backend`; deployed to a public URL. |
-| **Frontend–backend linkage** | Mobile: `EXPO_PUBLIC_BACKEND_URL` + `lib/backend-client.ts`. Dashboard: `NEXT_PUBLIC_API_URL` + `lib/api.ts`. |
-| **Open Banking API** | External API; integration implemented in the backend; expected from another team member. |
-
-For details of backend routes and mobile client usage, see `web/backend/README.md` and `mobile/lib/backend-client.ts`.
+An older hackathon API under `web/backend` is separate from this pipeline. It is not the Version 1 intelligence implementation.

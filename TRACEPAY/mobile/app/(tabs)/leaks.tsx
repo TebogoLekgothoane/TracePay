@@ -1,283 +1,67 @@
-import { router } from "expo-router";
-import {
-  Banknote,
-  CreditCard,
-  Download,
-  FileText,
-  Landmark,
-  RefreshCw,
-  Store,
-  Building2,
-  Smartphone,
-} from "lucide-react-native";
+import { router, useFocusEffect } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
+import { Bell, ChevronRight, Download, Info } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { useMemo, useState } from "react";
-import { Text, View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import {
-  LeaksSegmentTabsContainer,
-  type LeaksTab,
-} from "../../src/components/leaks/LeaksSegmentTabs";
+
+import { LeakCategoryCard } from "../../src/components/leaks/LeakCategoryCards";
+import { LockedLeakRow } from "../../src/components/leaks/LockedLeakRow";
+import { PotentialLeakCard } from "../../src/components/leaks/PotentialLeakCard";
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
+import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
 import { InfoSheet } from "../../src/components/ui/Modal";
-import { LeaksSummaryCard } from "../../src/components/leaks/LeaksSummaryCard";
+import { Skeleton } from "../../src/components/ui/Skeleton";
+import { SkeletonRows, SkeletonTile } from "../../src/components/ui/SkeletonGroups";
+import { formatWholeRand } from "../../src/features/billing/billing.format";
+import { useBilling } from "../../src/features/billing/billing.store";
+import { useLeakEntitlement } from "../../src/features/leaks/leak-entitlement.store";
+import { LEAK_CATEGORIES } from "../../src/features/leaks/leak-categories";
 import {
-  TopLeakRow,
-  type TopLeakItem,
-} from "../../src/components/leaks/TopLeakRow";
-import { COLORS } from "../../src/theme/colors";
-
-const OVERVIEW_LEAKS: TopLeakItem[] = [
-  {
-    id: "fees",
-    title: "Bank fees",
-    description: "Unnecessary bank charges",
-    amount: "R712.50",
-    percentLabel: "39% of leaks",
-    impactLabel: "High impact",
-    impact: "high",
-    Icon: FileText,
-  },
-  {
-    id: "subs",
-    title: "Subscriptions",
-    description: "Unused or forgotten subscriptions",
-    amount: "R430.00",
-    percentLabel: "24% of leaks",
-    impactLabel: "Medium impact",
-    impact: "mediumWarm",
-    Icon: RefreshCw,
-  },
-  {
-    id: "debit",
-    title: "Debit orders",
-    description: "Could be paused or cancelled",
-    amount: "R320.75",
-    percentLabel: "18% of leaks",
-    impactLabel: "Medium impact",
-    impact: "mediumCool",
-    Icon: CreditCard,
-  },
-  {
-    id: "airtime",
-    title: "Airtime & data",
-    description: "Higher than usual spending",
-    amount: "R206.15",
-    percentLabel: "11% of leaks",
-    impactLabel: "Low impact",
-    impact: "lowTeal",
-    Icon: Banknote,
-  },
-  {
-    id: "atm",
-    title: "Cash withdrawals",
-    description: "High ATM fees",
-    amount: "R150.00",
-    percentLabel: "8% of leaks",
-    impactLabel: "Low impact",
-    impact: "lowBlue",
-    Icon: Landmark,
-  },
-];
-
-const CATEGORY_LEAKS: TopLeakItem[] = [
-  {
-    id: "fees",
-    title: "Fees & charges",
-    description: "Bank fees and service charges",
-    amount: "R862.50",
-    percentLabel: "47% of leaks",
-    impactLabel: "High impact",
-    impact: "high",
-    Icon: FileText,
-  },
-  {
-    id: "subs",
-    title: "Subscriptions",
-    description: "Streaming, software, and memberships",
-    amount: "R430.00",
-    percentLabel: "24% of leaks",
-    impactLabel: "Medium impact",
-    impact: "mediumWarm",
-    Icon: RefreshCw,
-  },
-  {
-    id: "debit",
-    title: "Recurring payments",
-    description: "Debit orders still collecting",
-    amount: "R320.75",
-    percentLabel: "18% of leaks",
-    impactLabel: "Medium impact",
-    impact: "mediumCool",
-    Icon: CreditCard,
-  },
-  {
-    id: "airtime",
-    title: "Telecoms",
-    description: "Airtime, data, and out-of-bundle",
-    amount: "R206.15",
-    percentLabel: "11% of leaks",
-    impactLabel: "Low impact",
-    impact: "lowTeal",
-    Icon: Smartphone,
-  },
-];
-
-const ACCOUNT_LEAKS: TopLeakItem[] = [
-  {
-    id: "fees",
-    title: "FNB Cheque",
-    description: "Fees, ATM, and SMS charges",
-    amount: "R684.20",
-    percentLabel: "38% of leaks",
-    impactLabel: "High impact",
-    impact: "high",
-    Icon: Building2,
-  },
-  {
-    id: "subs",
-    title: "Capitec Global One",
-    description: "Subscriptions billed here",
-    amount: "R498.00",
-    percentLabel: "27% of leaks",
-    impactLabel: "Medium impact",
-    impact: "mediumWarm",
-    Icon: Building2,
-  },
-  {
-    id: "debit",
-    title: "Standard Bank",
-    description: "Debit orders and account fees",
-    amount: "R412.40",
-    percentLabel: "23% of leaks",
-    impactLabel: "Medium impact",
-    impact: "mediumCool",
-    Icon: Landmark,
-  },
-  {
-    id: "airtime",
-    title: "TymeBank",
-    description: "Airtime top-ups and withdrawals",
-    amount: "R225.80",
-    percentLabel: "12% of leaks",
-    impactLabel: "Low impact",
-    impact: "lowTeal",
-    Icon: Banknote,
-  },
-];
-
-const MERCHANT_LEAKS: TopLeakItem[] = [
-  {
-    id: "subs",
-    title: "Netflix",
-    description: "Streaming · billed monthly",
-    amount: "R159.00",
-    percentLabel: "Subscription",
-    impactLabel: "Medium impact",
-    impact: "mediumWarm",
-    Icon: Store,
-  },
-  {
-    id: "fees",
-    title: "FNB monthly fee",
-    description: "Account service charge",
-    amount: "R165.00",
-    percentLabel: "Bank fee",
-    impactLabel: "High impact",
-    impact: "high",
-    Icon: FileText,
-  },
-  {
-    id: "subs",
-    title: "Showmax",
-    description: "Streaming · rarely used",
-    amount: "R99.00",
-    percentLabel: "Subscription",
-    impactLabel: "Medium impact",
-    impact: "mediumWarm",
-    Icon: Store,
-  },
-  {
-    id: "debit",
-    title: "Virgin Active",
-    description: "Gym debit order",
-    amount: "R399.00",
-    percentLabel: "Debit order",
-    impactLabel: "Medium impact",
-    impact: "mediumCool",
-    Icon: CreditCard,
-  },
-  {
-    id: "airtime",
-    title: "Vodacom",
-    description: "Airtime & data top-ups",
-    amount: "R206.15",
-    percentLabel: "Telecoms",
-    impactLabel: "Low impact",
-    impact: "lowTeal",
-    Icon: Smartphone,
-  },
-  {
-    id: "atm",
-    title: "Other-bank ATM",
-    description: "Cash withdrawal fees",
-    amount: "R150.00",
-    percentLabel: "ATM fee",
-    impactLabel: "Low impact",
-    impact: "lowBlue",
-    Icon: Landmark,
-  },
-];
-
-const TAB_CONTENT: Record<
-  LeaksTab,
-  {
-    items: TopLeakItem[];
-    sectionTitle: string;
-    total: string;
-    changeLabel: string;
-    spendingPercent: string;
-  }
-> = {
-  Overview: {
-    items: OVERVIEW_LEAKS,
-    sectionTitle: "Your top leaks",
-    total: "R1,820.40",
-    changeLabel: "↑ 18% vs last month",
-    spendingPercent: "9%",
-  },
-  "By category": {
-    items: CATEGORY_LEAKS,
-    sectionTitle: "Leaks by category",
-    total: "R1,819.40",
-    changeLabel: "↑ 12% vs last month",
-    spendingPercent: "9%",
-  },
-  "By account": {
-    items: ACCOUNT_LEAKS,
-    sectionTitle: "Leaks by account",
-    total: "R1,820.40",
-    changeLabel: "↑ 9% vs last month",
-    spendingPercent: "9%",
-  },
-  "By merchant": {
-    items: MERCHANT_LEAKS,
-    sectionTitle: "Leaks by merchant",
-    total: "R1,178.15",
-    changeLabel: "Top merchant leaks",
-    spendingPercent: "6%",
-  },
-};
+  splitLeaksForPaywall,
+  totalMonthlyLeaks,
+} from "../../src/features/leaks/leak-paywall";
+import {
+  REVIEW_STATUSES,
+  REVIEW_STATUS_LABEL,
+  listPotentialLeaks,
+  type ReviewStatus,
+} from "../../src/features/leaks/potential-leaks";
+import { COLORS, TRACEPAY, withAlpha } from "../../src/theme/colors";
 
 export default function LeaksScreen() {
-  const [activeTab, setActiveTab] = useState<LeaksTab>("Overview");
+  const [filter, setFilter] = useState<ReviewStatus | "all">("all");
   const [showDownloadInfo, setShowDownloadInfo] = useState(false);
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
-
-  const content = useMemo(() => TAB_CONTENT[activeTab], [activeTab]);
+  const leaks = useMemo(() => listPotentialLeaks(), []);
+  const findingsTotal = useMemo(() => totalMonthlyLeaks(leaks), [leaks]);
+  const paywall = useMemo(() => splitLeaksForPaywall(leaks), [leaks]);
+  const { unlocked, hydrated } = useLeakEntitlement();
+  const { products, entitlements, refresh } = useBilling();
+  const price = products?.fullAnalysis.priceCents;
+  const unlockLabel = price ? `Unlock full analysis · ${formatWholeRand(price)}` : "Unlock full analysis";
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
+  );
+  const visible = useMemo(
+    () => (filter === "all" ? leaks : leaks.filter((leak) => leak.status === filter)),
+    [filter, leaks],
+  );
+  const openLeak = useCallback((id: string) => {
+    router.push(`/leak/${id}`);
+  }, []);
+  const openUpgrade = useCallback(() => {
+    router.push("/upgrade");
+  }, []);
+  const openCategory = useCallback((item: { id: string }) => {
+    router.push(`/leak/${item.id}` as never);
+  }, []);
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -286,14 +70,14 @@ export default function LeaksScreen() {
         contentContainerStyle={{ paddingBottom: 120 }}
         showsVerticalScrollIndicator={false}
       >
-        <View className="px-5 pt-1">
-          <View className="mb-1 flex-row items-start justify-between">
+        <View className="px-5 pt-2">
+          <View className="flex-row items-start justify-between">
             <View className="flex-1 pr-4">
               <Text className="text-[30px] font-bold tracking-[-0.6px] text-foreground">
                 Leaks
               </Text>
-              <Text className="mt-1 text-[14px] leading-5 text-muted-foreground">
-                We found areas where you&apos;re losing money.
+              <Text className="mt-0.5 text-[14px] leading-5 text-muted-foreground">
+                Where your money is quietly slipping away.
               </Text>
             </View>
 
@@ -306,42 +90,221 @@ export default function LeaksScreen() {
             </IconButton>
           </View>
 
-          <View className="mt-5">
-            <LeaksSegmentTabsContainer
-              active={activeTab}
-              onChange={setActiveTab}
-            />
-          </View>
-
-          <View className="mt-5">
-            <LeaksSummaryCard
-              total={content.total}
-              changeLabel={content.changeLabel}
-              spendingPercent={content.spendingPercent}
-            />
-          </View>
-
-          <Text className="mb-3 mt-7 text-[17px] font-bold text-foreground">
-            {content.sectionTitle}
-          </Text>
-
-          <View className="overflow-hidden rounded-3xl border border-border bg-card">
-            {content.items.map((item, index) => (
-              <TopLeakRow
-                key={`${activeTab}-${item.id}-${item.title}`}
-                item={item}
-                isLast={index === content.items.length - 1}
-                onPress={() => router.push(`/leak/${item.id}`)}
+          {hydrated ? (
+            <View className="mt-5 overflow-hidden rounded-[28px]">
+              <LinearGradient
+                pointerEvents="none"
+                colors={[...TRACEPAY.light.summaryGradient]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
               />
-            ))}
-          </View>
+              <View className="px-5 py-5">
+                <Text className="text-[13px] font-medium" style={{ color: TRACEPAY.light.heroMuted }}>
+                  Estimated monthly leaks
+                </Text>
+                <Text className="mt-1 text-[36px] font-bold tracking-[-1px] text-white">
+                  {findingsTotal}
+                </Text>
+                <View className="mt-4 flex-row gap-2">
+                  <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: TRACEPAY.light.heroSubtle }}>
+                    <Text className="text-[12px] font-semibold text-white">
+                      {leaks.length} {leaks.length === 1 ? "finding" : "findings"}
+                    </Text>
+                  </View>
+                  <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: TRACEPAY.light.heroSubtle }}>
+                    <Text className="text-[12px] font-semibold text-white">
+                      {LEAK_CATEGORIES.length} areas
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          ) : null}
+
+          {!hydrated ? (
+            <View className="mt-7">
+              <View className="gap-2.5">
+                <Skeleton width="45%" height={22} />
+                <Skeleton width="70%" height={14} />
+              </View>
+              <ScrollView
+                horizontal
+                scrollEnabled={false}
+                showsHorizontalScrollIndicator={false}
+                className="-mx-5 mt-4"
+                contentContainerStyle={{ gap: 12, paddingHorizontal: 20 }}
+              >
+                {[0, 1, 2, 3].map((index) => (
+                  <SkeletonTile key={index} />
+                ))}
+              </ScrollView>
+
+              <View className="mt-7 gap-2.5">
+                <Skeleton width="50%" height={22} />
+                <Skeleton width="85%" height={14} />
+              </View>
+              <View className="mt-4">
+                <SkeletonRows count={5} compact />
+              </View>
+            </View>
+          ) : (
+            <>
+              <Text className="mb-1 mt-8 text-[22px] font-bold tracking-[-0.3px] text-foreground">
+                Leak breakdown
+              </Text>
+              <Text className="text-[14px] leading-5 text-muted-foreground">
+                Areas where we found potential money leaks.
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                className="-mx-5 mt-4"
+                contentContainerStyle={{ gap: 12, paddingHorizontal: 20 }}
+              >
+                {LEAK_CATEGORIES.map((item) => (
+                  <LeakCategoryCard key={item.id} item={item} onPress={openCategory} />
+                ))}
+              </ScrollView>
+            </>
+          )}
+
+          {!hydrated ? null : unlocked ? (
+            <>
+              <Text className="mb-1 mt-8 text-[22px] font-bold tracking-[-0.3px] text-foreground">
+                Potential leaks
+              </Text>
+              <Text className="text-[14px] leading-5 text-muted-foreground">
+                We found {leaks.length} things worth reviewing.
+              </Text>
+
+              <View className="mt-4 flex-row flex-wrap gap-2">
+                {REVIEW_STATUSES.map((status) => {
+                  const selected = status === filter;
+                  const count = leaks.filter((leak) => leak.status === status).length;
+                  return (
+                    <Pressable
+                      key={status}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      onPress={() => setFilter((current) => (current === status ? "all" : status))}
+                      className="overflow-hidden rounded-full px-4 py-2.5 active:opacity-80"
+                      style={{ backgroundColor: selected ? undefined : palette.card }}
+                    >
+                      {selected ? (
+                        <LinearGradient
+                          pointerEvents="none"
+                          colors={[...TRACEPAY.light.summaryGradient]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={StyleSheet.absoluteFill}
+                        />
+                      ) : null}
+                      <Text
+                        className="text-[13px] font-semibold"
+                        style={{ color: selected ? "#FFFFFF" : palette.foreground }}
+                      >
+                        {REVIEW_STATUS_LABEL[status]} ({count})
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <View className="mt-4 gap-3">
+                {visible.length === 0 ? (
+                  <View className="rounded-3xl bg-card px-4 py-6">
+                    <Text className="text-[15px] font-semibold text-foreground">
+                      Nothing in {REVIEW_STATUS_LABEL[filter === "all" ? "new" : filter].toLowerCase()}
+                    </Text>
+                    <Text className="mt-1 text-[13px] leading-5 text-muted-foreground">
+                      Switch filters to see the other findings.
+                    </Text>
+                  </View>
+                ) : (
+                  visible.map((leak) => (
+                    <PotentialLeakCard key={leak.id} leak={leak} onPress={openLeak} />
+                  ))
+                )}
+              </View>
+
+              <Pressable
+                accessibilityRole="button"
+                className="mt-6 flex-row items-center gap-3 rounded-[20px] bg-card px-4 py-4 active:opacity-80"
+                onPress={() =>
+                  router.push((entitlements?.monitoring.active ? "/monitoring" : "/upgrade") as never)
+                }
+              >
+                <View
+                  className="h-11 w-11 items-center justify-center rounded-full"
+                  style={{ backgroundColor: withAlpha(palette.primary, 0.12) }}
+                >
+                  <Bell color={palette.primary} size={20} strokeWidth={2} />
+                </View>
+                <View className="min-w-0 flex-1">
+                  <Text className="text-[16px] font-bold text-foreground">
+                    {entitlements?.monitoring.active
+                      ? "Monitoring is on"
+                      : "Keep TracePay working for you"}
+                  </Text>
+                  <Text className="mt-0.5 text-[13px] leading-5 text-muted-foreground">
+                    {entitlements?.monitoring.active
+                      ? "See your plan, renewal date and recent alerts."
+                      : "Get alerted to new potential leaks as your activity changes. Optional."}
+                  </Text>
+                </View>
+                <ChevronRight color={palette.mutedForeground} size={20} />
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Text className="mb-1 mt-8 text-[22px] font-bold tracking-[-0.3px] text-foreground">
+                Biggest findings
+              </Text>
+              <Text className="text-[14px] leading-5 text-muted-foreground">
+                {leaks.length} potential {leaks.length === 1 ? "finding" : "findings"} ·{" "}
+                {findingsTotal} estimated monthly impact
+              </Text>
+
+              <View className="mt-4 gap-2">
+                {paywall.preview.map((leak) => (
+                  <PotentialLeakCard key={leak.id} leak={leak} onPress={openLeak} />
+                ))}
+                {paywall.locked.map((leak) => (
+                  <LockedLeakRow key={leak.id} leak={leak} onPress={openUpgrade} />
+                ))}
+              </View>
+
+              {paywall.locked.length > 0 ? (
+                <>
+                  <View className="mt-4 flex-row items-center rounded-[20px] bg-card py-3 pl-4 pr-4">
+                    <Info color={palette.primary} size={24} strokeWidth={1.8} />
+                    <View className="mx-3 h-10 w-px bg-border" />
+                    <Text className="flex-1 text-[15px] leading-6 text-foreground">
+                      Unlock your complete analysis to see all {leaks.length} findings, evidence and
+                      next steps.
+                    </Text>
+                  </View>
+
+                  <View className="mt-4">
+                    <Button onPress={openUpgrade} arrow style={{ minHeight: 56 }}>
+                      {unlockLabel}
+                    </Button>
+                    <Text className="mt-2 text-center text-[14px] text-muted-foreground">
+                      One payment. Not a subscription.
+                    </Text>
+                  </View>
+                </>
+              ) : null}
+            </>
+          )}
         </View>
       </TabScrollView>
 
       <InfoSheet
         visible={showDownloadInfo}
         title="Leaks report"
-        message="PDF export is coming soon. For now, open each leak below to see the breakdown and step-by-step fixes."
+        message="PDF export is coming soon. Open a finding below to review what we know and record what you've done."
         onClose={() => setShowDownloadInfo(false)}
       />
     </SafeAreaView>

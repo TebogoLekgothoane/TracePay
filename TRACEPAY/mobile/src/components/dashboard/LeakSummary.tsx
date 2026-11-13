@@ -80,7 +80,7 @@ export function LeakSummary({ items, onItemPress }: Props) {
           <Pressable
             key={item.id}
             onPress={() => onItemPress?.(item)}
-            className="w-[152px] rounded-2xl border border-border/70 bg-card p-3.5 active:opacity-80"
+            className="w-[152px] rounded-2xl bg-card p-3.5 active:opacity-80"
           >
             <CategoryIcon item={item} />
 

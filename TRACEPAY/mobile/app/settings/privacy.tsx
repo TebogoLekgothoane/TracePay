@@ -66,7 +66,7 @@ export default function PrivacyScreen() {
             </View>
           </View>
 
-          <View className="mt-5 flex-row items-center gap-3 rounded-3xl border border-primary/20 bg-primary/10 px-4 py-4">
+          <View className="mt-5 flex-row items-center gap-3 rounded-3xl bg-primary/10 px-4 py-4">
             <View className="h-11 w-11 items-center justify-center rounded-2xl bg-primary/15">
               <ShieldCheck color={palette.primary} size={22} strokeWidth={2.2} />
             </View>

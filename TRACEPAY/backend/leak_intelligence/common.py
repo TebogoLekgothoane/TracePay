@@ -1,0 +1,117 @@
+"""Shared, side-effect-free helpers for financial feature calculation."""
+
+from __future__ import annotations
+
+from decimal import Decimal
+from functools import lru_cache
+
+from categorisation.normalize import (
+    is_bank_boilerplate_label,
+    merchant_key,
+)
+from categorisation.constants import NON_SPENDING_CATEGORY_NAMES
+from categorisation.rules import PURCHASE_REVERSAL_RULE, is_purchase_reversal_description
+from categorisation.source_identity import identify_source
+
+from .models import FeatureTransaction
+
+ZERO = Decimal("0")
+
+_NON_MERCHANT_GROUP_CLASSES = frozenset(
+    {
+        "person_to_person",
+        "internal_transfer",
+        "income",
+        "savings",
+        "investment",
+        "bank_fee",
+    }
+)
+_NON_MERCHANT_SOURCE_TYPES = frozenset(
+    {
+        "person",
+        "bank",
+        "payment_processor",
+        "payment_mechanism",
+    }
+)
+
+
+def amount_of(transaction: FeatureTransaction) -> Decimal:
+    """Return a transaction magnitude without assuming source sign conventions."""
+    return abs(Decimal(transaction.amount))
+
+
+def is_purchase_spending_candidate(transaction: FeatureTransaction) -> bool:
+    """True when a row may represent discretionary merchant spending."""
+    if is_purchase_reversal(transaction):
+        return False
+    result = transaction.categorisation
+    transaction_class = result.transaction_class or "unknown"
+    if transaction_class != "spending":
+        return False
+    category = (result.category_name or "").strip()
+    if not category or category in NON_SPENDING_CATEGORY_NAMES:
+        return False
+    return True
+
+
+def is_purchase_reversal(transaction: FeatureTransaction) -> bool:
+    """Return whether this row undoes a payment instead of creating one.
+
+    Identification uses reversal wording or the deterministic reversal rule.
+    Other credits, including salary and interest, are unchanged.
+    """
+    if transaction.categorisation.rule == PURCHASE_REVERSAL_RULE:
+        return True
+    return is_purchase_reversal_description(transaction.description)
+
+
+def merchant_group_key(transaction: FeatureTransaction) -> str | None:
+    """Return a sanitized stable merchant grouping key, never bank boilerplate.
+
+    People, banks, processors and payment mechanisms are never treated as merchants.
+    Free-text extraction is used only when source identity confirms a merchant.
+    """
+    return _merchant_group_key(
+        transaction.categorisation.transaction_class,
+        transaction.description,
+        transaction.merchant_name,
+        transaction.categorisation.merchant_name,
+    )
+
+
+# The key depends only on these four strings, and the analysis asks for it
+# many times per transaction (every rule groups by merchant), so it is cached.
+@lru_cache(maxsize=65_536)
+def _merchant_group_key(
+    transaction_class: str | None,
+    description: str | None,
+    merchant_name: str | None,
+    categorised_merchant: str | None,
+) -> str | None:
+    if transaction_class in _NON_MERCHANT_GROUP_CLASSES:
+        return None
+
+    identity = identify_source(description)
+    if identity.source_type in _NON_MERCHANT_SOURCE_TYPES:
+        return None
+
+    value = None
+    if identity.source_type == "merchant" and identity.merchant_name:
+        value = identity.merchant_name
+    else:
+        value = merchant_name or categorised_merchant
+        if value and is_bank_boilerplate_label(value):
+            value = None
+
+    if not value:
+        return None
+    key = merchant_key(value)
+    return key or None
+
+
+def month_key(transaction: FeatureTransaction) -> str | None:
+    if transaction.transaction_date is None:
+        return None
+    return transaction.transaction_date.strftime("%Y-%m")

@@ -1,0 +1,138 @@
+"""Sanitized reporting for potential financial leak detections."""
+
+from __future__ import annotations
+
+from collections import Counter
+from decimal import ROUND_HALF_UP, Decimal
+
+from .leak_models import LeakDetection, LeakDetectionResult
+
+_RECURRING_TYPES = frozenset(
+    {
+        "subscription_leak",
+        "recurring_payment_leak",
+        "unknown_recurring_payment",
+        "duplicate_streaming_leak",
+        "overlapping_cover_leak",
+        "high_cost_credit_leak",
+        "recurring_transfer_leak",
+        "bank_fee_leak",
+        "cash_usage_leak",
+    }
+)
+_ESCALATION_TYPES = frozenset(
+    {
+        "spending_escalation_leak",
+        "food_spending_leak",
+        "transport_spending_leak",
+        "airtime_data_leak",
+        "coffee_spending_leak",
+        "convenience_store_leak",
+        "weekend_spending_leak",
+        "payday_spending_leak",
+        "gambling_spending_leak",
+    }
+)
+
+
+def render_leak_report(result: LeakDetectionResult) -> str:
+    """Render aggregate findings without raw transaction details or advice."""
+    lines = [
+        "========================================",
+        "TRACEPAY LEAK INTELLIGENCE REPORT",
+        "========================================",
+        "",
+        f"Transactions analysed: {result.transaction_count}",
+        f"Total potential signals: {len(result.leaks)}",
+    ]
+    if not result.leaks:
+        lines.append("No potential leaks met the minimum evidence threshold.")
+        return "\n".join(lines)
+
+    counts = Counter(leak.leak_type for leak in result.leaks)
+    recurring = sum(counts[t] for t in counts if t in _RECURRING_TYPES)
+    escalation = sum(counts[t] for t in counts if t in _ESCALATION_TYPES)
+    fee = counts.get("bank_fee_leak", 0)
+    duplicate = counts.get("duplicate_payment_leak", 0) + counts.get(
+        "duplicate_debit_order_leak", 0
+    )
+
+    lines.extend(
+        [
+            "",
+            "Summary:",
+            f"  Recurring / fee-style signals: {recurring}",
+            f"  Spending escalation signals: {escalation}",
+            f"  Bank fee signals: {fee}",
+            f"  Duplicate verification candidates: {duplicate}",
+            "",
+            "Potential financial signals (not confirmed leaks):",
+        ]
+    )
+    for index, leak in enumerate(result.leaks, start=1):
+        lines.extend(_leak_lines(index, leak))
+    return "\n".join(lines)
+
+
+def _leak_lines(index: int, leak: LeakDetection) -> list[str]:
+    primary_label, primary_value = _primary_impact(leak)
+    return [
+        "",
+        f"{index}. {_public_title(leak.leak_type, leak.title)}",
+        f"   {primary_label}: {primary_value}",
+        f"   Estimated annual impact: {_annual_impact(leak)}",
+        f"   Impact type: {leak.impact_kind}",
+        f"   Confidence: {leak.confidence:.2f}",
+        f"   Severity: {leak.severity.title()}",
+    ]
+
+
+def _primary_impact(leak: LeakDetection) -> tuple[str, str]:
+    if leak.leak_type == "irregular_transaction_leak":
+        return "Transaction amount", _money(leak.estimated_monthly_impact)
+    if leak.impact_kind == "one_time":
+        return "Potential amount", _money(leak.estimated_monthly_impact)
+    return "Monthly impact", _money(leak.estimated_monthly_impact)
+
+
+def _annual_impact(leak: LeakDetection) -> str:
+    if leak.estimated_annual_impact is None:
+        return "Not annualised"
+    return _money(leak.estimated_annual_impact)
+
+
+def _money(value: Decimal) -> str:
+    return str(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _public_title(leak_type: str, fallback: str) -> str:
+    """Prefer the detector title when it is already merchant-safe.
+
+    Fall back to type-level generics only when the detector title is empty.
+    """
+    cleaned = fallback.strip()
+    if cleaned:
+        return cleaned
+    generic = {
+        "subscription_leak": "Unidentified subscription payment",
+        "recurring_payment_leak": "Unidentified recurring payment",
+        "unknown_recurring_payment": "Unidentified recurring payment",
+        "duplicate_payment_leak": "Potential duplicate payment requires verification",
+        "duplicate_debit_order_leak": "Potential duplicate debit order requires verification",
+        "duplicate_streaming_leak": "Overlapping active streaming subscriptions",
+        "inactive_recurring_payment_leak": "Potential inactive recurring payment",
+        "irregular_transaction_leak": "Potential unusual transaction requires verification",
+        "bank_fee_leak": "Potential recurring banking fee burden",
+        "spending_escalation_leak": "Potential spending escalation",
+        "coffee_spending_leak": "Recurring coffee spending pattern",
+        "convenience_store_leak": "Repeated convenience-store spending",
+        "weekend_spending_leak": "Discretionary weekend spending spike",
+        "payday_spending_leak": "Post-payday discretionary spending concentration",
+        "overlapping_cover_leak": "Funeral or life cover with several providers",
+        "gambling_spending_leak": "Regular betting or lottery payments",
+        "high_cost_credit_leak": "Credit repayments to review",
+        "penalty_fee_leak": "Late or penalty fees charged",
+        "recurring_transfer_leak": "Regular payments to the same recipient",
+        "money_pass_through_leak": "Large deposits paid straight out",
+    }
+    return generic.get(leak_type, "Potential spending pattern")

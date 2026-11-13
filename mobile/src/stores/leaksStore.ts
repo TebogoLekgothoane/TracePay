@@ -5,7 +5,7 @@ import {
   loadStoredLeaks,
   saveStoredLeaks,
 } from "@/services/transactions/transactionRepository";
-import type { LifecycleLeak } from "../../lib/backend-client";
+import type { LifecycleLeak } from "@/lib/backend";
 
 export interface Leak {
   id: string;

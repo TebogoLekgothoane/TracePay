@@ -1,0 +1,146 @@
+[
+  {
+    "id": "fi036-data-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-05",
+    "description": "VODACOM DATA BUNDLE",
+    "amount": "79.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "VODACOM",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Airtime & Data"
+    }
+  },
+  {
+    "id": "fi036-data-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-05",
+    "description": "VODACOM DATA BUNDLE",
+    "amount": "99.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "VODACOM",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Airtime & Data"
+    }
+  },
+  {
+    "id": "fi036-data-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-05",
+    "description": "VODACOM DATA BUNDLE",
+    "amount": "149.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "VODACOM",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Airtime & Data"
+    }
+  },
+  {
+    "id": "fi036-data-3",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-20",
+    "description": "VODACOM DATA BUNDLE",
+    "amount": "149.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "VODACOM",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Airtime & Data"
+    }
+  },
+  {
+    "id": "fi036-data-4",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-30",
+    "description": "VODACOM DATA BUNDLE",
+    "amount": "149.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "VODACOM",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Airtime & Data"
+    }
+  },
+  {
+    "id": "pad-grocery-0",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-03",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "900.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "pad-grocery-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-03",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "900.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "pad-grocery-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-03",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "900.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  }
+]

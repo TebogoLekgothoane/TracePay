@@ -1,0 +1,182 @@
+[
+  {
+    "id": "fi029-grocery-07",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-02",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "800.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi029-kfc-07a",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-06",
+    "description": "POS PURCHASE KFC SANDTON CITY",
+    "amount": "120.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "KFC",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Fast Food"
+    }
+  },
+  {
+    "id": "fi029-kfc-07b",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-20",
+    "description": "POS PURCHASE KFC ROSEBANK",
+    "amount": "130.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "KFC",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Fast Food"
+    }
+  },
+  {
+    "id": "fi029-grocery-08",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-02",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "800.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  },
+  {
+    "id": "fi029-kfc-08a",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-06",
+    "description": "POS PURCHASE KFC SANDTON CITY",
+    "amount": "180.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "KFC",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Fast Food"
+    }
+  },
+  {
+    "id": "fi029-kfc-08b",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-20",
+    "description": "POS PURCHASE KFC ROSEBANK",
+    "amount": "190.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "KFC",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Fast Food"
+    }
+  },
+  {
+    "id": "fi029-kfc-09a",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-06",
+    "description": "POS PURCHASE KFC SANDTON CITY",
+    "amount": "280.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "KFC",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Fast Food"
+    }
+  },
+  {
+    "id": "fi029-kfc-09b",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-20",
+    "description": "POS PURCHASE KFC ROSEBANK",
+    "amount": "320.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "KFC",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Fast Food"
+    }
+  },
+  {
+    "id": "fi029-kfc-09c",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-28",
+    "description": "POS PURCHASE KFC MALL OF AFRICA",
+    "amount": "200.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "KFC",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Fast Food"
+    }
+  },
+  {
+    "id": "fi029-grocery-09",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-30",
+    "description": "POS PURCHASE CHECKERS SANDTON",
+    "amount": "800.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "CHECKERS",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Groceries"
+    }
+  }
+]

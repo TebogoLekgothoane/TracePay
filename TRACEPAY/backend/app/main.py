@@ -2,14 +2,57 @@ import asyncio
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from app import billing, revenuecat
 from app.auth import require_supabase_user
+from app.behaviour_analysis import build_user_behaviour_analysis
 from app.category_catalog import fetch_category_names
+from app.consolidation_service import build_user_coverage_payload, reconcile_user_transfers
+from app.financial_features import build_user_feature_snapshot, public_feature_payload
+from app.financial_intelligence_report import (
+    ReportCompositionError,
+    build_user_financial_intelligence_report,
+)
+from app.finding_actions import (
+    FindingActionRequest,
+    FindingNotFound,
+    guidance_payload,
+    load_finding_guidance,
+    save_finding_action,
+)
+from app.finding_answers import (
+    FindingAnswerRequest,
+    FindingSkipRequest,
+    answer_payload,
+    save_finding_answer,
+    skip_finding_question,
+)
+from app.finding_registry import reconcile_findings_after_import
+from app.subscription_usage import (
+    SubscriptionUsageRequest,
+    load_subscription_usage,
+    save_subscription_usage,
+    usage_payload,
+)
+from app.financial_reasoning import build_user_financial_reasoning
+from app.financial_recommendations import build_user_financial_recommendations
+from app.leak_detection import (
+    build_user_leak_detections,
+    build_user_statement_review,
+    invalidate_user_leak_detections,
+    leak_detection_cache,
+)
 from app.rate_limit import enforce_rate_limit
+from app.synthetic_intelligence import (
+    analyze_scenario,
+    require_synthetic_debug_user,
+    scenario_catalog,
+)
 from categorisation.reprocess import (
     as_categorisable,
     classification_update_payload,
@@ -100,13 +143,23 @@ async def extraction_preview(
     file: UploadFile = File(...),
     password: str | None = Form(default=None),
     authorization: str | None = Header(default=None),
+    x_tracepay_pdf_password: str | None = Header(default=None, alias="X-TracePay-Pdf-Password"),
     _user_id: str = Depends(require_supabase_user),
 ) -> dict[str, object]:
     """Extract and validate a PDF without writing financial data to the database."""
-    enforce_rate_limit(f"pdf-user:{_user_id}", 8, 15 * 60)
+    # Allow password retries + re-uploads without locking the user out quickly.
+    enforce_rate_limit(f"pdf-user:{_user_id}", 20, 15 * 60)
     _reject_oversized_content_length(request)
     filename = file.filename or "statement"
-    logger.info("extraction_started filename=%s content_type=%s", filename, file.content_type)
+    # Header backup: some RN FormData builds drop string fields after the file part.
+    unlock_password = (password or x_tracepay_pdf_password or "").strip() or None
+    logger.info(
+        "extraction_started filename=%s content_type=%s password_present=%s password_len=%s",
+        filename,
+        file.content_type,
+        unlock_password is not None,
+        len(unlock_password) if unlock_password else 0,
+    )
     if not filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=415, detail="Only PDF statements are supported.")
 
@@ -128,7 +181,7 @@ async def extraction_preview(
                 content,
                 filename,
                 _user_id,
-                password,
+                unlock_password,
                 category_names,
                 access_token,
             )
@@ -188,3 +241,355 @@ async def categorisation_reprocess(
         result["metrics"]["categorised_transactions"],  # type: ignore[index]
     )
     return result
+
+
+@app.get("/debug/intelligence-scenarios")
+async def debug_intelligence_scenarios(
+    user_id: str = Depends(require_synthetic_debug_user),
+) -> dict[str, object]:
+    """List server-side synthetic scenarios. Unavailable outside development."""
+    enforce_rate_limit(f"synthetic-intelligence:{user_id}", 40, 15 * 60)
+    return scenario_catalog()
+
+
+@app.get("/debug/intelligence-scenarios/{scenario_id}/analysis")
+async def debug_intelligence_scenario_analysis(
+    scenario_id: str,
+    user_id: str = Depends(require_synthetic_debug_user),
+) -> dict[str, object]:
+    """Analyse one named synthetic scenario. The client cannot supply transactions."""
+    enforce_rate_limit(f"synthetic-intelligence:{user_id}", 40, 15 * 60)
+    return analyze_scenario(scenario_id)
+
+
+@app.get("/financial-features")
+async def financial_features(
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Return user-scoped financial observations without making leak decisions."""
+    enforce_rate_limit(f"features-user:{_user_id}", 20, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    snapshot = await build_user_feature_snapshot(_user_id, access_token)
+    logger.info(
+        "financial_features_completed user_id_prefix=%s transactions=%s merchants=%s categories=%s",
+        _user_id[:8],
+        snapshot.transaction_count,
+        len(snapshot.merchants),
+        len(snapshot.categories),
+    )
+    return public_feature_payload(snapshot)
+
+
+@app.get("/behaviour-analysis")
+async def behaviour_analysis(
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Return neutral, user-scoped behavioural observations."""
+    enforce_rate_limit(f"behaviour-user:{_user_id}", 20, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    result = await build_user_behaviour_analysis(_user_id, access_token)
+    logger.info(
+        "behaviour_analysis_completed user_id_prefix=%s transactions=%s observations=%s",
+        _user_id[:8],
+        result.transaction_count,
+        len(result.observations),
+    )
+    return result.model_dump(mode="json")
+
+
+@app.get("/leak-detections")
+async def leak_detections(
+    refresh: bool = False,
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Return current deterministic potential leaks without persisting state."""
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    # A saved result is cheap to return, so only a real build counts against the limit.
+    async def build():
+        enforce_rate_limit(f"leaks-user:{_user_id}", 20, 15 * 60)
+        return await build_user_leak_detections(_user_id, access_token)
+
+    result, from_cache = await leak_detection_cache.get_or_build(
+        _user_id, build, force=refresh
+    )
+    logger.info(
+        "leak_detections_completed user_id_prefix=%s transactions=%s leaks=%s cached=%s",
+        _user_id[:8],
+        result.transaction_count,
+        len(result.leaks),
+        from_cache,
+    )
+    return result.model_dump(mode="json")
+
+
+@app.get("/statement-review")
+async def statement_review(
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """The statement report in plain language, grouped and with what each finding cannot show."""
+    enforce_rate_limit(f"statement-review-user:{_user_id}", 20, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    result = await build_user_statement_review(_user_id, access_token)
+    logger.info(
+        "statement_review_completed user_id_prefix=%s transactions=%s findings=%s",
+        _user_id[:8],
+        result["transaction_count"],
+        len(result["findings"]),  # type: ignore[arg-type]
+    )
+    return result
+
+
+@app.get("/statement-coverage")
+async def statement_coverage(
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Accounts and periods the uploaded statements cover, gaps, overlaps and issues."""
+    enforce_rate_limit(f"coverage-user:{_user_id}", 60, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    return await build_user_coverage_payload(_user_id, access_token)
+
+
+@app.post("/consolidation/reconcile")
+async def consolidation_reconcile(
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Link own-account transfers and refunds from evidence, after an import.
+
+    Idempotent: repeating it changes nothing. Equal amounts alone never link.
+    """
+    enforce_rate_limit(f"reconcile-user:{_user_id}", 30, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    try:
+        return await reconcile_user_transfers(_user_id, access_token)
+    finally:
+        invalidate_user_leak_detections(_user_id)
+
+
+@app.get("/financial-reasoning")
+async def financial_reasoning(
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Return sanitized deterministic explanations for current potential leaks."""
+    enforce_rate_limit(f"reasoning-user:{_user_id}", 20, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    result = await build_user_financial_reasoning(_user_id, access_token)
+    logger.info(
+        "financial_reasoning_completed user_id_prefix=%s transactions=%s analyses=%s",
+        _user_id[:8],
+        result.transaction_count,
+        len(result.analyses),
+    )
+    return result.model_dump(mode="json")
+
+
+@app.get("/financial-recommendations")
+async def financial_recommendations(
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Return sanitized, non-automated next steps for current financial reasoning."""
+    enforce_rate_limit(f"recommendations-user:{_user_id}", 20, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    result = await build_user_financial_recommendations(_user_id, access_token)
+    logger.info(
+        "financial_recommendations_completed user_id_prefix=%s recommendations=%s",
+        _user_id[:8],
+        result.recommendation_count,
+    )
+    return result.model_dump(mode="json")
+
+
+@app.get("/financial-intelligence-report")
+async def financial_intelligence_report(
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Return one read-only report assembled from a single intelligence run."""
+    enforce_rate_limit(f"report-user:{_user_id}", 20, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    try:
+        report = await build_user_financial_intelligence_report(_user_id, access_token)
+    except ReportCompositionError:
+        logger.error(
+            "financial_intelligence_report_composition_failed user_id_prefix=%s",
+            _user_id[:8],
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Financial intelligence report could not be assembled.",
+        ) from None
+    logger.info(
+        "financial_intelligence_report_completed user_id_prefix=%s findings=%s",
+        _user_id[:8],
+        len(report.findings),
+    )
+    return report.model_dump(mode="json")
+
+
+@app.get("/billing/products")
+async def billing_products() -> dict[str, object]:
+    """Public prices, so the app can show them before any sign-in or entitlement lookup."""
+    return billing.products_payload()
+
+
+@app.get("/billing/entitlements")
+async def billing_entitlements(_user_id: str = Depends(require_supabase_user)) -> dict[str, object]:
+    enforce_rate_limit(f"billing-read:{_user_id}", 60, 15 * 60)
+    return await asyncio.to_thread(billing.load_entitlements, _user_id)
+
+
+@app.post("/billing/revenuecat/sync")
+async def billing_revenuecat_sync(_user_id: str = Depends(require_supabase_user)) -> dict[str, object]:
+    """After an in-app purchase or restore: re-read the store state from RevenueCat."""
+    enforce_rate_limit(f"billing-rc-sync:{_user_id}", 30, 15 * 60)
+    return await asyncio.to_thread(revenuecat.sync_subscriber, _user_id)
+
+
+@app.post("/billing/webhooks/revenuecat")
+async def revenuecat_webhook(
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, str]:
+    """Sent by RevenueCat, not by a user. Rejected unless the shared secret matches."""
+    raw_body = await request.body()
+    return await asyncio.to_thread(revenuecat.handle_webhook, authorization, raw_body)
+
+
+@app.post("/finding-registry/imports/{statement_import_id}")
+async def reconcile_finding_registry(
+    statement_import_id: str,
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Store finding identity after one processed import. This does not read as a report."""
+    enforce_rate_limit(f"finding-registry:{_user_id}", 20, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    # The import just added transactions, so any saved leak result is out of date.
+    invalidate_user_leak_detections(_user_id)
+    try:
+        result = await reconcile_findings_after_import(
+            _user_id,
+            access_token,
+            statement_import_id,
+        )
+    finally:
+        invalidate_user_leak_detections(_user_id)
+    return result.model_dump(mode="json")
+
+
+@app.get("/finding-registry/{finding_id}/guidance")
+async def finding_guidance(
+    finding_id: str,
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Return stored guidance. This does not write notifications or the registry."""
+    enforce_rate_limit(f"finding-guidance:{_user_id}", 30, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    try:
+        guidance = load_finding_guidance(_user_id, access_token, _finding_id(finding_id))
+    except FindingNotFound:
+        raise HTTPException(status_code=404, detail="That finding was not found.") from None
+    return guidance_payload(guidance)
+
+
+@app.get("/subscription-findings/{finding_id}/usage")
+async def subscription_usage(
+    finding_id: str,
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Read the latest user usage answer without changing finding state."""
+    enforce_rate_limit(f"subscription-usage:{_user_id}", 30, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    return usage_payload(load_subscription_usage(_user_id, access_token, finding_id))
+
+
+@app.post("/subscription-findings/{finding_id}/usage")
+async def save_subscription_usage_answer(
+    finding_id: str,
+    request: SubscriptionUsageRequest,
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Append a user usage answer; this never resolves or reclassifies a finding."""
+    enforce_rate_limit(f"subscription-usage-write:{_user_id}", 20, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    stored = save_subscription_usage(
+        _user_id,
+        access_token,
+        finding_id,
+        request,
+        confirmed_at=datetime.now(timezone.utc),
+    )
+    return usage_payload(stored)
+
+
+@app.post("/finding-questions/answer")
+async def answer_finding_question(
+    body: FindingAnswerRequest,
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Record what the user told us. Statement facts and detector confidence are untouched."""
+    enforce_rate_limit(f"finding-question:{_user_id}", 40, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    stored = save_finding_answer(
+        _user_id, access_token, body, answered_at=datetime.now(timezone.utc)
+    )
+    invalidate_user_leak_detections(_user_id)
+    return answer_payload(stored)
+
+
+@app.post("/finding-questions/skip")
+async def skip_finding_question_endpoint(
+    body: FindingSkipRequest,
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Remember a skip so the question is not asked again until the finding changes."""
+    enforce_rate_limit(f"finding-question:{_user_id}", 40, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    stored = skip_finding_question(
+        _user_id, access_token, body, answered_at=datetime.now(timezone.utc)
+    )
+    invalidate_user_leak_detections(_user_id)
+    return answer_payload(stored)
+
+
+@app.post("/finding-registry/{finding_id}/actions")
+async def record_finding_action(
+    finding_id: str,
+    body: FindingActionRequest,
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Append one user response. Detection status is left unchanged."""
+    enforce_rate_limit(f"finding-action:{_user_id}", 20, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    try:
+        guidance = save_finding_action(
+            _user_id,
+            access_token,
+            _finding_id(finding_id),
+            body,
+            created_at=datetime.now(timezone.utc),
+        )
+    except FindingNotFound:
+        raise HTTPException(status_code=404, detail="That finding was not found.") from None
+    return guidance_payload(guidance)
+
+
+def _finding_id(value: str) -> str:
+    try:
+        parsed = uuid.UUID(value)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="The finding id is invalid.") from None
+    return str(parsed)

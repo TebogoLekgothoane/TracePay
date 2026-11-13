@@ -111,4 +111,45 @@ test("requireValidExtractedTransactions returns validated rows", () => {
   assertEqual(rows[0]?.description, "WOOLWORTHS SANDTON", "description");
 });
 
+test("dates must be strict ISO calendar dates", () => {
+  for (const bad of ["2026-02-30", "02/03/2026", "2026-13-01", "2026-1-5", "March 3 2026", "2026-02-29"]) {
+    assertEqual(parseExtractedTransaction({ ...valid, date: bad }), null, `rejects ${bad}`);
+  }
+  assertEqual(parseExtractedTransaction({ ...valid, date: "2024-02-29" })?.date, "2024-02-29", "leap day is real");
+});
+
+test("date provenance fields are validated and preserved", () => {
+  const row = parseExtractedTransaction({
+    ...valid,
+    date_text: "28 Feb",
+    date_confidence: "medium",
+    date_warnings: ["year_inferred_from_statement_period"],
+    value_date: "2026-09-20",
+    booking_date: "2026-09-19",
+    source_row: 3,
+  });
+  assert(row, "expected a validated transaction");
+  assertEqual(row.date_text, "28 Feb", "date text");
+  assertEqual(row.date_confidence, "medium", "confidence");
+  assertEqual(row.value_date, "2026-09-20", "value date");
+  assertEqual(row.booking_date, "2026-09-19", "booking date");
+  assertEqual(row.source_row, 3, "source row");
+});
+
+test("malformed provenance rejects the row rather than being coerced", () => {
+  assertEqual(parseExtractedTransaction({ ...valid, date_confidence: "certain" }), null, "confidence");
+  assertEqual(parseExtractedTransaction({ ...valid, value_date: "next week" }), null, "value date");
+  assertEqual(parseExtractedTransaction({ ...valid, booking_date: "2026-02-30" }), null, "booking date");
+  assertEqual(parseExtractedTransaction({ ...valid, date_warnings: "oops" }), null, "warnings");
+  assertEqual(parseExtractedTransaction({ ...valid, source_row: -1 }), null, "source row");
+});
+
+test("older processor payloads without provenance still validate", () => {
+  const row = parseExtractedTransaction(valid);
+  assert(row, "expected a validated transaction");
+  assertEqual(row.date_text, null, "no date text");
+  assertEqual(row.date_confidence, null, "unknown confidence stays unknown");
+  assertEqual(row.value_date, null, "no value date");
+});
+
 console.log("statement-import validation tests passed");

@@ -1,0 +1,572 @@
+import {
+  DUPLICATE_MATCH_DISCLAIMER,
+  formatConfidence,
+  formatCurrency,
+  formatDuplicateFinding,
+  formatEvidence,
+  formatFindingEvidence,
+  formatIrregularFinding,
+  formatImpactKind,
+  formatPercentValue,
+  formatPrimaryImpactLabel,
+  formatTuningReport,
+  groupFindingsByValue,
+  merchantDisplayName,
+  recognisedCategoryKey,
+} from "./leak-intelligence.format";
+import {
+  accountPatternExplanation,
+  amountStatusLabel,
+  confidenceLevelLabel,
+  formatAnalysisAmount,
+  formatAnalysisDateRange,
+  isConfirmedAmount,
+  notCountedInTotalNote,
+} from "./leak-intelligence.format";
+import {
+  parseFindingQuestions,
+  parseLeakAnalysis,
+  parseLeakClaims,
+  parseLeakDetectionResult,
+  parseNearMisses,
+} from "./leak-intelligence.parse";
+import { catalogLogoUrl, resolveCatalogLogo } from "../transactions/merchant-logos";
+
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+function test(name: string, run: () => void) {
+  try {
+    run();
+    console.log(`✓ ${name}`);
+  } catch (error) {
+    console.error(`✗ ${name}`);
+    throw error;
+  }
+}
+
+test("formats monetary and confidence values", () => {
+  assert(formatCurrency("2655.48").includes("2"), "formats currency");
+  assert(formatConfidence(0.8) === "80%", "formats confidence");
+  assert(formatImpactKind("one_time") === "One-time", "formats impact kind");
+  assert(formatPrimaryImpactLabel("one_time") === "Potential amount", "one-time impact label");
+  assert(formatPrimaryImpactLabel("recurring") === "Monthly impact", "recurring impact label");
+});
+
+test("near misses keep the reason and skip anything malformed", () => {
+  const parsed = parseNearMisses([
+    {
+      leak_type: "duplicate_payment_leak",
+      reason_code: "outside_day_window",
+      reason: "Identical payments 4 days apart are treated as separate purchases.",
+      merchant: "GAME",
+      merchant_display_name: "Game",
+      amount: "1299.00",
+      dates: ["2026-07-12", "2026-07-16", 7],
+    },
+    { reason: "no amount", reason_code: "x", leak_type: "y" },
+    "junk",
+  ]);
+  assert(parsed.length === 1, "malformed entries are dropped");
+  assert(parsed[0].dates.length === 2, "non-string dates are dropped");
+  assert(parsed[0].merchant_display_name === "Game", "display name is kept");
+  assert(parseNearMisses(undefined).length === 0, "an older backend has none");
+});
+
+test("the tuning report lists what was raised and what was left out, without descriptions", () => {
+  const report = formatTuningReport({
+    period_start: "2026-07-01",
+    period_end: "2026-09-30",
+    transaction_count: 120,
+    detector_version: "1.0",
+    leaks: [
+      {
+        leak_type: "duplicate_payment_leak",
+        value_group: "recoverable",
+        impact_kind: "one_time",
+        estimated_monthly_impact: "210.5",
+        confidence: 0.6,
+        evidence: { merchant_display_name: "Takealot", evidence_status: "possible", original_description: "SECRET CARD 1234" },
+      } as never,
+    ],
+    near_misses: [
+      {
+        leak_type: "duplicate_payment_leak",
+        reason_code: "outside_day_window",
+        reason: "These were 4 days apart.",
+        merchant: "GAME",
+        merchant_display_name: "Game",
+        amount: "1299",
+        dates: ["2026-07-12", "2026-07-16"],
+      },
+    ],
+  });
+  assert(report.includes("[recoverable] duplicate_payment_leak · Takealot · R210.50 once"), "raised line");
+  const withOthers = formatTuningReport({
+    period_start: null,
+    period_end: null,
+    transaction_count: 1,
+    detector_version: "1.0",
+    leaks: [
+      {
+        leak_type: "subscription_leak",
+        impact_kind: "recurring",
+        estimated_monthly_impact: "165",
+        confidence: 0.9,
+        evidence: { merchant_display_name: "Apple", other_regular_amounts: ["14.99"] },
+      } as never,
+    ],
+  });
+  assert(withOthers.includes("also repeats monthly at: R14.99"), "other regular amounts are named");
+  const explained = formatTuningReport({
+    period_start: null,
+    period_end: null,
+    transaction_count: 1,
+    detector_version: "1.0",
+    leaks: [
+      {
+        leak_type: "subscription_leak",
+        impact_kind: "recurring",
+        estimated_monthly_impact: "39.69",
+        confidence: 0.9,
+        evidence: {
+          merchant_display_name: "Apple",
+          observation_count: 6,
+          typical_amount: "14.99",
+          latest_amount: "54.68",
+          headline_impact_basis: "price_increase",
+          last_observed_date: "2026-10-16",
+        },
+      } as never,
+    ],
+  });
+  assert(
+    explained.includes("6 charges; typical R14.99; latest R54.68; headline price_increase; last 2026-10-16"),
+    "the numbers behind an amount are shown",
+  );
+  const fees = formatTuningReport({
+    period_start: null,
+    period_end: null,
+    transaction_count: 1,
+    detector_version: "1.0",
+    leaks: [
+      {
+        leak_type: "bank_fee_leak",
+        impact_kind: "recurring",
+        estimated_monthly_impact: "181.79",
+        confidence: 0.82,
+        evidence: {
+          finding_focus: "monthly_banking_fee_trend",
+          bank_fee_transaction_count: 40,
+          monthly_average_fee: "90.00",
+          fee_change_amount: "181.79",
+          recurring_fee_total: "300.00",
+          one_off_fee_total: "790.00",
+        },
+      } as never,
+    ],
+  });
+  assert(
+    fees.includes("focus monthly_banking_fee_trend; 40 fees; monthly average R90.00; rise R181.79; recurring fees R300.00; one-off fees R790.00"),
+    "bank fee findings show what they are made of",
+  );
+  assert(report.includes("Looked at, not raised (1)"), "near-miss header");
+  assert(report.includes("outside_day_window · Game · R1299.00 · 2026-07-12, 2026-07-16"), "near-miss line");
+  assert(!report.includes("SECRET"), "never includes a bank description");
+});
+
+test("findings are split into the three groups in a fixed order", () => {
+  const groups = groupFindingsByValue([
+    { id: "habit", value_group: "commitment" as const },
+    { id: "dup", value_group: "recoverable" as const },
+    { id: "sub", value_group: "review" as const },
+    { id: "old-backend" },
+    { id: "unset", value_group: null },
+  ]);
+  assert(
+    groups.map((group) => group.key).join() === "recoverable,review,commitment",
+    "groups come in a fixed order",
+  );
+  assert(groups[0].leaks.length === 1, "one recoverable finding");
+  assert(
+    groups[1].leaks.map((leak) => leak.id).join() === "sub,old-backend,unset",
+    "findings without a group are read as worth reviewing",
+  );
+  assert(groupFindingsByValue([]).length === 0, "empty groups are not shown");
+});
+
+test("irregular finding shows the exact transaction and baseline evidence", () => {
+  const rows = formatIrregularFinding({
+    merchant_display_name: "Shell",
+    transaction_amount: "900",
+    transaction_date: "2026-10-01",
+    transaction_time: null,
+    original_description: "SHELL REF [REDACTED]",
+    category_name: "Groceries",
+    transaction_id: "tx-4",
+    baseline_sample_size: 3,
+    category_median_amount: "100",
+    difference_from_baseline: "800",
+    amount_multiple_of_category_median: "9",
+    confidence_is_calibrated: false,
+    verification_required: true,
+  });
+  assert(rows.some((row) => row.label === "Actual transaction amount" && row.value.includes("900")), "actual amount");
+  assert(rows.some((row) => row.label === "Transaction date" && row.value === "2026-10-01"), "date");
+  assert(rows.some((row) => row.label === "Transaction time" && row.value === "Time not available"), "missing time");
+  assert(rows.some((row) => row.label === "Baseline sample size" && row.value === "3"), "baseline sample");
+  assert(rows.some((row) => row.label === "Difference from baseline" && row.value.includes("800")), "difference");
+  assert(rows.some((row) => row.label === "Statement description" && row.value.includes("REDACTED")), "description");
+});
+
+test("formats fee share with two decimal places and no duplicate percent", () => {
+  assert(formatPercentValue("0.022359261737830622", "bank_fee_ratio") === "2.24%", "fee share");
+  assert(formatPercentValue(0, "bank_fee_ratio") === "0.00%", "zero fee share");
+});
+
+test("renders allowlisted evidence as readable rows", () => {
+  const rows = formatEvidence({
+    previous_amount: "5715.86",
+    current_amount: "8371.33",
+    change_amount: "2655.47",
+    change_percentage: "46.46",
+    bank_fee_ratio: "0.02",
+  });
+  assert(rows.length === 5, "includes known evidence keys");
+  assert(
+    rows.some(
+      (row) =>
+        row.label === "Previous monthly baseline" && row.value.includes("5"),
+    ),
+    "formats baseline",
+  );
+  assert(
+    rows.some((row) => row.label === "Change percentage" && row.value === "+46.46%"),
+    "formats percentage",
+  );
+  const feeRow = rows.find((row) => row.label === "Fee share of spending");
+  assert(feeRow?.value === "2.00%", "formats bank fee ratio once");
+});
+
+test("redacts raw identity and transaction evidence", () => {
+  const rows = formatEvidence({
+    merchant_key: "RAW MERCHANT REF 123456789",
+    transaction_ids: ["a", "b"],
+    description: "RAW DESCRIPTION",
+    account_number: "1234567890",
+    candidate_amount: "50",
+  });
+  assert(rows.length === 1, "shows only safe evidence");
+  assert(rows[0]?.label === "Potential duplicate amount", "keeps safe amount");
+});
+
+test("duplicate finding shows merchant, date, count, and both amounts", () => {
+  const finding = formatDuplicateFinding({
+    estimated_monthly_impact: "186.40",
+    evidence: {
+      merchant_key: "WOOLWORTHS",
+      merchant_display_name: "Woolworths",
+      description: "WOOLWORTHS REF 123456789",
+      transaction_ids: ["wool-a", "wool-b"],
+      observed_date: "2026-07-18",
+      transaction_count_in_group: 2,
+      candidate_amount: "186.40",
+      group_total: "372.80",
+      date_span_days: 0,
+      verification_required: true,
+    },
+  });
+  const labels = finding.rows.map((row) => row.label);
+  assert(
+    labels.join("|") ===
+      "Merchant|Transaction date|Matching transactions|Amount per transaction|Candidate amount",
+    "duplicate rows",
+  );
+  assert(finding.rows[0]?.value === "Woolworths", "merchant");
+  assert(finding.rows[1]?.value === "2026-07-18", "date");
+  assert(finding.rows[2]?.value === "2", "count");
+  assert(finding.rows[3]?.value === formatCurrency("186.40"), "amount per transaction");
+  assert(finding.rows[4]?.value === formatCurrency("186.40"), "candidate amount");
+  assert(finding.disclaimer === DUPLICATE_MATCH_DISCLAIMER, "disclaimer");
+  const rendered = finding.rows.map((row) => `${row.label} ${row.value}`).join(" ");
+  assert(!rendered.includes("WOOLWORTHS REF"), "hides description");
+  assert(!rendered.includes("wool-a"), "hides transaction ids");
+  assert(!rendered.includes("372.80"), "hides group total");
+  assert(!labels.includes("Date span"), "hides repeated date span");
+  assert(!labels.includes("Verification required"), "hides repeated verification row");
+  assert(!labels.includes("Potential duplicate amount"), "does not repeat the generic amount label");
+});
+
+test("card boilerplate and sensitive keys stay off the finding", () => {
+  assert(merchantDisplayName({ merchant_display_name: "With Card At" }) === null, "boilerplate");
+  assert(
+    merchantDisplayName({ merchant_display_name: "PURCHASE WITH CARD AT" }) === null,
+    "purchase boilerplate",
+  );
+  assert(resolveCatalogLogo("With Card At") === null, "boilerplate logo");
+  assert(resolveCatalogLogo("PURCHASE WITH CARD AT") === null, "purchase boilerplate logo");
+  const rows = formatFindingEvidence("recurring_payment_leak", {
+    merchant_key: "WITH CARD AT",
+    merchant_display_name: "With Card At",
+    description: "PURCHASE WITH CARD AT",
+    transaction_ids: ["tx-1"],
+  });
+  assert(rows.length === 0, "no merchant row for boilerplate");
+});
+
+test("catalogue logos match reliable names and reject arbitrary text", () => {
+  const woolworths = resolveCatalogLogo("Woolworths");
+  const checkers = resolveCatalogLogo("Checkers");
+  assert(woolworths?.domain === "woolworths.co.za", "woolworths domain");
+  assert(checkers?.domain === "checkers.co.za", "checkers domain");
+  assert(
+    catalogLogoUrl(woolworths?.domain ?? "") === "https://logos.hunter.io/woolworths.co.za",
+    "validated hunter url",
+  );
+  assert(resolveCatalogLogo("North Cafe") === null, "unknown merchant");
+  assert(resolveCatalogLogo("Cursor")?.domain === "cursor.com", "cursor logo");
+  assert(resolveCatalogLogo("Cursor usage")?.brandId === "cursor", "cursor usage logo");
+  assert(resolveCatalogLogo("CURSOR, AI POWERED IDE")?.brandId === "cursor", "cursor statement logo");
+  assert(resolveCatalogLogo("Apple Music")?.brandId === "applemusic", "apple music not generic apple");
+  assert(catalogLogoUrl("Woolworths") === null, "display name is not a domain");
+  assert(catalogLogoUrl("https://evil.example/woolworths.co.za") === null, "rejects url");
+  assert(catalogLogoUrl("not-a-catalog.example") === null, "rejects unknown domain");
+});
+
+test("category finding keeps its category and has no logo without a merchant", () => {
+  const rows = formatFindingEvidence("food_spending_leak", {
+    category_name: "Groceries",
+    category_transaction_count: 4,
+    merchant_key: "HIDDEN MERCHANT",
+  });
+  assert(rows.some((row) => row.label === "Category" && row.value === "Groceries"), "category");
+  assert(!rows.some((row) => row.label === "Merchant"), "no merchant row");
+  assert(recognisedCategoryKey("Groceries") === "groceries", "category icon key");
+  assert(recognisedCategoryKey("Unknown category") === null, "unrecognised category");
+  assert(resolveCatalogLogo(null) === null, "no logo");
+});
+
+test("payloads without merchant_display_name still parse and render", () => {
+  const parsed = parseLeakDetectionResult({
+    user_id: "user-a",
+    transaction_count: 3,
+    period_start: "2026-07-01",
+    period_end: "2026-09-30",
+    detector_version: "1.0",
+    leaks: [
+      {
+        leak_id: "a".repeat(16),
+        fingerprint: "b".repeat(16),
+        leak_type: "duplicate_payment_leak",
+        title: "Potential duplicate payment requires verification",
+        description: "Same-day transactions with the same merchant and amount.",
+        severity: "low",
+        confidence: 0.62,
+        status: "active",
+        estimated_monthly_impact: "186.40",
+        estimated_annual_impact: null,
+        impact_kind: "one_time",
+        evidence: {
+          observed_date: "2026-07-18",
+          transaction_count_in_group: 2,
+          candidate_amount: "186.40",
+          verification_required: true,
+        },
+        supporting_behavior_ids: [],
+        supporting_feature_references: ["duplicate_candidates"],
+        detector_version: "1.0",
+        detected_at: "2026-09-30T00:00:00+00:00",
+        period_start: "2026-07-01",
+        period_end: "2026-09-30",
+      },
+    ],
+  });
+  const leak = parsed.leaks[0];
+  assert(leak, "parsed");
+  assert(merchantDisplayName(leak.evidence) === null, "missing display name");
+  const finding = formatDuplicateFinding(leak);
+  assert(!finding.rows.some((row) => row.label === "Merchant"), "no merchant row");
+  assert(finding.rows.some((row) => row.label === "Transaction date"), "date still shown");
+  assert(finding.disclaimer === DUPLICATE_MATCH_DISCLAIMER, "disclaimer still shown");
+});
+
+test("formats new FI-017, FI-024, FI-028, FI-030, FI-032, and FI-033 evidence fields", () => {
+  const rows = formatEvidence({
+    billing_date_shift_days: 3,
+    amount_variance: "15.00",
+    active_streaming_service_count: 2,
+    combined_monthly_streaming_spend: "298.00",
+    coffee_transaction_count: 8,
+    coffee_total_amount: "394.00",
+    convenience_store_transaction_count: 10,
+    convenience_store_total_amount: "759.99",
+    discretionary_weekend_daily_average: "412.50",
+    post_salary_discretionary_total: "3210.00",
+  });
+  assert(rows.some((r) => r.label === "Billing date shift" && r.value === "3 days"), "shift days");
+  assert(rows.some((r) => r.label === "Amount variance" && r.value.includes("15")), "variance");
+  assert(rows.some((r) => r.label === "Active streaming services" && r.value === "2"), "streaming count");
+  assert(rows.some((r) => r.label === "Combined monthly streaming spend" && r.value.includes("298")), "streaming spend");
+  assert(rows.some((r) => r.label === "Coffee transactions" && r.value === "8"), "coffee count");
+  assert(rows.some((r) => r.label === "Convenience-store visits" && r.value === "10"), "convenience count");
+});
+
+
+test("evidence helpers never present estimates or duplicates as confirmed", () => {
+  assert(amountStatusLabel("confirmed") === "Confirmed from your transactions", "confirmed label");
+  assert(amountStatusLabel("estimated") === "Estimated", "estimated label");
+  assert(amountStatusLabel("potentially_duplicated").includes("verify"), "duplicate label");
+  assert(isConfirmedAmount("confirmed"), "confirmed is confirmed");
+  assert(!isConfirmedAmount("estimated"), "estimated not confirmed");
+  assert(!isConfirmedAmount("potentially_duplicated"), "duplicate not confirmed");
+  assert(confidenceLevelLabel("medium") === "Medium confidence", "confidence label");
+  assert(confidenceLevelLabel(null).includes("not available"), "null confidence");
+});
+
+test("account patterns are explained only where needed", () => {
+  assert(accountPatternExplanation("single_account") === null, "single needs no note");
+  assert(accountPatternExplanation(null) === null, "null needs no note");
+  assert(Boolean(accountPatternExplanation("sequential_move")), "sequential explained");
+  assert(Boolean(accountPatternExplanation("concurrent_charges")), "concurrent explained");
+  assert(Boolean(accountPatternExplanation("unrelated_accounts")), "unrelated explained");
+});
+
+test("parses the optional analysis block defensively", () => {
+  assert(parseLeakAnalysis(undefined) === null, "missing block is null");
+  assert(parseLeakAnalysis("nope") === null, "malformed block is null");
+  const analysis = parseLeakAnalysis({
+    source_accounts: [
+      { account_id: "a", label: "FNB ••1234", transaction_count: 3, amount: "120.50" },
+      { account_id: "b" },
+    ],
+    cross_account: true,
+    account_pattern: "mystery",
+    date_range_start: "2026-03-01",
+    date_range_end: "2026-03-31",
+    amount: "120.50",
+    currency: "ZAR",
+    amount_status: "totally_sure",
+    confidence_level: "extreme",
+    confidence_notes: ["a", 3],
+    coverage_limits: [{ message: "Feb missing", materially_limits: true }, { kind: "x" }],
+    calculation: "sum",
+    counted_in_total: false,
+  });
+  assert(analysis !== null, "parsed");
+  assert(analysis.source_accounts.length === 1, "drops malformed account");
+  assert(analysis.account_pattern === null, "unknown pattern dropped");
+  assert(analysis.amount_status === "estimated", "unknown status never confirmed");
+  assert(analysis.confidence_level === null, "unknown confidence dropped");
+  assert(analysis.confidence_notes.length === 0, "bad notes array rejected");
+  assert(analysis.coverage_limits.length === 1, "drops limit without message");
+  assert(analysis.counted_in_total === false, "counted_in_total false kept");
+  assert(formatAnalysisDateRange(analysis) === "1 Mar 2026 – 31 Mar 2026", "date range not shifted");
+  assert(notCountedInTotalNote(analysis) !== null, "note shown when not counted");
+  assert(formatAnalysisAmount("120.50", "ZAR").includes("120"), "amount formatted");
+});
+
+test("results without analysis keep the old shape", () => {
+  const result = parseLeakDetectionResult({
+    user_id: "u",
+    transaction_count: 0,
+    detector_version: "v",
+    leaks: [],
+  });
+  assert(result.analysis_summary === null, "no summary");
+});
+
+test("claims keep confirmed facts apart from possible leaks", () => {
+  const claims = parseLeakClaims({
+    confirmed: [
+      { text: "You paid the ATM balance enquiry fee 18 times, R63 in all.", figures: { count: 18 } },
+      { text: "   " },
+      { figures: {} },
+    ],
+    possible: [
+      {
+        text: "You may be able to avoid this fee by checking your balance in your banking app.",
+        cannot_see: ["Whether your bank's app shows your balance for free."],
+        check: "Open your banking app.",
+      },
+      { text: "You may be overpaying.", cannot_see: [] },
+      { text: "No limits field at all." },
+    ],
+  });
+  assert(claims !== null, "claims parsed");
+  assert(claims.confirmed.length === 1, "blank and malformed facts dropped");
+  assert(claims.confirmed[0].figures.count === 18, "figures kept");
+  assert(claims.possible.length === 1, "a suggestion with no stated limits is dropped");
+  assert(claims.possible[0].check === "Open your banking app.", "check kept");
+});
+
+test("a missing or malformed claims block is null, never a throw", () => {
+  assert(parseLeakClaims(undefined) === null, "undefined");
+  assert(parseLeakClaims("nope") === null, "string");
+  assert(parseLeakClaims({}) !== null && parseLeakClaims({})!.possible.length === 0, "empty object is empty");
+});
+
+test("claims keep what the user said apart from the statements and an unknown effect never counts", () => {
+  const claims = parseLeakClaims({
+    confirmed: [{ text: "You paid Netflix 8 times.", figures: {} }],
+    reported: [
+      { text: "You told us you rarely use this.", question_kind: "subscription_usage", answer: "rarely" },
+      { text: "  " },
+    ],
+    possible: [],
+    user_effect: "definitely-a-leak",
+  });
+  assert(claims !== null, "claims parsed");
+  assert(claims.reported.length === 1, "blank reported fact dropped");
+  assert(claims.reported[0].answer === "rarely", "answer kept");
+  assert(claims.user_effect === "none", "unknown effect falls back to none");
+  assert(parseLeakClaims({ confirmed: [], possible: [], user_effect: "resolves" })!.user_effect === "resolves", "known effect kept");
+});
+
+test("questions need a prompt and a real choice, and always carry their signature", () => {
+  const questions = parseFindingQuestions([
+    {
+      question_key: "subscription_usage:netflix",
+      kind: "subscription_usage",
+      leak_id: "a",
+      leak_type: "subscription_leak",
+      subject: "Netflix",
+      prompt: "You paid R99 to Netflix. Do you still use it?",
+      why_asked: "Your answer shows whether this is worth reviewing.",
+      context: ["You paid Netflix 8 times."],
+      options: [
+        { value: "still_use", label: "Still use it" },
+        { value: "not_sure", label: "Not sure" },
+        { value: 1 },
+      ],
+      priority: 91.5,
+      signature: "amt=99",
+    },
+    { question_key: "x:y", kind: "made_up", prompt: "Nope", options: [] },
+    {
+      question_key: "data_usage:data",
+      kind: "data_usage",
+      prompt: "One option is not a choice",
+      options: [{ value: "a", label: "A" }],
+    },
+    { question_key: "duplicate_expected:gym", kind: "duplicate_expected", prompt: " ", options: [] },
+  ]);
+  assert(questions.length === 1, "only the well-formed question survives");
+  assert(questions[0].options.length === 2, "malformed option dropped");
+  assert(questions[0].signature === "amt=99", "signature kept");
+  assert(questions[0].can_skip === true, "skip allowed by default");
+  assert(parseFindingQuestions(undefined).length === 0, "missing questions is empty");
+});
+
+test("a result without questions still parses and has none to ask", () => {
+  const result = parseLeakDetectionResult({
+    user_id: "u",
+    transaction_count: 0,
+    detector_version: "v",
+    leaks: [],
+  });
+  assert(result.questions.length === 0, "no questions");
+  assert(result.questions_not_shown === 0, "none held back");
+});

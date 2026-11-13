@@ -6,7 +6,7 @@ import { router } from "expo-router";
 import { Button } from "@/components/Button";
 import { AppText } from "@/components/Typography";
 
-const robotSource = require("@/assets/images/herobot.png");
+const robotSource = require("@/assets/images/herobot.webp");
 
 export default function WelcomeScreen() {
   return (

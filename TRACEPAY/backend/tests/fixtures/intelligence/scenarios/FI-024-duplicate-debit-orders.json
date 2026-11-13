@@ -1,0 +1,74 @@
+[
+  {
+    "id": "fi024-do-jul",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-07-01",
+    "description": "DEBIT ORDER OUTSURANCE REF POL8821",
+    "amount": "850.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "OUTSURANCE",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Insurance"
+    }
+  },
+  {
+    "id": "fi024-do-aug",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-08-01",
+    "description": "DEBIT ORDER OUTSURANCE REF POL8821",
+    "amount": "850.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "OUTSURANCE",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Insurance"
+    }
+  },
+  {
+    "id": "fi024-do-sep-1",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-01",
+    "description": "DEBIT ORDER OUTSURANCE REF POL8821",
+    "amount": "850.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "OUTSURANCE",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Insurance"
+    }
+  },
+  {
+    "id": "fi024-do-sep-2",
+    "user_id": "synthetic-intelligence-user",
+    "date": "2026-09-01",
+    "description": "DEBIT ORDER OUTSURANCE REF POL8821",
+    "amount": "850.00",
+    "type": "debit",
+    "is_duplicate": false,
+    "merchant_name": "OUTSURANCE",
+    "category_confidence": 0.95,
+    "category_rule": null,
+    "transaction_class": "spending",
+    "classification_confidence": 0.95,
+    "classification_reason": "synthetic-intelligence-dataset",
+    "categories": {
+      "name": "Insurance"
+    }
+  }
+]

@@ -39,7 +39,7 @@ const FAQS = [
     id: "leaks",
     question: "What are money leaks?",
     answer:
-      "Money leaks are patterns TracePay finds in your imported transactions such as rising fees, forgotten subscriptions, or unusual debits. Treat each insight as a suggestion and confirm before you cancel anything.",
+      "Money leaks are patterns TracePay finds in your imported transactions such as rising fees, forgotten recurring payments, or unusual debits. Treat each insight as a suggestion and confirm before you cancel anything.",
   },
   {
     id: "security",
