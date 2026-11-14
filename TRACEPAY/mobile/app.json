@@ -20,7 +20,7 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png",
-        "backgroundColor": "#0E0B1D"
+        "backgroundColor": "#FAF9FE"
       },
       "softwareKeyboardLayoutMode": "pan",
       "permissions": [
@@ -49,6 +49,8 @@
       [
         "expo-splash-screen",
         {
+          "image": "./assets/images/splash-blank.png",
+          "imageWidth": 200,
           "backgroundColor": "#FAF9FE",
           "dark": {
             "backgroundColor": "#050505"

@@ -6,7 +6,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { SetupBrandHeader } from "../auth/SetupBrandHeader";
 import { BankImportList } from "./BankImportList";
 import {
   CoverageNotes,
@@ -877,9 +876,7 @@ export function AccountStatementSetupFlow({
       edges={mode === "onboarding" ? undefined : ["top"]}
     >
       <View className="flex-1 px-5">
-        {mode === "onboarding" ? (
-          <SetupBrandHeader />
-        ) : (
+        {mode === "onboarding" ? null : (
           <View className="relative mt-1 min-h-11 flex-row items-center justify-center">
             <View className="absolute left-0 z-10">
               <IconButton accessibilityLabel="Go back" variant="outline" onPress={() => leave()}>
@@ -921,9 +918,12 @@ export function AccountStatementSetupFlow({
               <Text className="mt-3 text-[13px] text-destructive">{formError}</Text>
             ) : null}
 
+            {/* Info paragraph about statement coverage, hidden for now. To bring it back, remove
+                this comment (the CoverageNotes import above is still in place).
             <View className="mt-4">
               <CoverageNotes />
             </View>
+            */}
 
             {showChooser && chooserBank ? (
               <View className="mt-6">
