@@ -594,6 +594,7 @@ RULES: tuple[Rule, ...] = (
         contains("JUSTINVEST", "JUST INVEST"),
         transaction_class="investment",
     ),
+    Rule("merchant:istore", "Shopping", 1.00, _outflow(contains("ISTORE"))),
     Rule("merchant:woolworths", "Groceries", 1.00, contains("WOOLWORTHS")),
     Rule("merchant:checkers", "Groceries", 1.00, contains("CHECKERS")),
     Rule("merchant:shoprite", "Groceries", 1.00, contains("SHOPRITE")),

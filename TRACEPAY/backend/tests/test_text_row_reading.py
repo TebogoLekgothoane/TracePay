@@ -149,6 +149,65 @@ def test_two_unreadable_rows_are_kept_only_if_one_reading_fits_the_balances() ->
     ]
 
 
+def test_period_is_read_when_ocr_splits_from_and_to_onto_separate_lines() -> None:
+    text = "\n".join(
+        [
+            "Nedbank Limited",
+            "06 AUGUST 2025",
+            "Statement period",
+            "01/05/2025 EXAMPLE From ..",
+            "TO 06/08/2025",
+            "Date Transaction Debit Credit Balance",
+            "02/05/2025 Grocer R -45,00 R 955,00",
+        ]
+    )
+    statement = resolve_extracted_statement(text, [])
+    assert (str(statement.statement_start_date), str(statement.statement_end_date)) == (
+        "2025-05-01",
+        "2025-08-06",
+    )
+    assert statement.period_source == "declared"
+
+
+def test_opening_and_closing_balance_are_read_from_the_carry_rows() -> None:
+    text = _statement(
+        [
+            "30/04/2025 BROUGHT FORWARD R 0,00 R 335,97",
+            "02/05/2025 Grocer R -35,97 R 300,00",
+            "05/05/2025 CARRIED FORWARD R 0,00 R 300,00",
+        ]
+    )
+    statement = resolve_extracted_statement(text, [])
+    assert statement.opening_balance == Decimal("335.97")
+    assert statement.closing_balance == Decimal("300.00")
+
+
+def test_a_dated_header_line_does_not_hide_the_opening_balance() -> None:
+    text = "\n".join(
+        [
+            "Nedbank Limited",
+            "Statement period",
+            "01/05/2025 EXAMPLE From ..",
+            "TO 06/08/2025",
+            "30/04/2025 BROUGHT FORWARD R 0,00 R 335,97",
+            "02/05/2025 Grocer R -35,97 R 300,00",
+        ]
+    )
+    assert resolve_extracted_statement(text, []).opening_balance == Decimal("335.97")
+
+
+def test_a_carry_row_at_a_page_break_is_not_the_closing_balance() -> None:
+    text = _statement(
+        [
+            "30/04/2025 BROUGHT FORWARD R 0,00 R 335,97",
+            "02/05/2025 CARRIED FORWARD R 0,00 R 335,97",
+            "02/05/2025 BROUGHT FORWARD R 0,00 R 335,97",
+            "03/05/2025 Grocer R -35,97 R 300,00",
+        ]
+    )
+    assert resolve_extracted_statement(text, []).closing_balance is None
+
+
 def test_rows_that_could_not_be_proven_are_handed_back_not_dropped() -> None:
     from pdf_processor.normalise import unparsed_text_rows
 

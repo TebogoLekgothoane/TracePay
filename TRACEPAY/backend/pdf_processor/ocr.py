@@ -1,5 +1,7 @@
 import logging
+import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Literal, Sequence
 
@@ -47,7 +49,7 @@ def ocr_page_images(images: Sequence[Image.Image | np.ndarray]) -> OcrResult:
     if not images:
         return OcrResult(text="", confidence=0.0, engine="none")
 
-    prepared = [preprocess_statement_image(image) for image in images]
+    prepared = _map_pages(preprocess_statement_image, images)
     paddle = _paddle_ocr(prepared)
     if _usable(paddle) and paddle.confidence >= OCR_CONFIDENCE_MIN:
         return paddle
@@ -294,42 +296,68 @@ def _box_origin(box: Any) -> tuple[float, float, float]:
     return 0.0, 0.0, 0.0
 
 
+#: Pages are independent, so they are read side by side. Tesseract runs as its own process and
+#: OpenCV releases the interpreter lock, so threads give a real speed-up.
+_MAX_PAGE_WORKERS = max(1, min(8, os.cpu_count() or 1))
+
+
+def _map_pages(function, items: Sequence[Any]) -> list[Any]:
+    if len(items) <= 1 or _MAX_PAGE_WORKERS == 1:
+        return [function(item) for item in items]
+    with ThreadPoolExecutor(max_workers=_MAX_PAGE_WORKERS) as pool:
+        return list(pool.map(function, items))
+
+
+def _tesseract_page(image: np.ndarray) -> tuple[str, list[float]]:
+    """One Tesseract pass per page: the lines and the word confidences come from the same read."""
+    import pytesseract
+
+    data = pytesseract.image_to_data(_to_pil(image), output_type=pytesseract.Output.DICT)
+    lines: dict[tuple[int, int, int], list[str]] = {}
+    scores: list[float] = []
+    for index, word in enumerate(data.get("text", [])):
+        try:
+            confidence = float(data["conf"][index])
+        except (TypeError, ValueError, KeyError, IndexError):
+            continue
+        if confidence < 0:
+            continue  # structural entries (page, block, line), not words
+        scores.append(confidence / 100.0)
+        if str(word).strip():
+            key = (data["block_num"][index], data["par_num"][index], data["line_num"][index])
+            lines.setdefault(key, []).append(str(word))
+    return "\n".join(" ".join(words) for words in lines.values()), scores
+
+
 def _tesseract_ocr(images: Sequence[np.ndarray]) -> OcrResult:
     try:
-        import pytesseract
+        import pytesseract  # noqa: F401
     except ImportError:
         logger.warning("tesseract_unavailable")
         return OcrResult(text="", confidence=0.0, engine="none")
 
-    pages: list[str] = []
-    scores: list[float] = []
-    for index, image in enumerate(images):
+    def read(item: tuple[int, np.ndarray]) -> tuple[str, list[float]] | None:
+        index, image = item
         try:
-            pil = _to_pil(image)
-            text = pytesseract.image_to_string(pil)
-            pages.append(text)
-            data = pytesseract.image_to_data(pil, output_type=pytesseract.Output.DICT)
-            page_scores = []
-            for raw in data.get("conf", []):
-                try:
-                    value = float(raw)
-                except (TypeError, ValueError):
-                    continue
-                if value >= 0:
-                    page_scores.append(value / 100.0)
-            if text.strip() and page_scores:
-                scores.append(sum(page_scores) / len(page_scores))
+            return _tesseract_page(image)
         except Exception as error:
             logger.warning(
-                "tesseract_failed page=%s error_type=%s",
-                index + 1,
-                type(error).__name__,
+                "tesseract_failed page=%s error_type=%s", index + 1, type(error).__name__
             )
+            return None
+
+    pages: list[str] = []
+    scores: list[float] = []
+    for result in _map_pages(read, list(enumerate(images))):
+        if result is None:
             continue
+        text, page_scores = result
+        pages.append(text)
+        if text.strip() and page_scores:
+            scores.append(sum(page_scores) / len(page_scores))
     text = "\n".join(part for part in pages if part.strip())
     confidence = float(sum(scores) / len(scores)) if scores else 0.0
     return OcrResult(text=text, confidence=max(0.0, min(1.0, confidence)), engine="tesseract")
-
 
 def _to_pil(image: np.ndarray) -> Image.Image:
     if image.ndim == 2:

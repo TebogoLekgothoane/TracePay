@@ -2,7 +2,7 @@ import re
 from datetime import date
 from decimal import Decimal
 
-from .models import ExtractedStatement, Transaction
+from .models import ExtractedStatement, StatementBalance, Transaction
 from .normalise import parse_amount, parse_date
 from .statement_balance import resolve_statement_balance
 from .statement_figures import extract_printed_figures
@@ -92,10 +92,17 @@ def resolve_extracted_statement(
         end = max(item.date for item in transactions)
         period_source = "inferred"
 
+    carried_opening, carried_closing = _carry_balances(text)
     opening = opening_balance if opening_balance is not None else _labelled_amount(text, _OPENING)
     if opening is None:
         opening = _opening_from_first_row(text, transactions)
+    if opening is None:
+        opening = carried_opening
     balance = resolve_statement_balance(text, transactions)
+    if balance.source == "unavailable" and carried_closing is not None:
+        balance = StatementBalance(
+            amount=carried_closing[0], as_of_date=carried_closing[1], source="closing_balance"
+        )
     closing = closing_balance
     if closing is None or (closing == 0 and balance.amount not in (None, 0)):
         closing = balance.amount
@@ -220,9 +227,76 @@ def _account_type_from_text(text: str) -> str | None:
 
 def _period_from_text(text: str) -> tuple[date | None, date | None]:
     match = _PERIOD.search(text)
-    if not match:
-        return None, None
-    return parse_date(match.group(1)), parse_date(match.group(2))
+    if match:
+        return parse_date(match.group(1)), parse_date(match.group(2))
+    return _period_after_label(text)
+
+
+_PERIOD_LABEL = re.compile(r"statement\s+period", re.IGNORECASE)
+
+
+def _period_after_label(text: str) -> tuple[date | None, date | None]:
+    """The period when OCR split "From" and "To" onto separate lines.
+
+    Scanned layouts put the label, the two dates and the words From and To in boxes that read
+    out in a different order. The two dates that follow the label are the period.
+    """
+    lines = (text or "").splitlines()
+    for index, line in enumerate(lines[:80]):
+        if not _PERIOD_LABEL.search(line):
+            continue
+        window = " ".join(lines[index : index + 6])
+        found = [parse_date(item) for item in _DATE.findall(window)]
+        dates = [item for item in found if item is not None]
+        if len(dates) >= 2 and dates[0] <= dates[1]:
+            return dates[0], dates[1]
+    return None, None
+
+
+def _carry_balances(text: str) -> tuple[Decimal | None, tuple[Decimal, date | None] | None]:
+    """Opening and closing balance from the carry rows some banks print instead of labels.
+
+    The first dated row "BROUGHT FORWARD" holds the opening balance, and a last dated row
+    "CARRIED FORWARD" the closing one. Both must be the statement's own first and last rows,
+    so a carry row at a page break is never taken.
+    """
+    from .normalise import (
+        _HAS_CENTS,
+        _NOTICE_LABEL,
+        _TEXT_ROW_DATE,
+        _row_label,
+        _standalone_money,
+        _tidy_ocr_money,
+    )
+
+    rows: list[tuple[str, Decimal | None, str]] = []
+    for line in (text or "").splitlines():
+        match = _TEXT_ROW_DATE.match(line.strip())
+        if not match:
+            continue
+        body = _tidy_ocr_money(match.group(2))
+        label = _row_label(body).upper()
+        tokens = _standalone_money(body)
+        balance = None
+        if len(tokens) >= 2 and _HAS_CENTS.search(tokens[-1][0].group(0).strip()):
+            balance = parse_amount(tokens[-1][0].group(0))
+        rows.append((label, balance, match.group(1)))
+    opening = None
+    for label, balance, _date_text in rows:
+        if label.startswith("BROUGHT FORWARD"):
+            opening = balance
+            break
+        if balance is not None:
+            break  # a real row came first, so a later brought-forward is a page break
+        # A dated header line (the period "From" date) carries no balance: keep looking.
+    closing = None
+    for label, balance, date_text in reversed(rows):
+        if label.startswith("PROVISIONAL") or label.startswith("BROUGHT FORWARD") or _NOTICE_LABEL.match(label):
+            continue
+        if label.startswith("CARRIED FORWARD") and balance is not None:
+            closing = (balance, parse_date(date_text))
+        break
+    return opening, closing
 
 
 def _first_money(line: str) -> Decimal | None:
