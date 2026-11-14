@@ -45,16 +45,30 @@ def send_sms(to: str, body: str) -> None:
         return
     except HTTPError as error:
         detail = error.read()[:300].decode("utf-8", errors="replace")
-        logger.error("auth_sms_rejected status=%s detail=%s", error.code, detail)
-        raise _map_status(error.code) from None
+        reason = _bulksms_reason(detail)
+        logger.error("auth_sms_rejected status=%s reason=%s", error.code, reason)
+        raise _map_status(error.code, reason) from None
     except (URLError, TimeoutError, OSError) as error:
         logger.error("auth_sms_unreachable error_type=%s", type(error).__name__)
         raise AuthError(502, "Could not send the verification SMS. Please try again.") from None
 
 
-def _map_status(status: int) -> AuthError:
+def _bulksms_reason(raw: str) -> str:
+    """BulkSMS error text (its 'detail' field when JSON). Safe to show: it describes the request, not credentials."""
+    try:
+        payload = json.loads(raw)
+    except ValueError:
+        payload = None
+    text = payload.get("detail") if isinstance(payload, dict) else None
+    if not isinstance(text, str) or not text.strip():
+        text = raw
+    return " ".join(text.split())[:200]
+
+
+def _map_status(status: int, reason: str = "") -> AuthError:
+    suffix = f" BulkSMS said: {reason}" if reason else ""
     if status == 400:
-        return AuthError(400, "BulkSMS rejected this phone number.")
+        return AuthError(400, f"BulkSMS rejected the message.{suffix}")
     if status == 402:
         return AuthError(503, "SMS credit is exhausted on the BulkSMS account. Top up BulkSMS and try again.")
     if status in (401, 403):

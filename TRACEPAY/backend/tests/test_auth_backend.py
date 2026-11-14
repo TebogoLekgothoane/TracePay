@@ -121,6 +121,19 @@ def test_send_sms_posts_basic_auth_and_sender(monkeypatch: pytest.MonkeyPatch) -
     }
 
 
+def test_send_sms_shows_bulksms_reason_for_400(monkeypatch: pytest.MonkeyPatch) -> None:
+    body = b'{"status":400,"detail":"An INTERNATIONAL \'from\' value cannot have more than 15 digits"}'
+
+    def fake_urlopen(request: Any, timeout: float) -> None:
+        raise HTTPError(request.full_url, 400, "Bad Request", {}, io.BytesIO(body))
+
+    monkeypatch.setattr(auth_sms, "urlopen", fake_urlopen)
+    with pytest.raises(AuthError) as info:
+        auth_sms.send_sms("+27821234567", "code")
+    assert info.value.status_code == 400
+    assert "cannot have more than 15 digits" in info.value.message
+
+
 @pytest.mark.parametrize(
     ("status", "expected_status"),
     [(400, 400), (402, 503), (401, 502), (429, 429), (500, 502)],

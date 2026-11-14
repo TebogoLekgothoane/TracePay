@@ -207,7 +207,9 @@ def send_otp(phone: str) -> None:
     row_id = inserted[0].get("id")
 
     try:
-        send_sms(phone, f"Your TRACEPAY code is {code}")
+        # Wording matters: BulkSMS did not deliver "Your TRACEPAY code is ..." (FAILED.NOT_SENT),
+        # but "TracePay sign-in: ..." delivered in testing.
+        send_sms(phone, f"TracePay sign-in: {code}")
     except AuthError:
         # Never delivered, so drop the row rather than leave an unusable code behind.
         if isinstance(row_id, str):
