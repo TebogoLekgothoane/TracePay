@@ -16,6 +16,14 @@ def _empty_leak_detection_cache():
 
 
 @pytest.fixture(autouse=True)
+def _no_live_ai_usage_writes(monkeypatch):
+    """Tests must never write usage rows to a real database."""
+    from app import ai_usage
+
+    monkeypatch.setattr(ai_usage, "_post", lambda row: None)
+
+
+@pytest.fixture(autouse=True)
 def _no_live_merchant_directory(monkeypatch):
     """A developer's .env may enable the shared directory; tests must never reach a real database."""
     monkeypatch.setattr(settings, "merchant_directory_enabled", False)

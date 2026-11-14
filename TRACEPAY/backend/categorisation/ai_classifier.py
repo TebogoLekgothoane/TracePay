@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from app.ai_usage import record_ai_usage
 from app.config import settings
 from categorisation.descriptor import parse_descriptor
 from categorisation.models import CategorisationResult
@@ -17,6 +18,8 @@ from categorisation.sanitizer import sanitize_for_ai
 from categorisation.source_identity import validate_ai_source
 
 logger = logging.getLogger("tracepay.categorisation.ai")
+
+FEATURE_CATEGORISATION = "transaction_categorisation"
 
 
 @dataclass(frozen=True)
@@ -529,7 +532,19 @@ def classify_batch(
     if xai_loaded:
         providers.append(("xai", _request_xai))
 
+    def record(provider: str, outcome: str, payload: object, started_at: float) -> None:
+        record_ai_usage(
+            feature=FEATURE_CATEGORISATION,
+            provider=provider,
+            model=_configured_model(provider),
+            outcome=outcome,
+            items=len(transactions),
+            payload=payload,
+            duration_ms=(time.perf_counter() - started_at) * 1000,
+        )
+
     for provider_name, requester in providers:
+        started_at = time.perf_counter()
         try:
             output = requester(instructions, schema, len(transactions))  # type: ignore[operator]
         except Exception as error:  # noqa: BLE001 - AI must never interrupt imports
@@ -538,8 +553,10 @@ def classify_batch(
                 provider_name,
                 type(error).__name__,
             )
+            record(provider_name, "failed", None, started_at)
             continue
         if output is None:
+            record(provider_name, "failed", None, started_at)
             continue
         try:
             text = _chat_response_text(output, provider_name)
@@ -557,13 +574,16 @@ def classify_batch(
                 rejected,
             )
             if results:
+                record(provider_name, "success", output, started_at)
                 return results
+            record(provider_name, "rejected", output, started_at)
         except (ValueError, TypeError, json.JSONDecodeError) as error:
             logger.exception(
                 "[AI] response_parse_failed provider=%s error_type=%s",
                 provider_name,
                 type(error).__name__,
             )
+            record(provider_name, "rejected", output, started_at)
             continue
         except Exception as error:  # noqa: BLE001 - keep imports resilient
             logger.exception(
@@ -571,5 +591,14 @@ def classify_batch(
                 provider_name,
                 type(error).__name__,
             )
+            record(provider_name, "rejected", output, started_at)
             continue
     return {}
+
+
+def _configured_model(provider: str) -> str:
+    if provider == "openrouter":
+        return settings.openrouter_model.strip() or "openai/gpt-4o-mini"
+    if provider == "openai":
+        return settings.openai_model.strip() or "gpt-4.1-mini"
+    return settings.xai_model.strip() or "grok-4-1-fast-non-reasoning"

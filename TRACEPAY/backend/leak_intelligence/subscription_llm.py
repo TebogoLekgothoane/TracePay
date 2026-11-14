@@ -16,11 +16,14 @@ import hashlib
 import json
 import logging
 import re
+import time
+from contextvars import ContextVar
 from threading import Lock
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from app.ai_usage import record_ai_usage
 from app.config import settings
 
 from .models import SubscriptionGroup
@@ -77,7 +80,31 @@ def _key(kind: str, payload: str) -> str:
     return f"{PROMPT_VERSION}:{settings.subscription_llm_model.strip()}:{kind}:{digest}"
 
 
+_FEATURES = {
+    "merchant_labels": "subscription_merchant_labels",
+    "subscription_reason": "subscription_reason",
+}
+
+
+def _record(name: str, outcome: str, payload: object, items: int, started: float) -> None:
+    record_ai_usage(
+        feature=_FEATURES.get(name, name),
+        provider="openrouter",
+        model=settings.subscription_llm_model.strip(),
+        outcome=outcome,
+        items=items,
+        payload=payload,
+        duration_ms=(time.perf_counter() - started) * 1000,
+    )
+
+
+# How many strings the call in progress sends, read when its usage is recorded.
+_items_hint: ContextVar[int] = ContextVar("subscription_llm_items", default=1)
+
+
 def _request(prompt: str, schema: dict, name: str) -> dict | None:
+    started = time.perf_counter()
+    items = _items_hint.get()
     body = json.dumps({
         "model": settings.subscription_llm_model.strip(),
         "temperature": 0,
@@ -90,13 +117,17 @@ def _request(prompt: str, schema: dict, name: str) -> dict | None:
         headers={"Authorization": f"Bearer {settings.openrouter_api_key.strip()}", "Content-Type": "application/json"},
         method="POST",
     )
+    payload: object = None
     try:
         with urlopen(request, timeout=max(1, settings.subscription_llm_timeout_seconds)) as response:
             payload = json.loads(response.read().decode("utf-8"))
         content = payload["choices"][0]["message"]["content"]
-        return json.loads(content) if isinstance(content, str) else None
+        parsed = json.loads(content) if isinstance(content, str) else None
+        _record(name, "success" if parsed is not None else "rejected", payload, items, started)
+        return parsed
     except (HTTPError, URLError, TimeoutError, ValueError, KeyError, IndexError, TypeError) as error:
         logger.warning("[subscription-llm] request_failed name=%s error_type=%s", name, type(error).__name__)
+        _record(name, "rejected" if payload is not None else "failed", payload, items, started)
         return None
 
 
@@ -121,7 +152,11 @@ def _resolve_merchants(strings: list[str]) -> dict[str, tuple[str, str]]:
         "not a subscription service. Return one entry per input, echoing the input exactly.\n"
         + json.dumps({"inputs": missing})
     )
-    output = _request(prompt, _MERCHANT_SCHEMA, "merchant_labels")
+    hint = _items_hint.set(len(missing))
+    try:
+        output = _request(prompt, _MERCHANT_SCHEMA, "merchant_labels")
+    finally:
+        _items_hint.reset(hint)
     if not isinstance(output, dict) or not isinstance(output.get("merchants"), list):
         return resolved
     wanted = set(missing)

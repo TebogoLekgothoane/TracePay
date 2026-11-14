@@ -50,6 +50,7 @@ from app.leak_detection import (
     leak_detection_cache,
 )
 from app.rate_limit import enforce_rate_limit
+from app.superadmin_routes import router as superadmin_router
 from app.synthetic_intelligence import (
     analyze_scenario,
     require_synthetic_debug_user,
@@ -75,6 +76,7 @@ logger = logging.getLogger("tracepay.api")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 register_auth_routes(app)
 app.include_router(ingestion_router)
+app.include_router(superadmin_router)
 
 
 def _reject_oversized_content_length(request: Request) -> None:

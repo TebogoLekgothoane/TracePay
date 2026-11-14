@@ -85,6 +85,12 @@ class Settings(BaseSettings):
     revenuecat_full_analysis_product_id: str = "tracepay_full_analysis"
     revenuecat_monitoring_product_id: str = "tracepay_annual_monitoring"
     synthetic_intelligence_debug: bool = False
+    # Superadmin beta dashboard (/superadmin). Shared operator token, 32+ characters. Unset means
+    # the data endpoint refuses every request. Never ship this value in the mobile app.
+    superadmin_dashboard_token: str = ""
+    # Optional JSON of per-model prices for the dashboard's AI cost estimate, in USD per million
+    # tokens as [input, output]. Example: {"openai/gpt-4o-mini": [0.15, 0.6]}.
+    ai_model_prices_json: str = ""
 
     @field_validator("synthetic_intelligence_debug", mode="before")
     @classmethod

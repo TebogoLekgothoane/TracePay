@@ -15,6 +15,7 @@ SMS ingestion remains Android-only future work. Do not confuse this tree with th
 | Mobile app | `TRACEPAY/mobile` | Expo 57, React Native. UI, PIN lock, statement import, Supabase session. |
 | Python API | `TRACEPAY/backend` (`uvicorn app.main:app`) | Port **8000**. One service for phone OTP sign-in (BulkSMS), phone-reading sync, PDF parsing and categorisation. Validates the user JWT. Never put SMS provider or service-role keys in the mobile app. |
 | Database | `TRACEPAY/supabase/migrations` | Postgres / RLS for accounts, statement imports, and transactions. |
+| Superadmin dashboard | `TRACEPAY/dashboard` | Next.js beta dashboard (sign-ups, sales, statements, AI usage). Reads `/superadmin/api/metrics` from the Python API with an operator token. See its README. |
 
 Mobile environment (`TRACEPAY/mobile/env.example`):
 
