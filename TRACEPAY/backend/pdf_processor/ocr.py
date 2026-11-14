@@ -33,7 +33,13 @@ def preprocess_statement_image(image: Image.Image | np.ndarray) -> np.ndarray:
     denoised = cv2.fastNlMeansDenoising(gray, h=10)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     enhanced = clahe.apply(denoised)
-    return cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+    # Scans often run text right up to the page edge (a date column, a balance column), and
+    # text detectors drop characters that touch the image border. A white margin keeps them.
+    margin = max(24, int(min(enhanced.shape[:2]) * 0.03))
+    padded = cv2.copyMakeBorder(
+        enhanced, margin, margin, margin, margin, cv2.BORDER_CONSTANT, value=255
+    )
+    return cv2.cvtColor(padded, cv2.COLOR_GRAY2BGR)
 
 
 def ocr_page_images(images: Sequence[Image.Image | np.ndarray]) -> OcrResult:
@@ -263,15 +269,18 @@ def _lines_from_ocr_items(texts: list[str], boxes: list[Any]) -> str:
         return ""
     items.sort(key=lambda item: (item[0], item[1]))
     tolerance = max(12.0, (sorted(heights)[len(heights) // 2] * 0.6) if heights else 16.0)
-    lines: list[list[str]] = []
+    lines: list[list[tuple[float, str]]] = []
     current_y: float | None = None
-    for y, _x, text in items:
+    for y, x, text in items:
         if current_y is None or abs(y - current_y) > tolerance:
-            lines.append([text])
+            lines.append([(x, text)])
             current_y = y
         else:
-            lines[-1].append(text)
-    return "\n".join(" ".join(line) for line in lines)
+            lines[-1].append((x, text))
+    # Read each line left to right. On a skewed scan the right-hand columns sit a little higher
+    # or lower than the left, so the vertical order the items were grouped in scrambles a row
+    # (the date after the balance).
+    return "\n".join(" ".join(text for _x, text in sorted(line)) for line in lines)
 
 
 def _box_origin(box: Any) -> tuple[float, float, float]:

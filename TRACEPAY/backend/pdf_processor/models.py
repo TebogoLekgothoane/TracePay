@@ -60,6 +60,13 @@ class Transaction(BaseModel):
         return self.balance
 
 
+class UnparsedRow(BaseModel):
+    """A dated line with an amount that could not be read as a transaction. Shown for review."""
+
+    source_row: int
+    text: str
+
+
 class ValidationResult(BaseModel):
     status: Literal["valid", "warning", "failed"]
     confidence: float = Field(ge=0, le=1)
@@ -144,6 +151,8 @@ class ProcessingResult(BaseModel):
     raw_extraction: RawExtraction
     validation: ValidationResult
     transactions: list[Transaction]
+    # Rows read from text that were not proven and so were not made into transactions.
+    unparsed_rows: list[UnparsedRow] = Field(default_factory=list)
     statement: ExtractedStatement = Field(default_factory=ExtractedStatement)
     statement_balance: StatementBalance = Field(
         default_factory=lambda: StatementBalance(),

@@ -100,6 +100,8 @@ _BOILERPLATE_LABEL_PREFIXES = (
 )
 
 _NOISE_PATTERNS = (
+    # A card reference printed straight after a truncated name ("NAKED INSURANC517992001175").
+    re.compile(r"(?<=[A-Z])\d{10,}\b"),
     re.compile(r"\b\d{2}[/-]\d{2}(?:[/-]\d{2,4})?\b"),  # embedded dates
     re.compile(
         r"\b(?:REF|REFERENCE|CARD|ACCT|ACCOUNT|AUTH|TRN|TXN)[\s:#-]*[A-Z0-9-]{4,}\b",

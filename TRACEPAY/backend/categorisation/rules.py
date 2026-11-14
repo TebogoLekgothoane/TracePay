@@ -57,6 +57,8 @@ INSURER_GROUPS: MerchantGroups = (
     ("Youi", ("YOUI",)),
     ("PPS", ("PPS INSURANCE", "PPS PREMIUM")),
     ("Metropolitan", ("METROPOLITAN LIFE", "METLIFE")),
+    # Statements often truncate the name ("NAKED INSURANC").
+    ("Naked", ("NAKED INSURANCE", "NAKED INSURANC")),
 )
 # Matched with a non-credit direction only, so claim payouts stay out.
 INSURANCE_PHRASES: tuple[str, ...] = (
@@ -361,6 +363,23 @@ DEBIT_ORDER_MARKERS: tuple[str, ...] = (
 )
 
 
+_MOBILE_BUNDLE = re.compile(
+    r"\b\d+(?:\.\d+)?\s?(?:GB|MB|MINS?|SMS)\b|\bRUSH HOUR\b|\bALL NET\b|\bONNET\b|\bBUNDLE\b|\bTOP[ -]?UP\b"
+)
+_FAMILY_PAYEES = frozenset(
+    {
+        "MUM", "MUMMY", "MUMMA", "MOM", "MOMMY", "MAMA", "MOTHER",
+        "DAD", "DADDY", "PAPA", "FATHER",
+        "BROTHER", "SISTER", "GRAN", "GRANNY", "GRANDMA", "GRANDPA", "AUNT", "AUNTY", "UNCLE",
+    }
+)
+_SAVINGS_LABEL_WORDS = (
+    "SAVINGS", "SAVING", "EMERGENCY", "FUND", "INVEST", "TFSA", "TAX FREE", "NOTICE ACCOUNT",
+    "FIXED DEPOSIT", "GOAL",
+)
+# The label, then " - ", then the account number as the normaliser prints it or a short suffix.
+_NAMED_ACCOUNT = re.compile(r"^[A-Z][A-Z0-9 '&.]*? - (?:ACCOUNT ID|\d{4})$")
+_COMPANY_SUFFIX = re.compile(r"\b(?:PTY LTD|PTY|LTD|INC|CC|NPC)\b")
 _FEE_ROW = re.compile(r"^FEE(?![A-Z0-9])")
 
 
@@ -483,6 +502,10 @@ RULES: tuple[Rule, ...] = (
             "ANNUAL FEE",
             "CREDIT CARD FEE",
             # Cash and ATM. These must beat the cash-withdrawal rule below.
+            "ATM/SSD FEE",
+            "SSD FEE",
+            "INSTANT PAYMENT FEE",
+            "INSTANT MONEY FEE",
             "ATM WITHDRAWAL FEE",
             "ATM CASH WITHDRAWAL FEE",
             "ATM CHARGE",
@@ -518,6 +541,58 @@ RULES: tuple[Rule, ...] = (
             "INTEREST DEBIT",
         ),
         transaction_class="bank_fee",
+    ),
+    # Interest the bank charged, printed as the single word.
+    Rule(
+        "description:interest-charged",
+        "Bank Fees",
+        0.80,
+        lambda description, kind: kind == "debit" and description == "INTEREST",
+        transaction_class="bank_fee",
+    ),
+    # Mobile data and voice bundles ("MTN 1.5 GB", "MTN 30 Min All Net", "Rush Hour 150 MB").
+    Rule(
+        "description:mobile-bundle",
+        "Airtime & Data",
+        0.92,
+        lambda description, kind: kind != "credit"
+        and "MOMO" not in description
+        and any(_bounded_phrase(operator).search(description) for operator in _MOBILE_OPERATORS)
+        and bool(_MOBILE_BUNDLE.search(description)),
+    ),
+    # A payment to a family member saved under a nickname is a transfer, not a purchase.
+    Rule(
+        "description:family-payee",
+        "Transfers",
+        0.85,
+        lambda description, _kind: description in _FAMILY_PAYEES,
+        transaction_class="person_to_person",
+    ),
+    # "<name> - <account number>": a transfer to or from a named account. A savings-style name
+    # is the customer's own money moving; any other name is a saved beneficiary. A card purchase
+    # never looks like this, because it carries the merchant and a card reference instead.
+    Rule(
+        "description:named-account-savings",
+        "Transfers",
+        0.88,
+        lambda description, _kind: bool(_NAMED_ACCOUNT.match(description))
+        and any(word in description for word in _SAVINGS_LABEL_WORDS),
+        transaction_class="internal_transfer",
+    ),
+    Rule(
+        "description:named-account-payment",
+        "Transfers",
+        0.78,
+        lambda description, _kind: bool(_NAMED_ACCOUNT.match(description)),
+        transaction_class="person_to_person",
+    ),
+    # Money moving to or from the customer's own investment account is not income or spending.
+    Rule(
+        "description:investment-account",
+        "Savings",
+        0.88,
+        contains("JUSTINVEST", "JUST INVEST"),
+        transaction_class="investment",
     ),
     Rule("merchant:woolworths", "Groceries", 1.00, contains("WOOLWORTHS")),
     Rule("merchant:checkers", "Groceries", 1.00, contains("CHECKERS")),
@@ -1047,6 +1122,16 @@ RULES: tuple[Rule, ...] = (
         "Salary",
         1.00,
         incoming_contains("SALARY", "PAYROLL", "WAGES", "MONTHLY SALARY"),
+        transaction_class="income",
+    ),
+    # A credit from a registered company that is not a refund (refund wording is caught first)
+    # is payment for work: salary, fees or an invoice. It is income, not an unknown transfer.
+    Rule(
+        "description:company-payment-received",
+        "Other Income",
+        0.70,
+        lambda description, kind: kind == "credit"
+        and bool(_COMPANY_SUFFIX.search(description)),
         transaction_class="income",
     ),
     # Trading-name words that say what kind of business a small, unlisted merchant is, e.g.

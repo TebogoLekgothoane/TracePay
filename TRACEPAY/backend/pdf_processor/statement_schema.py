@@ -121,11 +121,35 @@ def period_from_text(text: str) -> tuple[date | None, date | None]:
     return _period_from_text((text or "")[:2000])
 
 
+_DATED_LINE = re.compile(
+    r"^\W*(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}-\d{1,2}-\d{1,2}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})\b"
+)
+
+
+def _letterhead(text: str) -> str:
+    """The statement text above its first dated row: the letterhead and account block.
+
+    Counterparty names inside the transaction rows (a payment to "Capitec" on a Nedbank
+    statement, for example) must not decide which bank issued the statement.
+    """
+    lines: list[str] = []
+    for line in (text or "").splitlines():
+        if _DATED_LINE.match(line.strip()):
+            break
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def _bank_from_text(text: str, source_filename: str | None = None) -> str | None:
-    haystack = f"{text}\n{_filename_text(source_filename)}".casefold()
-    for needle, label in _BANK_ALIASES:
-        if re.search(rf"(?<![a-z0-9]){re.escape(needle)}(?![a-z0-9])", haystack):
-            return label
+    """The issuing bank, from the letterhead first, then the filename, then the start of the text."""
+    for haystack in (
+        _letterhead(text).casefold(),
+        _filename_text(source_filename).casefold(),
+        (text or "")[:2000].casefold(),
+    ):
+        for needle, label in _BANK_ALIASES:
+            if re.search(rf"(?<![a-z0-9]){re.escape(needle)}(?![a-z0-9])", haystack):
+                return label
     return None
 
 

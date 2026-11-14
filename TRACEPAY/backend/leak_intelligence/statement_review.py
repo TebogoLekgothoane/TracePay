@@ -1513,13 +1513,36 @@ def _delivery_habit(txs: list[FeatureTransaction]) -> ReviewFinding | None:
     )
 
 
+#: Categorisation rules that read a purchase as mobile airtime or data.
+_AIRTIME_RULES = frozenset(
+    {
+        "merchant:airtime-data",
+        "description:prepaid-airtime",
+        "description:airtime-wording",
+        "description:data-bundle",
+        "description:vas-mobile-purchase",
+        "description:mobile-purchase-phone",
+        "description:online-mtn",
+        "description:mobile-bundle",
+    }
+)
+
+
+def _is_airtime_purchase(tx: FeatureTransaction) -> bool:
+    """Airtime or data, by the words printed or by how the row was classified.
+
+    "MTN 1.5 GB" never says airtime; the classifier knows it is a data bundle.
+    """
+    if re.match(r"vas\s", tx.description or "", re.IGNORECASE) or "airtime" in (tx.description or "").lower():
+        return True
+    return (
+        tx.categorisation.category_name == "Airtime & Data"
+        or (tx.categorisation.rule or "") in _AIRTIME_RULES
+    )
+
+
 def _airtime(txs: list[FeatureTransaction], series_map: dict[str, _Series]) -> ReviewFinding | None:
-    top_ups = [
-        tx
-        for tx in _purchases(txs)
-        if re.match(r"vas\s", tx.description or "", re.IGNORECASE)
-        or "airtime" in (tx.description or "").lower()
-    ]
+    top_ups = [tx for tx in _purchases(txs) if _is_airtime_purchase(tx)]
     if not top_ups:
         return None
     contract = next(

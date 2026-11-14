@@ -3,8 +3,14 @@ from pathlib import PurePath
 
 from .extract import ExtractionError, extract_layers
 from .mirrored_sections import drop_mirrored_text, has_mirrored_sections, is_mirror_table
-from .models import ProcessingResult, StatementBalance, Transaction, ValidationResult
-from .normalise import normalize_row, parse_text_rows, split_same_row_fee, table_marks_debits_with_sign
+from .models import ProcessingResult, StatementBalance, Transaction, UnparsedRow, ValidationResult
+from .normalise import (
+    normalize_row,
+    parse_text_rows,
+    split_same_row_fee,
+    table_marks_debits_with_sign,
+    unparsed_text_rows,
+)
 from .statement_schema import (
     period_from_text,
     printed_opening_balance,
@@ -64,6 +70,7 @@ def process_pdf(
         logger.info("pdf_mirrored_sections_dropped")
 
     transactions: list[Transaction] = []
+    text_rows_used = False
     rows_rejected = 0
     ai_statement = None
     # Only a period printed on the statement can place year-less dates.
@@ -141,6 +148,7 @@ def process_pdf(
         rows_rejected = max(raw.rows_found - len(transactions), 0)
         if not transactions:
             transactions, detected_rows = parse_text_rows(text, period=header_period)
+            text_rows_used = True
             raw = raw.model_copy(update={"rows_found": detected_rows})
             rows_rejected = max(detected_rows - len(transactions), 0)
 
@@ -211,6 +219,12 @@ def process_pdf(
             raw.rows_found or len(transactions),
             rows_rejected,
         )
+    # source_row means a line of the extracted text only when the text parser read the rows.
+    unparsed_rows = (
+        [UnparsedRow(source_row=number, text=line) for number, line in unparsed_text_rows(text, transactions)]
+        if text_rows_used
+        else []
+    )
     statement = resolve_extracted_statement(
         text,
         transactions,
@@ -233,6 +247,11 @@ def process_pdf(
         uncertain_dates = sum(1 for item in transactions if item.date_confidence != "high")
         extra_warnings = list(validation.warnings)
         extra_warnings.extend(_coverage_warnings(statement, transactions))
+        if unparsed_rows:
+            extra_warnings.append(
+                f"{len(unparsed_rows)} row(s) with an amount could not be read with certainty and were "
+                "not added. They are listed so you can check them against the statement."
+            )
         if balance_break_rows:
             extra_warnings.append(
                 f"The printed balance does not follow from the previous row on "
@@ -287,6 +306,7 @@ def process_pdf(
         ),
         validation=validation,
         transactions=transactions,
+        unparsed_rows=unparsed_rows,
         statement=statement,
         statement_balance=statement_balance,
     )
