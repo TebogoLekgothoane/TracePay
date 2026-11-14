@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Supabase database via MCP
 
-For **any** TracePay task involving the Supabase/Postgres database, use the **Supabase MCP server** (`project-0-TracePay-supabase`), not manual SQL Editor steps or shell-only guesses.
+For **any** TracePay task involving the Supabase/Postgres database, use the **Supabase MCP server** (`project-0-TracePay-tracepay`), not manual SQL Editor steps or shell-only guesses.
 
 ## When to use MCP
 
@@ -26,7 +26,7 @@ For **any** TracePay task involving the Supabase/Postgres database, use the **Su
 
 ## Project context
 
-- MCP config: `.cursor/mcp.json` (project `qbosrqpfcenylivvhzgl`)
+- MCP config: `.cursor/mcp.json`. The server is not pinned to a project, so the user chooses the organization during authentication. TracePay's project ref is `qbosrqpfcenylivvhzgl`.
 - SQL source files live in `supabase/` — after editing a `.sql` file, apply it via MCP `apply_migration`, not by telling the user to paste into the dashboard unless MCP is unavailable
 - Mobile auth recovery email uses `public.profiles` (see `supabase/mobile-profiles.sql`)
 
