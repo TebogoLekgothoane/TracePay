@@ -53,7 +53,7 @@ def test_existing_mcdonalds_spellings_still_match(description: str) -> None:
         ("Yoco *Moro Gelato Wi Cape Town", "Restaurants", "Moro Gelato Wi"),
         ("ANDYS SUSHI BAR SEA PO Cape Town", "Restaurants", "Andys Sushi Bar"),
         ("IMPORTERS COFFEE MERCH Cape Town", "Restaurants", "Importers Coffee Merch"),
-        ("HELLO ASIA SUPERSTORE SEA POINT Inter account [REDACTED] from account...7378", "Groceries", "Hello Asia Superstore"),
+        ("HELLO ASIA SUPERSTORE SEA POINT Inter account [REDACTED] from account...0000", "Groceries", "Hello Asia Superstore"),
     ],
 )
 def test_business_type_words_classify_small_merchants_at_low_confidence(description, category, merchant) -> None:

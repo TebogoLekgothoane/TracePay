@@ -14,7 +14,7 @@ from categorisation.merchant_directory import pattern_key_for
         ("ANDYS SUSHI BAR SEA PO Cape Town", "Andys Sushi Bar", None, "SEA PO CAPE TOWN"),
         ("MCD Green Point (0187) Cape Town", "MCD", None, "GREEN POINT CAPE TOWN"),
         ("ENGEN SEA POINT Tokai", "Engen", None, "SEA POINT TOKAI"),
-        ("HELLO ASIA SUPERSTORE SEA POINT Inter account transfer from account...7378", "Hello Asia Superstore", None, "SEA POINT"),
+        ("HELLO ASIA SUPERSTORE SEA POINT Inter account transfer from account...0000", "Hello Asia Superstore", None, "SEA POINT"),
     ],
 )
 def test_trading_name_is_separated_from_processor_place_and_account_text(description, name, processor, location) -> None:
@@ -41,7 +41,7 @@ def test_the_same_shop_is_one_directory_entry_however_it_was_paid() -> None:
 
 
 def test_account_wording_never_reaches_a_directory_key() -> None:
-    key = pattern_key_for("HELLO ASIA SUPERSTORE SEA POINT Inter account [REDACTED] from account...7378")
+    key = pattern_key_for("HELLO ASIA SUPERSTORE SEA POINT Inter account [REDACTED] from account...0000")
     assert key == "HELLO ASIA SUPERSTORE"
 
 

@@ -98,7 +98,7 @@ def test_a_lower_price_held_for_two_charges_is_the_current_cost():
     ("description", "transaction_class"),
     [
         ("DIGITAL TRANSF DT 45502715-0664-1011 ABSA BANK", "internal_transfer"),
-        ("DIGITAL PAYMENT DT ABSA BANK Neo", "person_to_person"),
+        ("DIGITAL PAYMENT DT ABSA BANK Thabo", "person_to_person"),
         ("DC TRACK INTERNAL WONGA LOAN00000001146656260529", "spending"),
         ("CASHSEND DIGITAL CARD NO. 1212 ABSA BANK cash", "spending"),
     ],
@@ -111,8 +111,8 @@ def test_short_term_lenders_repaid_twice_are_raised_without_a_schedule():
     from tests.test_leak_detection import _detect, _transaction
 
     rows = [
-        _transaction("w1", "2665.76", date(2026, 6, 2), merchant="WONGA", category="Loans & Credit"),
-        _transaction("w2", "2665.76", date(2026, 7, 9), merchant="WONGA", category="Loans & Credit"),
+        _transaction("w1", "2500.00", date(2026, 6, 2), merchant="WONGA", category="Loans & Credit"),
+        _transaction("w2", "2500.00", date(2026, 7, 9), merchant="WONGA", category="Loans & Credit"),
         _transaction("c1", "420", date(2026, 7, 14), merchant="CHECKERS", category="Groceries"),
     ]
     leaks = [item for item in _detect(rows).leaks if item.leak_type == "high_cost_credit_leak"]

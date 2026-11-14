@@ -993,7 +993,7 @@ def test_pipeline_metrics_cover_mixed_batch(monkeypatch: pytest.MonkeyPatch) -> 
     ("NSF Fee", "Bank Fees", "bank_fee"),
     ("NSF Charge", "Bank Fees", "bank_fee"),
     ("Banking App External PayShap Payment: Tebogo", "Transfers", "person_to_person"),
-    ("Banking App Immediate Payment: Neo Capitec", "Transfers", "person_to_person"),
+    ("Banking App Immediate Payment: Thabo Capitec", "Transfers", "person_to_person"),
     ("Live Better Round-up Transfer", "Transfers", "internal_transfer"),
     ("Banking App Transfer Received from Tebogo Savings: Transfer", "Transfers", "internal_transfer"),
     ("Banking App Prepaid Purchase: MTN", "Airtime & Data", "spending"),

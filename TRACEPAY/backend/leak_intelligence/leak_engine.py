@@ -4233,6 +4233,10 @@ def _leak(
     behaviour_ids: list[str],
     feature_refs: list[str],
 ) -> LeakDetection:
+    # Money is shown to the penny. An average can carry more decimals than that.
+    monthly_impact = Decimal(monthly_impact).quantize(Decimal("0.01"))
+    if annual_impact is not None:
+        annual_impact = Decimal(annual_impact).quantize(Decimal("0.01"))
     merchant_key = evidence.get("merchant_key")
     display_name = merchant_display_name_for(merchant_key if isinstance(merchant_key, str) else None)
     if display_name:

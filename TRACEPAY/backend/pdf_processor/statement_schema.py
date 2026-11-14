@@ -72,6 +72,10 @@ def resolve_extracted_statement(
     resolved_bank = bank or _bank_from_text(header, source_filename)
     last4 = _digits4(account_number_last4) or _last4_from_text(header)
     resolved_type = account_type or _account_type_from_text(header)
+    if resolved_type is None and re.search(r"credit\s+limit", text or "", re.IGNORECASE):
+        # A card statement prints a credit limit; a bank account does not. Amounts on a card are
+        # owed, so the reconciliation must read them that way.
+        resolved_type = "credit_card"
     start, end = statement_start_date, statement_end_date
     if start is None or end is None:
         parsed_start, parsed_end = _period_from_text(header)

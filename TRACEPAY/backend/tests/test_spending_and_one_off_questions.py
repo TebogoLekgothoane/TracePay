@@ -44,7 +44,7 @@ def _one_off() -> list[FeatureTransaction]:
     others = [
         _tx(i, f"SHOP {i}", "150.00", date(2026, 3, 1 + i)) for i in range(6)
     ]
-    big = _tx(99, "Hertz Rent A Car", "5630.00", date(2026, 3, 6))
+    big = _tx(99, "Hertz Rent A Car", "4200.00", date(2026, 3, 6))
     return [*others, big]
 
 
@@ -117,7 +117,7 @@ def test_the_large_charge_asks_whether_it_was_planned() -> None:
     assert finding is not None and len(finding.questions) == 1
     question = finding.questions[0]
     assert question.kind == "one_off_expected"
-    assert "Hertz Rent A Car" in question.prompt and "R5,630" in question.prompt
+    assert "Hertz Rent A Car" in question.prompt and "R4,200" in question.prompt
     assert {o.value for o in question.options} >= {"planned", "unplanned", "refunded", "not_mine"}
 
 
@@ -128,16 +128,16 @@ def test_planned_and_refunded_set_the_large_charge_aside() -> None:
     refunded, refunded_notes = apply_answers([_large()], _answer(finding, "one_off_expected", "refunded"))
 
     assert planned[0].status == "dismissed"
-    assert planned_notes == ["You told us the R5,630 Hertz Rent A Car charge was planned, so it is not raised."]
+    assert planned_notes == ["You told us the R4,200 Hertz Rent A Car charge was planned, so it is not raised."]
     assert refunded[0].status == "resolved"
-    assert refunded_notes == ["You told us the R5,630 Hertz Rent A Car charge was refunded, so it is not raised."]
+    assert refunded_notes == ["You told us the R4,200 Hertz Rent A Car charge was refunded, so it is not raised."]
 
 
 @pytest.mark.parametrize(
     ("value", "text"),
     [
-        ("unplanned", "the R5,630 Hertz Rent A Car charge was unplanned."),
-        ("not_mine", "you don't recognise the R5,630 Hertz Rent A Car charge."),
+        ("unplanned", "the R4,200 Hertz Rent A Car charge was unplanned."),
+        ("not_mine", "you don't recognise the R4,200 Hertz Rent A Car charge."),
     ],
 )
 def test_unplanned_or_unrecognised_keeps_the_large_charge(value: str, text: str) -> None:

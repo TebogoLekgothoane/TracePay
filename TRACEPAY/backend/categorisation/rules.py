@@ -802,6 +802,22 @@ RULES: tuple[Rule, ...] = (
             "CASH SEND",
         ),
     ),
+    # Money moved between the holder's own accounts (Discovery: card repayments from the cheque account).
+    Rule(
+        "description:inter-account-transfer",
+        "Transfers",
+        0.90,
+        contains("INTER ACCOUNT TRANSFER"),
+        transaction_class="internal_transfer",
+    ),
+    # A card's own payment of its overdue amount, received on the card (Discovery).
+    Rule(
+        "description:card-payment-overdue",
+        "Transfers",
+        0.90,
+        contains("PAYMENT OF OVERDUE AMOUNT"),
+        transaction_class="internal_transfer",
+    ),
     # Private-bank wording: money moved between the customer's own accounts.
     Rule(
         "description:own-account-move",

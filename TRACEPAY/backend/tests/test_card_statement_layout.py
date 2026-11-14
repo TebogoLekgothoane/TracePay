@@ -12,11 +12,11 @@ from pdf_processor.tables import merge_continuation_rows
 
 HEADERS = ["date", "card no.", "type", "details", "amount"]
 ROWS = [
-    ["15 Mar 2026", "***6190", "POS Purchase", "HPY*A13 Ottery", "- R120.00"],
-    ["", "", "", "Inter account transfer from account...7378", ""],
+    ["15 Mar 2026", "***1234", "POS Purchase", "HPY*A13 Ottery", "- R120.00"],
+    ["", "", "", "Inter account transfer from account...0000", ""],
     ["17 Mar 2026", "", "Transfer", "", "R21\xa0074.70"],
     ["", "", "", "Repay", ""],
-    ["19 Mar 2026", "***6190", "POS Purchase", "Yoco   *PRASHAD GENERA Cape Town", "- R105.00"],
+    ["19 Mar 2026", "***1234", "POS Purchase", "Yoco   *PRASHAD GENERA Cape Town", "- R105.00"],
 ]
 
 
@@ -25,16 +25,16 @@ def test_details_printed_above_a_dated_row_belong_to_that_row() -> None:
 
     assert [row[3] for row in merged] == [
         "HPY*A13 Ottery",
-        "Inter account transfer from account...7378 Repay",
+        "Inter account transfer from account...0000 Repay",
         "Yoco   *PRASHAD GENERA Cape Town",
     ]
 
 
 def test_a_wrapped_second_line_still_joins_the_row_above() -> None:
     rows = [
-        ["15 Mar 2026", "***6190", "POS Purchase", "SASOL KING SHAKA", "- R726.12"],
+        ["15 Mar 2026", "***1234", "POS Purchase", "SASOL KING SHAKA", "- R726.12"],
         ["", "", "", "AIRPORT Tongaat", ""],
-        ["17 Mar 2026", "***6190", "Online", "Takealot", "- R947.00"],
+        ["17 Mar 2026", "***1234", "Online", "Takealot", "- R947.00"],
     ]
 
     merged = merge_continuation_rows(rows, HEADERS)

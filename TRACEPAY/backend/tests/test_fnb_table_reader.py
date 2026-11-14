@@ -12,10 +12,10 @@ FNB_HEADERS = ["date", "", "description", "", "amount", "balance", "bank"]
 
 
 def test_description_printed_in_the_blank_column_before_its_header_is_kept():
-    row = ["14 Jul", "Payshapid Off-Us Owami", "", "", "32.00", "1,592.86Cr", ""]
+    row = ["14 Jul", "Payshapid Off-Us Example", "", "", "32.00", "1,592.86Cr", ""]
     aligned, headers = align_row_to_headers(row, FNB_HEADERS)
     assert headers == ["date", "description", "amount", "balance", "bank"]
-    assert aligned[headers.index("description")] == "Payshapid Off-Us Owami"
+    assert aligned[headers.index("description")] == "Payshapid Off-Us Example"
     assert aligned[headers.index("amount")] == "32.00"
 
 
@@ -102,7 +102,7 @@ def test_a_row_that_fits_neither_direction_is_left_blank():
 
 def test_an_overdrawn_balance_printed_without_its_marker_is_read_as_negative():
     # 1,197.88 - 3,050.00 = -1,852.12: the statement prints the overdraft with no "Dr".
-    rows = [["25 Jul", "Payshapid Off-Us Ltee", "3,050.00", "1,852.12"]]
+    rows = [["25 Jul", "Payshapid Off-Us Example", "3,050.00", "1,852.12"]]
     out, _ = infer_directions_from_balances(rows, ["date", "description", "amount", "balance"], Decimal("1197.88"))
     assert out[0][-1] == "debit"
     assert out[0][3] == "1,852.12 Dr"
@@ -135,7 +135,7 @@ def test_a_marked_amount_is_not_overridden_by_the_balance():
 
 def test_an_amount_marked_cr_is_money_in():
     headers = ["date", "description", "amount", "balance"]
-    tx = normalize_row(["07 Jul", "FNB App Transfer From Vee", "100.00Cr", "2,585.74Cr"], headers, 1, period=PERIOD)
+    tx = normalize_row(["07 Jul", "FNB App Transfer From Example", "100.00Cr", "2,585.74Cr"], headers, 1, period=PERIOD)
     assert tx is not None
     assert tx.type == "credit"
     assert tx.amount == Decimal("100.00")

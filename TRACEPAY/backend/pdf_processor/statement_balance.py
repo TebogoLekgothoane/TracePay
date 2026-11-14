@@ -22,6 +22,9 @@ _DATE = re.compile(
 )
 
 
+_MASKED_NUMBER = re.compile(r"\*+\s*\d{4}\b")
+
+
 def _money_candidates(line: str) -> list[Decimal]:
     # Strip dates so day/month fragments are not parsed as amounts.
     scrubbed = _DATE.sub(" ", line)
@@ -49,9 +52,17 @@ def _closing_from_text(text: str) -> StatementBalance | None:
     for index, line in enumerate(lines[search_from:], start=search_from):
         if not _CLOSING_LABEL.search(line):
             continue
-        window = line
+        # Masked card numbers ("***6190") are not amounts.
+        window = _MASKED_NUMBER.sub(" ", line)
         if index + 1 < len(lines):
-            window = f"{line} {lines[index + 1]}"
+            window = f"{window} {_MASKED_NUMBER.sub(' ', lines[index + 1])}"
+        if not _money_candidates(window):
+            # Some layouts print the label, then the date, then the figure on a later line.
+            for extra in range(2, 4):
+                if index + extra < len(lines):
+                    window = f"{window} {_MASKED_NUMBER.sub(' ', lines[index + extra])}"
+                if _money_candidates(window):
+                    break
         amounts = _money_candidates(window)
         if not amounts:
             continue

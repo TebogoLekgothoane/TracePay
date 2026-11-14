@@ -225,7 +225,7 @@ def test_interest_posted_as_two_lines_is_one_charge_for_the_implied_balance() ->
 
 
 def test_car_hire_is_not_rent_but_a_landlord_still_is() -> None:
-    hire = _categorise("Hertz Rent A Car", "-5630.00")
+    hire = _categorise("Hertz Rent A Car", "-4200.00")
     landlord = _categorise("RENT - J SMITH", "-9000.00")
 
     assert payee_name(hire) == "Hertz Rent A Car"
