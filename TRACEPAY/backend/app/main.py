@@ -55,6 +55,7 @@ from app.synthetic_intelligence import (
     require_synthetic_debug_user,
     scenario_catalog,
 )
+from categorisation.ai_budget import AiBudgetUnavailable, consume_ai_budget
 from categorisation.reprocess import (
     as_categorisable,
     classification_update_payload,
@@ -218,6 +219,18 @@ async def categorisation_reprocess(
 ) -> dict[str, object]:
     """Re-run categorisation for existing transactions without creating duplicates."""
     enforce_rate_limit(f"categorise-user:{_user_id}", 10, 15 * 60)
+    # Each transaction can go to a paid model. The whole request is charged up front, which
+    # is the conservative count: the budget is spent before any model call is made.
+    try:
+        allowed = consume_ai_budget(_user_id, len(payload.transactions))
+    except AiBudgetUnavailable as error:
+        raise HTTPException(
+            status_code=503, detail="AI categorisation is unavailable right now. Try again later."
+        ) from error
+    if not allowed:
+        raise HTTPException(
+            status_code=429, detail="Daily limit reached for AI categorisation. Try again tomorrow."
+        )
     access_token = (authorization or "").removeprefix("Bearer ").strip()
 
     def run_reprocess() -> dict[str, object]:

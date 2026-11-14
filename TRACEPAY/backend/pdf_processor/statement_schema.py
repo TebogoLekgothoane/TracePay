@@ -89,6 +89,8 @@ def resolve_extracted_statement(
         period_source = "inferred"
 
     opening = opening_balance if opening_balance is not None else _labelled_amount(text, _OPENING)
+    if opening is None:
+        opening = _opening_from_first_row(text, transactions)
     balance = resolve_statement_balance(text, transactions)
     closing = closing_balance
     if closing is None or (closing == 0 and balance.amount not in (None, 0)):
@@ -201,6 +203,41 @@ def _first_money(line: str) -> Decimal | None:
         parsed = parse_amount(match.group(0))
         if parsed is not None and abs(parsed) >= 1:
             return parsed
+    return None
+
+
+_BROUGHT_FORWARD = re.compile(r"balance\s+brought\s+forward", re.IGNORECASE)
+
+
+def _opening_from_first_row(text: str, transactions: list[Transaction]) -> Decimal | None:
+    """Some statements print "Balance Brought Forward" with no figure beside it (Absa).
+
+    The first row's printed balance, less that row's own movement, is the balance it started
+    from. Only used when the label is printed, and the reconciliation check still tests it
+    against the closing balance.
+    """
+    if not _BROUGHT_FORWARD.search(text or ""):
+        return None
+    rows = sorted(
+        (item for item in transactions if item.balance is not None),
+        key=lambda item: (item.source_row, item.date),
+    )
+    if not rows:
+        return None
+    first = rows[0]
+    return first.balance - first.amount
+
+
+def printed_opening_balance(text: str) -> Decimal | None:
+    """The opening balance as printed, negative when marked Dr (overdrawn)."""
+    lines = text.splitlines()
+    for index, line in enumerate(lines[:80]):
+        if not _OPENING.search(line):
+            continue
+        window = line if index + 1 >= len(lines) else f"{line} {lines[index + 1]}"
+        amount = _first_money(window)
+        if amount is not None:
+            return -abs(amount) if re.search(r"\d\s*dr\b", window, re.IGNORECASE) else abs(amount)
     return None
 
 

@@ -2134,8 +2134,8 @@ def _cash_leaks(
             subject="cash-withdrawals",
             title=title,
             description=description,
-            monthly_impact=impact,
-            annual_impact=impact * Decimal("12"),
+            monthly_impact=impact.quantize(Decimal("0.01")),
+            annual_impact=(impact * Decimal("12")).quantize(Decimal("0.01")),
             impact_kind=impact_kind,
             confidence=confidence,
             severity=severity_for_impact(impact, persistent=True, confidence=confidence),
@@ -2226,6 +2226,20 @@ def _duplicate_near_miss(candidate, code: str) -> NearMiss:
     )
 
 
+def _owned_by_debit_order_detector(candidate) -> bool:
+    """A debit order with recurring history is reported by the debit-order detector.
+
+    A debit order without that history is an ordinary duplicate candidate, so the plain
+    same-day and near-day rules apply to it just as they do to any other payment.
+    Without this, adding the words DEBIT ORDER to a description hid the finding entirely.
+    """
+    return (
+        candidate.is_debit_order
+        and candidate.recurring_debit_order_months >= 2
+        and candidate.recurring_debit_order_count >= 3
+    )
+
+
 def _duplicate_leaks(
     snapshot: FinancialFeatureSnapshot,
     observations: dict[str, list[BehaviourObservation]],
@@ -2253,7 +2267,7 @@ def _duplicate_leaks(
     # remain stable across detector versions.
     selected_by_merchant: dict[str, object] = {}
     for candidate in snapshot.duplicate_candidates:
-        if candidate.is_debit_order:
+        if _owned_by_debit_order_detector(candidate):
             continue
         dates = candidate.transaction_dates
         high_confidence_ratio = (
@@ -2313,7 +2327,7 @@ def _duplicate_leaks(
         if (
             candidate.merchant_name in same_day_merchants
             or candidate.merchant_name in selected_by_merchant
-            or candidate.is_debit_order
+            or _owned_by_debit_order_detector(candidate)
             or len(dates) != 2
             or not 1 <= (max(dates) - min(dates)).days <= NEAR_DAY_DUPLICATE_MAX_DAYS
             or candidate.amount < NEAR_DAY_DUPLICATE_MIN_AMOUNT
@@ -3349,6 +3363,10 @@ def _short_term_lender_leaks(
     names = [merchant_display_name_for(item.merchant_name) or item.merchant_name for item in lenders]
     total = sum((item.merchant_total_amount for item in lenders), Decimal("0"))
     count = sum(item.merchant_transaction_count for item in lenders)
+    # The monthly figure is what is repaid in an average month that has repayments, not the
+    # whole total spread over the statement. Months are the calendar months that have one.
+    repayment_months = {month for item in lenders for month in item.merchant_monthly_totals}
+    per_month = (total / Decimal(max(1, len(repayment_months)))).quantize(Decimal("0.01"))
     confidence = leak_confidence(
         support=_combined_support(lenders),
         observation_count=count,
@@ -3369,7 +3387,7 @@ def _short_term_lender_leaks(
                 "interest, so this is a prompt to check the cost of each loan, not a finding "
                 "that any of it is too expensive."
             ),
-            monthly_impact=total,
+            monthly_impact=per_month,
             annual_impact=None,
             impact_kind="estimated",
             confidence=confidence,

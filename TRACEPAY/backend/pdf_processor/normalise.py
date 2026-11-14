@@ -65,6 +65,20 @@ def parse_amount(value: str) -> Decimal | None:
     return -amount if negative else amount
 
 
+_DR_SUFFIX = re.compile(r"dr\s*$", re.IGNORECASE)
+_CR_SUFFIX = re.compile(r"cr\s*$", re.IGNORECASE)
+
+
+def parse_balance(value: str) -> Decimal | None:
+    """A running balance with its Cr/Dr marker. Dr means overdrawn, so it is negative."""
+    amount = parse_amount(value)
+    if amount is None:
+        return None
+    if _DR_SUFFIX.search(value.strip()):
+        return -abs(amount)
+    return amount
+
+
 def _normalize_amount_body(cleaned: str) -> str | None:
     if not cleaned:
         return None
@@ -157,8 +171,20 @@ def normalize_row(
         ),
         "",
     )
-    if not date_value or not description:
+    if not date_value:
         return None
+    if not description:
+        # Some statements print small charges with no label (FNB: "06 Jul | 3.00 | 2,485.74Cr").
+        # Keep such a row only when the balance chain has already given it a date, an amount,
+        # a balance and a direction. A footer or wrapped line has none of these, so it is still
+        # rejected.
+        amount_marked = bool(
+            _DR_SUFFIX.search(values.get("amount", "") or "") or _CR_SUFFIX.search(values.get("amount", "") or "")
+        )
+        direction_known = amount_marked or any(values[name] for name in values if name == "direction")
+        if not (direction_known and values.get("balance") and parse_amount(values.get("amount", ""))):
+            return None
+        description = "No description printed"
     parsed_date = parse_statement_date(date_value, period=period)
     if parsed_date.value is None:
         return None
@@ -232,6 +258,11 @@ def normalize_row(
             or (unsigned_is_credit and not re.search(_DIRECTION_WORD, direction))
         ):
             signed_amount, transaction_type = abs(amount), "credit"
+        # Some statements print the direction on the amount itself: "100.00Cr" is money in.
+        elif _DR_SUFFIX.search(amount_value.strip()):
+            signed_amount, transaction_type = -abs(amount), "debit"
+        elif _CR_SUFFIX.search(amount_value.strip()):
+            signed_amount, transaction_type = abs(amount), "credit"
         else:
             return None
     else:
@@ -267,7 +298,7 @@ def normalize_row(
         description=description,
         amount=signed_amount,
         type=transaction_type,
-        balance=parse_amount(balance_value),
+        balance=parse_balance(balance_value),
         source_row=row_number,
         currency=None,
         confidence="medium",

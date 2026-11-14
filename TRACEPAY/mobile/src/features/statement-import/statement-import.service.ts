@@ -59,6 +59,8 @@ export type ExtractedTransaction = {
   amount: number | string;
   type: "debit" | "credit";
   balance?: number | string | null;
+  /** Whether this row's printed balance follows from the previous row's. */
+  balance_check?: "match" | "break" | "unchecked" | null;
   currency?: string;
   category_name?: string | null;
   category_confidence?: number;
@@ -498,6 +500,19 @@ async function failAndCleanup(
   await supabase.from("transactions").delete().eq("statement_id", statementId);
   await supabase.storage.from("statements").remove([filePath]);
   throw new Error(userMessage);
+}
+
+/**
+ * Deletes the uploaded PDF from storage. Best effort: the rows are already saved, so a failed
+ * delete is logged and retried by nothing else, and must not fail the import.
+ */
+async function removeStatementFile(filePath: string): Promise<void> {
+  const { error } = await getSupabase().storage.from("statements").remove([filePath]);
+  if (error) {
+    console.warn("[TracePay][statement] file_remove_failed", { message: error.message });
+    return;
+  }
+  console.info("[TracePay][statement] file_removed_after_save", { filePath });
 }
 
 /**
@@ -1009,6 +1024,8 @@ export async function preparePdfStatement(
       account,
       options.deferReconciliation === true,
     );
+    // The PDF was only needed to read its rows. They are saved now, so the file goes.
+    await removeStatementFile(filePath);
     preview.findingSummary = {
       inserted: persistResult.inserted,
       newFindings: persistResult.newFindings,

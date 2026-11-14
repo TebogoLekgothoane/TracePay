@@ -22,6 +22,9 @@ class Transaction(BaseModel):
     amount: Decimal
     type: Literal["debit", "credit"]
     balance: Decimal | None = None
+    # Whether this row's printed balance follows from the previous printed balance.
+    # "break": the printed balance does not equal the previous one plus the movements since.
+    balance_check: Literal["match", "break", "unchecked"] = "unchecked"
     currency: str | None = None
     source: Literal["pdf"] = "pdf"
     source_row: int
@@ -67,6 +70,8 @@ class ValidationResult(BaseModel):
     rows_rejected: int = 0
     duplicate_count: int = 0
     balance_reconciliation: Literal["verified", "not_available", "mismatch"] = "not_available"
+    # source_row of every transaction whose balance breaks the chain, in statement order.
+    balance_break_rows: list[int] = Field(default_factory=list)
     # The statement's own summary shows no money in or out for the period.
     no_activity: bool = False
     # Opening balance + extracted movements vs closing balance, using the
@@ -107,6 +112,10 @@ class PrintedFigures(BaseModel):
     fees_total: Decimal | None = None
     interest_paid: Decimal | None = None
     interest_received: Decimal | None = None
+    # The fee lines and the VAT on them, as printed in the statement's "Bank Charges" block.
+    service_fees: Decimal | None = None
+    other_fees: Decimal | None = None
+    vat: Decimal | None = None
 
     def is_empty(self) -> bool:
         return all(value is None for value in self.model_dump().values())

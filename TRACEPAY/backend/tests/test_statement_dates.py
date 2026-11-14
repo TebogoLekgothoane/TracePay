@@ -80,7 +80,7 @@ def test_yearless_date_takes_year_from_period_across_year_end() -> None:
     january = parse_statement_date("02 Jan", period=PERIOD_DEC_JAN)
     assert december.value == date(2025, 12, 28)
     assert january.value == date(2026, 1, 2)
-    assert december.year_was_inferred and december.confidence == "medium"
+    assert december.year_was_inferred and december.confidence == "high"
     assert "year_inferred_from_statement_period" in january.warnings
 
 
@@ -136,7 +136,7 @@ def test_text_rows_with_yearless_dates_use_the_statement_period() -> None:
     text = "28 Dec Shoprite -120.00\n02 Jan Salary +25,000.00\n"
     rows, _ = parse_text_rows(text, period=PERIOD_DEC_JAN)
     assert [row.date for row in rows] == [date(2025, 12, 28), date(2026, 1, 2)]
-    assert all(row.date_confidence == "medium" for row in rows)
+    assert all(row.date_confidence == "high" for row in rows)
     assert all("year_inferred_from_statement_period" in row.date_warnings for row in rows)
     unplaced, detected = parse_text_rows(text)
     assert unplaced == [] and detected == 2
@@ -281,12 +281,13 @@ def test_yearless_statement_across_year_end_is_read_with_the_printed_period() ->
         date(2025, 12, 28), date(2025, 12, 30), date(2026, 1, 2), date(2026, 1, 15),
     ]
     assert [item.date_text for item in result.transactions] == ["28 Dec", "30 Dec", "02 Jan", "15 Jan"]
-    assert all(item.date_confidence == "medium" for item in result.transactions)
+    assert all(item.date_confidence == "high" for item in result.transactions)
     assert result.statement.period_source == "declared"
     assert result.statement.statement_start_date == date(2025, 12, 1)
     assert result.validation.opening_closing_reconciliation == "verified"
-    assert result.validation.transactions_with_uncertain_dates == 4
-    assert any("could not be read with full confidence" in w for w in result.validation.warnings)
+    # The year comes from the statement's printed period, so these dates are not uncertain.
+    assert result.validation.transactions_with_uncertain_dates == 0
+    assert not any("could not be read with full confidence" in w for w in result.validation.warnings)
 
 
 def test_yearless_statement_without_a_printed_period_does_not_invent_years() -> None:

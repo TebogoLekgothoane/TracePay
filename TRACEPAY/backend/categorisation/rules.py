@@ -243,7 +243,6 @@ _RECOGNISED_MERCHANT_GROUPS: MerchantGroups = (
     ("Bolt", ("BOLT", "DLBOLT")),
     ("Shell", ("SHELL",)),
     ("Engen", ("ENGEN",)),
-    ("Bp", ("BP",)),
     ("Totalenergies", ("TOTALENERGIES",)),
     ("Sasol", ("SASOL",)),
     ("Netflix", ("NETFLIX",)),
@@ -323,6 +322,11 @@ def incoming_contains(*phrases: str) -> Callable[[str, str], bool]:
     return lambda description, transaction_type: (
         transaction_type == "credit" and matcher(description, transaction_type)
     )
+
+
+def debit_only(matcher: Callable[[str, str], bool]) -> Callable[[str, str], bool]:
+    """Apply a matcher only to money out. An unknown direction never matches."""
+    return lambda description, kind: kind == "debit" and matcher(description, kind)
 
 
 def contains_fragment(*fragments: str) -> Callable[[str, str], bool]:
@@ -554,7 +558,9 @@ RULES: tuple[Rule, ...] = (
     Rule("merchant:bolt", "Ride Hailing", 1.00, any_of(contains("BOLT"), contains_fragment("DLBOLT"))),
     Rule("merchant:shell", "Fuel", 1.00, contains("SHELL")),
     Rule("merchant:engen", "Fuel", 1.00, contains("ENGEN")),
-    Rule("merchant:bp", "Fuel", 1.00, contains("BP")),
+    # BP is also the bank's own prefix on credits (BP SALARY, BP INTEREST PAID, BP CLIENT PAYMENT),
+    # so the fuel brand only counts on money out.
+    Rule("merchant:bp", "Fuel", 1.00, debit_only(contains("BP"))),
     Rule("merchant:total", "Fuel", 1.00, contains("TOTALENERGIES")),
     Rule("merchant:sasol", "Fuel", 1.00, contains("SASOL")),
     Rule(

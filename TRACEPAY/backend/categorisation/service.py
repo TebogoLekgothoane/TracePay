@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
 
 from app.config import settings
+from categorisation.ai_budget import AiBudgetUnavailable
 from categorisation.ai_classifier import AiTransaction, classify_batch
 from categorisation.bank_category_map import map_bank_category
 from categorisation.classifier import classify_transaction
@@ -75,6 +77,7 @@ def categorise_batch(
     access_token: str | None = None,
     merchant_memory: MerchantMemory | None = None,
     merchant_directory: MerchantDirectory | None = None,
+    ai_allowed: Callable[[int], bool] | None = None,
 ) -> dict[str, CategorisationResult]:
     return categorise_batch_with_metrics(
         transactions,
@@ -82,7 +85,16 @@ def categorise_batch(
         access_token=access_token,
         merchant_memory=merchant_memory,
         merchant_directory=merchant_directory,
+        ai_allowed=ai_allowed,
     ).results
+
+
+def _budget_allows(ai_allowed: Callable[[int], bool], amount: int) -> bool:
+    """A budget that cannot be checked counts as used up: rules still categorise."""
+    try:
+        return ai_allowed(amount)
+    except AiBudgetUnavailable:
+        return False
 
 
 def categorise_batch_with_metrics(
@@ -92,6 +104,7 @@ def categorise_batch_with_metrics(
     access_token: str | None = None,
     merchant_memory: MerchantMemory | None = None,
     merchant_directory: MerchantDirectory | None = None,
+    ai_allowed: Callable[[int], bool] | None = None,
 ) -> CategorisationRun:
     catalog = set(category_names or [])
     memory = merchant_memory if merchant_memory is not None else fetch_merchant_memory(access_token)
@@ -230,6 +243,8 @@ def categorise_batch_with_metrics(
         )
     elif not catalog:
         logger.warning("[AI] requests=0 reason=empty_live_category_catalog")
+    elif ai_allowed is not None and not _budget_allows(ai_allowed, len(ai_items)):
+        logger.warning("[AI] requests=0 reason=daily_budget candidates=%s", len(ai_items))
     else:
         learned = []
         for offset in range(0, len(ai_items), BATCH_SIZE):

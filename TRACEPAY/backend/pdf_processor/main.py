@@ -5,10 +5,24 @@ from .extract import ExtractionError, extract_layers
 from .mirrored_sections import drop_mirrored_text, has_mirrored_sections, is_mirror_table
 from .models import ProcessingResult, StatementBalance, Transaction, ValidationResult
 from .normalise import normalize_row, parse_text_rows, split_same_row_fee, table_marks_debits_with_sign
-from .statement_schema import period_from_text, resolve_extracted_statement, statement_has_no_activity
-from .tables import align_row_to_headers, is_transaction_table, merge_continuation_rows, table_headers
+from .statement_schema import (
+    period_from_text,
+    printed_opening_balance,
+    resolve_extracted_statement,
+    statement_has_no_activity,
+)
+from .tables import (
+    align_row_to_headers,
+    infer_directions_from_balances,
+    is_summary_row,
+    is_transaction_table,
+    last_printed_balance,
+    merge_continuation_rows,
+    table_headers,
+)
 from .text_chain import text_chain_transactions
-from .validate import reconcile_opening_closing, validate_transactions
+from .validate import balance_chain_checks, reconcile_opening_closing, validate_transactions
+from categorisation.ai_budget import consume_ai_budget
 from categorisation.service import CategorisableTransaction, categorise_batch
 
 
@@ -55,6 +69,7 @@ def process_pdf(
     # Only a period printed on the statement can place year-less dates.
     header_period = period_from_text(text)
 
+    running_balance = printed_opening_balance(text)
     chain_transactions = text_chain_transactions(text) if raw.extraction_method == "text" else None
     if chain_transactions is not None:
         transactions = chain_transactions
@@ -81,7 +96,11 @@ def process_pdf(
                 for row in data_rows:
                     aligned_row, aligned_headers = align_row_to_headers(row, headers)
                     aligned_rows.append(aligned_row)
-                merged_rows = merge_continuation_rows(aligned_rows, aligned_headers)
+                merged_rows = merge_continuation_rows(
+                    aligned_rows, aligned_headers, period=header_period
+                )
+                # Summary lines such as "Closing Balance" are printed in the table but are not transactions.
+                merged_rows = [row for row in merged_rows if not is_summary_row(row)]
                 logger.info(
                     "pdf_table_detected table=%s header_row=%s headers=%s data_rows=%s coalesced_rows=%s",
                     table_index,
@@ -92,6 +111,15 @@ def process_pdf(
                 )
                 table_rows_detected += len(merged_rows)
                 unsigned_is_credit = table_marks_debits_with_sign(merged_rows, aligned_headers)
+                if not unsigned_is_credit:
+                    # Unsigned amounts with no direction column: the running balance decides.
+                    # The chain runs across tables: each starts from the balance the last one ended on.
+                    merged_rows, aligned_headers = infer_directions_from_balances(
+                        merged_rows, aligned_headers, running_balance
+                    )
+                latest = last_printed_balance(merged_rows, aligned_headers)
+                if latest is not None:
+                    running_balance = latest
                 for row in merged_rows:
                     transaction = normalize_row(
                         row,
@@ -153,11 +181,20 @@ def process_pdf(
         ],
         category_names,
         access_token=access_token,
+        ai_allowed=lambda amount: consume_ai_budget(authenticated_user_id, amount),
     )
     catalog = {name.casefold(): name for name in (category_names or [])}
     transactions = [
         _with_category(transaction, classifications[str(index)], catalog)
         for index, transaction in enumerate(transactions)
+    ]
+    balance_checks = balance_chain_checks(transactions)
+    transactions = [
+        item.model_copy(update={"balance_check": status})
+        for item, status in zip(transactions, balance_checks)
+    ]
+    balance_break_rows = [
+        item.source_row for item in transactions if item.balance_check == "break"
     ]
     if no_activity:
         validation = ValidationResult(
@@ -195,6 +232,13 @@ def process_pdf(
         )
         uncertain_dates = sum(1 for item in transactions if item.date_confidence != "high")
         extra_warnings = list(validation.warnings)
+        extra_warnings.extend(_coverage_warnings(statement, transactions))
+        if balance_break_rows:
+            extra_warnings.append(
+                f"The printed balance does not follow from the previous row on "
+                f"{len(balance_break_rows)} row(s) (statement rows "
+                f"{', '.join(str(row) for row in balance_break_rows)}). Check those rows against the statement."
+            )
         if reconciliation == "mismatch":
             extra_warnings.append(
                 "Opening balance plus extracted transactions does not equal the closing balance; "
@@ -209,6 +253,7 @@ def process_pdf(
                 "opening_closing_reconciliation": reconciliation,
                 "reconciliation_difference": difference,
                 "transactions_with_uncertain_dates": uncertain_dates,
+                "balance_break_rows": balance_break_rows,
                 "warnings": extra_warnings,
                 "status": "warning" if extra_warnings and validation.status == "valid" else validation.status,
             }
@@ -245,6 +290,35 @@ def process_pdf(
         statement=statement,
         statement_balance=statement_balance,
     )
+
+
+#: A quiet first or last week is normal; more than this many days without rows is not.
+COVERAGE_GRACE_DAYS = 7
+
+
+def _coverage_warnings(statement, transactions: list[Transaction]) -> list[str]:
+    """Say when the rows do not reach the period the statement declares.
+
+    A statement that declares April to July but lists only June and July has missing months,
+    and every finding built on it would be too narrow without a warning.
+    """
+    start, end = statement.statement_start_date, statement.statement_end_date
+    if not transactions or statement.period_source != "declared" or start is None or end is None:
+        return []
+    first = min(item.date for item in transactions)
+    last = max(item.date for item in transactions)
+    warnings: list[str] = []
+    if (first - start).days > COVERAGE_GRACE_DAYS:
+        warnings.append(
+            f"The statement period starts {start:%d %b %Y}, but the first transaction is "
+            f"{first:%d %b %Y}. Transactions from {start:%d %b %Y} to {first:%d %b %Y} are not shown."
+        )
+    if (end - last).days > COVERAGE_GRACE_DAYS:
+        warnings.append(
+            f"The statement period ends {end:%d %b %Y}, but the last transaction is "
+            f"{last:%d %b %Y}. Transactions from {last:%d %b %Y} to {end:%d %b %Y} are not shown."
+        )
+    return warnings
 
 
 def _with_category(transaction: Transaction, classification, catalog: dict[str, str]) -> Transaction:

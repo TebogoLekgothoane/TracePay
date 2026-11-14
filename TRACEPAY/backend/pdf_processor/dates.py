@@ -223,7 +223,7 @@ def _place_yearless(
     ]
     if len(fits) == 1:
         return ParsedDate(
-            original, fits[0], "medium", ("year_inferred_from_statement_period",), True
+            original, fits[0], "high", ("year_inferred_from_statement_period",), True
         )
     if not fits:
         return ParsedDate(original, None, "none", ("date_outside_statement_period",))
@@ -247,7 +247,7 @@ def _place_yearless_numeric(
     distinct = sorted(set(readings))
     if len(distinct) == 1:
         return ParsedDate(
-            original, distinct[0], "medium", ("year_inferred_from_statement_period",), True
+            original, distinct[0], "high", ("year_inferred_from_statement_period",), True
         )
     if not distinct:
         return ParsedDate(original, None, "none", ("date_outside_statement_period",))

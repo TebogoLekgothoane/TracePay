@@ -56,6 +56,9 @@ def _closing_from_text(text: str) -> StatementBalance | None:
         if not amounts:
             continue
         amount = amounts[-1]
+        # "482.78 Dr" is an overdrawn balance: the closing is negative.
+        if re.search(r"\d\s*dr\b", window, re.IGNORECASE):
+            amount = -abs(amount)
         date_match = _DATE.search(window)
         as_of = parse_date(date_match.group(1)) if date_match else None
         candidates.append((index, amount, as_of))

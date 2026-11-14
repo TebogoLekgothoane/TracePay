@@ -255,6 +255,7 @@ function DetailPhase(
                 transactions={props.transactions}
                 onPress={props.onTransactionPress}
               />
+              <CorrectionNotice />
             </View>
           ) : null}
 
@@ -634,6 +635,20 @@ function ResponseSummary({ response }: { response: StoredLeakResponse | null }) 
       {response.note ? (
         <Text className="mt-2 text-[14px] leading-5 text-muted-foreground">{response.note}</Text>
       ) : null}
+    </View>
+  );
+}
+
+/** Shown on every finding: the engine reads statements automatically and can be wrong. */
+function CorrectionNotice() {
+  return (
+    <View className="mt-6 rounded-3xl border border-border bg-card px-4 py-4">
+      <Text className="text-[15px] font-semibold text-foreground">Check this against your statement</Text>
+      <Text className="mt-1.5 text-[13px] leading-5 text-muted-foreground">
+        TracePay reads your statement automatically. It can misread a row, miss context such as a
+        refund or a reversal, or flag something that is correct. Check the amounts and transactions
+        above. If something is wrong, say so in your response below.
+      </Text>
     </View>
   );
 }

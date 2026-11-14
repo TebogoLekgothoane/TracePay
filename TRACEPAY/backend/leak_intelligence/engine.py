@@ -2224,9 +2224,10 @@ def _near_day_duplicate_candidates(
             or item.transaction_date is None
             or item.transaction_type == "credit"
             or is_purchase_reversal(item)
-            or _is_debit_order_transaction(item)
         ):
             continue
+        # Debit orders stay in: a pair with no recurring history is an ordinary near-day
+        # candidate, and a recurring one is handed to the debit-order detector downstream.
         if (merchant := merchant_group_key(item)) is not None:
             groups[merchant].append(item)
 

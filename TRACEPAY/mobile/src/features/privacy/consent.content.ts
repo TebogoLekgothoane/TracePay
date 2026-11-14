@@ -52,6 +52,11 @@ export const CONSENT_FORM_SECTIONS = [
     body: "Names and contact details for your account; consent records; bank statements and financial documents you choose to upload; transaction dates, descriptions, amounts and balances; categories, analysis results and potential leak findings; and application logs needed to run and protect the service.",
   },
   {
+    id: "retention",
+    title: "How long we keep it",
+    body: "We delete your statement PDF from our storage as soon as its transactions are saved. If an import fails, the file is deleted straight away. We keep the transactions, categories and findings from it until you delete them. We also keep the statement's file name, size and a fingerprint of its contents, so the same statement is not imported twice.",
+  },
+  {
     id: "why",
     title: "Why we need it",
     body: "To show your transactions, surface possible money leaks, keep your account secure, and improve the service with feedback you choose to share.",

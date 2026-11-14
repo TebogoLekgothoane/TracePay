@@ -4,24 +4,56 @@ from decimal import Decimal
 from .models import Transaction, ValidationResult
 
 
-def reconcile_balances(transactions: list[Transaction]) -> str:
-    with_balances = [item for item in transactions if item.balance is not None]
-    if len(with_balances) < 2:
-        return "not_available"
-    ordered = sorted(with_balances, key=lambda item: (item.source_row, item.date))
-    last = ordered[0].balance or Decimal("0")
-    for previous, current in zip(ordered, ordered[1:]):
+BALANCE_TOLERANCE = Decimal("0.02")
+
+
+def balance_chain_checks(transactions: list[Transaction]) -> list[str]:
+    """Check each row's printed balance against the one before it.
+
+    Returns one status per transaction, in the same order as the input:
+
+    - ``match``: the printed balance equals the previous printed balance plus the
+      movements since (this row's amount included).
+    - ``break``: it does not. The chain then continues from this row's printed
+      balance, so one misread row does not mark every row after it.
+    - ``unchecked``: the row prints no balance, or no earlier printed balance
+      exists to check it against.
+    """
+    statuses = ["unchecked"] * len(transactions)
+    ordered = sorted(
+        range(len(transactions)),
+        key=lambda i: (transactions[i].source_row, transactions[i].date),
+    )
+    previous_index: int | None = None
+    last = Decimal("0")
+    for index in ordered:
+        current = transactions[index]
+        if current.balance is None:
+            continue
+        if previous_index is None:
+            previous_index = index
+            last = current.balance
+            continue
+        previous = transactions[previous_index]
         # Include amounts of intervening rows that lack a printed balance.
         gap = [
             item.amount
             for item in transactions
             if previous.source_row < item.source_row <= current.source_row
         ]
-        expected = last + sum(gap)
-        if abs(expected - (current.balance or Decimal("0"))) > Decimal("0.02"):
-            return "mismatch"
-        last = current.balance or Decimal("0")
-    return "verified"
+        expected = last + sum(gap, Decimal("0"))
+        broken = abs(expected - current.balance) > BALANCE_TOLERANCE
+        statuses[index] = "break" if broken else "match"
+        previous_index = index
+        last = current.balance
+    return statuses
+
+
+def reconcile_balances(transactions: list[Transaction]) -> str:
+    checks = balance_chain_checks(transactions)
+    if not any(status != "unchecked" for status in checks):
+        return "not_available"
+    return "mismatch" if "break" in checks else "verified"
 
 
 def validate_transactions(
