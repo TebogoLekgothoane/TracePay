@@ -9,6 +9,7 @@ import { secureStorage } from "../../lib/secure-storage";
 import { resetAccountsSnapshot } from "../accounts/account.store";
 import { resetRevenueCat } from "../../lib/revenuecat";
 import { resetBilling } from "../billing/billing.store";
+import { resetLeakSoftUnlock } from "../leaks/leak-entitlement.store";
 import { invalidateTransactionLists } from "../../hooks/useTransactions";
 import { invalidateTransactionTotals } from "../../hooks/useTransactionTotals";
 import { clearQueryCache } from "../../lib/query-cache";
@@ -437,6 +438,7 @@ export async function deleteCurrentUser(password: string): Promise<void> {
   resetProfileSnapshot();
   resetAccountsSnapshot();
   resetBilling();
+  await resetLeakSoftUnlock();
   await resetRevenueCat();
   clearQueryCache();
   invalidateTransactionLists();
@@ -741,6 +743,7 @@ export async function signOut(): Promise<void> {
   resetProfileSnapshot();
   resetAccountsSnapshot();
   resetBilling();
+  await resetLeakSoftUnlock();
   await resetRevenueCat();
   clearQueryCache();
   invalidateTransactionLists();

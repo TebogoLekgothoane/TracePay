@@ -89,6 +89,14 @@ export function isVisibleLeak(leak: { evidence?: Record<string, unknown> | null 
   return leak.evidence?.redundant_for_display !== true;
 }
 
+/**
+ * A commitment is where money goes (credit repayments, regular payments to a person, airtime,
+ * everyday spending patterns), not a leak. It stays listed but is never added into leak totals.
+ */
+export function countsAsLeak(leak: { value_group?: string | null }): boolean {
+  return leak.value_group !== "commitment";
+}
+
 export function belongsToCategory(
   category: LeakDebugCategory,
   item: { leak_type: string },
@@ -116,6 +124,7 @@ export function categoryTotal(
   leaks: ReadonlyArray<{
     leak_type: string;
     status?: string;
+    value_group?: string | null;
     estimated_monthly_impact: number | string | null;
     analysis?: { counted_in_total?: boolean } | null;
     evidence?: Record<string, unknown> | null;
@@ -124,9 +133,9 @@ export function categoryTotal(
   let count = 0;
   let monthly = 0;
   for (const leak of leaks) {
-    if (!isVisibleLeak(leak) || !belongsToCategory(category, leak)) continue;
-    count += 1;
+    if (!isVisibleLeak(leak) || !belongsToCategory(category, leak) || !countsAsLeak(leak)) continue;
     const open = leak.status === "active" || leak.status === "monitoring";
+    if (open && leak.analysis?.counted_in_total !== false) count += 1;
     const value = Number(leak.estimated_monthly_impact);
     if (open && leak.analysis?.counted_in_total !== false && Number.isFinite(value) && value > 0) {
       monthly += value;

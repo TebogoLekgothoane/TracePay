@@ -15,6 +15,9 @@ export type ReviewTransaction = {
   brandId?: string;
   mark?: string;
   markColor?: string;
+  /** Raw bank description; when set the row renders like the Transactions page. */
+  description?: string;
+  direction?: "debit" | "credit";
 };
 
 export type ReviewStepLink = {

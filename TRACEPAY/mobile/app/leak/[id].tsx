@@ -1,17 +1,12 @@
 import { Redirect, router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { FindingReview } from "../../src/components/leaks/FindingReview";
+import { CounteractPlanCard } from "../../src/components/leaks/CounteractPlanCard";
 import { LeakCategoryScreen } from "../../src/components/leaks/LeakCategoryScreen";
 import { Button } from "../../src/components/ui/Button";
-import type { ActionType } from "../../src/features/guidance/finding-guidance.model";
-import {
-  readLeakResponse,
-  saveLeakResponse,
-  type StoredLeakResponse,
-} from "../../src/features/leaks/leak-response.store";
 import { useLeakEntitlement } from "../../src/features/leaks/leak-entitlement.store";
 import { isLeakLocked } from "../../src/features/leaks/leak-paywall";
 import { LEAK_DETAILS } from "../../src/features/leaks/leak-details";
@@ -23,13 +18,24 @@ import {
   getFixRoute,
   getPrimaryFixActionId,
 } from "../../src/features/leaks/fixContent";
-import { useLeakIntelligenceDebug } from "../../src/hooks/useLeakIntelligenceDebug";
+import { useKeptPayments } from "../../src/features/leaks/kept-payments.preferences";
+import { leakMerchantKey } from "../../src/features/leaks/kept-payments";
+import { KeepPaymentCard } from "../../src/components/leaks/KeepPaymentCard";
+import { useLeakFindings } from "../../src/hooks/useLeakFindings";
+
+const RECURRING_TYPES = new Set([
+  "subscription_leak",
+  "duplicate_streaming_leak",
+  "recurring_payment_leak",
+  "unknown_recurring_payment",
+  "inactive_recurring_payment_leak",
+]);
 
 export default function LeakDetailScreen() {
   const params = useLocalSearchParams<{ id: string; view?: string }>();
   const leakId = Array.isArray(params.id) ? params.id[0] : params.id;
   const { unlocked, hydrated } = useLeakEntitlement();
-  const detections = useLeakIntelligenceDebug(true);
+  const detections = useLeakFindings(true);
   const liveLeaks = useMemo(
     () => listLivePotentialLeaks(detections.result),
     [detections.result],
@@ -37,7 +43,7 @@ export default function LeakDetailScreen() {
 
   if (!hydrated) return null;
   if (leakId && isLeakLocked(liveLeaks, leakId, unlocked)) {
-    return <Redirect href="/upgrade" />;
+    return <Redirect href="/(tabs)/leaks" />;
   }
   return <LeakDetailContent />;
 }
@@ -45,7 +51,8 @@ export default function LeakDetailScreen() {
 function LeakDetailContent() {
   const params = useLocalSearchParams<{ id: string; view?: string; filter?: string }>();
   const leakId = Array.isArray(params.id) ? params.id[0] : params.id;
-  const detections = useLeakIntelligenceDebug(true);
+  const detections = useLeakFindings(true);
+  const { keep } = useKeptPayments();
   const isCategory = Boolean(leakId && LEAK_DETAILS[leakId]);
 
   const potential = useMemo(() => {
@@ -58,41 +65,17 @@ function LeakDetailContent() {
     return raw ? potentialLeakFromDetection(raw) : null;
   }, [detections.result, isCategory, leakId]);
 
-  const [response, setResponse] = useState<StoredLeakResponse | null>(null);
-  const [savingResponse, setSavingResponse] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!leakId || !potential) return;
-    let active = true;
-    void readLeakResponse(leakId).then((value) => {
-      if (active) setResponse(value);
-    });
-    return () => {
-      active = false;
-    };
-  }, [leakId, potential]);
-
-  const onSaveResponse = useCallback(
-    async (action: ActionType, note: string) => {
-      if (!leakId || savingResponse) return false;
-      setSavingResponse(true);
-      setSaveError(null);
-      try {
-        const saved = await saveLeakResponse(leakId, action, note);
-        setResponse(saved);
-        return true;
-      } catch (caught) {
-        setSaveError(
-          caught instanceof Error ? caught.message : "The response could not be saved.",
-        );
-        return false;
-      } finally {
-        setSavingResponse(false);
-      }
-    },
-    [leakId, savingResponse],
-  );
+  // A recurring payment the user may want to keep: only findings that name a merchant.
+  const keepTarget = useMemo(() => {
+    const raw = detections.result?.leaks.find(
+      (leak) => leak.fingerprint === leakId || leak.leak_id === leakId,
+    );
+    if (!raw || !RECURRING_TYPES.has(raw.leak_type)) return null;
+    const key = leakMerchantKey(raw);
+    if (!key) return null;
+    const label = raw.evidence?.merchant_display_name;
+    return { key, name: typeof label === "string" && label.trim() ? label.trim() : raw.title };
+  }, [detections.result, leakId]);
 
   const openGuide = (targetLeakId: string) => {
     const actionId = getPrimaryFixActionId(targetLeakId);
@@ -120,15 +103,11 @@ function LeakDetailContent() {
         history={[
           {
             title: "Status",
-            detail:
-              "This label is how the finding looks now. Saving a response does not change it.",
+            detail: "This label is how the finding looks now.",
           },
         ]}
         icon={potential.icon}
         known={potential.known}
-        response={response}
-        saveError={saveError}
-        saving={savingResponse}
         status={potential.status}
         steps={potential.steps}
         subtitle={potential.subtitle}
@@ -142,7 +121,20 @@ function LeakDetailContent() {
             ? () => openGuide(potential.relatedLeakId as string)
             : undefined
         }
-        onSave={onSaveResponse}
+        guidanceExtra={
+          <>
+            <CounteractPlanCard fingerprint={leakId as string} />
+            {keepTarget ? (
+              <KeepPaymentCard
+                name={keepTarget.name}
+                kept={false}
+                onToggle={() => {
+                  void keep(keepTarget.key).then(() => router.back());
+                }}
+              />
+            ) : null}
+          </>
+        }
       />
     );
   }

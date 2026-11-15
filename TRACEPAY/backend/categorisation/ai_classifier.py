@@ -496,6 +496,22 @@ def classify_batch(
     transactions: list[AiTransaction],
     category_names: list[str],
 ) -> dict[str, CategorisationResult]:
+    """Classify descriptions with the model. Only the cleaned description and the debit/credit
+    direction leave the server: the real transaction id and the amount never do. Rows are
+    labelled "1", "2", ... for the round trip and mapped back here."""
+    real_ids = {str(index): item.transaction_id for index, item in enumerate(transactions)}
+    minimal = [
+        AiTransaction(str(index), item.description, "", item.transaction_type)
+        for index, item in enumerate(transactions)
+    ]
+    answered = _classify_minimal(minimal, category_names)
+    return {real_ids[alias]: result for alias, result in answered.items() if alias in real_ids}
+
+
+def _classify_minimal(
+    transactions: list[AiTransaction],
+    category_names: list[str],
+) -> dict[str, CategorisationResult]:
     expected_ids = {item.transaction_id for item in transactions}
     descriptions_by_id = {item.transaction_id: item.description for item in transactions}
     openrouter_loaded, openai_loaded, xai_loaded = settings.categorisation_provider_keys()

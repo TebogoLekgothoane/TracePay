@@ -21,7 +21,9 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ForYouSection } from "../dashboard/ForYouSection";
+import { LockedLeakRow } from "./LockedLeakRow";
 import { PotentialLeakCard } from "./PotentialLeakCard";
+import { RecurringSubscriptionsSection } from "./RecurringSubscriptionsSection";
 import { SubscriptionCalendar } from "./SubscriptionCalendar";
 import { PeriodTabs } from "../insights/PeriodTabs";
 import { Button } from "../ui/Button";
@@ -39,10 +41,12 @@ import {
 } from "../../features/insights/period";
 import { buildLiveLeakCategories } from "../../features/leaks/leak-categories.live";
 import { LEAK_DETAILS, type LeakDetail } from "../../features/leaks/leak-details";
+import { useLeakEntitlement } from "../../features/leaks/leak-entitlement.store";
 import {
   getFixRoute,
   getPrimaryFixActionId,
 } from "../../features/leaks/fixContent";
+import { splitLeaksForPaywall } from "../../features/leaks/leak-paywall";
 import {
   REVIEW_STATUSES,
   REVIEW_STATUS_LABEL,
@@ -160,6 +164,7 @@ export function LeakCategoryScreen({
     () => liveCategories.find((entry) => entry.id === categoryKey) ?? null,
     [categoryKey, liveCategories],
   );
+  const { unlocked } = useLeakEntitlement();
   const categoryFindings = useMemo(
     () => listLiveCategoryFindings(result, categoryKey),
     [categoryKey, result],
@@ -170,6 +175,10 @@ export function LeakCategoryScreen({
         ? categoryFindings
         : categoryFindings.filter((leak) => leak.status === filter),
     [categoryFindings, filter],
+  );
+  const findingsPaywall = useMemo(
+    () => splitLeaksForPaywall(visibleFindings),
+    [visibleFindings],
   );
   const whereItGoes = useMemo(
     () =>
@@ -215,6 +224,9 @@ export function LeakCategoryScreen({
     },
     [findingHref],
   );
+  const openUnlock = useCallback(() => {
+    router.push("/leaks/unlocked" as never);
+  }, []);
 
   if (!detail) {
     return (
@@ -392,10 +404,19 @@ export function LeakCategoryScreen({
                       Switch filters to see the other findings.
                     </Text>
                   </View>
-                ) : (
+                ) : unlocked ? (
                   visibleFindings.map((finding) => (
                     <PotentialLeakCard key={finding.id} leak={finding} onPress={openFinding} />
                   ))
+                ) : (
+                  <>
+                    {findingsPaywall.preview.map((finding) => (
+                      <PotentialLeakCard key={finding.id} leak={finding} onPress={openFinding} />
+                    ))}
+                    {findingsPaywall.locked.map((finding) => (
+                      <LockedLeakRow key={finding.id} leak={finding} onPress={openUnlock} />
+                    ))}
+                  </>
                 )}
               </View>
             </>
@@ -457,10 +478,10 @@ export function LeakCategoryScreen({
           ) : null}
 
           <ReduceTipCard
-            title="Stop the drain"
+            title="Review these payments"
             body={
               monthly > 0
-                ? `You're losing about ${amountLabel} ${detail.onLabel} each month from findings in your statements. Review them and stop what you don't need.`
+                ? `About ${amountLabel} ${detail.onLabel} each month is worth a second look. Some of it may be payments you want to keep, so check each one before you stop it.`
                 : `No open ${detail.title.toLowerCase()} findings right now. Keep importing statements so we can spot new ones.`
             }
             color={tone.color}
@@ -479,6 +500,7 @@ export function LeakCategoryScreen({
                   if (charge.href) router.push(charge.href as never);
                 }}
               />
+              <RecurringSubscriptionsSection />
             </View>
           ) : null}
 
@@ -503,6 +525,7 @@ export function LeakCategoryScreen({
         }
         onClose={() => setShowCalc(false)}
       />
+
     </SafeAreaView>
   );
 }

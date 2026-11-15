@@ -512,7 +512,23 @@ export function AccountStatementSetupFlow({
       return;
     }
     setPasswordItemId(null);
+    // A clean import goes straight to the homepage. Anything the user should read (a failed or
+    // skipped file, possible duplicates, insights that need a retry) keeps the summary screen.
+    const allSaved = summary.saved === list.length && list.length > 0;
+    const needsAttention =
+      summary.possibleDuplicates > 0 || list.some((item) => item.reconcileId);
+    if (allSaved && !needsAttention) {
+      goHome();
+      return;
+    }
     setPhase("summary");
+  };
+
+  const goHome = () => {
+    if (mode === "onboarding") {
+      void dismissFinancialAccountsSetup();
+    }
+    router.replace("/(tabs)");
   };
 
   const applyResult = (id: string, result: FileResult) => {

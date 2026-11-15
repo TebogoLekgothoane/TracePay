@@ -16,6 +16,7 @@ from categorisation.classifier import classify_transaction
 from categorisation.rules import PURCHASE_REVERSAL_RULE
 from categorisation.constants import FALLBACK_CATEGORY, FALLBACK_CONFIDENCE
 from categorisation.merchant_directory import MerchantDirectory, entry_for, pattern_key_for
+from categorisation.merchant_profiles import apply_profiles
 from categorisation.merchant_memory import MerchantMemory, fetch_merchant_memory
 from categorisation.models import CategorisationResult
 from categorisation.normalize import (
@@ -340,6 +341,21 @@ def categorise_batch_with_metrics(
                 catalog,
                 merchant_name=reconciled.merchant_name,
             )
+
+    # Payees the rules and the categoriser left unresolved (for example a trading broker the bank
+    # shows as a payment to a person) get the business type identified once for everyone.
+    # Rows already sent to the AI categoriser are skipped: it identified (or failed to identify)
+    # the merchant, and asking again would pay twice for the same answer.
+    apply_profiles(
+        [
+            (item.transaction_id, item.description, item.transaction_type)
+            for item in transactions
+            if source_by_id.get(item.transaction_id) in {"deterministic", "merchant_memory", "statement"}
+        ],
+        results,
+        catalog,
+        (lambda amount: _budget_allows(ai_allowed, amount)) if ai_allowed is not None else None,
+    )
 
     for transaction_id, result in list(results.items()):
         if result.rule == PURCHASE_REVERSAL_RULE:

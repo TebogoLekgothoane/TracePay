@@ -23,10 +23,7 @@ import {
 import { formatWholeRand } from "../../src/features/billing/billing.format";
 import { useBilling } from "../../src/features/billing/billing.store";
 import { useLeakEntitlement } from "../../src/features/leaks/leak-entitlement.store";
-import {
-  buildLiveLeakCategories,
-  liveLeakCategoriesMonthlyTotal,
-} from "../../src/features/leaks/leak-categories.live";
+import { buildLiveLeakCategories } from "../../src/features/leaks/leak-categories.live";
 import {
   splitLeaksForPaywall,
   totalMonthlyLeaks,
@@ -36,8 +33,8 @@ import {
   REVIEW_STATUS_LABEL,
   type ReviewStatus,
 } from "../../src/features/leaks/potential-leaks";
-import { listLivePotentialLeaks } from "../../src/features/leaks/potential-leaks.live";
-import { useLeakIntelligenceDebug } from "../../src/hooks/useLeakIntelligenceDebug";
+import { liveLeaksMonthlyTotal, listLivePotentialLeaks } from "../../src/features/leaks/potential-leaks.live";
+import { useLeakFindings } from "../../src/hooks/useLeakFindings";
 import { formatRandAmount } from "../../src/utils/currency";
 import { COLORS, TRACEPAY, withAlpha } from "../../src/theme/colors";
 
@@ -46,7 +43,7 @@ export default function LeaksScreen() {
   const [showDownloadInfo, setShowDownloadInfo] = useState(false);
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
-  const detections = useLeakIntelligenceDebug(true);
+  const detections = useLeakFindings(true);
   const categories = useMemo(
     () => buildLiveLeakCategories(detections.result),
     [detections.result],
@@ -54,10 +51,10 @@ export default function LeaksScreen() {
   const leaks = useMemo(() => listLivePotentialLeaks(detections.result), [detections.result]);
   const findingsTotal = useMemo(() => {
     if (detections.result) {
-      return formatRandAmount(liveLeakCategoriesMonthlyTotal(categories));
+      return formatRandAmount(liveLeaksMonthlyTotal(detections.result));
     }
     return totalMonthlyLeaks(leaks);
-  }, [categories, detections.result, leaks]);
+  }, [detections.result, leaks]);
   const paywall = useMemo(() => splitLeaksForPaywall(leaks), [leaks]);
   const { unlocked, hydrated } = useLeakEntitlement();
   const { products, entitlements, refresh } = useBilling();
@@ -75,8 +72,8 @@ export default function LeaksScreen() {
   const openLeak = useCallback((id: string) => {
     router.push(`/leak/${id}`);
   }, []);
-  const openUpgrade = useCallback(() => {
-    router.push("/upgrade");
+  const openUnlock = useCallback(() => {
+    router.push("/leaks/unlocked" as never);
   }, []);
   const openCategory = useCallback((item: { id: string }) => {
     router.push(`/leak/${item.id}` as never);
@@ -276,16 +273,17 @@ export default function LeaksScreen() {
                   <Bell color={palette.primary} size={20} strokeWidth={2} />
                 </View>
                 <View className="min-w-0 flex-1">
-                  <Text className="text-[16px] font-bold text-foreground">
-                    {entitlements?.monitoring.active
-                      ? "Monitoring is on"
-                      : "Keep TracePay working for you"}
-                  </Text>
-                  <Text className="mt-0.5 text-[13px] leading-5 text-muted-foreground">
-                    {entitlements?.monitoring.active
-                      ? "See your plan, renewal date and recent alerts."
-                      : "Get alerted to new potential leaks as your activity changes. Optional."}
-                  </Text>
+                <Text className="text-[16px] font-bold text-foreground">
+  {entitlements?.monitoring.active
+    ? "Monitoring is on"
+    : "Monitoring is off"}
+</Text>
+
+<Text className="mt-0.5 text-[13px] leading-5 text-muted-foreground">
+  {entitlements?.monitoring.active
+    ? "See your plan, renewal date and recent alerts."
+    : "Subscribe to monitoring to receive ongoing alerts."}
+</Text>
                 </View>
                 <ChevronRight color={palette.mutedForeground} size={20} />
               </Pressable>
@@ -305,30 +303,21 @@ export default function LeaksScreen() {
                   <PotentialLeakCard key={leak.id} leak={leak} onPress={openLeak} />
                 ))}
                 {paywall.locked.map((leak) => (
-                  <LockedLeakRow key={leak.id} leak={leak} onPress={openUpgrade} />
+                  <LockedLeakRow key={leak.id} leak={leak} onPress={openUnlock} />
                 ))}
               </View>
 
-              {paywall.locked.length > 0 ? (
-                <>
-                  <View className="mt-4 flex-row items-center rounded-[20px] bg-card py-3 pl-4 pr-4">
-                    <Info color={palette.primary} size={24} strokeWidth={1.8} />
-                    <View className="mx-3 h-10 w-px bg-border" />
-                    <Text className="flex-1 text-[15px] leading-6 text-foreground">
-                      Unlock your complete analysis to see all {leaks.length} findings, evidence and
-                      next steps.
+              {paywall.locked.length > 0 || paywall.hiddenCount > 0 ? (
+                <View className="mt-4">
+                  {paywall.hiddenCount > 0 ? (
+                    <Text className="mb-3 text-center text-[14px] leading-5 text-muted-foreground">
+                      {paywall.hiddenCount} more {paywall.hiddenCount === 1 ? "finding is" : "findings are"} included in the full analysis.
                     </Text>
-                  </View>
-
-                  <View className="mt-4">
-                    <Button onPress={openUpgrade} arrow style={{ minHeight: 56 }}>
-                      {unlockLabel}
-                    </Button>
-                    <Text className="mt-2 text-center text-[14px] text-muted-foreground">
-                      One payment. Not a subscription.
-                    </Text>
-                  </View>
-                </>
+                  ) : null}
+                  <Button onPress={openUnlock} arrow style={{ minHeight: 56 }}>
+                    {unlockLabel}
+                  </Button>
+                </View>
               ) : null}
             </>
           )}
@@ -338,7 +327,7 @@ export default function LeaksScreen() {
       <InfoSheet
         visible={showDownloadInfo}
         title="Leaks report"
-        message="PDF export is coming soon. Open a finding below to review what we know and record what you've done."
+        message="PDF export is coming soon. Open a finding below to review what we found."
         onClose={() => setShowDownloadInfo(false)}
       />
     </SafeAreaView>

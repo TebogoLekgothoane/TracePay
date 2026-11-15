@@ -15,6 +15,7 @@ from urllib.request import Request, urlopen
 from fastapi import HTTPException
 
 from app.config import settings
+from categorisation.merchant_profiles import reclassify_feature_transactions
 from leak_intelligence.adapters import FeatureRowValidationError, feature_transaction_from_row
 from leak_intelligence.consolidation import AccountIdentity, TransferReconciliation, consolidate
 from leak_intelligence.coverage import (
@@ -123,6 +124,9 @@ async def build_user_consolidated_inputs(user_id: str, access_token: str) -> Con
             status_code=422,
             detail="Stored transaction data could not be analysed safely.",
         ) from error
+    # Payees the rules cannot place (an online lender, a broker, an unfamiliar shop) are
+    # identified once by AI, by name only, before any feature or finding is derived.
+    transactions = await asyncio.to_thread(reclassify_feature_transactions, transactions, user_id)
     statement_ids = sorted(
         {item.statement_id for item in transactions if item.statement_id}
     )

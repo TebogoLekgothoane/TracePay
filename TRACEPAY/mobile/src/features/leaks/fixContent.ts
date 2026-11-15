@@ -55,6 +55,8 @@ export type ComparisonRow = {
 export type GuideLink = {
   label: string;
   url: string;
+  /** Web URL fallback when `url` is a custom app scheme (`spotify://`, `nflx://`, etc.) and the app is not installed. */
+  fallbackUrl?: string;
 };
 
 export type GuideStep = {
@@ -63,6 +65,8 @@ export type GuideStep = {
   description: string;
   /** Official page that helps with this step. */
   link?: GuideLink;
+  /** Additional direct app or web links for this step. */
+  links?: GuideLink[];
 };
 
 export type ActionDetailContent = {

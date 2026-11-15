@@ -46,12 +46,12 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-4-6"
     anthropic_base_url: str = "https://api.anthropic.com"
     anthropic_timeout_seconds: int = 45
-    ai_categorisation_enabled: bool = False
+    ai_categorisation_enabled: bool = True
     # Transactions one user may send to paid AI categorisation per 24 hours.
     ai_daily_item_limit: int = 2000
     # Shared merchant directory (see categorisation/merchant_directory.py). Off by default; needs
     # SUPABASE_SERVICE_ROLE_KEY and the merchant_directory migration.
-    merchant_directory_enabled: bool = False
+    merchant_directory_enabled: bool = True
     ai_merchant_identification_min_confidence: float = Field(default=0.85, ge=0, le=1)
     openrouter_api_key: str = ""
     openrouter_model: str = "openai/gpt-4o-mini"

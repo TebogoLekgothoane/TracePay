@@ -18,7 +18,9 @@ import {
 } from "../../src/features/accounts/account.navigation";
 import type { RhythmSpan } from "../../src/features/dashboard/spending-rhythm";
 import { buildSpendingPatterns } from "../../src/features/insights/spending-patterns";
-import { rankLeaksByMonthlyCost } from "../../src/features/leaks/leak-paywall";
+import { countsAsLeak } from "../../src/features/leak-intelligence/leak-debug-categories";
+import { useLeakEntitlement } from "../../src/features/leaks/leak-entitlement.store";
+import { rankLeaksByMonthlyCost, splitLeaksForPaywall } from "../../src/features/leaks/leak-paywall";
 import { listLivePotentialLeaks } from "../../src/features/leaks/potential-leaks.live";
 import { formatRandAmount } from "../../src/utils/currency";
 import {
@@ -28,7 +30,7 @@ import {
 import { usePrivacyPreferences } from "../../src/features/privacy/privacy.preferences";
 import { useAccounts } from "../../src/hooks/useAccounts";
 import { useFindingNotifications } from "../../src/hooks/useFindingNotifications";
-import { useLeakIntelligenceDebug } from "../../src/hooks/useLeakIntelligenceDebug";
+import { useLeakFindings } from "../../src/hooks/useLeakFindings";
 import { useProfile } from "../../src/hooks/useProfile";
 import { useSpendingPatternData } from "../../src/hooks/useSpendingPatternData";
 import { useSpendingRhythm } from "../../src/hooks/useSpendingRhythm";
@@ -45,7 +47,8 @@ export default function HomeScreen() {
   const [rhythmSpan, setRhythmSpan] = useState<RhythmSpan>("6 months");
   const rhythm = useSpendingRhythm(rhythmSpan);
   const upcoming = useUpcomingPayments();
-  const leakDetections = useLeakIntelligenceDebug(previews.length > 0);
+  const leakDetections = useLeakFindings(previews.length > 0);
+  const { unlocked } = useLeakEntitlement();
   const patternData = useSpendingPatternData();
   const { notifications } = useFindingNotifications();
   const hasUnreadNotifications = notifications.some(
@@ -69,6 +72,12 @@ export default function HomeScreen() {
     () => rankLeaksByMonthlyCost(listLivePotentialLeaks(leakDetections.result)),
     [leakDetections.result],
   );
+  // Same rule as the Leaks tab: with three or more findings the two biggest show, with one or
+  // two findings only the biggest does. Once unlocked, the two biggest always show.
+  const topFindings = useMemo(
+    () => (unlocked ? ranked.slice(0, 2) : splitLeaksForPaywall(ranked).preview),
+    [ranked, unlocked],
+  );
 
   // Real detections from the user's statements. Findings that overlap another
   // finding (counted_in_total false) and closed ones stay out of the sum.
@@ -80,7 +89,8 @@ export default function HomeScreen() {
       .filter(
         (leak) =>
           (leak.status === "active" || leak.status === "monitoring") &&
-          leak.analysis?.counted_in_total !== false,
+          leak.analysis?.counted_in_total !== false &&
+          countsAsLeak(leak),
       )
       .reduce((sum, leak) => sum + Number(leak.estimated_monthly_impact), 0);
   }, [leakDetections.result]);
@@ -118,7 +128,7 @@ export default function HomeScreen() {
           />
 
           <BalanceCard
-            heading="Total leaked this month"
+            heading="Possible leaks this month"
             balance={balanceLabel}
             metaLabel={metaLabel}
             accounts={previews}
@@ -162,7 +172,7 @@ export default function HomeScreen() {
                 </Text>
               </View>
             ) : (
-              ranked.slice(0, 2).map((leak) => (
+              topFindings.map((leak) => (
                 <PotentialLeakCard
                   key={leak.id}
                   leak={leak}

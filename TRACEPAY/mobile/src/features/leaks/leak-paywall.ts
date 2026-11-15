@@ -1,7 +1,7 @@
 import { formatRandAmount, parseRandAmount } from "../../utils/currency";
 import type { PotentialLeak, ReviewIcon } from "./potential-leaks";
 
-/** Leaks a user can open in full before upgrading. */
+/** Clear findings when there are more than two real leaks. */
 export const FREE_LEAK_COUNT = 2;
 
 export const ANNUAL_PLAN = {
@@ -21,7 +21,10 @@ export type LockedLeak = {
 
 export type LeakPaywallView = {
   preview: PotentialLeak[];
+  /** Blurred rows. Only shown when there are enough findings for a blur to make sense. */
   locked: LockedLeak[];
+  /** Findings behind the paywall that get no row at all (the two-finding case). */
+  hiddenCount: number;
 };
 
 export function estimatedMonthlyCost(leak: PotentialLeak): number {
@@ -39,19 +42,33 @@ export function totalMonthlyLeaks(leaks: PotentialLeak[]): string {
   return formatRandAmount(leaks.reduce((sum, leak) => sum + estimatedMonthlyCost(leak), 0));
 }
 
+/**
+ * Only real findings are shown.
+ * - 1 finding: that one stays clear
+ * - 2 findings: top one clear, the other gets no row (no lone blurred card); the unlock
+ *   button says one more finding is included
+ * - 3+: top two clear, the rest blurred
+ */
 export function splitLeaksForPaywall(leaks: PotentialLeak[]): LeakPaywallView {
   const ranked = rankLeaksByMonthlyCost(leaks);
+  const clearCount = clearCountFor(ranked.length);
+  const behind = ranked.slice(clearCount);
+  const blur = ranked.length > FREE_LEAK_COUNT;
   return {
-    preview: ranked.slice(0, FREE_LEAK_COUNT),
-    locked: ranked.slice(FREE_LEAK_COUNT).map((leak) => ({
-      id: leak.id,
-      icon: leak.icon,
-      monthlyAmount: leak.amount,
-    })),
+    preview: ranked.slice(0, clearCount),
+    locked: blur
+      ? behind.map((leak) => ({ id: leak.id, icon: leak.icon, monthlyAmount: leak.amount }))
+      : [],
+    hiddenCount: blur ? 0 : behind.length,
   };
+}
+
+function clearCountFor(total: number): number {
+  return total <= FREE_LEAK_COUNT ? Math.min(1, total) : FREE_LEAK_COUNT;
 }
 
 export function isLeakLocked(leaks: PotentialLeak[], leakId: string, unlocked: boolean): boolean {
   if (unlocked) return false;
-  return splitLeaksForPaywall(leaks).locked.some((leak) => leak.id === leakId);
+  const ranked = rankLeaksByMonthlyCost(leaks);
+  return ranked.slice(clearCountFor(ranked.length)).some((leak) => leak.id === leakId);
 }

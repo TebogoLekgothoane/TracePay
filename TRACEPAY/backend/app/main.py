@@ -500,6 +500,10 @@ async def reconcile_finding_registry(
         )
     finally:
         invalidate_user_leak_detections(_user_id)
+        # A new statement can change every finding, so saved AI plans are stale.
+        from leak_intelligence.ai_counteract import invalidate_user_plans
+
+        invalidate_user_plans(_user_id)
     return result.model_dump(mode="json")
 
 
@@ -517,6 +521,94 @@ async def finding_guidance(
     except FindingNotFound:
         raise HTTPException(status_code=404, detail="That finding was not found.") from None
     return guidance_payload(guidance)
+
+
+COUNTERACT_BUDGET_UNITS = 3
+
+
+@app.post("/finding-registry/{finding_id}/counteract")
+async def finding_counteract(
+    finding_id: str,
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """AI plan for counteracting one finding. Cached, budgeted, with a rules fallback."""
+    from leak_intelligence import ai_counteract
+
+    enforce_rate_limit(f"finding-counteract:{_user_id}", 10, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+    try:
+        guidance = await asyncio.to_thread(
+            load_finding_guidance, _user_id, access_token, _finding_id(finding_id)
+        )
+    except FindingNotFound:
+        raise HTTPException(status_code=404, detail="That finding was not found.") from None
+    payload = guidance_payload(guidance)
+    facts = ai_counteract.finding_facts(payload)
+    key = ai_counteract.cache_key(_user_id, str(payload["finding_id"]), facts)
+
+    plan = ai_counteract.cached_plan(key)
+    if plan is None and ai_counteract.ai_configured():
+        try:
+            allowed = await asyncio.to_thread(consume_ai_budget, _user_id, COUNTERACT_BUDGET_UNITS)
+        except AiBudgetUnavailable:
+            allowed = False
+        if allowed:
+            plan = await asyncio.to_thread(ai_counteract.generate_plan, key, facts)
+    if plan is not None:
+        return plan.payload("ai")
+    steps = [str(step) for step in payload.get("steps", [])]
+    return {
+        "source": "rules",
+        "summary": "Here are the checks we can suggest for this finding.",
+        "potential_saving": "",
+        "actions": [{"title": f"Step {i}", "detail": step} for i, step in enumerate(steps, 1)],
+        "prevent": [],
+    }
+
+
+class LeakCounteractRequest(BaseModel):
+    fingerprint: str = Field(min_length=1, max_length=200)
+
+
+@app.post("/leak-detections/counteract")
+async def leak_counteract(
+    body: LeakCounteractRequest,
+    authorization: str | None = Header(default=None),
+    _user_id: str = Depends(require_supabase_user),
+) -> dict[str, object]:
+    """Plan for counteracting one live finding. Cached until the next import, budgeted, with a
+    plain-steps fallback. Only the finding's own cleaned summary is sent to the model."""
+    from leak_intelligence import ai_counteract
+
+    enforce_rate_limit(f"finding-counteract:{_user_id}", 20, 15 * 60)
+    access_token = (authorization or "").removeprefix("Bearer ").strip()
+
+    async def build():
+        enforce_rate_limit(f"leaks-user:{_user_id}", 20, 15 * 60)
+        return await build_user_leak_detections(_user_id, access_token)
+
+    result, _ = await leak_detection_cache.get_or_build(_user_id, build, force=False)
+    leak = next(
+        (item for item in result.leaks if body.fingerprint in (item.fingerprint, item.leak_id)),
+        None,
+    )
+    if leak is None:
+        raise HTTPException(status_code=404, detail="That finding was not found.")
+    facts = ai_counteract.leak_facts(leak)
+    key = ai_counteract.cache_key(_user_id, leak.fingerprint or leak.leak_id, facts)
+
+    plan = ai_counteract.cached_plan(key)
+    if plan is None and ai_counteract.ai_configured():
+        try:
+            allowed = await asyncio.to_thread(consume_ai_budget, _user_id, COUNTERACT_BUDGET_UNITS)
+        except AiBudgetUnavailable:
+            allowed = False
+        if allowed:
+            plan = await asyncio.to_thread(ai_counteract.generate_plan, key, facts)
+    if plan is not None:
+        return plan.payload("ai")
+    return ai_counteract.fallback_plan(leak.leak_type).payload("rules")
 
 
 @app.get("/subscription-findings/{finding_id}/usage")

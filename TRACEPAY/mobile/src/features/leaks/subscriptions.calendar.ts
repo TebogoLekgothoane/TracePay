@@ -1,7 +1,6 @@
 import { parseRandAmount } from "../../utils/currency";
 import {
   cadenceOfCharge,
-  listRecurringCharges,
   type RecurringCharge,
   type RecurringChargeCadence,
   type RecurringChargeKind,
@@ -110,7 +109,7 @@ function toMark(item: RecurringCharge): CalendarChargeMark {
 }
 
 function marksForDay(
-  items: RecurringCharge[],
+  items: readonly RecurringCharge[],
   year: number,
   month: number,
   day: number,
@@ -141,14 +140,16 @@ function makeDay(
   };
 }
 
-/** Monday-first month grid covering all recurring charges (subs, debit orders, obligations). */
+/**
+ * Monday-first month grid for the recurring charges passed in (detected from the user's
+ * statements, plus any they added). With none, the grid is simply empty.
+ */
 export function buildSubscriptionCalendarMonth(
   year: number,
   month: number,
   from = new Date(),
-  extras: readonly RecurringCharge[] = [],
+  items: readonly RecurringCharge[] = [],
 ): SubscriptionCalendarMonth {
-  const items = listRecurringCharges(extras);
   const active = items.filter((item) => item.status === "Active");
   const first = new Date(year, month, 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();

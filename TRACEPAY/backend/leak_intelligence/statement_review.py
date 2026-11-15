@@ -2051,6 +2051,20 @@ def _platform_payee(description: str | None) -> tuple[str, bool] | None:
     known = _trading_name(description)
     if known:
         return known, True
+    from categorisation.merchant_profiles import (
+        TRADING_TYPES,
+        payee_label,
+        type_for_description,
+    )
+
+    identified = type_for_description(description)
+    if identified in TRADING_TYPES:
+        # A model named it a broker or exchange; treated like a listed platform.
+        label = payee_label(description, transaction_class="unknown") or ""
+        return (label[:1].upper() + label[1:]) or "Trading platform", True
+    if identified not in (None, "unknown"):
+        # The model says it is something else (a shop, a person, a lender): not a broker.
+        return None
     match = _REFERENCED_PAYEE.search(description or "")
     if match is None:
         return None

@@ -6,6 +6,7 @@
 import { formatRandAmount } from "../../utils/currency";
 import {
   belongsToCategory,
+  countsAsLeak,
   isVisibleLeak,
   LEAK_DEBUG_CATEGORIES,
 } from "../leak-intelligence/leak-debug-categories";
@@ -35,12 +36,28 @@ function relatedLeakId(leakType: string): string | null {
 }
 
 function transactionRows(leak: LeakDetection): ReviewTransaction[] {
-  return (leak.supporting_transactions ?? []).slice(0, 8).map((row, index) => ({
-    id: row.transaction_id || `${leak.fingerprint}:${index}`,
-    title: row.description || "Transaction",
-    subtitle: row.date || "",
-    amount: formatRandAmount(Number(row.amount) || 0),
-  }));
+  return (leak.supporting_transactions ?? []).slice(0, 8).map((row, index) => {
+    const direction: "debit" | "credit" =
+      String(row.direction).toLowerCase().startsWith("c") || row.role === "reversal"
+        ? "credit"
+        : "debit";
+    const roleLabel =
+      row.role === "reversal"
+        ? "Reversal"
+        : row.role === "fee" || row.role === "other_fee" || row.role === "failed_attempt_fee"
+          ? "Fee"
+          : "";
+    const date = row.date ? String(row.date).slice(0, 10) : "";
+    const description = (row.description || "Transaction").trim();
+    return {
+      id: row.transaction_id || `${leak.fingerprint}:${index}`,
+      title: description,
+      description,
+      direction,
+      subtitle: [roleLabel, date].filter(Boolean).join(" · "),
+      amount: `${direction === "debit" ? "-" : "+"}R${Math.abs(Number(row.amount) || 0).toFixed(2)}`,
+    };
+  });
 }
 
 function evidenceRows(leak: LeakDetection): { label: string; value: string }[] {
@@ -83,7 +100,7 @@ export function potentialLeakFromDetection(leak: LeakDetection): PotentialLeak {
     status: statusFromDetection(leak.status),
     priority: Math.round((leak.confidence <= 1 ? leak.confidence : leak.confidence / 100) * 100),
     icon: iconForType(leak.leak_type),
-    why: known[0] || leak.description,
+    why: known.length > 0 ? known.slice(0, 3).join(" ") : leak.description,
     evidence: evidenceRows(leak),
     transactions: transactionRows(leak),
     steps,
@@ -94,18 +111,28 @@ export function potentialLeakFromDetection(leak: LeakDetection): PotentialLeak {
   };
 }
 
+function openLeakDetections(result: LeakDetectionResult | null | undefined): LeakDetection[] {
+  if (!result) return [];
+  return result.leaks.filter((leak) => {
+    if (!isVisibleLeak(leak) || !countsAsLeak(leak)) return false;
+    const open = leak.status === "active" || leak.status === "monitoring";
+    if (!open) return false;
+    if (leak.analysis?.counted_in_total === false) return false;
+    return Number(leak.estimated_monthly_impact) > 0 || leak.supporting_transaction_count > 0;
+  });
+}
+
 /** Open, visible findings for the Leaks tab — from the live analysis only. */
 export function listLivePotentialLeaks(result: LeakDetectionResult | null | undefined): PotentialLeak[] {
-  if (!result) return [];
-  return result.leaks
-    .filter((leak) => {
-      if (!isVisibleLeak(leak)) return false;
-      const open = leak.status === "active" || leak.status === "monitoring";
-      if (!open) return false;
-      if (leak.analysis?.counted_in_total === false) return false;
-      return Number(leak.estimated_monthly_impact) > 0 || leak.supporting_transaction_count > 0;
-    })
-    .map(potentialLeakFromDetection);
+  return openLeakDetections(result).map(potentialLeakFromDetection);
+}
+
+/** Exact monthly total of the findings the tab lists (same filter, nothing dropped or doubled). */
+export function liveLeaksMonthlyTotal(result: LeakDetectionResult | null | undefined): number {
+  return openLeakDetections(result).reduce((sum, leak) => {
+    const value = Number(leak.estimated_monthly_impact);
+    return sum + (Number.isFinite(value) && value > 0 ? value : 0);
+  }, 0);
 }
 
 /** Findings that belong to one Leaks-tab category (fees / subs / …). */

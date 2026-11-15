@@ -15,6 +15,10 @@ import {
   sanitiseActionNote,
   type ActionType,
 } from "../../../src/features/guidance/finding-guidance.model";
+import {
+  fetchCounteractPlan,
+  type CounteractPlan,
+} from "../../../src/features/guidance/finding-guidance.api";
 import { useFindingGuidance } from "../../../src/hooks/useFindingGuidance";
 import { COLORS } from "../../../src/theme/colors";
 
@@ -39,6 +43,23 @@ export default function FindingGuidanceScreen() {
   const [note, setNote] = useState("");
   const [noteError, setNoteError] = useState<string | null>(null);
   const [pending, setPending] = useState<ActionType | null>(null);
+
+  const [plan, setPlan] = useState<CounteractPlan | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
+
+  async function onGeneratePlan() {
+    if (planLoading) return;
+    setPlanLoading(true);
+    setPlanError(null);
+    try {
+      setPlan(await fetchCounteractPlan(id));
+    } catch (caught) {
+      setPlanError(caught instanceof Error ? caught.message : "The plan could not be loaded.");
+    } finally {
+      setPlanLoading(false);
+    }
+  }
 
   async function onRecord(actionType: ActionType) {
     if (saving || pending) {
@@ -189,6 +210,54 @@ export default function FindingGuidanceScreen() {
                     {step}
                   </Text>
                 ))}
+              </Section>
+
+              <Section title="How to counteract this">
+                {plan ? (
+                  <>
+                    <Text className="text-[15px] leading-5 text-foreground">{plan.summary}</Text>
+                    {plan.actions.map((action, index) => (
+                      <View key={`${index}-${action.title}`} className="mt-3">
+                        <Text className="text-[15px] font-semibold text-foreground">
+                          {index + 1}. {action.title}
+                        </Text>
+                        <Text className="mt-0.5 text-[14px] leading-5 text-foreground">
+                          {action.detail}
+                        </Text>
+                      </View>
+                    ))}
+                    {plan.prevent.map((action, index) => (
+                      <View key={`p${index}-${action.title}`} className="mt-3">
+                        <Text className="text-[15px] font-semibold text-foreground">
+                          Prevent: {action.title}
+                        </Text>
+                        <Text className="mt-0.5 text-[14px] leading-5 text-foreground">
+                          {action.detail}
+                        </Text>
+                      </View>
+                    ))}
+                    <Text className="mt-3 text-[12px] leading-4 text-muted-foreground">
+                      {plan.source === "ai"
+                        ? "Written by AI from this finding only. TracePay can't cancel or dispute anything for you, and this isn't financial advice."
+                        : "AI guidance isn't available right now, so these are the standard checks."}
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Text className="text-[15px] leading-5 text-muted-foreground">
+                      Get a short plan for cancelling, disputing or cutting back on this. It uses
+                      only this finding, not your full statements.
+                    </Text>
+                    {planError ? (
+                      <Text className="mt-2 text-[13px] text-destructive">{planError}</Text>
+                    ) : null}
+                    <View className="mt-3">
+                      <Button loading={planLoading} onPress={() => void onGeneratePlan()}>
+                        Get AI plan
+                      </Button>
+                    </View>
+                  </>
+                )}
               </Section>
 
               <Section title="Recorded responses">

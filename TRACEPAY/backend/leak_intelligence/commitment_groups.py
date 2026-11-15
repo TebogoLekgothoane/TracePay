@@ -128,6 +128,14 @@ def credit_provider(merchant_name: str | None) -> tuple[str, bool] | None:
         return None
     if _HIGH_COST_PATTERN.search(upper):
         return upper, True
+    # A lender the lists do not name, identified by AI from its name alone.
+    from categorisation.merchant_profiles import known_type
+
+    identified = known_type(merchant_name)
+    if identified == "short_term_lender":
+        return upper, True
+    if identified == "loan_provider":
+        return upper, False
     for provider_id, aliases in _INSTALMENT_PROVIDERS.items():
         if any(alias in upper for alias in aliases):
             return provider_id, False

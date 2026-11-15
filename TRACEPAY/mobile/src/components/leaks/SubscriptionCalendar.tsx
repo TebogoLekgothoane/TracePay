@@ -23,7 +23,11 @@ import {
 import Animated, { FadeIn, ZoomIn, ZoomOut } from "react-native-reanimated";
 
 import { useCustomCharges } from "../../features/leaks/custom-charges.preferences";
-import { kindLabel } from "../../features/leaks/recurring-charges.catalog";
+import {
+  kindLabel,
+  listRecurringCharges,
+} from "../../features/leaks/recurring-charges.catalog";
+import { useDetectedSubscriptions } from "../../hooks/useDetectedSubscriptions";
 import {
   buildSubscriptionCalendarMonth,
   shiftCalendarMonth,
@@ -134,7 +138,7 @@ function OverlayShell({
             accessibilityRole="button"
             accessibilityLabel="Dismiss"
             onPress={onClose}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
           />
           {/* Card must stay a View — Pressable parents steal TextInput focus on Android. */}
           {card}
@@ -172,9 +176,14 @@ export function SubscriptionCalendar({ onOpenCharge }: Props) {
   const palette = COLORS[scheme];
   const { charges: customCharges, addCharge, removeCharge } = useCustomCharges();
 
+  const detected = useDetectedSubscriptions();
+  const charges = useMemo(
+    () => listRecurringCharges(detected.subscriptions, customCharges),
+    [detected.subscriptions, customCharges],
+  );
   const calendar = useMemo(
-    () => buildSubscriptionCalendarMonth(year, month, now, customCharges),
-    [year, month, now, customCharges],
+    () => buildSubscriptionCalendarMonth(year, month, now, charges),
+    [year, month, now, charges],
   );
 
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth();
@@ -411,6 +420,16 @@ export function SubscriptionCalendar({ onOpenCharge }: Props) {
             </Pressable>
           ))}
         </Animated.View>
+      ) : null}
+
+      {charges.length === 0 ? (
+        <Text className="mt-4 text-[13px] leading-5 text-muted-foreground">
+          {detected.loading
+            ? "Reading your recurring payments…"
+            : detected.error
+              ? "Couldn't load your recurring payments right now. Pull to refresh or try again later."
+              : "No recurring payments found in your statements yet. Import more statements, or tap + to add one yourself."}
+        </Text>
       ) : null}
 
       <View className="mt-5 border-t border-border pt-4">

@@ -1,6 +1,6 @@
 import Constants from "expo-constants";
 import { LinearGradient } from "expo-linear-gradient";
-import { router, useFocusEffect } from "expo-router";
+import { router } from "expo-router";
 import type { LucideIcon } from "lucide-react-native";
 import {
   Receipt,
@@ -8,7 +8,7 @@ import {
   ChevronRight,
   FileText,
   FlaskConical,
-  Globe,
+  // Globe,
   HelpCircle,
   LogOut,
   Shield,
@@ -17,7 +17,7 @@ import {
   Wallet,
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -32,9 +32,9 @@ import {
 import { useAppLock } from "../../src/features/security/AppLockProvider";
 import { LINKED_ACCOUNTS_HREF } from "../../src/features/accounts/account.navigation";
 import { formatAccountsCount } from "../../src/features/accounts/account.validation";
-import { DEFAULT_ONBOARDING_LANGUAGE } from "../../src/features/onboarding/onboarding.constants";
-import { loadOnboardingLanguage } from "../../src/features/onboarding/onboarding.service";
-import type { OnboardingLanguage } from "../../src/features/onboarding/onboarding.types";
+// import { DEFAULT_ONBOARDING_LANGUAGE } from "../../src/features/onboarding/onboarding.constants";
+// import { loadOnboardingLanguage } from "../../src/features/onboarding/onboarding.service";
+// import type { OnboardingLanguage } from "../../src/features/onboarding/onboarding.types";
 import { useAccounts } from "../../src/hooks/useAccounts";
 import { useProfile } from "../../src/hooks/useProfile";
 import { COLORS, TRACEPAY } from "../../src/theme/colors";
@@ -43,7 +43,7 @@ const APP_VERSION = Constants.expoConfig?.version ?? "1.0.0";
 const PERSONAL_DETAILS_HREF = "/settings/account";
 const SECURITY_HREF = "/settings/security";
 const PRIVACY_HREF = "/settings/privacy";
-const LANGUAGE_HREF = "/settings/language";
+// const LANGUAGE_HREF = "/settings/language";
 const STATEMENT_COVERAGE_HREF = "/statements/coverage";
 const TRANSACTIONS_HREF = "/transactions-list";
 const HELP_HREF = "/settings/help";
@@ -112,13 +112,13 @@ const PREFERENCE_ROWS: SettingsRow[] = [
     Icon: ShieldCheck,
     href: PRIVACY_HREF,
   },
-  {
-    id: "language",
-    label: "Language",
-    value: "English",
-    Icon: Globe,
-    href: LANGUAGE_HREF,
-  },
+  // {
+  //   id: "language",
+  //   label: "Language",
+  //   value: "English",
+  //   Icon: Globe,
+  //   href: LANGUAGE_HREF,
+  // },
   {
     id: "help",
     label: "Help & support",
@@ -204,9 +204,9 @@ export default function ProfileScreen() {
   const { error, loading, profile, retry } = useProfile();
   const { accounts } = useAccounts();
   const [loggingOut, setLoggingOut] = useState(false);
-  const [languageLabel, setLanguageLabel] = useState<OnboardingLanguage>(
-    DEFAULT_ONBOARDING_LANGUAGE,
-  );
+  // const [languageLabel, setLanguageLabel] = useState<OnboardingLanguage>(
+  //   DEFAULT_ONBOARDING_LANGUAGE,
+  // );
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
   const trace = TRACEPAY[scheme];
@@ -215,19 +215,19 @@ export default function ProfileScreen() {
   const displayPhone = formatSaPhoneDisplay(profile?.phone);
   const initials = initialsFromName(profile?.fullName ?? "");
 
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      void loadOnboardingLanguage().then((language) => {
-        if (active) {
-          setLanguageLabel(language);
-        }
-      });
-      return () => {
-        active = false;
-      };
-    }, []),
-  );
+  // useFocusEffect(
+  //   useCallback(() => {
+  //     let active = true;
+  //     void loadOnboardingLanguage().then((language) => {
+  //       if (active) {
+  //         setLanguageLabel(language);
+  //       }
+  //     });
+  //     return () => {
+  //       active = false;
+  //     };
+  //   }, []),
+  // );
   const handleLogout = () => {
     if (loggingOut) {
       return;
@@ -272,9 +272,10 @@ export default function ProfileScreen() {
     return row;
   });
 
-  const preferenceRows = PREFERENCE_ROWS.map((row) =>
-    row.id === "language" ? { ...row, value: languageLabel } : row,
-  );
+  // const preferenceRows = PREFERENCE_ROWS.map((row) =>
+  //   row.id === "language" ? { ...row, value: languageLabel } : row,
+  // );
+  const preferenceRows = PREFERENCE_ROWS;
 
   const developerRows: SettingsRow[] = __DEV__
     ? [
