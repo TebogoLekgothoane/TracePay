@@ -41,6 +41,7 @@ from .engine import (
     NEAR_DAY_DUPLICATE_MIN_AMOUNT,
     NEAR_MISS_MIN_LISTED_AMOUNT,
     RECURRENCE_MIN_OBSERVATIONS,
+    ranked_destinations,
 )
 from .near_misses import build_near_miss
 from .models import (
@@ -285,6 +286,8 @@ def _irregular_transaction_leaks(snapshot: FinancialFeatureSnapshot) -> list[Lea
         if confidence is None:
             continue
         merchant_display = merchant_display_name_for(candidate.merchant_name)
+        if not merchant_display:
+            merchant_display = _payee_from_description(candidate.transaction_description)
         merchant = merchant_display or "Unknown merchant"
         safe_description = _safe_transaction_description(candidate.transaction_description)
         findings.append(
@@ -332,6 +335,21 @@ def _irregular_transaction_leaks(snapshot: FinancialFeatureSnapshot) -> list[Lea
 
 
 _LONG_DIGITS = re.compile(r"\b\d{6,}\b")
+
+
+def _payee_from_description(description: str) -> str | None:
+    """A short name from the statement line when no merchant was recognised."""
+    text = " ".join(description.split())
+    text = re.sub(
+        r"^(?:yoco|payfast|paystack|payu|dl|pos)\s*\*?\s*",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(r"\s{2,}", " ", text).strip(" -*")
+    if len(text) < 3:
+        return None
+    return text[:60].title()
 
 
 def _safe_transaction_description(description: str) -> str | None:
@@ -2151,6 +2169,8 @@ def _cash_leaks(
 DUPLICATE_MAX_TIME_GAP_MINUTES = 30
 # Without timestamps the evidence is only "same merchant, amount and day", so
 # only high-value, one-off style purchases are surfaced.
+# No times on the statement: two identical charges from R100 up are worth a look.
+# Below that, two ordinary purchases of the same amount are not a duplicate.
 DUPLICATE_UNTIMED_MIN_AMOUNT = Decimal("100")
 _DUPLICATE_EXCLUDED_CATEGORIES = frozenset(
     {"transfers", "cash withdrawal", "cash withdrawals", "atm cash withdrawal", "savings", "investments"}
@@ -2240,6 +2260,22 @@ def _owned_by_debit_order_detector(candidate) -> bool:
     )
 
 
+def _unidentified_duplicate_description(candidate, near_day: bool) -> str:
+    """What to say when the payee is only the words on the statement."""
+    label = candidate.description_signature or "the same words"
+    amount = format_zar(candidate.amount)
+    if near_day:
+        gap = (max(candidate.transaction_dates) - min(candidate.transaction_dates)).days
+        when = f"{gap} day{'s' if gap != 1 else ''} apart"
+    else:
+        when = "on the same day"
+    return (
+        f"Two charges of {amount}, {when}, are both described as {label}. "
+        "The statement cannot show whether that was one purchase billed twice or two purchases. "
+        "This needs a look, and it is not a confirmed duplicate."
+    )
+
+
 def _duplicate_leaks(
     snapshot: FinancialFeatureSnapshot,
     observations: dict[str, list[BehaviourObservation]],
@@ -2289,12 +2325,16 @@ def _duplicate_leaks(
         if candidate.nearby_reversal_or_refund:
             miss(candidate, "refund_nearby")
             continue
-        # With no merchant to vouch for it, only a tight timestamp pair is evidence
-        # enough: two rows within minutes with the same description and amount.
+        # An unrecognised payee is a possible duplicate only as a pair with one
+        # description. Times, when the statement prints them, have to be minutes
+        # apart. A statement that prints no times still has the identical lines.
         if unidentified and (
             len(dates) != 2
-            or candidate.min_time_gap_minutes is None
-            or candidate.min_time_gap_minutes > 15
+            or candidate.distinct_description_count > 1
+            or (
+                candidate.min_time_gap_minutes is not None
+                and candidate.min_time_gap_minutes > 15
+            )
         ):
             continue
         reason = _implausible_duplicate_reason(candidate, habitual)
@@ -2319,6 +2359,7 @@ def _duplicate_leaks(
     same_day_merchants = {item.merchant_name for item in snapshot.duplicate_candidates}
     for candidate in snapshot.near_day_duplicate_candidates:
         dates = candidate.transaction_dates
+        unidentified = candidate.description_signature is not None
         high_confidence_ratio = (
             Decimal(candidate.high_confidence_transaction_count) / Decimal(len(dates))
             if dates
@@ -2333,7 +2374,7 @@ def _duplicate_leaks(
             or candidate.amount < NEAR_DAY_DUPLICATE_MIN_AMOUNT
         ):
             continue
-        if high_confidence_ratio < Decimal("0.60"):
+        if high_confidence_ratio < Decimal("0.60") and not unidentified:
             miss(candidate, "merchant_not_recognised")
             continue
         if candidate.nearby_reversal_or_refund:
@@ -2412,19 +2453,21 @@ def _duplicate_leaks(
                     amount=candidate.amount,
                 ),
                 description=(
-                    (
+                    _unidentified_duplicate_description(candidate, near_day)
+                    if unidentified
+                    else (
                         "Two transactions with the same merchant and amount, a few days apart, "
                         "were grouped as a duplicate candidate that requires manual verification. "
                         "Two orders or visits can look identical, and matching merchant and "
                         "amount alone does not confirm a duplicate, accidental payment, error, "
                         "or recoverable amount."
-                    )
-                    if near_day
-                    else (
-                        "Same-day transactions with the same merchant and amount were grouped as a "
-                        "duplicate candidate that requires manual verification. Matching merchant, "
-                        "amount and date alone does not confirm a duplicate, accidental payment, "
-                        "error, or recoverable amount."
+                        if near_day
+                        else (
+                            "Same-day transactions with the same merchant and amount were grouped as a "
+                            "duplicate candidate that requires manual verification. Matching merchant, "
+                            "amount and date alone does not confirm a duplicate, accidental payment, "
+                            "error, or recoverable amount."
+                        )
                     )
                 ),
                 monthly_impact=impact,
@@ -3280,6 +3323,27 @@ def _pass_through_leaks(snapshot: FinancialFeatureSnapshot) -> list[LeakDetectio
         return []
     deposits = sum((event.amount for event in events), Decimal("0"))
     payments = sum(event.outflow_count for event in events)
+    destinations = ranked_destinations(events)
+    went_to = ""
+    if destinations:
+        shown = destinations[:4]
+        if len(shown) == 1:
+            listed = shown[0]
+        elif len(shown) == 2:
+            listed = f"{shown[0]} and {shown[1]}"
+        else:
+            listed = ", ".join(shown[:-1]) + f" and {shown[-1]}"
+        went_to = f" The largest payments went to {listed}."
+    description = (
+        f"{len(events)} deposits totalling {format_zar(deposits)} were paid back out within "
+        f"{events[0].days_window} days, in {payments} payments, leaving almost nothing in "
+        f"the account. The bank charged {format_zar(fees)} in fees on those days; that is "
+        "part of your bank fees, not extra."
+        f"{went_to} The statement does not show what the payments were for, so this is "
+        "not a finding that any of it was wasted."
+    )
+    if len(description) > 500:
+        description = description.replace(went_to, "")
     confidence = leak_confidence(
         support=None,
         observation_count=payments,
@@ -3294,13 +3358,7 @@ def _pass_through_leaks(snapshot: FinancialFeatureSnapshot) -> list[LeakDetectio
             leak_type="money_pass_through_leak",
             subject="deposits-paid-straight-out",
             title="Large deposits leave within days in many small payments",
-            description=(
-                f"{len(events)} deposits totalling {format_zar(deposits)} were paid back out within "
-                f"{events[0].days_window} days, in {payments} payments, leaving almost nothing in "
-                f"the account. The bank charged {format_zar(fees)} in fees on those days; that is "
-                "part of your bank fees, not extra. The statement does not show what the payments "
-                "were for, so this is not a finding that any of it was wasted."
-            ),
+            description=description,
             monthly_impact=fees.quantize(Decimal("0.01")),
             annual_impact=None,
             impact_kind="estimated",
@@ -3313,6 +3371,7 @@ def _pass_through_leaks(snapshot: FinancialFeatureSnapshot) -> list[LeakDetectio
                 "total_deposited": deposits,
                 "payment_count": payments,
                 "fees_in_windows": fees,
+                "destinations": destinations,
                 "amounts_not_additive_with_category_findings": True,
                 "events": [
                     {

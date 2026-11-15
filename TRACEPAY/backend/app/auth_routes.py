@@ -48,6 +48,15 @@ class ResendOtpBody(BaseModel):
     phone: str = ""
 
 
+class ChangePasswordBody(BaseModel):
+    currentPassword: str = ""
+    newPassword: str = ""
+
+
+class DeleteAccountBody(BaseModel):
+    password: str = ""
+
+
 def _limit(key: str, max_requests: int, window_seconds: int) -> None:
     if not allow_request(key, max_requests, window_seconds):
         raise AuthError(429, LIMIT_MESSAGE)
@@ -100,6 +109,25 @@ def forgot_password_route(body: ForgotPasswordBody, request: Request) -> dict[st
 def reset_password_route(body: ResetPasswordBody, request: Request) -> dict:
     _limit(f"reset-password:{_ip(request)}:{_phone_key(body.phone)}", 10, 10 * MINUTE)
     return auth_service.reset_password(body.phone, body.password, body.resetToken)
+
+
+@router.post("/change-password")
+def change_password_route(body: ChangePasswordBody, request: Request) -> dict:
+    _limit(f"change-password:{_ip(request)}", 10, 10 * MINUTE)
+    return auth_service.change_password(
+        request.headers.get("Authorization"),
+        body.currentPassword,
+        body.newPassword,
+    )
+
+
+@router.post("/delete-account")
+def delete_account_route(body: DeleteAccountBody, request: Request) -> dict[str, bool]:
+    _limit(f"delete-account:{_ip(request)}", 5, 15 * MINUTE)
+    return auth_service.delete_account(
+        request.headers.get("Authorization"),
+        body.password,
+    )
 
 
 def register_auth_routes(app: FastAPI) -> None:

@@ -310,6 +310,38 @@ def test_yearless_statement_without_a_printed_period_does_not_invent_years() -> 
     assert result.validation.rows_detected == 2 and result.validation.rows_rejected == 2
 
 
+def test_from_and_to_dates_on_following_lines_are_the_period() -> None:
+    from pdf_processor.statement_schema import period_from_text
+
+    start, end = period_from_text(
+        "Account\nFrom Date:\n01/09/2025\nOpening Balance:\nTo Date:\n26/09/2026\nClosing Balance:\n"
+    )
+    assert start == date(2025, 9, 1)
+    assert end == date(2026, 9, 26)
+    assert period_from_text("From the shop on 01/09/2025\nTo collect 26/09/2026\n") == (None, None)
+
+
+def test_a_repeated_printed_row_is_dropped_and_a_real_second_charge_is_kept() -> None:
+    from pdf_processor.validate import drop_repeated_printed_rows
+
+    def row(amount: str, balance: str) -> Transaction:
+        return Transaction(
+            date=date(2026, 6, 1),
+            description="Checkers",
+            amount=Decimal(amount),
+            type="debit",
+            balance=Decimal(balance),
+            source_row=1,
+            confidence="high",
+        )
+
+    kept = drop_repeated_printed_rows([row("-20", "80"), row("-20", "80"), row("-20", "60")])
+    assert [(item.amount, item.balance) for item in kept] == [
+        (Decimal("-20"), Decimal("80")),
+        (Decimal("-20"), Decimal("60")),
+    ]
+
+
 def test_a_statement_without_a_printed_period_is_marked_as_inferred() -> None:
     from pdf_processor.main import process_pdf
 

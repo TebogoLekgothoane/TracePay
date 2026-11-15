@@ -7,7 +7,6 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AnimatedBar } from "../../src/components/charts/AnimatedBar";
-import { CalendarHeat } from "../../src/components/charts/CalendarHeat";
 import { ChartBoundary } from "../../src/components/charts/ChartBoundary";
 import { ShareBar } from "../../src/components/charts/ShareBar";
 import { PaceChart } from "../../src/components/charts/PaceChart";
@@ -28,7 +27,6 @@ import {
   buildCategoryMovement,
   buildHighlights,
   buildLargestPayments,
-  buildSpendingCalendar,
   buildSpendingDrivers,
   buildSpendingPace,
   buildTopMerchants,
@@ -47,7 +45,6 @@ import { LEAK_COLORS, LEAK_SERIES } from "../../src/theme/leak-colors";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const SPEND_VIEWS = ["Categories", "Merchants"] as const;
-const TIME_VIEWS = ["Calendar", "Weekdays"] as const;
 const GRAINS: readonly TrendGrain[] = ["By week", "By month", "By day"];
 
 function shortDate(key: string): string {
@@ -82,10 +79,7 @@ export default function InsightsScreen() {
   const [customRange, setCustomRange] = useState<CustomRange>("Last 14 days");
   const [trendGrain, setTrendGrain] = useState<TrendGrain>("By week");
   const [spendView, setSpendView] = useState<(typeof SPEND_VIEWS)[number]>("Categories");
-  const [timeView, setTimeView] = useState<(typeof TIME_VIEWS)[number]>("Calendar");
   const [trendIndex, setTrendIndex] = useState<number | null>(null);
-  const [calendarKey, setCalendarKey] = useState<string | null>(null);
-  const [categoryKey, setCategoryKey] = useState<string | null>(null);
   const [rhythmSpan, setRhythmSpan] = useState<RhythmSpan>("6 months");
   const rhythm = useSpendingRhythm(rhythmSpan);
   const { colorScheme } = useColorScheme();
@@ -112,7 +106,6 @@ export default function InsightsScreen() {
       pace: buildSpendingPace(rows, range),
       movement: new Map(buildCategoryMovement(rows, range, 50).map((entry) => [entry.name, entry])),
       merchants: buildTopMerchants(rows, range),
-      calendar: buildSpendingCalendar(rows, range),
       weekdays: buildWeekdayAverages(rows, range),
       largest: buildLargestPayments(rows, range),
       drivers: buildSpendingDrivers(rows, range),
@@ -181,13 +174,10 @@ export default function InsightsScreen() {
   const change = report?.changePercent ?? null;
   const spendingUp = change !== null && change > 0;
   const cashFlow = analytics?.cashFlow;
-  const selectedDay = calendarKey ? analytics?.calendar.find((day) => day.key === calendarKey) : null;
 
   const handlePeriodChange = (next: Period) => {
     setPeriod(next);
     setTrendIndex(null);
-    setCalendarKey(null);
-    setCategoryKey(null);
   };
 
   return (
@@ -451,57 +441,61 @@ export default function InsightsScreen() {
                       segments={slices.map((slice, index) => ({ color: categoryColors[index % categoryColors.length], value: slice.amount }))}
                       label="Total"
                       total={formatRandWhole(breakdown?.total ?? 0)}
-                      highlight={categoryKey && slices.some((slice) => slice.name === categoryKey) ? slices.findIndex((slice) => slice.name === categoryKey) : null}
                     />
                     <View className="mt-5">
                       <RankedBars
                         items={categoryItems}
                         track={gridColor}
                         colors={barColors}
-                        selectedKey={categoryKey}
-                        onPress={(key) => setCategoryKey((current) => (current === key ? null : key))}
+                        onPress={(key) => {
+                          if (key === "Other") {
+                            const named = slices
+                              .filter((slice) => slice.name !== "Other")
+                              .map((slice) => slice.name)
+                              .join("|");
+                            router.push(
+                              `/transactions-list?excludeCategories=${encodeURIComponent(named)}` as never,
+                            );
+                            return;
+                          }
+                          router.push(
+                            `/transactions-list?category=${encodeURIComponent(key)}` as never,
+                          );
+                        }}
                       />
                     </View>
                   </>
                 ) : spendView === "Merchants" && merchantItems.length > 0 ? (
-                  <RankedBars items={merchantItems} track={gridColor} colors={barColors} />
+                  <RankedBars
+                    items={merchantItems}
+                    track={gridColor}
+                    colors={barColors}
+                    onPress={(key) => {
+                      router.push(
+                        `/transactions-list?merchant=${encodeURIComponent(key)}` as never,
+                      );
+                    }}
+                  />
                 ) : (
                   <Text className="text-[13px] leading-5 text-muted-foreground">Nothing to show for this view yet.</Text>
                 )}
                 </ChartBoundary>
               </Card>
 
-              {analytics.calendar.length > 1 ? (
-                <Card title="When you spend" order={4} action={<SegmentToggle value={timeView} options={TIME_VIEWS} onChange={setTimeView} />}>
-                  <ChartBoundary key={timeView}>
-                  {timeView === "Calendar" ? (
-                    <>
-                      <Text className="mb-3 text-[13px] text-muted-foreground">
-                        {selectedDay
-                          ? `${shortDate(selectedDay.key)} · ${selectedDay.amount > 0 ? formatRandWhole(selectedDay.amount) : "No spending"}`
-                          : analytics.calendar.length >= 35
-                            ? "The last five weeks. Tap a day; green is a light day, red the heaviest."
-                            : "Tap a day; green is a light day, red the heaviest."}
-                      </Text>
-                      <CalendarHeat
-                        days={analytics.calendar}
-                        selectedKey={calendarKey}
-                        onSelect={setCalendarKey}
-                        colors={{
-                          tiers: [LEAK_COLORS.down, LEAK_COLORS.yellow, LEAK_COLORS.orange, LEAK_COLORS.up],
-                          empty: palette.muted,
-                          text: palette.foreground,
-                          textOnHot: "#FFFFFF",
-                          selected: palette.foreground,
-                        }}
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <Text className="mb-4 text-[13px] text-muted-foreground">Average spend on each day of the week.</Text>
-                      <WeekdayBars days={analytics.weekdays} colors={{ days: categoryColors.slice(0, 7), grid: gridColor, label: palette.mutedForeground }} />
-                    </>
-                  )}
+              {analytics.weekdays.some((day) => day.average > 0) ? (
+                <Card title="When you spend" order={4}>
+                  <ChartBoundary>
+                    <Text className="mb-4 text-[13px] text-muted-foreground">
+                      Average spend on each day of the week.
+                    </Text>
+                    <WeekdayBars
+                      days={analytics.weekdays}
+                      colors={{
+                        days: categoryColors.slice(0, 7),
+                        grid: gridColor,
+                        label: palette.mutedForeground,
+                      }}
+                    />
                   </ChartBoundary>
                 </Card>
               ) : null}
@@ -522,24 +516,90 @@ export default function InsightsScreen() {
                     />
                   }
                 >
-                  <Text className="mb-3 text-[13px] text-muted-foreground">
-                    {trendSelected
-                      ? `${trendSelected.label}: ${formatRandWhole(trendSelected.current)} against ${formatRandWhole(trendSelected.previous)} before`
-                      : "Grey is the stretch before; red means you spent more, green means less."}
-                  </Text>
+                  {trendSelected ? (
+                    <View className="mb-4 gap-3">
+                      <View>
+                        <Text className="text-[15px] font-bold text-foreground">{trendSelected.detailLabel}</Text>
+                        <Text className="mt-0.5 text-[12px] text-muted-foreground">
+                          vs the matching stretch before
+                        </Text>
+                      </View>
+                      <View className="flex-row gap-3">
+                        <View className="flex-1 rounded-2xl bg-muted/70 px-3 py-2.5">
+                          <Text className="text-[11px] font-medium text-muted-foreground">This period</Text>
+                          <Text className="mt-1 text-[16px] font-bold text-foreground">
+                            {formatRandWhole(trendSelected.current)}
+                          </Text>
+                        </View>
+                        <View className="flex-1 rounded-2xl bg-muted/70 px-3 py-2.5">
+                          <Text className="text-[11px] font-medium text-muted-foreground">Before</Text>
+                          <Text className="mt-1 text-[16px] font-bold text-foreground">
+                            {formatRandWhole(trendSelected.previous)}
+                          </Text>
+                        </View>
+                      </View>
+                      <View className="flex-row items-center justify-between rounded-2xl bg-muted/50 px-3 py-2.5">
+                        <Text className="text-[13px] text-muted-foreground">Change</Text>
+                        <Text
+                          className="text-[14px] font-bold"
+                          style={{
+                            color:
+                              trendSelected.delta === 0
+                                ? palette.mutedForeground
+                                : trendSelected.delta > 0
+                                  ? LEAK_COLORS.up
+                                  : LEAK_COLORS.down,
+                          }}
+                        >
+                          {trendSelected.delta === 0
+                            ? "Same as before"
+                            : `${trendSelected.delta > 0 ? "↑" : "↓"} ${formatRandWhole(Math.abs(trendSelected.delta))}${
+                                trendSelected.changePercent !== null
+                                  ? ` · ${Math.round(Math.abs(trendSelected.changePercent))}%`
+                                  : ""
+                              }`}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <View className="mb-4 gap-3">
+                      <Text className="text-[13px] leading-5 text-muted-foreground">
+                        Each pair is this period next to the same stretch before. Tap a bar for the exact amounts.
+                      </Text>
+                      <View className="flex-row flex-wrap items-center gap-x-4 gap-y-2">
+                        <View className="flex-row items-center gap-1.5">
+                          <View
+                            className="h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: colorScheme === "dark" ? "#4A4860" : "#C9C7DA" }}
+                          />
+                          <Text className="text-[12px] text-muted-foreground">Before</Text>
+                        </View>
+                        <View className="flex-row items-center gap-1.5">
+                          <View className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: LEAK_COLORS.up }} />
+                          <Text className="text-[12px] text-muted-foreground">Higher now</Text>
+                        </View>
+                        <View className="flex-row items-center gap-1.5">
+                          <View className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: LEAK_COLORS.down }} />
+                          <Text className="text-[12px] text-muted-foreground">Lower now</Text>
+                        </View>
+                      </View>
+                    </View>
+                  )}
                   <ChartBoundary key={trendGrain}>
-                  <TrendBars
-                    points={trendPoints}
-                    selected={trendIndex}
-                    onSelect={setTrendIndex}
-                    colors={{
-                      up: LEAK_COLORS.up,
-                      down: LEAK_COLORS.down,
-                      previous: colorScheme === "dark" ? "#4A4860" : "#C9C7DA",
-                      grid: gridColor,
-                      label: palette.mutedForeground,
-                    }}
-                  />
+                    <TrendBars
+                      points={trendPoints}
+                      selected={trendIndex}
+                      onSelect={setTrendIndex}
+                      colors={{
+                        up: LEAK_COLORS.up,
+                        down: LEAK_COLORS.down,
+                        previous: colorScheme === "dark" ? "#4A4860" : "#C9C7DA",
+                        current: palette.foreground,
+                        average: LEAK_COLORS.blue,
+                        grid: gridColor,
+                        label: palette.mutedForeground,
+                      }}
+                    />
                   </ChartBoundary>
                 </Card>
               ) : null}

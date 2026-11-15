@@ -5,7 +5,7 @@ from typing import Any
 
 from .models import RawExtraction
 from .normalise import has_usable_structured_text
-from .ocr import ocr_page_images
+from .ocr import ocr_page_images_all
 from .tables import extract_camelot_tables
 from .text_chain import text_chain_transactions
 
@@ -71,22 +71,26 @@ def extract_layers(content: bytes, password: str | None = None) -> tuple[RawExtr
             method = "text"
             confidence = _TEXT_METHOD_CONFIDENCE
 
+    alternative_texts: list[str] = []
     needs_ocr = pymupdf.scanned or (method == "unknown" and useful_text == 0)
     if needs_ocr:
         images = pymupdf.page_images or _render_pdf_pages(content)
         if images:
-            ocr = ocr_page_images(images)
-            ocr_useful = len(" ".join(ocr.text.split()))
-            if ocr_useful >= _USEFUL_TEXT_MIN:
+            readings = ocr_page_images_all(images)
+            ocr = readings[0] if readings else None
+            ocr_useful = len(" ".join(ocr.text.split())) if ocr else 0
+            if ocr is not None and ocr_useful >= _USEFUL_TEXT_MIN:
                 text = ocr.text
                 useful_text = ocr_useful
                 method = "ocr"
                 confidence = round(ocr.confidence, 3)
+                alternative_texts = [other.text for other in readings[1:]]
                 logger.info(
-                    "pdf_ocr_used engine=%s confidence=%s useful_chars=%s",
+                    "pdf_ocr_used engine=%s confidence=%s useful_chars=%s other_engines=%s",
                     ocr.engine,
                     confidence,
                     useful_text,
+                    [other.engine for other in readings[1:]],
                 )
 
     if method == "unknown" and useful_text > 0:
@@ -102,6 +106,7 @@ def extract_layers(content: bytes, password: str | None = None) -> tuple[RawExtr
             useful_text_characters=useful_text,
             tables_found=len(tables),
             rows_found=sum(len(table) for table in tables),
+            ocr_alternative_texts=alternative_texts,
         ),
         text,
         tables,

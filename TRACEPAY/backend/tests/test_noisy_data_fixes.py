@@ -163,8 +163,6 @@ def test_the_unidentified_duplicate_carries_its_rows_and_its_own_registry_identi
     [
         # Different order references: two orders, not one charge twice.
         [_order("a"), _order("b", "ZENDOLO.COM ORDER 884377", time(12, 1)), ANCHOR],
-        # No times: a date alone is not enough for an unrecognised payee.
-        [_order("a", at=None), _order("b", at=None), ANCHOR],
         # Half an hour apart.
         [_order("a"), _order("b", at=time(12, 30)), ANCHOR],
         # Hours apart.
@@ -180,10 +178,29 @@ def test_the_unidentified_duplicate_carries_its_rows_and_its_own_registry_identi
         # Under the R20 floor.
         [_order("a", amount="15"), _order("b", amount="15", at=time(12, 1)), ANCHOR],
     ],
-    ids=["different-orders", "no-times", "30-minutes", "hours-apart", "three", "boilerplate", "tiny"],
+    ids=["different-orders", "30-minutes", "hours-apart", "three", "boilerplate", "tiny"],
 )
 def test_unrecognised_payee_duplicates_need_tight_evidence(rows) -> None:
     assert not _leaks(rows, "duplicate_payment_leak")
+
+
+def test_an_untimed_identical_pair_is_a_possible_duplicate() -> None:
+    rows = [_order("a", at=None), _order("b", at=None), ANCHOR]
+    [leak] = _leaks(rows, "duplicate_payment_leak")
+    assert leak.evidence["evidence_status"] == "possible"
+    assert "ZENDOLO COM" in leak.description
+    assert "not a confirmed duplicate" in leak.description
+
+
+def test_the_same_unknown_charge_a_few_days_apart_is_a_possible_duplicate() -> None:
+    rows = [
+        _order("a", at=None, day=date(2026, 8, 18)),
+        _order("b", at=None, day=date(2026, 8, 20)),
+        ANCHOR,
+    ]
+    [leak] = _leaks(rows, "duplicate_payment_leak")
+    assert "2 days apart" in leak.description
+    assert leak.evidence["evidence_status"] == "possible"
 
 
 def test_a_recognised_merchant_is_still_handled_as_before() -> None:

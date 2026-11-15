@@ -191,6 +191,36 @@ def test_a_refund_between_the_pair_removes_the_duplicate_claim() -> None:
     assert not _flagged([*pair, refund])
 
 
+def test_same_day_purchases_with_different_card_dates_are_two_purchases() -> None:
+    posted = date(2026, 8, 25)
+    pair = [
+        _transaction(
+            "ice-1", "100", posted, merchant="ICE WATER", category="Eating Out",
+            description="POS Purchase Ice Water", booking_date=date(2026, 8, 22),
+        ),
+        _transaction(
+            "ice-2", "100", posted, merchant="ICE WATER", category="Eating Out",
+            description="POS Purchase Ice Water", booking_date=date(2026, 8, 23),
+        ),
+    ]
+    assert not _flagged(pair)
+
+
+def test_the_same_card_date_can_still_be_a_duplicate() -> None:
+    posted = date(2026, 8, 25)
+    pair = [
+        _transaction(
+            "ice-1", "100", posted, merchant="ICE WATER", category="Eating Out",
+            description="POS Purchase Ice Water", booking_date=date(2026, 8, 22),
+        ),
+        _transaction(
+            "ice-2", "100", posted, merchant="ICE WATER", category="Eating Out",
+            description="POS Purchase Ice Water", booking_date=date(2026, 8, 22),
+        ),
+    ]
+    assert _flagged(pair)
+
+
 def test_a_same_day_duplicate_keeps_its_own_reading_when_a_near_day_pair_exists() -> None:
     same_day = _pair("1299", "GAME", "Shopping", prefix="s", day=date(2026, 7, 18))
     next_day = _transaction("n", "1299", date(2026, 7, 19), merchant="GAME", category="Shopping")

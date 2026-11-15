@@ -12,10 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { IconButton } from "../../src/components/ui/IconButton";
-import {
-  DEFAULT_ONBOARDING_LANGUAGE,
-  ONBOARDING_LANGUAGES,
-} from "../../src/features/onboarding/onboarding.constants";
+import { DEFAULT_ONBOARDING_LANGUAGE } from "../../src/features/onboarding/onboarding.constants";
 import {
   isOnboardingLanguage,
   loadOnboardingLanguage,
@@ -24,6 +21,65 @@ import {
 import { setOnboardingLanguage } from "../../src/features/onboarding/onboarding.store";
 import type { OnboardingLanguage } from "../../src/features/onboarding/onboarding.types";
 import { COLORS } from "../../src/theme/colors";
+
+type LanguageOption = {
+  id: OnboardingLanguage;
+  title: string;
+  subtitle?: string;
+};
+
+const LANGUAGE_OPTIONS: readonly LanguageOption[] = [
+  { id: "English", title: "English" },
+  { id: "isiXhosa", title: "isiXhosa", subtitle: "Xhosa" },
+  { id: "Afrikaans", title: "Afrikaans" },
+  { id: "Sesotho", title: "Sesotho", subtitle: "Southern Sotho" },
+  { id: "Setswana", title: "Setswana", subtitle: "Tswana" },
+  { id: "isiZulu", title: "isiZulu", subtitle: "Zulu" },
+];
+
+function LanguageRow({
+  option,
+  selected,
+  disabled,
+  onSelect,
+}: {
+  option: LanguageOption;
+  selected: boolean;
+  disabled: boolean;
+  onSelect: (language: OnboardingLanguage) => void;
+}) {
+  const { colorScheme } = useColorScheme();
+  const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
+
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected, disabled }}
+      accessibilityLabel={
+        option.subtitle ? `${option.title}, ${option.subtitle}` : option.title
+      }
+      disabled={disabled}
+      onPress={() => onSelect(option.id)}
+      className="min-h-[56px] flex-row items-center gap-3 px-4 active:opacity-70"
+    >
+      <View className="min-w-0 flex-1 py-3">
+        <Text className="text-[16px] font-medium text-foreground">
+          {option.title}
+        </Text>
+        {option.subtitle ? (
+          <Text className="mt-0.5 text-[13px] text-muted-foreground">
+            {option.subtitle}
+          </Text>
+        ) : null}
+      </View>
+      {selected ? (
+        <Check color={palette.primary} size={20} strokeWidth={2.4} />
+      ) : (
+        <View className="h-5 w-5" />
+      )}
+    </Pressable>
+  );
+}
 
 export default function LanguageSettingsScreen() {
   const { colorScheme } = useColorScheme();
@@ -34,6 +90,7 @@ export default function LanguageSettingsScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const mountedRef = useRef(true);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -46,10 +103,11 @@ export default function LanguageSettingsScreen() {
     let active = true;
     void loadOnboardingLanguage()
       .then((language) => {
-        if (active) {
-          setSelected(language);
-          setOnboardingLanguage(language);
+        if (!active) {
+          return;
         }
+        setSelected(language);
+        setOnboardingLanguage(language);
       })
       .finally(() => {
         if (active) {
@@ -62,23 +120,24 @@ export default function LanguageSettingsScreen() {
   }, []);
 
   const handleSelect = (language: OnboardingLanguage) => {
-    if (saving || loading || language === selected) {
+    if (!isOnboardingLanguage(language) || saving || loading || language === selected) {
       return;
     }
 
     const previous = selected;
+    const requestId = ++requestIdRef.current;
     setSelected(language);
     setSaving(true);
 
     void (async () => {
       try {
         await persistOnboardingLanguage(language);
-        setOnboardingLanguage(language);
-        if (mountedRef.current) {
-          router.back();
+        if (!mountedRef.current || requestId !== requestIdRef.current) {
+          return;
         }
+        setOnboardingLanguage(language);
       } catch {
-        if (!mountedRef.current) {
+        if (!mountedRef.current || requestId !== requestIdRef.current) {
           return;
         }
         setSelected(previous);
@@ -87,12 +146,14 @@ export default function LanguageSettingsScreen() {
           "Please try again in a moment.",
         );
       } finally {
-        if (mountedRef.current) {
+        if (mountedRef.current && requestId === requestIdRef.current) {
           setSaving(false);
         }
       }
     })();
   };
+
+  const busy = loading || saving;
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -110,57 +171,37 @@ export default function LanguageSettingsScreen() {
             >
               <ChevronLeft color={palette.foreground} size={22} strokeWidth={2} />
             </IconButton>
-            <View className="flex-1">
-              <Text className="text-[24px] font-bold text-foreground">
-                Language
-              </Text>
-              <Text className="mt-0.5 text-[14px] text-muted-foreground">
-                Choose your preferred TracePay language
-              </Text>
-            </View>
+            <Text className="flex-1 text-[24px] font-bold text-foreground">
+              Language
+            </Text>
           </View>
 
-          <Text className="mt-5 text-[13px] leading-5 text-muted-foreground">
-            This sets your language preference for TracePay on this device.
-            Full translations roll out language by language.
+          <Text className="mb-3 mt-8 text-[13px] font-semibold uppercase tracking-[0.6px] text-muted-foreground">
+            Preferred language
           </Text>
 
-          <View className="mt-5 overflow-hidden rounded-3xl bg-card">
-            {ONBOARDING_LANGUAGES.map((language, index) => {
-              const isSelected = language === selected;
-              return (
-                <Pressable
-                  key={language}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: isSelected }}
-                  disabled={loading || saving}
-                  onPress={() => {
-                    if (isOnboardingLanguage(language)) {
-                      handleSelect(language);
-                    }
-                  }}
-                  className={`min-h-[56px] flex-row items-center px-4 active:opacity-75 ${
-                    index < ONBOARDING_LANGUAGES.length - 1
-                      ? "border-b border-border/50"
-                      : ""
-                  } ${isSelected ? "bg-primary/10" : ""} ${
-                    loading || saving ? "opacity-60" : ""
-                  }`}
-                >
-                  <Text className="flex-1 text-[16px] font-semibold text-foreground">
-                    {language}
-                  </Text>
-                  {isSelected ? (
-                    <View className="h-6 w-6 items-center justify-center rounded-full bg-primary">
-                      <Check color={COLORS.white} size={14} strokeWidth={3} />
-                    </View>
-                  ) : (
-                    <View className="h-6 w-6 rounded-full border-2 border-border" />
-                  )}
-                </Pressable>
-              );
-            })}
+          <View
+            accessibilityRole="radiogroup"
+            className="overflow-hidden rounded-3xl bg-card"
+          >
+            {LANGUAGE_OPTIONS.map((option, index) => (
+              <View key={option.id}>
+                {index > 0 ? (
+                  <View className="ml-4 h-px bg-border/50" />
+                ) : null}
+                <LanguageRow
+                  disabled={busy}
+                  option={option}
+                  selected={option.id === selected}
+                  onSelect={handleSelect}
+                />
+              </View>
+            ))}
           </View>
+
+          <Text className="mt-4 px-1 text-[13px] leading-5 text-muted-foreground">
+            Applies to TracePay on this device.
+          </Text>
         </View>
       </ScrollView>
     </SafeAreaView>

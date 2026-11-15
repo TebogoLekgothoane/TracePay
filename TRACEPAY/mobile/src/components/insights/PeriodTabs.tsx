@@ -8,9 +8,11 @@ import { TRACEPAY } from "../../theme/colors";
 type PeriodTabsProps = {
   active: Period;
   onChange: (period: Period) => void;
+  /** When set, selected chip uses this solid color instead of the default purple gradient. */
+  accentColor?: string;
 };
 
-export function PeriodTabs({ active, onChange }: PeriodTabsProps) {
+export function PeriodTabs({ active, onChange, accentColor }: PeriodTabsProps) {
   const { colorScheme } = useColorScheme();
   const trace = TRACEPAY[colorScheme === "dark" ? "dark" : "light"];
 
@@ -29,8 +31,11 @@ export function PeriodTabs({ active, onChange }: PeriodTabsProps) {
               key={period}
               onPress={() => onChange(period)}
               className="overflow-hidden rounded-full px-4 py-2.5 active:opacity-75"
+              style={
+                selected && accentColor ? { backgroundColor: accentColor } : undefined
+              }
             >
-              {selected ? (
+              {selected && !accentColor ? (
                 <LinearGradient
                   pointerEvents="none"
                   colors={[...TRACEPAY.light.summaryGradient]}

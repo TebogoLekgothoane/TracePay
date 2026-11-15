@@ -153,7 +153,7 @@ def _orders(description: str, count: int = 12, start: date = date(2026, 3, 1)):
     ("description", "name"),
     [
         ("UBER EATS JOHANNESBURG", "Uber Eats"),
-        ("DL UBER CPT ZA", "Uber Eats"),
+        ("DL New Uber Eats CPT ZA", "Uber Eats"),
         ("MR D FOOD CAPE TOWN", "Mr D Food"),
         ("MRDFOOD*ORDER 8812", "Mr D Food"),
         ("BOLT FOOD SANDTON", "Bolt Food"),
@@ -183,7 +183,7 @@ def test_several_services_make_one_food_delivery_finding_that_names_them_all() -
 
 @pytest.mark.parametrize(
     "description",
-    ["CHECKERS SIXTY60 ORDER", "WOOLWORTHS DASH", "PICK N PAY ASAP", "BOLT RIDE JOHANNESBURG", "UBER TRIP CPT"],
+    ["CHECKERS SIXTY60 ORDER", "WOOLWORTHS DASH", "PICK N PAY ASAP", "BOLT RIDE JOHANNESBURG", "UBER TRIP CPT", "DL UBER CPT ZA"],
 )
 def test_groceries_and_rides_are_not_a_delivery_habit(description: str) -> None:
     assert delivery_service(description) is None

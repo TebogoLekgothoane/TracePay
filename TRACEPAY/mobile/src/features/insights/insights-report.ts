@@ -14,8 +14,14 @@ export type TrendGrain = "By day" | "By week" | "By month";
 
 export type TrendPoint = {
   label: string;
+  /** Short secondary label (e.g. date range) shown under the axis when space allows. */
+  detailLabel: string;
   current: number;
   previous: number;
+  /** current − previous. */
+  delta: number;
+  /** Null when previous is zero. */
+  changePercent: number | null;
 };
 
 export type InsightsReport = {
@@ -74,7 +80,12 @@ function sumDays(perDay: ReadonlyMap<string, number>, startKey: string, endKey: 
   return total;
 }
 
-type Bucket = { label: string; startKey: string; endKey: string };
+type Bucket = { label: string; detailLabel: string; startKey: string; endKey: string };
+
+function shortDayLabel(key: string): string {
+  const date = parseKey(key);
+  return `${date.getDate()} ${MONTHS[date.getMonth()]}`;
+}
 
 function trendBuckets(range: Pick<PeriodRange, "startKey" | "endKey">, grain: TrendGrain): Bucket[] {
   const days = daysInclusive(range.startKey, range.endKey);
@@ -84,7 +95,8 @@ function trendBuckets(range: Pick<PeriodRange, "startKey" | "endKey">, grain: Tr
       const key = addDays(range.endKey, index - (shown - 1));
       const date = parseKey(key);
       return {
-        label: shown <= 7 ? WEEKDAYS[date.getDay()] : String(date.getDate()),
+        label: WEEKDAYS[date.getDay()] ?? String(date.getDate()),
+        detailLabel: shortDayLabel(key),
         startKey: key,
         endKey: key,
       };
@@ -94,9 +106,10 @@ function trendBuckets(range: Pick<PeriodRange, "startKey" | "endKey">, grain: Tr
     const buckets: Bucket[] = [];
     for (let start = range.startKey; start <= range.endKey; start = addDays(start, 7)) {
       const end = addDays(start, 6) > range.endKey ? range.endKey : addDays(start, 6);
-      const date = parseKey(start);
       buckets.push({
-        label: `${date.getDate()} ${MONTHS[date.getMonth()]}`,
+        label: shortDayLabel(start),
+        detailLabel:
+          start === end ? shortDayLabel(start) : `${shortDayLabel(start)}–${shortDayLabel(end)}`,
         startKey: start,
         endKey: end,
       });
@@ -113,10 +126,16 @@ function trendBuckets(range: Pick<PeriodRange, "startKey" | "endKey">, grain: Tr
   ) {
     const monthStart = dateKey(cursor);
     const monthEnd = dateKey(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0));
+    const startKey = monthStart < range.startKey ? range.startKey : monthStart;
+    const endKey = monthEnd > range.endKey ? range.endKey : monthEnd;
     buckets.push({
-      label: MONTHS[cursor.getMonth()],
-      startKey: monthStart < range.startKey ? range.startKey : monthStart,
-      endKey: monthEnd > range.endKey ? range.endKey : monthEnd,
+      label: MONTHS[cursor.getMonth()] ?? "Month",
+      detailLabel:
+        startKey === monthStart && endKey === monthEnd
+          ? `${MONTHS[cursor.getMonth()]} ${cursor.getFullYear()}`
+          : `${shortDayLabel(startKey)}–${shortDayLabel(endKey)}`,
+      startKey,
+      endKey,
     });
   }
   return buckets.slice(-MAX_TREND_POINTS);
@@ -169,18 +188,21 @@ export function buildInsightsReport(
     dailyAverage: days > 0 ? total / days : 0,
     peakDay,
     sparkline: downsample(dailyValues),
-    trend: trendBuckets(range, grain).map((bucket) => ({
-      label: bucket.label,
-      current: Math.max(sumDays(perDay, bucket.startKey, bucket.endKey), 0),
-      previous: Math.max(
-        sumDays(
-          perDay,
-          addDays(bucket.startKey, -days),
-          addDays(bucket.endKey, -days),
-        ),
+    trend: trendBuckets(range, grain).map((bucket) => {
+      const current = Math.max(sumDays(perDay, bucket.startKey, bucket.endKey), 0);
+      const previous = Math.max(
+        sumDays(perDay, addDays(bucket.startKey, -days), addDays(bucket.endKey, -days)),
         0,
-      ),
-    })),
+      );
+      return {
+        label: bucket.label,
+        detailLabel: bucket.detailLabel,
+        current,
+        previous,
+        delta: current - previous,
+        changePercent: previous > 0 ? ((current - previous) / previous) * 100 : null,
+      };
+    }),
   };
 }
 

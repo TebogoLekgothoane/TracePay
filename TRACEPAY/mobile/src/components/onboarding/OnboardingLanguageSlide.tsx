@@ -16,13 +16,11 @@ function LanguageRow({
   language,
   selected,
   onSelect,
-  selectedBackground,
   border,
 }: {
   language: OnboardingLanguage;
   selected: boolean;
   onSelect: (language: string) => void;
-  selectedBackground: string;
   border: string;
 }) {
   const handlePress = useCallback(() => {
@@ -36,7 +34,6 @@ function LanguageRow({
       accessibilityLabel={language}
       onPress={handlePress}
       className="min-h-[56px] flex-row items-center rounded-2xl px-4 active:opacity-80"
-      style={selected ? { backgroundColor: selectedBackground } : undefined}
     >
       <Text className="flex-1 text-[16px] font-semibold text-foreground">
         {language}
@@ -84,7 +81,6 @@ function OnboardingLanguageSlideComponent({
               language={language}
               selected={language === selectedLanguage}
               onSelect={onSelect}
-              selectedBackground={palette.surfaceSoft}
               border={palette.placeholder}
             />
           ))}

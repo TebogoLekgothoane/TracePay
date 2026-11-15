@@ -26,7 +26,6 @@ export const LEAK_DEBUG_CATEGORIES: readonly LeakDebugCategory[] = [
     title: "Subscriptions",
     blurb: "Recurring subscriptions and overlapping services.",
     leakTypes: ["subscription_leak", "duplicate_streaming_leak"],
-    href: "/debug/subscriptions",
   },
   {
     key: "airtime",
@@ -79,11 +78,26 @@ export function leakDebugCategoryByKey(key: string | undefined): LeakDebugCatego
   return LEAK_DEBUG_CATEGORIES.find((category) => category.key === key) ?? null;
 }
 
+const CATEGORISED_TYPES = new Set(
+  LEAK_DEBUG_CATEGORIES.filter((category) => category.key !== "other").flatMap(
+    (category) => category.leakTypes,
+  ),
+);
+
+/** A finding another finding already explains. Shown once, on the finding that explains it. */
+export function isVisibleLeak(leak: { evidence?: Record<string, unknown> | null }): boolean {
+  return leak.evidence?.redundant_for_display !== true;
+}
+
 export function belongsToCategory(
   category: LeakDebugCategory,
   item: { leak_type: string },
 ): boolean {
-  return category.leakTypes.includes(item.leak_type);
+  if (category.leakTypes.includes(item.leak_type)) {
+    return true;
+  }
+  // A new finding type still appears, under Other, instead of disappearing.
+  return category.key === "other" && !CATEGORISED_TYPES.has(item.leak_type);
 }
 
 export function categoryHref(category: LeakDebugCategory): string {
@@ -104,12 +118,13 @@ export function categoryTotal(
     status?: string;
     estimated_monthly_impact: number | string | null;
     analysis?: { counted_in_total?: boolean } | null;
+    evidence?: Record<string, unknown> | null;
   }>,
 ): CategoryTotal {
   let count = 0;
   let monthly = 0;
   for (const leak of leaks) {
-    if (!belongsToCategory(category, leak)) continue;
+    if (!isVisibleLeak(leak) || !belongsToCategory(category, leak)) continue;
     count += 1;
     const open = leak.status === "active" || leak.status === "monitoring";
     const value = Number(leak.estimated_monthly_impact);

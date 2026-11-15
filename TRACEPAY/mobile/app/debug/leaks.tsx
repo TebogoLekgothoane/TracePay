@@ -16,10 +16,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { IconButton } from "../../src/components/ui/IconButton";
 import { formatCurrency } from "../../src/features/leak-intelligence/leak-intelligence.format";
+import type { LeakDetection } from "../../src/features/leak-intelligence/leak-intelligence.types";
 import {
   LEAK_DEBUG_CATEGORIES,
+  belongsToCategory,
   categoryHref,
   categoryTotal,
+  isVisibleLeak,
   type LeakDebugCategory,
 } from "../../src/features/leak-intelligence/leak-debug-categories";
 import { SyntheticSourceNote } from "../../src/features/synthetic-intelligence/SyntheticSourceNote";
@@ -27,7 +30,7 @@ import { scenarioLabel } from "../../src/features/synthetic-intelligence/synthet
 import { useLeakIntelligenceDebug } from "../../src/hooks/useLeakIntelligenceDebug";
 import { useStoredSyntheticAnalysis } from "../../src/hooks/useStoredSyntheticAnalysis";
 import { COLORS } from "../../src/theme/colors";
-import { ErrorState, LoadingState } from "./leak-intelligence";
+import { ErrorState, FindingCard, LoadingState } from "./leak-intelligence";
 
 const CATEGORY_ICONS: Record<string, LucideIcon> = {
   fees: Landmark,
@@ -115,21 +118,15 @@ function LeaksDebugScreen() {
                 ))}
               </ScrollView>
 
-              <Text className="mb-1 mt-7 text-[22px] font-bold tracking-[-0.3px] text-foreground">
-                Potential leaks
-              </Text>
-              <Text className="text-[14px] leading-5 text-muted-foreground">
-                We found {result.leaks.length} {result.leaks.length === 1 ? "thing" : "things"} worth
-                reviewing.
-              </Text>
+              <FindingsList leaks={result.leaks.filter(isVisibleLeak)} />
               <Pressable
                 accessibilityRole="button"
                 className="mt-4 rounded-3xl bg-card px-4 py-4 active:opacity-80"
                 onPress={() => router.push("/debug/leak-intelligence" as never)}
               >
-                <Text className="text-[16px] font-bold text-foreground">All findings</Text>
+                <Text className="text-[16px] font-bold text-foreground">Full report</Text>
                 <Text className="mt-1 text-[13px] leading-5 text-muted-foreground">
-                  Every finding with its evidence, near misses and the tuning report.
+                  The same findings as a report, with near misses and the tuning view.
                 </Text>
               </Pressable>
               {loading ? (
@@ -140,6 +137,40 @@ function LeaksDebugScreen() {
         </View>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+/** Every visible finding, under the category it belongs to. Nothing is left off the page. */
+function FindingsList({ leaks }: { leaks: LeakDetection[] }) {
+  const groups = LEAK_DEBUG_CATEGORIES.map((category) => ({
+    category,
+    leaks: leaks.filter((leak) => belongsToCategory(category, leak)),
+  })).filter((group) => group.leaks.length > 0);
+
+  return (
+    <View className="mt-7">
+      <Text className="mb-1 text-[22px] font-bold tracking-[-0.3px] text-foreground">
+        Potential leaks
+      </Text>
+      <Text className="text-[14px] leading-5 text-muted-foreground">
+        {leaks.length === 0
+          ? "Nothing in these statements was flagged."
+          : `${leaks.length} ${leaks.length === 1 ? "finding" : "findings"}, each with what the rows show.`}
+      </Text>
+      {groups.map((group) => (
+        <View key={group.category.key} className="mt-6">
+          <Text className="text-[17px] font-bold text-foreground">
+            {group.category.title} ({group.leaks.length})
+          </Text>
+          <Text className="mt-0.5 text-[13px] text-muted-foreground">{group.category.blurb}</Text>
+          <View className="mt-3 gap-3">
+            {group.leaks.map((leak) => (
+              <FindingCard key={leak.fingerprint} leak={leak} />
+            ))}
+          </View>
+        </View>
+      ))}
+    </View>
   );
 }
 

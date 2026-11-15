@@ -124,11 +124,22 @@ def test_paddleocr_failure_falls_back_to_tesseract(monkeypatch: pytest.MonkeyPat
     assert result.confidence == 0.66
 
 
-def test_high_confidence_paddleocr_skips_tesseract(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_high_confidence_paddleocr_is_preferred_and_tesseract_is_kept_for_recovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both engines read every scanned page: they misread different rows, and a row one of
+    them lost is recovered from the other when the balances prove it. The confident Paddle
+    reading is the one the text is taken from."""
+    from pdf_processor.ocr import ocr_page_images_all
+
     image = np.zeros((64, 64, 3), dtype=np.uint8)
     monkeypatch.setattr(
         "pdf_processor.ocr._tesseract_ocr",
-        lambda _images: (_ for _ in ()).throw(AssertionError("Tesseract should not run")),
+        lambda _images: OcrResult(
+            text="18/09/2026 TESSERACT PAYMENT -450.00 extra words from the other engine " * 8,
+            confidence=0.80,
+            engine="tesseract",
+        ),
     )
     monkeypatch.setattr(
         "pdf_processor.ocr._paddle_ocr",
@@ -141,17 +152,25 @@ def test_high_confidence_paddleocr_skips_tesseract(monkeypatch: pytest.MonkeyPat
     result = ocr_page_images([image])
     assert result.engine == "paddleocr"
     assert result.confidence == 0.91
+    assert [item.engine for item in ocr_page_images_all([image])] == ["paddleocr", "tesseract"]
 
 
 def test_scanned_pdf_uses_ocr_and_records_confidence(monkeypatch: pytest.MonkeyPatch) -> None:
     content = _scanned_pdf()
     monkeypatch.setattr(
-        "pdf_processor.extract.ocr_page_images",
-        lambda images: OcrResult(
-            text="18/09/2026 SCANNED PAYMENT -450.00 extra useful characters for the threshold padding",
-            confidence=0.88,
-            engine="paddleocr",
-        ),
+        "pdf_processor.extract.ocr_page_images_all",
+        lambda images: [
+            OcrResult(
+                text="18/09/2026 SCANNED PAYMENT -450.00 extra useful characters for the threshold padding",
+                confidence=0.88,
+                engine="paddleocr",
+            ),
+            OcrResult(
+                text="18/09/2026 SCANNED PAYMENT -450.00 the other engine's reading of the same page",
+                confidence=0.70,
+                engine="tesseract",
+            ),
+        ],
     )
     raw, text, tables = extract_layers(content)
     assert raw.extraction_method == "ocr"
@@ -159,6 +178,9 @@ def test_scanned_pdf_uses_ocr_and_records_confidence(monkeypatch: pytest.MonkeyP
     assert raw.raw_text_available is True
     assert "SCANNED PAYMENT" in text
     assert tables == []
+    # The other reading travels with the extraction for row recovery, but never into the API.
+    assert len(raw.ocr_alternative_texts) == 1
+    assert "ocr_alternative_texts" not in raw.model_dump(mode="json")
 
 
 def test_camelot_accuracy_is_normalised_to_unit_interval(monkeypatch: pytest.MonkeyPatch) -> None:

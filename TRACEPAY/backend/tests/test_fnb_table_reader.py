@@ -58,6 +58,15 @@ Facility Limit
 """
 
 
+def test_a_statement_date_on_the_same_line_as_its_label_is_read():
+    from pdf_processor.statement_figures import extract_printed_figures
+
+    figures = extract_printed_figures("Statement Date : 6 October 2026\nFacility Limit\n2,000.00\n")
+    assert figures is not None
+    assert figures.statement_date == date(2026, 10, 6)
+    assert figures.facility == Decimal("2000.00")
+
+
 def test_the_printed_fee_summary_is_read_with_its_marks():
     from pdf_processor.statement_figures import extract_printed_figures
 

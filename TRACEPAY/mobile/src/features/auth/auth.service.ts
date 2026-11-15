@@ -1,6 +1,7 @@
 import { authRequest } from "../../api/auth.api";
 import { getSupabase, isSupabaseConfigured } from "../../lib/supabase";
 import {
+  AUTH_DELETE_ACCOUNT_TIMEOUT_MS,
   DEFAULT_PROFILE_CURRENCY,
   FALLBACK_PROFILE_NAME,
 } from "./auth.constants";
@@ -368,6 +369,86 @@ export async function resetPassword(password: string, phone?: string): Promise<v
 
   await persistSession(result.session);
   clearPendingCredentials();
+}
+
+async function requireAccessToken(): Promise<string> {
+  const session = await getAuthSession();
+  if (!session) {
+    throw new AuthError("Your session expired. Please sign in again.");
+  }
+  return session.accessToken;
+}
+
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  if (!currentPassword) {
+    throw new AuthError("Enter your current password.");
+  }
+  if (!isValidPassword(newPassword)) {
+    throw new AuthError("Password must be at least 8 characters.");
+  }
+  if (currentPassword === newPassword) {
+    throw new AuthError(
+      "Choose a new password that is different from your current one.",
+    );
+  }
+
+  const accessToken = await requireAccessToken();
+  const result = readSignInResult(
+    await authRequest<unknown>("/auth/change-password", {
+      accessToken,
+      body: {
+        currentPassword,
+        newPassword,
+      },
+    }),
+  );
+
+  if (!result.session) {
+    throw new AuthError("Password updated. Log in with your new password.");
+  }
+
+  await persistSession(result.session);
+}
+
+/**
+ * Permanently deletes the signed-in TracePay user, including bank statements
+ * and related rows. Requires the account password. Caller must clear device lock.
+ */
+export async function deleteCurrentUser(password: string): Promise<void> {
+  if (!password) {
+    throw new AuthError("Enter your password to delete your account.");
+  }
+
+  const accessToken = await requireAccessToken();
+  await authRequest<{ ok: boolean }>("/auth/delete-account", {
+    accessToken,
+    timeoutMs: AUTH_DELETE_ACCOUNT_TIMEOUT_MS,
+    body: { password },
+  });
+
+  // Server already removed the user; wipe local session without calling remote sign-out.
+  clearPendingCredentials();
+  freshAuthenticationAt = null;
+  profileRequest = null;
+  profileUpdateRequest = null;
+  resetProfileSnapshot();
+  resetAccountsSnapshot();
+  resetBilling();
+  await resetRevenueCat();
+  clearQueryCache();
+  invalidateTransactionLists();
+  invalidateTransactionTotals();
+  await clearFinancialAccountsSetupDismissed().catch(() => undefined);
+  await clearOnboardingCompleted().catch(() => undefined);
+
+  if (isSupabaseConfigured()) {
+    await getSupabase().auth.signOut({ scope: "local" });
+  }
+
+  emitSessionPresence(false);
 }
 
 export async function verifyPhoneOtp(code: string, phone?: string): Promise<void> {

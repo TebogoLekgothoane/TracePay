@@ -280,3 +280,117 @@ def test_register_rejects_short_password_with_error_body() -> None:
     )
     assert response.status_code == 400
     assert response.json() == {"error": "Password must be at least 8 characters."}
+
+
+def test_change_password_requires_bearer_token() -> None:
+    response = TestClient(app).post(
+        "/auth/change-password",
+        json={"currentPassword": "old-password", "newPassword": "new-password"},
+    )
+    assert response.status_code == 401
+    assert response.json() == {"error": "Sign in again to continue."}
+
+
+def test_delete_account_requires_bearer_token() -> None:
+    response = TestClient(app).post(
+        "/auth/delete-account",
+        json={"password": "password123"},
+    )
+    assert response.status_code == 401
+    assert response.json() == {"error": "Sign in again to continue."}
+
+
+def test_change_password_updates_when_current_matches(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, str]] = []
+
+    def fake_user(_authorization: str | None) -> dict[str, Any]:
+        return {"id": "user-1", "phone": "+27821234567"}
+
+    def fake_session(phone: str, password: str) -> dict[str, str] | None:
+        calls.append((phone, password))
+        if password == "old-password-1":
+            return {"accessToken": "old-access", "refreshToken": "old-refresh"}
+        if password == "new-password-1":
+            return {"accessToken": "new-access", "refreshToken": "new-refresh"}
+        return None
+
+    updated: dict[str, Any] = {}
+
+    def fake_update(user_id: str, fields: dict[str, Any], failure: str) -> None:
+        updated["user_id"] = user_id
+        updated["fields"] = fields
+
+    monkeypatch.setattr(auth_service, "require_access_token_user", fake_user)
+    monkeypatch.setattr(auth_service, "_password_session", fake_session)
+    monkeypatch.setattr(auth_service, "_update_user", fake_update)
+
+    response = TestClient(app).post(
+        "/auth/change-password",
+        headers={"Authorization": "Bearer test-token"},
+        json={"currentPassword": "old-password-1", "newPassword": "new-password-1"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "ok": True,
+        "session": {"accessToken": "new-access", "refreshToken": "new-refresh"},
+    }
+    assert updated == {
+        "user_id": "user-1",
+        "fields": {"password": "new-password-1", "phone_confirm": True},
+    }
+    assert calls == [
+        ("+27821234567", "old-password-1"),
+        ("+27821234567", "new-password-1"),
+    ]
+
+
+def test_delete_account_removes_statements_then_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    removed_paths: list[str] = []
+    deleted_users: list[str] = []
+    cleared_phones: list[str] = []
+
+    monkeypatch.setattr(
+        auth_service,
+        "require_access_token_user",
+        lambda _authorization: {"id": "user-1", "phone": "+27821234567"},
+    )
+    monkeypatch.setattr(
+        auth_service,
+        "_password_session",
+        lambda phone, password: (
+            {"accessToken": "a", "refreshToken": "r"}
+            if phone == "+27821234567" and password == "password123"
+            else None
+        ),
+    )
+    monkeypatch.setattr(
+        auth_service,
+        "_statement_file_paths",
+        lambda user_id: [f"statements/{user_id}/one.pdf", f"statements/{user_id}/two.pdf"],
+    )
+    monkeypatch.setattr(
+        auth_service,
+        "_remove_statement_files",
+        lambda paths: removed_paths.extend(paths),
+    )
+    monkeypatch.setattr(
+        auth_service,
+        "_clear_otp_for_phone",
+        lambda phone: cleared_phones.append(phone),
+    )
+    monkeypatch.setattr(
+        auth_service,
+        "_delete_user",
+        lambda user_id: deleted_users.append(user_id),
+    )
+
+    response = TestClient(app).post(
+        "/auth/delete-account",
+        headers={"Authorization": "Bearer test-token"},
+        json={"password": "password123"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+    assert removed_paths == ["statements/user-1/one.pdf", "statements/user-1/two.pdf"]
+    assert cleared_phones == ["+27821234567"]
+    assert deleted_users == ["user-1"]

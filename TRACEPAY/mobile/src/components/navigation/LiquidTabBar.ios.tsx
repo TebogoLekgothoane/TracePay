@@ -22,12 +22,24 @@ import { useId } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { COLORS, withAlpha } from "../../theme/colors";
+import { COLORS } from "../../theme/colors";
+
+type TabRoute = {
+  key: string;
+  name: string;
+};
 
 type LiquidTabBarProps = {
   state: {
     index: number;
-    routes: { key: string; name: string }[];
+    routes: TabRoute[];
+  };
+  emitter: {
+    emit: (event: {
+      type: "tabPress";
+      target: string;
+      canPreventDefault: true;
+    }) => { defaultPrevented: boolean };
   };
   navigateToTab: (routeKey: string) => void;
 };
@@ -49,7 +61,7 @@ const BAR_HORIZONTAL_PADDING = 6;
 const TAB_BUTTON_HEIGHT = 36;
 const SLOT = (BAR_WIDTH - BAR_HORIZONTAL_PADDING * 2) / TAB_ITEMS.length;
 
-export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
+export function LiquidTabBar({ state, emitter, navigateToTab }: LiquidTabBarProps) {
   const insets = useSafeAreaInsets();
   const namespaceId = useId();
   const { colorScheme } = useColorScheme();
@@ -84,9 +96,7 @@ export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
         }}
       >
         <Namespace id={namespaceId}>
-          <GlassEffectContainer
-            spacing={10}
-          >
+          <GlassEffectContainer spacing={10}>
             <HStack
               spacing={0}
               modifiers={[
@@ -102,15 +112,27 @@ export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
               ]}
             >
               {TAB_ITEMS.map((item) => {
+                const route = state.routes.find((candidate) => candidate.name === item.key);
                 const selected = focusedKey === item.key;
 
                 return (
                   <Button
                     key={item.key}
                     onPress={() => {
-                    const route = state.routes.find((candidate) => candidate.name === item.key);
-                    if (route) navigateToTab(route.key);
-                  }}
+                      if (!route) {
+                        return;
+                      }
+
+                      const event = emitter.emit({
+                        type: "tabPress",
+                        target: route.key,
+                        canPreventDefault: true,
+                      });
+
+                      if (!selected && !event.defaultPrevented) {
+                        navigateToTab(route.key);
+                      }
+                    }}
                     modifiers={[
                       frame({ width: SLOT, height: TAB_BUTTON_HEIGHT }),
                       buttonStyle("plain"),
@@ -128,20 +150,13 @@ export function LiquidTabBar({ state, navigateToTab }: LiquidTabBarProps) {
                             glassEffectId("tab-liquid", namespaceId),
                           ]
                         : []),
-                      animation(
-                        Animation.spring({ duration: 0.55 }),
-                        focusedIndex,
-                      ),
+                      animation(Animation.spring({ duration: 0.55 }), focusedIndex),
                     ]}
                   >
                     <Image
                       systemName={item.systemImage}
                       size={19}
-                      color={
-                        selected
-                          ? palette.foreground
-                          : palette.mutedForeground
-                      }
+                      color={selected ? palette.foreground : palette.mutedForeground}
                     />
                   </Button>
                 );

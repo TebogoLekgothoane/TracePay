@@ -55,7 +55,8 @@ def test_the_endpoint_returns_everything_a_screen_needs_to_lay_out_the_report() 
         "name": "Rent (LANDLORD)",
         "amount": "R25,300, about **53%** of the R48,048 salary",
     }
-    assert len(payload["commitments"]) == 12
+    # "DL UBER CPT" rides are a monthly commitment of their own now that they are not read as Uber Eats.
+    assert len(payload["commitments"]) == 13
     assert payload["context_notes"][0].startswith("salary fell from R51,022 to R48,048")
     assert any("labelled or explained" in note for note in payload["near_misses"])
     assert payload["coverage_limits"][0].startswith("Only this account is visible.")

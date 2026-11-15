@@ -59,8 +59,8 @@ def test_the_fee_rows_add_up_to_the_stated_total_and_split_by_source(by_key) -> 
 
 def test_the_delivery_rows_are_the_orders_the_text_counts(by_key) -> None:
     finding = by_key["food_delivery"]
-    assert finding.rows_total == 52
-    assert _total(finding) == Decimal("9727.68")
+    assert finding.rows_total == 44
+    assert _total(finding) == Decimal("8598.86")
 
 
 def test_a_long_list_is_cut_but_the_count_is_never_hidden(by_key) -> None:

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -11,8 +12,11 @@ from app.config import settings
 logger = logging.getLogger("tracepay.auth")
 
 
-def _fetch_supabase_user_id(token: str) -> str:
-    """Blocking Supabase Auth user lookup. Call only from a worker thread."""
+def fetch_supabase_user(token: str, timeout: float = 10) -> dict[str, Any]:
+    """Blocking Supabase Auth user lookup. Call only from a worker thread.
+
+    Authorization must use app_metadata from this response. user_metadata is editable by the user.
+    """
     project_url = settings.supabase_url.rstrip("/")
     publishable_key = settings.supabase_publishable_key()
     if not project_url or not publishable_key:
@@ -25,7 +29,7 @@ def _fetch_supabase_user_id(token: str) -> str:
         method="GET",
     )
     try:
-        with urlopen(request, timeout=10) as response:
+        with urlopen(request, timeout=timeout) as response:
             user = json.loads(response.read().decode("utf-8"))
     except (HTTPError, URLError, TimeoutError, ValueError) as error:
         logger.warning(
@@ -37,7 +41,15 @@ def _fetch_supabase_user_id(token: str) -> str:
             detail="The Supabase access token is invalid or expired.",
         ) from error
 
-    user_id = user.get("id") if isinstance(user, dict) else None
+    if not isinstance(user, dict):
+        logger.warning("auth_rejected reason=supabase_user_not_object")
+        raise HTTPException(status_code=401, detail="The Supabase access token is invalid.")
+    return user
+
+
+def _fetch_supabase_user_id(token: str) -> str:
+    """Blocking Supabase Auth user lookup. Call only from a worker thread."""
+    user_id = fetch_supabase_user(token).get("id")
     if not isinstance(user_id, str) or not user_id:
         logger.warning("auth_rejected reason=supabase_user_missing_id")
         raise HTTPException(status_code=401, detail="The Supabase access token is invalid.")

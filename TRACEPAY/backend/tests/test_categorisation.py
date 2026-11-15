@@ -40,10 +40,14 @@ LIVE_CATEGORIES = [
     ("WOOLWORTHS", "Groceries"), ("CHECKERS", "Groceries"), ("SHOPRITE", "Groceries"),
     ("NANDO'S", "Restaurants"), ("MUGG & BEAN", "Restaurants"),
     ("KFC", "Fast Food"), ("MCDONALDS", "Fast Food"),
-    ("UBER", "Ride Hailing"), ("BOLT", "Ride Hailing"), ("SHELL", "Fuel"), ("GAUTRAIN", "Public Transport"),
+    ("UBER", "Ride Hailing"), ("BOLT", "Ride Hailing"), ("DL BOLT", "Ride Hailing"),
+    ("BOLT.EU/O/2607201830", "Ride Hailing"), ("BOLT.EU/S/260", "Subscriptions"),
+    ("SHELL", "Fuel"), ("GAUTRAIN", "Public Transport"),
     ("MTN AIRTIME", "Airtime & Data"), ("VODACOM DATA", "Airtime & Data"),
     ("NETFLIX", "Subscriptions"), ("SPOTIFY", "Subscriptions"), ("DSTV", "Subscriptions"),
-    ("FNB SERVICE FEE", "Bank Fees"),
+    ("GOOGLE *GOOGL", "Subscriptions"), ("GOOGLE G1SK00", "Subscriptions"), ("GOOGLE CRUNCH", "Subscriptions"),
+    ("FNB SERVICE FEE", "Bank Fees"), ("INT ON DEBIT BALANCE", "Bank Fees"),
+    ("#SERVICE FEES #PAYMENTS BUNDLE FEE", "Bank Fees"), ("#ITEM PAID NO FUNDS", "Bank Fees"),
     ("SALARY", "Salary"), ("PAYROLL", "Salary"), ("ELECTRICITY", "Utilities"),
 ])
 def test_known_rules(description: str, category: str) -> None:
@@ -988,6 +992,8 @@ def test_pipeline_metrics_cover_mixed_batch(monkeypatch: pytest.MonkeyPatch) -> 
     ("Overdraft Fee", "Bank Fees", "bank_fee"),
     ("Overdraft Charge", "Bank Fees", "bank_fee"),
     ("Monthly Account Admin Fee", "Bank Fees", "bank_fee"),
+    ("Electricity Advance Fee", "Bank Fees", "bank_fee"),
+    ("Banking App Electricity Advance Fee", "Bank Fees", "bank_fee"),
     ("Card Purchase Insufficient Funds Fee: Uber Johannesburg Za", "Bank Fees", "bank_fee"),
     ("Insufficient Funds Charge", "Bank Fees", "bank_fee"),
     ("NSF Fee", "Bank Fees", "bank_fee"),
@@ -1154,6 +1160,33 @@ def test_batch_keeps_purchases_income_and_genuine_fallback(monkeypatch: pytest.M
     assert results["refund"].category_name is None
     assert results["refund"].transaction_class == "unknown"
     assert results["refund"].rule == "description:purchase-reversal"
+
+
+def test_mr_d_without_the_word_food_is_still_food_delivery() -> None:
+    result = classify_transaction("Online Purchase: Mr D Cape Town (Card 4285)", "debit")
+    assert result.transaction_class == "spending"
+    assert result.category_name == "Fast Food"
+    assert result.rule == "merchant:food-delivery"
+    person = classify_transaction("Payment to Mr David Smith", "debit")
+    assert person.category_name != "Fast Food"
+
+
+def test_a_fee_at_mr_d_does_not_turn_the_later_purchase_into_a_fee() -> None:
+    results = categorise_batch(
+        [
+            CategorisableTransaction(
+                "fee", "Online Purchase Limit Exceeded Fee: Mr D Food Za", Decimal("-1.00"), "debit"
+            ),
+            CategorisableTransaction(
+                "buy", "Online Purchase: Mr D Cape Town (Card 4285)", Decimal("-108.80"), "debit"
+            ),
+        ],
+        LIVE_CATEGORIES,
+        merchant_memory=MerchantMemory(),
+    )
+    assert results["fee"].transaction_class == "bank_fee"
+    assert results["buy"].transaction_class == "spending"
+    assert results["buy"].category_name == "Fast Food"
 
 
 def test_fallback_other_has_low_confidence(monkeypatch: pytest.MonkeyPatch) -> None:

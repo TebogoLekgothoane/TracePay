@@ -1,4 +1,4 @@
-const { AndroidConfig, withAndroidManifest, withDangerousMod, withMainApplication } = require("@expo/config-plugins");
+const { AndroidConfig, withAndroidManifest, withDangerousMod, withGradleProperties, withMainApplication } = require("@expo/config-plugins");
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -37,7 +37,7 @@ class TracePayIngestionModule(private val reactContext: ReactApplicationContext)
 
   @ReactMethod
   fun requestSmsPermission(promise: Promise) {
-    val activity: Activity? = currentActivity
+    val activity: Activity? = reactContext.currentActivity
     if (activity == null) {
       promise.resolve(false)
       return
@@ -292,6 +292,27 @@ module.exports = function withTracePayAndroidIngestion(config) {
         "PackageList(this).packages",
         "PackageList(this).packages.apply { add(TracePayIngestionPackage()) }"
       );
+    }
+    return mod;
+  });
+
+  config = withGradleProperties(config, (mod) => {
+    // One phone ABI and a smaller Gradle heap. The free cloud builder is killed when the
+    // native compile and a 4 GB heap run together.
+    const properties = {
+      reactNativeArchitectures: "arm64-v8a",
+      "org.gradle.parallel": "false",
+      "org.gradle.workers.max": "2",
+      "org.gradle.jvmargs": "-Xmx2048m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8",
+      "kotlin.daemon.jvmargs": "-Xmx1024m",
+    };
+    for (const [key, value] of Object.entries(properties)) {
+      const existing = mod.modResults.find((item) => item.type === "property" && item.key === key);
+      if (existing) {
+        existing.value = value;
+      } else {
+        mod.modResults.push({ type: "property", key, value });
+      }
     }
     return mod;
   });

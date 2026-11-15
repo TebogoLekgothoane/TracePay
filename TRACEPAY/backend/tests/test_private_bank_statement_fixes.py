@@ -176,12 +176,108 @@ def _deposit_then_payments(final_balance: str):
     return rows
 
 
+def test_a_later_large_payee_outranks_an_earlier_small_one():
+    from datetime import date
+    from decimal import Decimal
+
+    from leak_intelligence.engine import ranked_destinations
+    from leak_intelligence.models import PassThroughEvent
+
+    def event(when: date, destinations: list[str]) -> PassThroughEvent:
+        return PassThroughEvent(
+            credit_transaction_id=when.isoformat(),
+            credit_date=when,
+            amount=Decimal("3000"),
+            days_window=3,
+            spent=Decimal("2900"),
+            share_spent=Decimal("0.96"),
+            outflow_count=4,
+            fee_total=Decimal("0"),
+            end_balance=Decimal("10"),
+            destinations=destinations,
+        )
+
+    labels = ranked_destinations(
+        [
+            event(date(2026, 5, 22), ["Savings R500", "Shop R80"]),
+            event(date(2026, 10, 29), ["Savings R400", "Tshabalala R1,300"]),
+        ]
+    )
+    assert labels[0] == "Tshabalala R1,300"
+    assert labels[1] == "Savings R900"
+    assert labels[2] == "Shop R80"
+
+
 def test_a_deposit_paid_straight_out_in_many_payments_is_found():
     from leak_intelligence.engine import _pass_through_events
 
     events = _pass_through_events(_deposit_then_payments("40"))
     assert len(events) == 1
     assert events[0].outflow_count == 8
+
+
+def test_a_transfer_to_the_account_that_also_pays_in_is_not_money_that_left():
+    from dataclasses import replace
+
+    from leak_intelligence.engine import _pass_through_events
+    from tests.test_leak_detection import _transaction
+
+    rows = [
+        replace(
+            _transaction(
+                "own-in",
+                "20",
+                date(2026, 6, 1),
+                transaction_type="credit",
+                merchant=None,
+                category=None,
+                transaction_class="unknown",
+                description="Banking App Transfer Received from A N Other: Transfer",
+            ),
+            balance=Decimal("20"),
+        ),
+        replace(
+            _transaction(
+                "in",
+                "5000",
+                date(2026, 6, 2),
+                transaction_type="credit",
+                merchant=None,
+                category=None,
+                transaction_class="unknown",
+                description="SALARY",
+            ),
+            balance=Decimal("5020"),
+        ),
+        replace(
+            _transaction(
+                "self",
+                "4800",
+                date(2026, 6, 2),
+                merchant=None,
+                category=None,
+                transaction_class="unknown",
+                description="Banking App Transfer to A N Other: Transfer",
+            ),
+            balance=Decimal("220"),
+        ),
+    ]
+    for index in range(7):
+        rows.append(
+            replace(
+                _transaction(
+                    f"p{index}",
+                    "20",
+                    date(2026, 6, 3),
+                    merchant=None,
+                    category=None,
+                    transaction_class="unknown",
+                    description=f"PAY {index}",
+                ),
+                balance=Decimal("40") if index == 6 else Decimal("200") - Decimal("20") * index,
+            )
+        )
+    assert _pass_through_events(rows) == []
 
 
 def test_a_deposit_that_leaves_a_healthy_balance_is_not_a_pass_through():

@@ -208,7 +208,6 @@ export function WelcomeAuthForm({
           </Text>
         ) : null}
         <Button
-          arrow
           className="mt-1"
           disabled={!canSubmit || submitting}
           loading={submitting}

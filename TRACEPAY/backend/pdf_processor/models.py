@@ -13,6 +13,9 @@ class RawExtraction(BaseModel):
     useful_text_characters: int
     tables_found: int
     rows_found: int
+    # Text from the other OCR engine(s), kept to recover rows the chosen one missed.
+    # Internal: never part of the API response.
+    ocr_alternative_texts: list[str] = Field(default_factory=list, exclude=True)
 
 
 class Transaction(BaseModel):

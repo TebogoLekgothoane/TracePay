@@ -4,6 +4,7 @@ import {
   EyeOff,
   Fingerprint,
   KeyRound,
+  LockKeyhole,
   Shield,
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
@@ -119,6 +120,10 @@ export default function SecurityScreen() {
     );
   };
 
+  const handleChangePassword = () => {
+    router.push("/settings/change-password");
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
       <ScrollView
@@ -218,6 +223,28 @@ export default function SecurityScreen() {
               onValueChange={handleBiometricsChange}
             />
           </View>
+
+          <Text className="mb-3 mt-6 text-[13px] font-semibold uppercase tracking-[0.6px] text-muted-foreground">
+            Sign-in
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            className="flex-row items-center gap-3 rounded-3xl bg-card px-4 py-3.5 active:opacity-75"
+            onPress={handleChangePassword}
+          >
+            <View className="h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+              <LockKeyhole color={palette.primary} size={18} strokeWidth={2.2} />
+            </View>
+            <View className="min-w-0 flex-1">
+              <Text className="text-[15px] font-semibold text-foreground">
+                Change password
+              </Text>
+              <Text className="mt-0.5 text-[13px] text-muted-foreground">
+                Update the password for your TracePay account
+              </Text>
+            </View>
+            <Text className="text-[13px] font-medium text-primary">Update</Text>
+          </Pressable>
 
           <Text className="mb-3 mt-6 text-[13px] font-semibold uppercase tracking-[0.6px] text-muted-foreground">
             Home privacy

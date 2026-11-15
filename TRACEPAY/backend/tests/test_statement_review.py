@@ -25,6 +25,7 @@ def _tx(
     kind: str = "debit",
     klass: str = "spending",
     merchant: str | None = None,
+    category: str = "Other",
 ) -> FeatureTransaction:
     return FeatureTransaction(
         transaction_id=f"t{n}",
@@ -35,7 +36,7 @@ def _tx(
         merchant_name=merchant,
         transaction_type=kind,  # type: ignore[arg-type]
         categorisation=CategorisationResult(
-            category_name="Other",
+            category_name=category,
             category_confidence=0.9,
             transaction_class=klass,  # type: ignore[arg-type]
             classification_confidence=0.9,
@@ -141,6 +142,20 @@ def test_a_doubled_debit_is_raised_when_no_month_was_missed() -> None:
     assert "double_debit:Virgin Active" in keys
 
 
+def test_a_later_double_of_an_amount_that_was_not_monthly_is_not_a_double_debit() -> None:
+    # The most common amount appears only in one month. Other months were other prices.
+    txs = [
+        _tx(1, date(2026, 6, 1), "60", "SHOP", merchant="Shop"),
+        _tx(2, date(2026, 7, 1), "340", "SHOP", merchant="Shop"),
+        _tx(3, date(2026, 8, 1), "500", "SHOP", merchant="Shop"),
+        _tx(4, date(2026, 9, 1), "100", "SHOP", merchant="Shop"),
+        _tx(5, date(2026, 9, 30), "100", "SHOP", merchant="Shop"),
+        _tx(6, date(2026, 10, 6), "200", "SHOP", merchant="Shop"),
+    ]
+    keys = {item.key for item in _report(txs).findings}
+    assert not any(key.startswith("double_debit") for key in keys)
+
+
 def test_missed_months_billed_together_are_not_a_double_debit() -> None:
     # August was never paid, so a double in September is the missed month catching up.
     txs = _monthly("VIRGIN ACT NETCASH", ["835", "835", "835", "1670"], [5, 6, 7, 9])
@@ -162,11 +177,168 @@ def test_the_same_charge_twice_in_one_month_only_is_not_raised() -> None:
     assert not [item for item in _report(_pair(6)).findings if item.key.startswith("paired")]
 
 
+def test_a_subscription_billed_twice_in_a_week_is_a_possible_pair() -> None:
+    txs = []
+    number = 0
+    for month, first in ((7, 19), (8, 19), (9, 19)):
+        for day in (first, first + 5):
+            number += 1
+            txs.append(
+                _tx(number, date(2026, month, day), "34.99", "GOOGLE ONE", merchant="Google One", category="Subscriptions")
+            )
+    findings = [item for item in _report(txs).findings if item.key.startswith("paired")]
+    assert len(findings) == 1
+    assert "within a week" in findings[0].confirmed[0]
+    assert "two accounts" in findings[0].cannot_see[0]
+
+
+def test_shop_purchases_five_days_apart_are_not_a_pair() -> None:
+    txs = []
+    number = 0
+    for month in (7, 8):
+        for day in (19, 24):
+            number += 1
+            txs.append(_tx(number, date(2026, month, day), "34.99", "CORNER SHOP", merchant="Corner Shop"))
+    assert not [item for item in _report(txs).findings if item.key.startswith("paired")]
+
+
+def test_an_atm_fee_is_tied_to_the_cash_withdrawal_not_the_nearest_purchase() -> None:
+    day = date(2026, 10, 6)
+    txs = [
+        _tx(1, day, "300", "ATM Cash Withdrawal", klass="spending"),
+        _tx(2, day, "150", "POS Purchase Shop", klass="spending"),
+        _tx(3, day, "64.80", "FNB ATM Cash Withdrawal Fee", klass="bank_fee"),
+    ]
+    fees = next(item for item in _report(txs).findings if item.key == "bank_fees")
+    assert "R64.80 on the R300 payment" in fees.shows
+    assert "R150" not in fees.shows
+
+
+def test_a_fee_credited_back_the_same_day_is_not_counted() -> None:
+    txs = [
+        _tx(1, date(2026, 9, 1), "112", "#Item Unpaid", klass="bank_fee"),
+        _tx(2, date(2026, 9, 1), "112", "#Item Unpaid", klass="bank_fee", kind="credit"),
+        _tx(3, date(2026, 9, 5), "125", "#Monthly Account Fee", klass="bank_fee"),
+    ]
+    fees = next(item for item in _report(txs).findings if item.key == "bank_fees")
+    assert fees.figures["total"] == Decimal("125")
+    assert "Monthly Account Fee" in fees.shows
+
+
 def test_the_same_charge_twice_in_two_months_is_raised() -> None:
     findings = [item for item in _report([*_pair(6), *_pair(7)]).findings if item.key.startswith("paired")]
     assert len(findings) == 1
     assert findings[0].figures["pairs"] == 2
     assert findings[0].figures["extra"] == Decimal("399.98")
+
+
+def test_two_rides_at_the_same_fare_are_not_a_second_subscription() -> None:
+    txs = []
+    number = 0
+    for month in (6, 7):
+        for day in (6, 8):
+            number += 1
+            txs.append(
+                _tx(
+                    number,
+                    date(2026, month, day),
+                    "14.96",
+                    "Recurring Card Purchase: Uber",
+                    merchant="Uber",
+                    category="Ride Hailing",
+                )
+            )
+    assert not [item for item in _report(txs).findings if item.key.startswith("paired")]
+
+
+def test_the_same_small_price_at_a_busy_shop_is_not_a_double_charge() -> None:
+    txs = []
+    number = 0
+    for month in (6, 7):
+        for day, amount in ((3, "14"), (5, "14"), (8, "22"), (12, "9"), (18, "31"), (22, "14.50")):
+            number += 1
+            txs.append(
+                _tx(number, date(2026, month, day), amount, "CORNER CAFE", merchant="Corner Cafe", category="Groceries")
+            )
+    assert not [item for item in _report(txs).findings if item.key.startswith("paired")]
+
+
+def test_a_round_up_into_savings_is_not_money_that_comes_back() -> None:
+    txs = []
+    number = 0
+    for month, day in ((6, 7), (7, 8)):
+        number += 1
+        txs.append(
+            _tx(number, date(2026, month, day), "35", "Live Better Round-up Transfer", kind="debit", klass="internal_transfer")
+        )
+        number += 1
+        txs.append(
+            _tx(
+                number,
+                date(2026, month, day + 2),
+                "34",
+                "Live Better Round-up Transfer",
+                kind="credit",
+                klass="internal_transfer",
+            )
+        )
+    assert not [item for item in _report(txs).findings if item.key == "round_trip_transfers"]
+
+
+def test_money_moved_to_another_account_and_back_is_still_a_round_trip() -> None:
+    txs = []
+    number = 0
+    for month in (6, 7):
+        number += 1
+        txs.append(
+            _tx(number, date(2026, month, 7), "5000", "Transfer to Holiday Account", kind="debit", klass="internal_transfer")
+        )
+        number += 1
+        txs.append(
+            _tx(
+                number,
+                date(2026, month, 9),
+                "5000",
+                "Transfer from Holiday Account",
+                kind="credit",
+                klass="internal_transfer",
+            )
+        )
+    findings = [item for item in _report(txs).findings if item.key == "round_trip_transfers"]
+    assert len(findings) == 1
+
+
+def test_an_unpaid_debit_order_fee_is_not_called_a_declined_card() -> None:
+    txs = [
+        _tx(1, date(2026, 6, 1), "6", "Eft Debit Order Insufficient Funds Fee", klass="bank_fee"),
+        _tx(2, date(2026, 7, 1), "6", "Eft Debit Order Insufficient Funds Fee", klass="bank_fee"),
+        _tx(3, date(2026, 6, 2), "2", "International Online Purchase Insufficient Funds Fee: Example", klass="bank_fee"),
+    ]
+    fees = next(item for item in _report(txs).findings if item.key == "bank_fees")
+    assert "Unpaid debit order fees R12" in fees.shows
+    assert "Declined card fees R2" in fees.shows
+
+
+def test_an_advance_fee_is_in_the_bank_fees_and_a_same_day_correction_is_not() -> None:
+    txs = [
+        _tx(1, date(2026, 6, 11), "3", "Electricity Advance Fee", klass="bank_fee"),
+        _tx(2, date(2026, 6, 13), "3", "Electricity Advance Fee", klass="bank_fee"),
+        _tx(3, date(2026, 6, 13), "3", "Correction: Electricity Advance Fee", kind="credit", klass="unknown"),
+        _tx(4, date(2026, 8, 8), "3", "Banking App Electricity Advance Fee", klass="bank_fee"),
+    ]
+    fees = next(item for item in _report(txs).findings if item.key == "bank_fees")
+    assert fees.figures["total"] == Decimal("6")
+    assert "Advance fees R6" in fees.shows
+
+
+def test_a_fee_printed_beside_a_card_purchase_is_not_named_as_that_shop() -> None:
+    txs = [
+        _tx(1, date(2026, 6, 1), "2", "Fee: Online Purchase: Example Video London", klass="bank_fee"),
+        _tx(2, date(2026, 6, 2), "2", "Fee: Recurring Card Purchase: Example One London", klass="bank_fee"),
+    ]
+    fees = next(item for item in _report(txs).findings if item.key == "bank_fees")
+    assert "Card purchase fees R4" in fees.shows
+    assert "Example" not in fees.shows
 
 
 # ---------------------------------------------------------------------------- price changes

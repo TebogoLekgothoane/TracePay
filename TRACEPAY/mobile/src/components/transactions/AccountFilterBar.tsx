@@ -9,8 +9,20 @@ type Props = {
   onSelect: (accountId: string | null) => void;
 };
 
+/** Distinct banks (institutions) with statements — filter chips only when > 1. */
+export function hasMultipleBanks(accounts: readonly FinancialAccount[]): boolean {
+  const banks = new Set(
+    accounts.map((account) => {
+      const institution = account.institution?.trim().toLowerCase();
+      if (institution) return institution;
+      return account.name.trim().toLowerCase();
+    }),
+  );
+  return banks.size > 1;
+}
+
 export function AccountFilterBar({ accounts, selectedAccountId, onSelect }: Props) {
-  if (accounts.length === 0) {
+  if (!hasMultipleBanks(accounts)) {
     return null;
   }
 

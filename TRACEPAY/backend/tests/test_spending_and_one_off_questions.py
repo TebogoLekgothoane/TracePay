@@ -36,7 +36,7 @@ def _tx(index: int, description: str, amount: str, day: date) -> FeatureTransact
 
 def _delivery() -> list[FeatureTransaction]:
     quiet = [_tx(i, "UBER EATS JOHANNESBURG", "100.00", date(2026, 3, 1 + i)) for i in range(4)]
-    busy = [_tx(10 + i, "DL UBER CPT ZA", "300.00", date(2026, 4, 1 + i)) for i in range(7)]
+    busy = [_tx(10 + i, "DL New Uber Eats CPT ZA", "300.00", date(2026, 4, 1 + i)) for i in range(7)]
     return [*quiet, *busy]
 
 

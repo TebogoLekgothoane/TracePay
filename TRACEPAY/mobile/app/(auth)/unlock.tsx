@@ -247,9 +247,9 @@ export default function UnlockScreen() {
               accessibilityRole="button"
               disabled={state.phase === "biometric" || state.phase === "unlocking"}
               onPress={() => dispatch({ type: "REQUEST_BIOMETRIC" })}
-              className="mt-14 h-24 w-24 items-center justify-center rounded-full bg-primary/10 active:opacity-70"
+              className="mt-14 h-24 w-24 items-center justify-center active:opacity-70"
             >
-              <BiometricIcon color={palette.primary} size={44} strokeWidth={1.6} />
+              <BiometricIcon color={palette.foreground} size={44} strokeWidth={1.6} />
             </Pressable>
           ) : null}
 

@@ -78,7 +78,7 @@ def resolve_extracted_statement(
         resolved_type = "credit_card"
     start, end = statement_start_date, statement_end_date
     if start is None or end is None:
-        parsed_start, parsed_end = _period_from_text(header)
+        parsed_start, parsed_end = _period_from_text(text or "")
         start = start or parsed_start
         end = end or parsed_end
     # A period read from the statement is evidence of coverage. One taken from
@@ -125,7 +125,7 @@ def resolve_extracted_statement(
 
 def period_from_text(text: str) -> tuple[date | None, date | None]:
     """The statement period printed in the header, if any (never inferred)."""
-    return _period_from_text((text or "")[:2000])
+    return _period_from_text(text or "")
 
 
 _DATED_LINE = re.compile(
@@ -226,10 +226,62 @@ def _account_type_from_text(text: str) -> str | None:
 
 
 def _period_from_text(text: str) -> tuple[date | None, date | None]:
-    match = _PERIOD.search(text)
+    head = (text or "")[:2000]
+    match = _PERIOD.search(head)
     if match:
         return parse_date(match.group(1)), parse_date(match.group(2))
-    return _period_after_label(text)
+    labelled = _period_after_label(head)
+    if labelled[0] is not None:
+        return labelled
+    return _period_from_edge_labels(text)
+
+
+# A statement period can run a little over a year. Two dates further apart than that
+# are not the period.
+_MAX_STATED_PERIOD_DAYS = 400
+_EDGE_DATE = re.compile(
+    r"^(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}-\d{1,2}-\d{1,2}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4})$"
+)
+_FROM_EDGE = re.compile(r"^(?:from(?:\s+date)?|statement\s+from)\s*:?\s*(.*)$", re.IGNORECASE)
+_TO_EDGE = re.compile(r"^(?:to(?:\s+date)?|statement\s+to)\s*:?\s*(.*)$", re.IGNORECASE)
+
+
+def _date_on_its_own(value: str) -> date | None:
+    """A line that is only a date. A transaction row starts with a date and then a payee."""
+    text = value.strip()
+    if not text or _EDGE_DATE.match(text) is None:
+        return None
+    return parse_date(text)
+
+
+def _period_from_edge_labels(text: str) -> tuple[date | None, date | None]:
+    """``From Date`` and ``To Date`` when each value is on the following line.
+
+    Some statements print the two labels down one column and the dates down the next,
+    so the text comes out as a label, then the date, then the other label.
+    """
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()][:160]
+    start = end = None
+    for index, line in enumerate(lines):
+        for pattern, which in ((_FROM_EDGE, "from"), (_TO_EDGE, "to")):
+            match = pattern.match(line)
+            if match is None:
+                continue
+            candidate = match.group(1).strip()
+            if not candidate and index + 1 < len(lines):
+                candidate = lines[index + 1]
+            parsed = _date_on_its_own(candidate)
+            if parsed is None:
+                continue
+            if which == "from" and start is None:
+                start = parsed
+            elif which == "to" and end is None:
+                end = parsed
+    if start is None or end is None or start > end:
+        return None, None
+    if (end - start).days > _MAX_STATED_PERIOD_DAYS:
+        return None, None
+    return start, end
 
 
 _PERIOD_LABEL = re.compile(r"statement\s+period", re.IGNORECASE)

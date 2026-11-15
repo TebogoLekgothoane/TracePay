@@ -41,6 +41,7 @@ LIVE_SUBSCRIPTION_STATUSES = ("active", "non_renewing", "attention")
 # Prefix of the message the app stores when a user cancels an import (not a processing failure).
 CANCELLED_PREFIX = "PDF processing was cancelled"
 RECENT_LIMIT = 25
+ACCOUNT_ID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 _cache_lock = threading.Lock()
 _cache: dict[str, Any] = {"at": None, "snapshot": None}
@@ -285,6 +286,54 @@ def _mask_email(email: str) -> str:
     return f"{local[:2]}***@{domain}"
 
 
+def build_account(snapshot: Snapshot, user_id: str) -> dict[str, Any] | None:
+    """One account, from the snapshot already loaded for the dashboard. Contact details stay masked."""
+    raw = next((row for row in snapshot.users if row.get("id") == user_id), None)
+    if not isinstance(raw, dict):
+        return None
+    created = _stamp(raw.get("created_at"))
+    if created is None:
+        return None
+    email = raw.get("email") if isinstance(raw.get("email"), str) else ""
+    phone = raw.get("phone") if isinstance(raw.get("phone"), str) else ""
+    label = _mask_email(email) if email else _mask_phone(phone) if phone else "***"
+    last_sign_in = _stamp(raw.get("last_sign_in_at"))
+    imports = [row for row in snapshot.statement_imports if row.get("user_id") == user_id]
+    purchases = [row for row in snapshot.purchases if row.get("user_id") == user_id]
+    succeeded = [row for row in purchases if row.get("status") == "succeeded"]
+    budget = next((row for row in snapshot.budget_rows if row.get("user_id") == user_id and int(row.get("used") or 0) > 0), None)
+    budget_started = _stamp(budget.get("window_start")) if budget is not None else None
+    latest = max(imports, key=lambda row: _stamp(row.get("created_at")) or datetime.min.replace(tzinfo=timezone.utc), default=None)
+    latest_at = _stamp(latest.get("created_at")) if isinstance(latest, dict) else None
+    latest_error = _clean_error(latest.get("error_message")) if isinstance(latest, dict) and latest.get("status") == "failed" else ""
+    return {
+        "id": user_id,
+        "user": label,
+        "created": created.isoformat(),
+        "last_sign_in": last_sign_in.isoformat() if last_sign_in else None,
+        "verified": bool(raw.get("phone_confirmed_at") or raw.get("email_confirmed_at") or raw.get("confirmed_at")),
+        "statements": {
+            "total": len(imports),
+            "by_status": dict(Counter(str(row.get("status")) for row in imports)),
+            "transactions": sum(int(row.get("transaction_count") or 0) for row in imports if row.get("status") == "processed"),
+            "latest_status": str(latest.get("status")) if isinstance(latest, dict) else None,
+            "latest_at": latest_at.isoformat() if latest_at else None,
+            "latest_error": latest_error,
+        },
+        "purchases": {
+            "count": len(purchases),
+            "succeeded": len(succeeded),
+            "spent_zar": _zar(sum(int(row.get("amount_cents") or 0) for row in succeeded)),
+            "latest_product": str(purchases[0].get("product")) if purchases else None,
+            "latest_status": str(purchases[0].get("status")) if purchases else None,
+        },
+        "budget": None if budget is None else {
+            "used": int(budget.get("used") or 0),
+            "window_start": budget_started.isoformat() if budget_started else None,
+        },
+    }
+
+
 def _mask_phone(phone: str) -> str:
     digits = re.sub(r"\D", "", phone)
     return f"***{digits[-4:]}" if digits else "***"
@@ -426,15 +475,22 @@ def _build_ai(
     )
 
     budget_rows = sorted(snapshot.budget_rows, key=lambda row: int(row.get("used") or 0), reverse=True)
-    top_users = [
-        {
-            "user": users[str(row.get("user_id"))]["label"] if str(row.get("user_id")) in users else "unknown",
-            "used": int(row.get("used") or 0),
-            "pct_of_limit": round(100 * int(row.get("used") or 0) / daily_item_limit, 1) if daily_item_limit else 0.0,
-        }
-        for row in budget_rows[:5]
-        if int(row.get("used") or 0) > 0
-    ]
+    top_users = []
+    window_starts: list[datetime] = []
+    for row in budget_rows:
+        used = int(row.get("used") or 0)
+        if used <= 0:
+            continue
+        started = _stamp(row.get("window_start"))
+        if started is not None:
+            window_starts.append(started)
+        if len(top_users) < 5:
+            top_users.append({
+                "user": users[str(row.get("user_id"))]["label"] if str(row.get("user_id")) in users else "unknown",
+                "used": used,
+                "pct_of_limit": round(100 * used / daily_item_limit, 1) if daily_item_limit else 0.0,
+                "window_start": started.isoformat() if started else None,
+            })
 
     return {
         "logging_ready": "ai_usage_events" not in snapshot.missing_tables,
@@ -450,6 +506,8 @@ def _build_ai(
             "daily_item_limit": daily_item_limit,
             "items_used_current_window": sum(int(row.get("used") or 0) for row in snapshot.budget_rows),
             "users_with_usage": sum(1 for row in snapshot.budget_rows if int(row.get("used") or 0) > 0),
+            "window_started_at": min(window_starts).isoformat() if window_starts else None,
+            "note": "Transactions reserved in each user's current 24-hour window. This is not a count of model calls.",
             "top_users": top_users,
         },
         "prices_note": "Cost is an estimate from list prices per million tokens. Set AI_MODEL_PRICES_JSON to correct it.",
@@ -650,6 +708,7 @@ def build_metrics(
         },
         "recent": [
             {
+                "id": str(row.get("user_id")) if isinstance(row.get("user_id"), str) else None,
                 "when": row["_created"].isoformat() if row["_created"] else None,
                 "user": users[str(row.get("user_id"))]["label"] if str(row.get("user_id")) in users else "unknown",
                 "product": row.get("product"),
@@ -733,6 +792,7 @@ def build_metrics(
 
     recent_signups = [
         {
+            "id": u["id"],
             "when": u["created"].isoformat(),
             "user": u["label"],
             "last_sign_in": u["last_sign_in"].isoformat() if u["last_sign_in"] else None,

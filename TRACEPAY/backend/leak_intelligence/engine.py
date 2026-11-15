@@ -818,7 +818,7 @@ def _data_total(transactions: list[FeatureTransaction]) -> Decimal:
 def _is_ride_hailing_transaction(transaction: FeatureTransaction) -> bool:
     raw = f"{transaction.merchant_name or ''} {transaction.description}".upper()
     compact = raw.replace(" ", "").replace("-", "").replace("*", "")
-    if "UBEREATS" in compact:
+    if "UBEREATS" in compact or "BOLT.EU/S/" in compact:
         return False
     tokens = raw.replace("-", " ").replace("*", " ").split()
     return "UBER" in tokens or "BOLT" in tokens
@@ -1206,6 +1206,8 @@ def _excluded_from_purchase_spending(transaction: FeatureTransaction) -> bool:
     if transaction_class in {"person_to_person", "transfer"}:
         return True
     category = (transaction.categorisation.category_name or "").strip()
+    if (transaction.description or "").strip().casefold() == "no description printed":
+        return True
     if transaction_class == "spending" and category in {
         "Transfers",
         "Savings",
@@ -2207,9 +2209,10 @@ def _near_day_duplicate_candidates(
     same_day_candidates: list[DuplicateCandidate],
     misses: list[NearMiss] | None = None,
 ) -> list[DuplicateCandidate]:
-    """Exactly two identical purchases one to three days apart, from a known merchant.
+    """Exactly two identical purchases one to three days apart.
 
-    A card charge can post a day or two late, so a real double charge is not always
+    A known merchant or the same unrecognised description both count. A card
+    charge can post a day or two late, so a real double charge is not always
     same-day. The evidence is weaker, so this only keeps pairs that are not routine:
     a merchant and amount seen three or more times is a habit or a subscription, and a
     merchant with any same-day candidate is left to the same-day rules.
@@ -2230,6 +2233,10 @@ def _near_day_duplicate_candidates(
         # candidate, and a recurring one is handed to the debit-order detector downstream.
         if (merchant := merchant_group_key(item)) is not None:
             groups[merchant].append(item)
+        elif (signature := unidentified_signature(item)) is not None:
+            # The same unknown description twice, a day or two apart, is the same
+            # evidence as a known merchant. Card statements often print no times.
+            groups[UNIDENTIFIED_GROUP_PREFIX + signature].append(item)
 
     candidates: list[DuplicateCandidate] = []
     for merchant, items in groups.items():
@@ -2311,6 +2318,110 @@ PASS_THROUGH_MIN_PAYMENTS = 6
 # leaves a healthy balance is ordinary, not a pass-through.
 PASS_THROUGH_MAX_LEFT_SHARE = Decimal("0.10")
 PASS_THROUGH_MAX_LEFT_FLOOR = Decimal("500")
+_PASS_THROUGH_PREFIX = re.compile(
+    r"^(?:fee:\s*)?(?:banking app\s+)?(?:immediate payment|external payshap payment|"
+    r"payshap payment|external payment|capitec pay(?:\s+capitec pay)? payment|cash sent)\s*:\s*",
+    re.IGNORECASE,
+)
+_TRANSFER_TO_OWN = re.compile(r"\btransfer to\s+(.+)", re.IGNORECASE)
+_TRANSFER_FROM_OWN = re.compile(r"\btransfer (?:received )?from\s+(.+)", re.IGNORECASE)
+
+
+def _transfer_person(raw: str) -> str:
+    """The person named on a transfer, without the bank's trailing wording."""
+    text = raw.split(":")[0]
+    text = re.sub(r"\s*\([^)]*\)", "", text)
+    return re.sub(r"\s+", " ", text).strip().casefold()
+
+
+def _names_that_also_pay_in(transactions: list[FeatureTransaction]) -> set[str]:
+    """Names the account both pays and is paid by: the holder's own other account."""
+    names: set[str] = set()
+    for item in transactions:
+        if item.transaction_type != "credit":
+            continue
+        match = _TRANSFER_FROM_OWN.search(item.description or "")
+        if match:
+            names.add(_transfer_person(match.group(1)))
+    return names
+
+
+def _is_transfer_to_own_name(item: FeatureTransaction, own_names: set[str]) -> bool:
+    match = _TRANSFER_TO_OWN.search(item.description or "")
+    return bool(match and _transfer_person(match.group(1)) in own_names)
+
+
+def _pass_through_name(description: str) -> str:
+    """Who a pass-through payment went to, without the bank's payment wording."""
+    text = re.sub(r"\s*\([^)]*\)", "", description or "")
+    text = re.sub(r"^banking app\s+", "", text, flags=re.IGNORECASE).strip()
+    transfer = re.match(r"transfer to\s+(.+?)(?::\s*transfer)?$", text, flags=re.IGNORECASE)
+    if transfer:
+        text = transfer.group(1)
+    else:
+        text = _PASS_THROUGH_PREFIX.sub("", text)
+        if ":" in text:
+            text = text.split(":")[-1]
+    text = re.sub(r"\s+", " ", text).strip(" :-")
+    if text.lower() == "transfer":
+        return "Transfer"
+    return (text or "Unknown")[:48]
+
+
+def _rand_text(total: Decimal) -> str:
+    quantized = total.quantize(Decimal("0.01"))
+    text = f"{quantized:,.2f}"
+    if text.endswith(".00"):
+        text = text[:-3]
+    return f"R{text}"
+
+
+_DESTINATION_AMOUNT = re.compile(
+    r"^(?P<name>.+?) R(?P<amount>\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)$"
+)
+
+
+def ranked_destinations(events: list[PassThroughEvent], limit: int = 4) -> list[str]:
+    """The largest payees across every window, by money, not by which deposit came first.
+
+    A later deposit's big payment must outrank an earlier deposit's small one.
+    The same payee in two windows is added together.
+    """
+    totals: dict[str, Decimal] = defaultdict(lambda: ZERO)
+    labels: dict[str, str] = {}
+    for event in events:
+        for item in event.destinations:
+            match = _DESTINATION_AMOUNT.match(item.strip())
+            if match is None:
+                continue
+            name = match.group("name").strip()
+            amount = Decimal(match.group("amount").replace(",", ""))
+            key = name.casefold()
+            labels.setdefault(key, name)
+            totals[key] += amount
+    ordered = sorted(totals.items(), key=lambda pair: (-pair[1], pair[0]))[:limit]
+    return [f"{labels[key]} {_rand_text(total)}" for key, total in ordered]
+
+
+def _pass_through_destinations(outflows: list[FeatureTransaction]) -> list[str]:
+    totals: dict[str, Decimal] = defaultdict(lambda: ZERO)
+    labels: dict[str, str] = {}
+    for item in outflows:
+        if item.categorisation.transaction_class == "bank_fee":
+            continue
+        label = _pass_through_name(item.description)
+        key = label.casefold()
+        labels.setdefault(key, label)
+        totals[key] += amount_of(item)
+    # Keep more than the sentence will show. The sentence ranks across every
+    # window, so a fourth large payee in one window must still be available.
+    ordered = sorted(totals.items(), key=lambda item: -item[1])[:8]
+    named = []
+    for key, total in ordered:
+        if total < Decimal("50"):
+            continue
+        named.append(f"{labels[key]} {_rand_text(total)}")
+    return named
 
 
 def _pass_through_events(transactions: list[FeatureTransaction]) -> list[PassThroughEvent]:
@@ -2320,6 +2431,7 @@ def _pass_through_events(transactions: list[FeatureTransaction]) -> list[PassThr
     """
     events: list[PassThroughEvent] = []
     last_window_end = None
+    own_names = _names_that_also_pay_in(transactions)
     for credit in transactions:
         if (
             credit.transaction_type != "credit"
@@ -2338,7 +2450,11 @@ def _pass_through_events(transactions: list[FeatureTransaction]) -> list[PassThr
             if item.transaction_date is not None and credit.transaction_date <= item.transaction_date <= end
         ]
         outflows = [
-            item for item in window if item.transaction_type == "debit" and not is_purchase_reversal(item)
+            item
+            for item in window
+            if item.transaction_type == "debit"
+            and not is_purchase_reversal(item)
+            and not _is_transfer_to_own_name(item, own_names)
         ]
         balances = [item.balance for item in window if item.balance is not None]
         if len(outflows) < PASS_THROUGH_MIN_PAYMENTS or not balances:
@@ -2370,6 +2486,7 @@ def _pass_through_events(transactions: list[FeatureTransaction]) -> list[PassThr
                 ),
                 end_balance=end_balance,
                 transaction_ids=[credit.transaction_id, *(item.transaction_id for item in outflows)][:60],
+                destinations=_pass_through_destinations(outflows),
             )
         )
     return events
@@ -2509,6 +2626,41 @@ def _has_reliable_irregular_category(item: FeatureTransaction) -> bool:
     return item.categorisation.category_confidence >= Decimal("0.70")
 
 
+_CARD_MONTHS = {
+    "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
+    "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12,
+}
+
+
+def _token_is_posting_date(token: str, posted: date) -> bool:
+    if token == posted.isoformat():
+        return True
+    match = re.match(r"(\d{1,2})[ \-]([A-Z]{3})", token)
+    if not match:
+        return False
+    month = _CARD_MONTHS.get(match.group(2)[:3])
+    return month == posted.month and int(match.group(1)) == posted.day
+
+
+def _distinct_card_dates(transactions: list[FeatureTransaction]) -> bool:
+    """True when every row carries a card date and no two share one."""
+    from pdf_processor.dates import find_embedded_dates
+
+    found_sets: list[set[str]] = []
+    for item in transactions:
+        found = {token.upper() for token in find_embedded_dates(f"{item.description or ''} {item.reference or ''}")}
+        if item.booking_date and item.transaction_date and item.booking_date != item.transaction_date:
+            found.add(item.booking_date.isoformat())
+        if item.transaction_date:
+            found = {token for token in found if not _token_is_posting_date(token, item.transaction_date)}
+        if not found:
+            return False
+        found_sets.append(found)
+    if len(found_sets) < 2:
+        return False
+    return set.intersection(*found_sets) == set()
+
+
 def _reference_tokens(description: str | None) -> set[str]:
     if not description:
         return set()
@@ -2525,6 +2677,10 @@ def _maybe_build_candidate(
     months_with_multiple_debits: int,
 ) -> DuplicateCandidate | None:
     if _is_overlapping_statement_import_copy(transactions):
+        return None
+    # A card statement posts two purchases on one day and prints each card date
+    # beside them. Different card dates are two purchases.
+    if _distinct_card_dates(transactions):
         return None
     unidentified = merchant.startswith(UNIDENTIFIED_GROUP_PREFIX)
     is_debit_order = all(_is_debit_order_transaction(item) for item in transactions)

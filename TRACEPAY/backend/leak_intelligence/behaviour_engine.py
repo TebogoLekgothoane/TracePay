@@ -857,8 +857,13 @@ def _cash_and_fee_observations(snapshot: FinancialFeatureSnapshot) -> list[Behav
                 snapshot.date_end,
             )
         )
+    # A calendar month with no fee row is a month the fee was not posted in, not a
+    # measured fee of zero. Averaging it in makes a flat fee look like it doubled.
+    fee_entries = [(month.month, month.bank_fee_total, 0) for month in snapshot.months]
+    if any(amount > ZERO for _, amount, _ in fee_entries):
+        fee_entries = [item for item in fee_entries if item[1] > ZERO]
     fee_compare = _period_compare(
-        [(month.month, month.bank_fee_total, 0) for month in snapshot.months],
+        fee_entries,
         coverage_end,
         coverage_start,
         minimum_baseline=MIN_FEE_BURDEN_TOTAL,

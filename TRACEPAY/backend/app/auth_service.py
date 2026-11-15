@@ -150,7 +150,7 @@ def _find_user_by_phone(phone: str) -> dict[str, Any] | None:
     return user
 
 
-def _password_session(phone: str, password: str) -> dict[str, str] | None:
+def _password_grant(phone: str, password: str) -> dict[str, Any] | None:
     status, body = _supabase(
         "POST",
         "/auth/v1/token?grant_type=password",
@@ -159,7 +159,39 @@ def _password_session(phone: str, password: str) -> dict[str, str] | None:
     )
     if status >= 300 or not isinstance(body, dict) or not isinstance(body.get("access_token"), str):
         return None
+    return body
+
+
+def _password_session(phone: str, password: str) -> dict[str, str] | None:
+    body = _password_grant(phone, password)
+    if body is None:
+        return None
     return {"accessToken": body["access_token"], "refreshToken": str(body.get("refresh_token", ""))}
+
+
+def app_metadata_role(user: Any) -> str | None:
+    """Role stored in app_metadata. user_metadata is user-editable and must not authorize anyone."""
+    if not isinstance(user, dict):
+        return None
+    meta = user.get("app_metadata")
+    if not isinstance(meta, dict):
+        return None
+    role = meta.get("role")
+    return role if isinstance(role, str) else None
+
+
+def open_superadmin_session(phone_raw: str, password: str) -> str:
+    """Password grant for a confirmed phone whose app_metadata.role is superadmin."""
+    phone = require_valid_phone(phone_raw)
+    if not password or len(password) > 128:
+        raise AuthError(401, "That phone number or password is not correct.")
+    body = _password_grant(phone, password)
+    if body is None or app_metadata_role(body.get("user")) != "superadmin":
+        raise AuthError(401, "That phone number or password is not correct.")
+    token = body.get("access_token")
+    if not isinstance(token, str) or not token:
+        raise AuthError(401, "That phone number or password is not correct.")
+    return token
 
 
 def _update_user(user_id: str, fields: dict[str, Any], failure: str) -> None:
@@ -172,6 +204,137 @@ def _update_user(user_id: str, fields: dict[str, Any], failure: str) -> None:
     if status >= 300:
         logger.error("auth_user_update_failed status=%s detail=%s", status, _error_message(body, "")[:200])
         raise AuthError(400, failure)
+
+
+def _delete_user(user_id: str) -> None:
+    status, body = _supabase(
+        "DELETE",
+        f"/auth/v1/admin/users/{quote(user_id, safe='')}",
+        headers=_service_headers(),
+    )
+    if status >= 300:
+        logger.error("auth_user_delete_failed status=%s detail=%s", status, _error_message(body, "")[:200])
+        raise AuthError(500, "Could not delete your account. Please try again.")
+
+
+def require_access_token_user(authorization: str | None) -> dict[str, Any]:
+    """Resolve the signed-in Supabase user from a Bearer access token."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise AuthError(401, "Sign in again to continue.")
+    token = authorization.removeprefix("Bearer ").strip()
+    if not token:
+        raise AuthError(401, "Sign in again to continue.")
+
+    status, user = _supabase(
+        "GET",
+        "/auth/v1/user",
+        headers={**_anon_headers(), "Authorization": f"Bearer {token}"},
+    )
+    if status >= 300 or not isinstance(user, dict) or not isinstance(user.get("id"), str) or not user["id"]:
+        raise AuthError(401, "Sign in again to continue.")
+    return user
+
+
+def _user_phone(user: dict[str, Any]) -> str:
+    phone = user.get("phone")
+    if not isinstance(phone, str) or not phone.strip():
+        raise AuthError(400, "This account has no mobile number on file.")
+    return require_valid_phone(phone)
+
+
+def _statement_file_paths(user_id: str) -> list[str]:
+    """Paths under the private statements bucket for this user (DB + storage listing)."""
+    headers = _service_headers()
+    paths: list[str] = []
+    seen: set[str] = set()
+
+    status, rows = _supabase(
+        "GET",
+        (
+            f"/rest/v1/statement_imports?select=file_path"
+            f"&user_id=eq.{quote(user_id, safe='')}"
+            f"&file_path=not.is.null"
+        ),
+        headers=headers,
+    )
+    if status >= 300:
+        logger.error("auth_statement_paths_failed status=%s", status)
+        raise AuthError(500, "Could not prepare your account for deletion. Please try again.")
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            path = row.get("file_path")
+            if isinstance(path, str) and path and path not in seen:
+                seen.add(path)
+                paths.append(path)
+
+    # Leftover PDFs (failed/in-progress imports) may still sit under statements/{userId}/.
+    offset = 0
+    prefix = f"statements/{user_id}"
+    while True:
+        status, listed = _supabase(
+            "POST",
+            "/storage/v1/object/list/statements",
+            headers=headers,
+            body={"prefix": prefix, "limit": 100, "offset": offset},
+        )
+        if status >= 300:
+            logger.error("auth_statement_storage_list_failed status=%s", status)
+            raise AuthError(500, "Could not prepare your account for deletion. Please try again.")
+        if not isinstance(listed, list) or not listed:
+            break
+        for item in listed:
+            if not isinstance(item, dict):
+                continue
+            # Folders are returned with a null id; only remove real objects.
+            if item.get("id") is None:
+                continue
+            name = item.get("name")
+            if not isinstance(name, str) or not name or name.endswith("/"):
+                continue
+            # List returns names relative to the prefix folder, or full object paths.
+            path = name if name.startswith("statements/") else f"{prefix}/{name}".rstrip("/")
+            if path not in seen:
+                seen.add(path)
+                paths.append(path)
+        if len(listed) < 100:
+            break
+        offset += 100
+
+    return paths
+
+
+def _remove_statement_files(paths: list[str]) -> None:
+    """Supabase refuses to delete auth users that still own storage objects."""
+    if not paths:
+        return
+    headers = _service_headers()
+    # Storage accepts batches; keep them modest to avoid payload limits.
+    batch_size = 50
+    for index in range(0, len(paths), batch_size):
+        batch = paths[index : index + batch_size]
+        status, body = _supabase(
+            "DELETE",
+            "/storage/v1/object/statements",
+            headers=headers,
+            body=batch,
+        )
+        if status >= 300:
+            logger.error(
+                "auth_statement_storage_delete_failed status=%s detail=%s count=%s",
+                status,
+                _error_message(body, "")[:200],
+                len(batch),
+            )
+            raise AuthError(500, "Could not delete your bank statements. Please try again.")
+
+
+def _clear_otp_for_phone(phone: str) -> None:
+    status, _ = _supabase("DELETE", _otp_rows_path(phone), headers=_service_headers())
+    if status >= 300:
+        logger.error("auth_otp_delete_on_account_delete_failed status=%s", status)
+        # Non-fatal: OTP rows are not linked by user_id and expire quickly.
 
 
 # --- OTP storage and delivery --------------------------------------------------
@@ -372,3 +535,62 @@ def resend_otp(phone_raw: str) -> None:
     if _find_user_by_phone(phone) is None:
         return
     send_otp(phone)
+
+
+def change_password(
+    authorization: str | None,
+    current_password: str,
+    new_password: str,
+) -> dict[str, Any]:
+    """Authenticated password change. Verifies the current password before updating."""
+    if not current_password:
+        raise AuthError(400, "Enter your current password.")
+    if len(current_password) > 128 or len(new_password) > 128:
+        raise AuthError(400, "Password is too long.")
+    if len(new_password) < 8:
+        raise AuthError(400, "Password must be at least 8 characters.")
+    if current_password == new_password:
+        raise AuthError(400, "Choose a new password that is different from your current one.")
+
+    user = require_access_token_user(authorization)
+    user_id = user["id"]
+    phone = _user_phone(user)
+
+    if _password_session(phone, current_password) is None:
+        raise AuthError(401, "Current password is incorrect.")
+
+    _update_user(
+        user_id,
+        {"password": new_password, "phone_confirm": True},
+        "Could not update your password. Please try again.",
+    )
+    session = _password_session(phone, new_password)
+    if session is None:
+        raise AuthError(401, "Password updated. Log in with your new password.")
+    return {"ok": True, "session": session}
+
+
+def delete_account(authorization: str | None, password: str) -> dict[str, bool]:
+    """Delete the signed-in user after password confirmation.
+
+    Removes statement PDFs from storage first (required by Supabase), clears OTP rows,
+    then deletes auth.users so public profile/account/statement/transaction rows cascade.
+    """
+    if not password:
+        raise AuthError(400, "Enter your password to delete your account.")
+    if len(password) > 128:
+        raise AuthError(400, "Password is too long.")
+
+    user = require_access_token_user(authorization)
+    user_id = user["id"]
+    phone = _user_phone(user)
+
+    if _password_session(phone, password) is None:
+        raise AuthError(401, "Incorrect password.")
+
+    paths = _statement_file_paths(user_id)
+    _remove_statement_files(paths)
+    _clear_otp_for_phone(phone)
+    _delete_user(user_id)
+    logger.info("auth_account_deleted user_id_prefix=%s statements_removed=%s", user_id[:8], len(paths))
+    return {"ok": True}

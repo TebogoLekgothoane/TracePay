@@ -112,10 +112,13 @@ test("weekly trend buckets pair each week with the same week one period earlier"
   );
   assertEqual(report.trend.length, 4, "1–7, 8–14, 15–21, 22–25 Oct");
   assertEqual(report.trend[0]?.label, "1 Oct", "label");
+  assertEqual(report.trend[0]?.detailLabel, "1 Oct–7 Oct", "detail");
   assertEqual(report.trend[0]?.current, 100, "week 1");
   assertEqual(report.trend[1]?.current, 200, "week 2");
   // 8 Sep is 25 days before 3 Oct, which falls in week 1.
   assertEqual(report.trend[0]?.previous, 40, "week 1 previous");
+  assertEqual(report.trend[0]?.delta, 60, "week 1 delta");
+  assertEqual(Math.round(report.trend[0]?.changePercent ?? 0), 150, "week 1 percent");
 });
 
 test("monthly and daily grains cover the right days", () => {

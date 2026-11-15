@@ -16,15 +16,10 @@ import {
   ADD_ACCOUNT_HREF,
   LINKED_ACCOUNTS_HREF,
 } from "../../src/features/accounts/account.navigation";
-import {
-  DEMO_INSIGHTS,
-  DEMO_MODE,
-  demoUpcomingPayments,
-} from "../../src/features/demo/demo-data";
 import type { RhythmSpan } from "../../src/features/dashboard/spending-rhythm";
 import { buildSpendingPatterns } from "../../src/features/insights/spending-patterns";
 import { rankLeaksByMonthlyCost } from "../../src/features/leaks/leak-paywall";
-import { listPotentialLeaks } from "../../src/features/leaks/potential-leaks";
+import { listLivePotentialLeaks } from "../../src/features/leaks/potential-leaks.live";
 import { formatRandAmount } from "../../src/utils/currency";
 import {
   firstNameFromFullName,
@@ -56,27 +51,24 @@ export default function HomeScreen() {
   const hasUnreadNotifications = notifications.some(
     (notification) => notification.deliveryStatus !== "read",
   );
-  const realInsights = useMemo(
+  const insights = useMemo(
     () =>
       patternData.data?.referenceDate
         ? buildSpendingPatterns(patternData.data.rows, patternData.data.referenceDate).insights
         : [],
     [patternData.data],
   );
-  // DEMO: fall back to mock data when real data is empty. Remove with features/demo.
-  const insights = DEMO_MODE && realInsights.length === 0 ? DEMO_INSIGHTS : realInsights;
-  const upcomingPayments = useMemo(
-    () =>
-      DEMO_MODE && upcoming.payments.length === 0 ? demoUpcomingPayments() : upcoming.payments,
-    [upcoming.payments],
-  );
+  const upcomingPayments = upcoming.payments;
 
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const firstName = profile ? firstNameFromFullName(profile.fullName) : "";
 
-  const ranked = useMemo(() => rankLeaksByMonthlyCost(listPotentialLeaks()), []);
+  const ranked = useMemo(
+    () => rankLeaksByMonthlyCost(listLivePotentialLeaks(leakDetections.result)),
+    [leakDetections.result],
+  );
 
   // Real detections from the user's statements. Findings that overlap another
   // finding (counted_in_total false) and closed ones stay out of the sum.
@@ -158,20 +150,33 @@ export default function HomeScreen() {
             </Pressable>
           </View>
           <View className="gap-2">
-            {ranked.slice(0, 2).map((leak) => (
-              <PotentialLeakCard
-                key={leak.id}
-                leak={leak}
-                onPress={(id) => router.push(`/leak/${id}` as never)}
-              />
-            ))}
+            {ranked.length === 0 ? (
+              <View className="rounded-3xl bg-card px-4 py-5">
+                <Text className="text-[15px] font-semibold text-foreground">
+                  {leakDetections.loading ? "Checking your statements…" : "No findings yet"}
+                </Text>
+                <Text className="mt-1 text-[13px] leading-5 text-muted-foreground">
+                  {leakDetections.loading
+                    ? "We're analysing your imported activity for money leaks."
+                    : "Import statements and we'll surface the biggest leaks here."}
+                </Text>
+              </View>
+            ) : (
+              ranked.slice(0, 2).map((leak) => (
+                <PotentialLeakCard
+                  key={leak.id}
+                  leak={leak}
+                  onPress={(id) => router.push(`/leak/${id}` as never)}
+                />
+              ))
+            )}
           </View>
 
           <View className="mt-7">
             <UpcomingPayments
               payments={upcomingPayments}
-              loading={upcoming.loading && !DEMO_MODE}
-              error={DEMO_MODE ? null : upcoming.error}
+              loading={upcoming.loading}
+              error={upcoming.error}
               onSeeAll={() => router.push("/(tabs)/leaks")}
             />
           </View>
@@ -179,7 +184,7 @@ export default function HomeScreen() {
           <View className="mt-7">
             <HomeInsights
               insights={insights}
-              loading={patternData.loading && !patternData.data && !DEMO_MODE}
+              loading={patternData.loading && !patternData.data}
               noData={!patternData.loading && !patternData.data?.referenceDate}
               onSeeAll={() => router.push("/(tabs)/budget")}
             />

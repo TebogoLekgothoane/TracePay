@@ -81,7 +81,7 @@ python -m pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Camelot may require Ghostscript. PaddleOCR needs the PaddlePaddle CPU package from `requirements.txt`. Tesseract is optional and used only as an OCR fallback. Apply `supabase/migrations/202609200001_pdf_statement_ingestion.sql` to the project before testing authenticated uploads.
+Camelot may require Ghostscript. PaddleOCR needs the PaddlePaddle CPU package from `requirements.txt` (on Windows, install into a venv at a short path such as `C:\tpv`, because Paddle's files exceed the 260-character path limit under a deep folder). PaddleOCR's pipeline also needs the `paddlex[ocr]` extras, which include `opencv-contrib-python`; on Windows that package cannot be installed while a server from the same venv is running, because it replaces `cv2.pyd`. Stop the servers, then `python -m pip install "paddlex[ocr]==<installed paddlex version>"`. Both OCR engines read every scanned page: Tesseract is the OCR fallback and its reading is also used to recover rows PaddleOCR missed, where the printed balances prove them. Install it (`winget install UB-Mannheim.TesseractOCR` on Windows, `apt install tesseract-ocr` on Debian). The Windows installer does not add itself to PATH; the backend looks in its default install folder, or at `TESSERACT_CMD` if set. Without either engine a scanned statement fails with "insufficient readable content". Apply `supabase/migrations/202609200001_pdf_statement_ingestion.sql` to the project before testing authenticated uploads.
 
 Tests:
 

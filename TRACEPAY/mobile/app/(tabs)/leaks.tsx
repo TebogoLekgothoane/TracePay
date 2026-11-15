@@ -15,11 +15,18 @@ import { Button } from "../../src/components/ui/Button";
 import { IconButton } from "../../src/components/ui/IconButton";
 import { InfoSheet } from "../../src/components/ui/Modal";
 import { Skeleton } from "../../src/components/ui/Skeleton";
-import { SkeletonRows, SkeletonTile } from "../../src/components/ui/SkeletonGroups";
+import {
+  SkeletonLeakCards,
+  SkeletonLeakSummary,
+  SkeletonTile,
+} from "../../src/components/ui/SkeletonGroups";
 import { formatWholeRand } from "../../src/features/billing/billing.format";
 import { useBilling } from "../../src/features/billing/billing.store";
 import { useLeakEntitlement } from "../../src/features/leaks/leak-entitlement.store";
-import { LEAK_CATEGORIES } from "../../src/features/leaks/leak-categories";
+import {
+  buildLiveLeakCategories,
+  liveLeakCategoriesMonthlyTotal,
+} from "../../src/features/leaks/leak-categories.live";
 import {
   splitLeaksForPaywall,
   totalMonthlyLeaks,
@@ -27,9 +34,11 @@ import {
 import {
   REVIEW_STATUSES,
   REVIEW_STATUS_LABEL,
-  listPotentialLeaks,
   type ReviewStatus,
 } from "../../src/features/leaks/potential-leaks";
+import { listLivePotentialLeaks } from "../../src/features/leaks/potential-leaks.live";
+import { useLeakIntelligenceDebug } from "../../src/hooks/useLeakIntelligenceDebug";
+import { formatRandAmount } from "../../src/utils/currency";
 import { COLORS, TRACEPAY, withAlpha } from "../../src/theme/colors";
 
 export default function LeaksScreen() {
@@ -37,8 +46,18 @@ export default function LeaksScreen() {
   const [showDownloadInfo, setShowDownloadInfo] = useState(false);
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
-  const leaks = useMemo(() => listPotentialLeaks(), []);
-  const findingsTotal = useMemo(() => totalMonthlyLeaks(leaks), [leaks]);
+  const detections = useLeakIntelligenceDebug(true);
+  const categories = useMemo(
+    () => buildLiveLeakCategories(detections.result),
+    [detections.result],
+  );
+  const leaks = useMemo(() => listLivePotentialLeaks(detections.result), [detections.result]);
+  const findingsTotal = useMemo(() => {
+    if (detections.result) {
+      return formatRandAmount(liveLeakCategoriesMonthlyTotal(categories));
+    }
+    return totalMonthlyLeaks(leaks);
+  }, [categories, detections.result, leaks]);
   const paywall = useMemo(() => splitLeaksForPaywall(leaks), [leaks]);
   const { unlocked, hydrated } = useLeakEntitlement();
   const { products, entitlements, refresh } = useBilling();
@@ -114,7 +133,7 @@ export default function LeaksScreen() {
                   </View>
                   <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: TRACEPAY.light.heroSubtle }}>
                     <Text className="text-[12px] font-semibold text-white">
-                      {LEAK_CATEGORIES.length} areas
+                      {categories.length} areas
                     </Text>
                   </View>
                 </View>
@@ -122,12 +141,16 @@ export default function LeaksScreen() {
             </View>
           ) : null}
 
-          {!hydrated ? (
-            <View className="mt-7">
-              <View className="gap-2.5">
-                <Skeleton width="45%" height={22} />
-                <Skeleton width="70%" height={14} />
+          {!hydrated || (detections.loading && !detections.result) ? (
+            <View>
+              <View className="mt-5">
+                <SkeletonLeakSummary />
               </View>
+
+              <View className="mb-1 mt-8">
+                <Skeleton width="42%" height={22} />
+              </View>
+              <Skeleton width="68%" height={14} />
               <ScrollView
                 horizontal
                 scrollEnabled={false}
@@ -140,21 +163,32 @@ export default function LeaksScreen() {
                 ))}
               </ScrollView>
 
-              <View className="mt-7 gap-2.5">
-                <Skeleton width="50%" height={22} />
-                <Skeleton width="85%" height={14} />
+              <View className="mb-1 mt-8">
+                <Skeleton width="48%" height={22} />
               </View>
+              <Skeleton width="72%" height={14} />
               <View className="mt-4">
-                <SkeletonRows count={5} compact />
+                <SkeletonLeakCards count={5} />
               </View>
             </View>
           ) : (
             <>
+              {detections.error && !detections.result ? (
+                <View className="mt-5 rounded-3xl bg-card px-4 py-5">
+                  <Text className="text-[15px] font-semibold text-foreground">Leaks unavailable</Text>
+                  <Text className="mt-1 text-[13px] leading-5 text-muted-foreground">
+                    {detections.error}
+                  </Text>
+                  <Button className="mt-4" variant="secondary" onPress={detections.refresh}>
+                    Try again
+                  </Button>
+                </View>
+              ) : null}
               <Text className="mb-1 mt-8 text-[22px] font-bold tracking-[-0.3px] text-foreground">
                 Leak breakdown
               </Text>
               <Text className="text-[14px] leading-5 text-muted-foreground">
-                Areas where we found potential money leaks.
+                Areas where we found potential money leaks from your statements.
               </Text>
               <ScrollView
                 horizontal
@@ -162,14 +196,14 @@ export default function LeaksScreen() {
                 className="-mx-5 mt-4"
                 contentContainerStyle={{ gap: 12, paddingHorizontal: 20 }}
               >
-                {LEAK_CATEGORIES.map((item) => (
+                {categories.map((item) => (
                   <LeakCategoryCard key={item.id} item={item} onPress={openCategory} />
                 ))}
               </ScrollView>
             </>
           )}
 
-          {!hydrated ? null : unlocked ? (
+          {!hydrated || (detections.loading && !detections.result) ? null : unlocked ? (
             <>
               <Text className="mb-1 mt-8 text-[22px] font-bold tracking-[-0.3px] text-foreground">
                 Potential leaks

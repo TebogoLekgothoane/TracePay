@@ -97,6 +97,40 @@ def test_interest_on_a_card_is_not_called_overdraft_interest() -> None:
     assert card.key == account.key == "overdraft_interest"
 
 
+def test_interest_cashback_is_taken_off_the_cost_on_any_card() -> None:
+    from dataclasses import replace
+
+    charged = _interest("158.64")
+    back = replace(
+        charged,
+        transaction_id="back",
+        amount=Decimal("68.34"),
+        transaction_type="credit",
+        description="Dynamic interest cashback at 7.00%",
+        categorisation=charged.categorisation.model_copy(
+            update={"transaction_class": "unknown", "category_name": None}
+        ),
+    )
+    overdue = replace(
+        back,
+        transaction_id="due",
+        amount=Decimal("449.85"),
+        description="Payment of overdue amount",
+    )
+
+    finding = _implied_overdraft(
+        [charged, back, overdue],
+        StatementContext(credit_limit=Decimal("117000")),
+        1,
+    )
+
+    assert finding is not None
+    assert finding.figures["total"] == Decimal("90.30")
+    assert "R158.64 charged" in finding.shows
+    assert "R68.34 paid back" in finding.shows
+    assert "labelled overdue" in finding.shows
+
+
 def test_extracted_rows_add_up_to_the_printed_balances() -> None:
     merged = merge_continuation_rows(ROWS, HEADERS)
     unsigned_is_credit = table_marks_debits_with_sign(merged, HEADERS)

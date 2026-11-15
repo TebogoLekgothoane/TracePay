@@ -139,8 +139,11 @@ def categorise_batch_with_metrics(
             results[item.transaction_id] = resolved
             source_by_id[item.transaction_id] = "deterministic"
             deterministic_matches += 1
-            trusted = trusted_merchant_for_memory(identity)
-            memory.remember(trusted, resolved)
+            # A fee names the merchant it was charged on. Remembering that
+            # classification would later turn the merchant's own purchases into fees.
+            if resolved.transaction_class != "bank_fee":
+                trusted = trusted_merchant_for_memory(identity)
+                memory.remember(trusted, resolved)
             _log_classification(item.transaction_id, resolved, "deterministic")
             continue
 
@@ -155,6 +158,8 @@ def categorise_batch_with_metrics(
             remembered = memory.get(deterministic.merchant_name)
         if remembered is None:
             remembered = memory.get(normalize_for_matching(item.description))
+        if remembered is not None and not _memory_applies(remembered, item.description):
+            remembered = None
         if remembered is not None and remembered.category_name not in {None, FALLBACK_CATEGORY}:
             remembered_result = ensure_complete_classification(
                 remembered.model_copy(
@@ -414,6 +419,17 @@ def categorise_batch_with_metrics(
         dict(sorted(by_source.items())),
     )
     return CategorisationRun(results=results, metrics=metrics)
+
+
+def _memory_applies(remembered: CategorisationResult, description: str) -> bool:
+    """A stored bank-fee answer only applies to a row that is itself a fee.
+
+    Fee lines name the merchant they were charged on. Reusing that answer for
+    the merchant's own purchase turns the purchase into a fee.
+    """
+    if remembered.transaction_class != "bank_fee":
+        return True
+    return "FEE" in normalize_description(description)
 
 
 def _from_statement_category(

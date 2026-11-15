@@ -34,6 +34,7 @@ def _transaction(
     transaction_type: str = "debit",
     description: str = "SHOP",
     transaction_time: time | None = None,
+    booking_date: date | None = None,
     user_id: str = "user-a",
 ) -> FeatureTransaction:
     return FeatureTransaction(
@@ -42,6 +43,7 @@ def _transaction(
         amount=Decimal(amount),
         transaction_date=when,
         transaction_time=transaction_time,
+        booking_date=booking_date,
         merchant_name=merchant,
         description=description,
         transaction_type=transaction_type,  # type: ignore[arg-type]
@@ -927,7 +929,32 @@ def test_rising_monthly_account_fees_produce_monthly_banking_fee_trend() -> None
     assert leak.evidence["completed_month_count"] == 3
 
 
-def test_recurring_card_fee_change_is_distinct_from_other_amount_patterns() -> None:
+def test_a_month_with_no_fee_posting_is_not_a_fee_increase() -> None:
+    """Fees that post on a statement date must not look like they doubled.
+
+    March has spending and no fee row. April and May each have the same fee.
+    That empty month is not a baseline of zero.
+    """
+    transactions = [
+        _transaction("shop-mar", "200", date(2026, 3, 15), merchant="CHECKERS", category="Groceries"),
+        _transaction("shop-apr", "200", date(2026, 4, 15), merchant="CHECKERS", category="Groceries"),
+        _transaction("shop-may", "200", date(2026, 5, 15), merchant="CHECKERS", category="Groceries"),
+        _transaction("shop-jun", "200", date(2026, 6, 10), merchant="CHECKERS", category="Groceries"),
+        _transaction(
+            "fee-apr", "69", date(2026, 4, 4), merchant=None, category="Bank Fees",
+            transaction_class="bank_fee", description="MONTHLY ACCOUNT FEE",
+        ),
+        _transaction(
+            "fee-may", "69", date(2026, 5, 4), merchant=None, category="Bank Fees",
+            transaction_class="bank_fee", description="MONTHLY ACCOUNT FEE",
+        ),
+    ]
+    focuses = {
+        item.evidence.get("finding_focus")
+        for item in _detect(transactions).leaks
+        if item.leak_type == "bank_fee_leak"
+    }
+    assert "monthly_banking_fee_trend" not in focuses
     card_fees = [
         _transaction(
             f"card-{month}",

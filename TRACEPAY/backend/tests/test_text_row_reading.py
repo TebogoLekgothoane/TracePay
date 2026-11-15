@@ -208,6 +208,157 @@ def test_a_carry_row_at_a_page_break_is_not_the_closing_balance() -> None:
     assert resolve_extracted_statement(text, []).closing_balance is None
 
 
+def test_a_balance_is_recorded_only_when_the_chain_proved_it() -> None:
+    rows = parse_text_rows(
+        _statement(
+            [
+                "30/04/2025 BROUGHT FORWARD R 0,00 R 335,97",
+                "02/05/2025 Grocer R -35,97 R 300,00",  # proven: 335.97 - 35.97
+                "03/05/2025 Cafe R -50,00 R 83597",  # garbled balance: accepted by its sign only
+                "04/05/2025 Taxi R -100,00 R 150,00",  # 300 - 50 - 100: the rows prove it
+            ]
+        )
+    )[0]
+    # The garbled figure is never recorded. Taxi's figure is, because the rows add up to it.
+    assert [row.balance for row in rows] == [Decimal("300.00"), None, Decimal("150.00")]
+
+
+def test_a_row_the_second_engine_read_is_added_only_where_the_balances_prove_a_gap() -> None:
+    first = _statement(
+        [
+            "30/04/2025 BROUGHT FORWARD R 0,00 R 335,97",
+            "02/05/2025 Grocer R -35,97 R 300,00",
+            "04/05/2025 Cafe R -50,00 R 150,00",  # 300 - 50 is 250, not 150: a row is missing
+        ]
+    )
+    second = _statement(
+        [
+            "30/04/2025 BROUGHT FORWARD R 0,00 R 335,97",
+            "02/05/2025 Grocer R -35,97 R 300,00",
+            "03/05/2025 Taxi R -100,00 R 200,00",  # closes the gap exactly
+            "03/05/2025 Ghost R -100,00 R 200,00",  # same figures: only one can close it
+            "04/05/2025 Cafe R -50,00 R 150,00",
+        ]
+    )
+    other = parse_text_rows(second)[0]
+    merged = parse_text_rows(first, extra_rows=other)[0]
+    assert [(row.description, str(row.amount)) for row in merged] == [
+        ("Grocer", "-35.97"),
+        ("Taxi", "-100.00"),
+        ("Cafe", "-50.00"),
+    ]
+    assert "row_recovered_from_second_ocr_engine" in merged[1].date_warnings
+    assert [row.balance for row in merged] == [Decimal("300.00"), Decimal("200.00"), Decimal("150.00")]
+
+
+def test_an_undated_row_is_dated_by_its_neighbours_when_the_chain_proves_it() -> None:
+    rows = parse_text_rows(
+        _statement(
+            [
+                "30/04/2025 BROUGHT FORWARD R 0,00 R 335,97",
+                "19/05/2025 Grocer R -35,97 R 300,00",
+                "/05/2025 Boutique R -100,00 R 200,00",  # the OCR lost the day
+                "19/05/2025 Cafe R -50,00 R 150,00",
+            ]
+        )
+    )[0]
+    assert [(row.description, str(row.amount), str(row.date)) for row in rows] == [
+        ("Grocer", "-35.97", "2025-05-19"),
+        ("Boutique", "-100.00", "2025-05-19"),
+        ("Cafe", "-50.00", "2025-05-19"),
+    ]
+    assert rows[1].date_confidence == "medium"
+    assert "date_taken_from_neighbouring_rows" in rows[1].date_warnings
+
+
+def test_an_undated_row_between_different_dates_is_listed_not_guessed() -> None:
+    from pdf_processor.normalise import unparsed_text_rows
+
+    text = _statement(
+        [
+            "30/04/2025 BROUGHT FORWARD R 0,00 R 335,97",
+            "18/05/2025 Grocer R -35,97 R 300,00",
+            "Boutique R -100,00 R 200,00",  # no date at all; neighbours differ
+            "19/05/2025 Cafe R -50,00 R 150,00",
+        ]
+    )
+    rows, detected = parse_text_rows(text)
+    assert [row.description for row in rows] == ["Grocer", "Cafe"]
+    assert detected == 4
+    assert [line.split()[0] for _n, line in unparsed_text_rows(text, rows)] == ["Boutique"]
+
+
+def test_on_a_statement_that_signs_its_debits_an_unsigned_amount_is_never_a_debit() -> None:
+    # Every debit below carries a minus. "500,00" with a balance that has lost its thousands
+    # digit (196,58 for 1 196,58) would chain as a debit; the printed convention says credit.
+    rows = parse_text_rows(
+        _statement(
+            [
+                "30/04/2025 BROUGHT FORWARD R 0,00 R 696,58",
+                "01/05/2025 Shop A R -10,00 R 686,58",
+                "02/05/2025 Shop B R -10,00 R 676,58",
+                "03/05/2025 Shop C R -10,00 R 666,58",
+                "04/05/2025 Shop D R -10,00 R 656,58",
+                "08/05/2025 N EXAMPLE R 500,00 R 156,58",  # misread balance, unsigned amount
+                "09/05/2025 Shop E R -32,00 R 124,58",
+            ]
+        )
+    )[0]
+    by_name = {row.description: row for row in rows}
+    assert "N EXAMPLE" not in by_name  # not proven either way: handed back, never a debit
+    assert by_name["Shop E"].amount == Decimal("-32.00")
+
+
+def test_a_statement_without_signed_debits_still_reads_by_the_balance_chain() -> None:
+    rows = parse_text_rows(
+        _statement(
+            [
+                "30/04/2025 BROUGHT FORWARD R 0,00 R 700,00",
+                "01/05/2025 Shop A R 100,00 R 600,00",
+                "02/05/2025 Deposit R 50,00 R 650,00",
+            ]
+        )
+    )[0]
+    assert [str(row.amount) for row in rows] == ["-100.00", "50.00"]
+
+
+def test_a_neighbour_dated_row_follows_its_neighbours_after_their_days_are_repaired() -> None:
+    rows = parse_text_rows(
+        _statement(
+            [
+                "30/04/2025 BROUGHT FORWARD R 0,00 R 1 000,00",
+                "23/05/2025 Shop A R -100,00 R 900,00",
+                "4/05/2025 Shop B R -100,00 R 800,00",  # 24 May with its first digit lost
+                "/05/2025 Shop C R -100,00 R 700,00",  # undated: sits between 24 May rows
+                "4/05/2025 Shop D R -100,00 R 600,00",
+                "26/05/2025 Shop E R -100,00 R 500,00",
+            ]
+        )
+    )[0]
+    assert [(row.description, row.date.day) for row in rows] == [
+        ("Shop A", 23),
+        ("Shop B", 24),
+        ("Shop C", 24),
+        ("Shop D", 24),
+        ("Shop E", 26),
+    ]
+
+
+def test_a_balance_with_a_leading_zero_is_not_trusted() -> None:
+    # "077,34" is "2 077,34" with its thousands lost: the chain must not run through it.
+    rows = parse_text_rows(
+        _statement(
+            [
+                "30/04/2025 BROUGHT FORWARD R 0,00 R 2 127,34",
+                "17/05/2025 Shop R -50,00 R 077,34",
+                "17/05/2025 Shop R -26,00 R 051,34",
+            ]
+        )
+    )[0]
+    assert [row.balance for row in rows] == [None, None]
+    assert [str(row.amount) for row in rows] == ["-50.00", "-26.00"]
+
+
 def test_rows_that_could_not_be_proven_are_handed_back_not_dropped() -> None:
     from pdf_processor.normalise import unparsed_text_rows
 

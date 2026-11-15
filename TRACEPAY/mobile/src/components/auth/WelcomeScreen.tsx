@@ -46,7 +46,7 @@ function WelcomeWordmark({ width }: { width: number }) {
   return (
     <Image
       accessibilityLabel="TRACEPAY"
-      className="mt-2"
+      className="mt-5"
       source={art.wordmark}
       style={{ width, height: width / LOGO_ASPECT.wordmark }}
       resizeMode="contain"
@@ -99,9 +99,9 @@ function WelcomeLogo({
 export function WelcomeScreen() {
   const { width } = useWindowDimensions();
   const palette = usePalette();
-  const heroLogoSize = Math.min(width * 0.52, 210);
-  const heroWordmarkWidth = Math.min(width * 0.78, 300);
-  const compactLogoSize = Math.min(width * 0.36, 132);
+  const heroLogoSize = Math.min(width * 0.28, 108);
+  const heroWordmarkWidth = Math.min(width * 0.48, 180);
+  const compactLogoSize = Math.min(width * 0.22, 84);
   const compactScale = compactLogoSize / heroLogoSize;
 
   const { error, requestReset, setError, signIn, signUp, submitting } = useAuth();
@@ -245,11 +245,11 @@ export function WelcomeScreen() {
 
             <View style={styles.flex} />
 
-            <View className="gap-3.5 px-7 pb-10">
-              <Button arrow onPress={() => openSheet("create")}>
+            <View className="gap-3.5 px-7 pb-16">
+              <Button onPress={() => openSheet("create")}>
                 Create Account
               </Button>
-              <Button arrow variant="outline" onPress={() => openSheet("login")}>
+              <Button variant="outline" onPress={() => openSheet("login")}>
                 Log In
               </Button>
             </View>

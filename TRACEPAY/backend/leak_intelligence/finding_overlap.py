@@ -317,6 +317,58 @@ def _is_specific_event(leak: LeakDetection) -> bool:
     return leak.leak_type == "irregular_transaction_leak" or _basis(leak) in _SPECIFIC_BASES
 
 
+#: A pattern finding whose base total is mostly one purchase says nothing that the one-off
+#: finding about that purchase does not already say.
+SINGLE_PURCHASE_SHARE = Decimal("0.6")
+_PATTERN_TOTAL_KEYS = {
+    "payday_spending_leak": "post_salary_discretionary_total",
+    "weekend_spending_leak": "discretionary_weekend_total",
+}
+
+
+def _in_pattern_window(leak: LeakDetection, day: date | None) -> bool:
+    """Whether a purchase on ``day`` falls inside the days this pattern finding counts."""
+    if day is None:
+        return False
+    if leak.leak_type == "weekend_spending_leak":
+        return day.weekday() >= 5
+    window = int(leak.evidence.get("window_days") or 3)
+    for text in leak.evidence.get("salary_event_dates") or []:
+        salary = _day(text)
+        if salary is not None and 0 <= (day - salary).days <= window:
+            return True
+    return False
+
+
+def _explained_by_single_purchase(
+    leak: LeakDetection, others: list[LeakDetection]
+) -> LeakDetection | None:
+    """The one-off finding about the purchase that makes up most of this pattern, or None.
+
+    The R19,499 laptop bought the Saturday after pay day is one event. Read as a weekend
+    spike and a payday spike as well, it would be reported three times with no new fact.
+    """
+    key = _PATTERN_TOTAL_KEYS.get(leak.leak_type)
+    total = _dec(leak.evidence.get(key)) if key else None
+    if not total or total <= 0:
+        return None
+    for other in others:
+        if other.leak_type != "irregular_transaction_leak":
+            continue
+        # The engine's finding carries transaction_amount and transaction_date; the review's
+        # one-off carries amount, and the date on its single supporting row.
+        evidence = other.evidence
+        amount = _dec(evidence.get("transaction_amount")) or _dec(evidence.get("amount"))
+        if amount is None or amount / total < SINGLE_PURCHASE_SHARE:
+            continue
+        day = _day(evidence.get("transaction_date"))
+        if day is None:
+            day = next((row.date for row in other.supporting_transactions), None)
+        if _in_pattern_window(leak, day):
+            return other
+    return None
+
+
 def mark_explained_findings(result: LeakDetectionResult) -> LeakDetectionResult:
     """Link each aggregate increase to the specific findings that account for it.
 
@@ -330,6 +382,22 @@ def mark_explained_findings(result: LeakDetectionResult) -> LeakDetectionResult:
     counted = {leak.leak_id: _counted_ids(leak) for leak in result.leaks}
     updated: list[LeakDetection] = []
     for leak in result.leaks:
+        single = _explained_by_single_purchase(leak, result.leaks)
+        if single is not None:
+            updated.append(
+                leak.model_copy(
+                    update={
+                        "evidence": {
+                            **leak.evidence,
+                            "explained_by_leak_ids": [single.leak_id],
+                            "explained_amount": _dec(single.evidence.get("transaction_amount")),
+                            "explained_reason": "single_purchase_dominates_pattern",
+                            "redundant_for_display": True,
+                        }
+                    }
+                )
+            )
+            continue
         ids = counted[leak.leak_id] if _is_aggregate(leak) else set()
         if not ids:
             updated.append(leak)

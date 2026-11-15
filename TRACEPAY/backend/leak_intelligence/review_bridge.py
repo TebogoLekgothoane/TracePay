@@ -104,6 +104,8 @@ _EVIDENCE_STATUS = {
     "cloud_overlap": "possible",
     "unknown_recurring": "possible",
     "optional_charge": "possible",
+    "airtime_advance": "confirmed",
+    "trading": "confirmed",
 }
 _FEE_ROLES = {"service charge", "cross-border fee", "payment fee", "interest"}
 
@@ -146,6 +148,19 @@ def _impact(finding: ReviewFinding, months: int) -> tuple[Decimal, Decimal | Non
         return monthly, monthly * 12, "recurring"
     if prefix == "airtime":
         return (money("total") / months).quantize(Decimal("0.01")), None, "estimated"
+    if prefix == "airtime_advance":
+        # The leak is the fee charged to borrow the airtime, not the repayment.
+        return (money("fees") / months).quantize(Decimal("0.01")), None, "estimated"
+    if prefix == "trading":
+        return (money("total") / months).quantize(Decimal("0.01")), None, "estimated"
+    if prefix in {"habit", "frequent"}:
+        # The level of a habit over the period: a fact about where the money goes, not a loss.
+        return (money("total") / months).quantize(Decimal("0.01")), None, "estimated"
+    if prefix == "unexplained_debits":
+        monthly = (money("total") / months).quantize(Decimal("0.01"))
+        return monthly, monthly * 12, "recurring"
+    if prefix == "balance":
+        return Decimal("0"), None, "estimated"
     if prefix == "escalation":
         return max(money("last") - money("first"), Decimal("0")), None, "estimated"
     if prefix in {"large_one_off", "repeat_payment"}:
@@ -219,8 +234,8 @@ def _claims(finding: ReviewFinding) -> LeakClaims:
 def review_to_leaks(review: StatementReview, user_id: str) -> list[LeakDetection]:
     """Every active review finding that is a finding, as an engine finding.
 
-    A price that fell is not one (see ``review_good_news``), and neither is a note or a
-    commitment: the commitments are not leaks and stay in the report.
+    A price that fell is not one (see ``review_good_news``). A commitment-group finding
+    (where the money goes) is passed on as a fact about the period, never as a loss.
     """
     detected_at = datetime.combine(
         review.period_end or review.period_start or datetime.now(timezone.utc).date(),
@@ -229,7 +244,7 @@ def review_to_leaks(review: StatementReview, user_id: str) -> list[LeakDetection
     )
     leaks = []
     for finding in review.findings:
-        if finding.status != "active" or finding.group not in {"recoverable", "review"}:
+        if finding.status != "active" or finding.group not in {"recoverable", "review", "commitment"}:
             continue
         monthly, annual, kind = _impact(finding, review.month_count)
         confidence = _CONFIDENCE.get(finding.confidence, 0.7)
@@ -351,6 +366,54 @@ def _contradicted(miss, review_leaks: list[LeakDetection]) -> bool:
     )
 
 
+def _already_in_habit(engine_leak: LeakDetection, review_leaks: list[LeakDetection]) -> LeakDetection | None:
+    """An unusual purchase that a habit finding already lists is not a second finding.
+
+    One large meal inside the restaurant total is the habit, on any account.
+    A large purchase with no habit around it is still raised on its own.
+    """
+    if engine_leak.evidence.get("finding_focus") != "unusual_transaction":
+        return None
+    ids = {row.transaction_id for row in engine_leak.supporting_transactions}
+    if not ids:
+        return None
+    for candidate in review_leaks:
+        key = str(candidate.evidence.get("review_key") or "")
+        if not (key.startswith("habit:") or key == "food_delivery"):
+            continue
+        covered = {row.transaction_id for row in candidate.supporting_transactions}
+        if ids <= covered:
+            return candidate
+    return None
+
+
+# A fee finding that names one kind of charge (SMS, interest, a foreign fee) is its own
+# fact. A finding that only says "fees" is the same money the itemised fee review lists.
+_NAMED_FEE_FOCUS = frozenset(
+    {
+        "sms_banking",
+        "atm_balance_enquiry",
+        "immediate_payment_fee",
+        "foreign_transaction_fee",
+        "interest_charges",
+        "overdraft_fee_pattern",
+        "insufficient_funds_charges",
+        "recurring_merchant_fee_change",
+    }
+)
+
+
+def _fees_already_itemised(engine_leak: LeakDetection, review_leaks: list[LeakDetection]) -> LeakDetection | None:
+    if engine_leak.leak_type != "bank_fee_leak":
+        return None
+    if engine_leak.evidence.get("finding_focus") in _NAMED_FEE_FOCUS:
+        return None
+    return next(
+        (item for item in review_leaks if item.evidence.get("review_key") == "bank_fees"),
+        None,
+    )
+
+
 def merge_review(
     engine: LeakDetectionResult,
     review_leaks: list[LeakDetection],
@@ -361,7 +424,11 @@ def merge_review(
     compared."""
     kept: list[LeakDetection] = []
     for leak in engine.leaks:
-        owner = _superseded_by(leak, review_leaks)
+        owner = (
+            _superseded_by(leak, review_leaks)
+            or _already_in_habit(leak, review_leaks)
+            or _fees_already_itemised(leak, review_leaks)
+        )
         if owner is None:
             kept.append(leak)
             continue

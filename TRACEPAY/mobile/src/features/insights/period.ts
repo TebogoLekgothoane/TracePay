@@ -18,7 +18,10 @@ export const CUSTOM_RANGES = [
 ] as const;
 export type CustomRange = (typeof CUSTOM_RANGES)[number];
 
-/** Relative size of mock totals vs "This month". */
+/**
+ * Legacy scaling helpers for screens that have not yet been switched fully to
+ * live statement totals. Prefer real period ranges + transaction sums instead.
+ */
 export const PERIOD_FACTORS: Record<Period, number> = {
   "This month": 1,
   "Last month": 0.88,

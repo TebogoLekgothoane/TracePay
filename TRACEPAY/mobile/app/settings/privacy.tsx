@@ -32,7 +32,7 @@ const SECTIONS = [
     id: "control",
     Icon: Lock,
     title: "You stay in control",
-    body: "You decide which statements to upload. You can remove linked accounts and log out at any time. TracePay never asks for your bank login password.",
+    body: "You decide which statements to upload. You can remove linked accounts, change your password or PIN, or delete your account (and your statements) at any time. TracePay never asks for your bank login password.",
   },
 ] as const;
 

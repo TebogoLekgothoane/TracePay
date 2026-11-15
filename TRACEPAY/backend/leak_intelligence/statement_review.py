@@ -334,15 +334,19 @@ _ALIASES: tuple[tuple[re.Pattern[str], str], ...] = tuple(
         (r"telkom", "Telkom"),
         (r"anthropic", "Anthropic Claude"),
         (r"discbank", "Discbank"),
+        # After delivery matching, so "Uber Eats" stays a delivery and a ride stays a ride.
+        (r"\buber\b", "Uber"),
+        (r"\bbolt\b", "Bolt"),
     )
 )
 # Restaurant and takeaway delivery services, by how their orders appear on a statement. A
 # supermarket's own delivery (Checkers Sixty60, say) is a grocery shop, not a delivery habit.
+# A bank prefix such as "DL UBER CPT" is a ride. It is delivery only when the line says Eats.
 _DELIVERY_SERVICES: tuple[tuple[re.Pattern[str], str], ...] = tuple(
     (re.compile(pattern, re.IGNORECASE), name)
     for pattern, name in (
-        (r"uber\s*eats|\bdl\W*uber", "Uber Eats"),
-        (r"\bmr\.?\s*d\s+food|\bmrd\s*food|\bmrdfood", "Mr D Food"),
+        (r"uber\s*eats", "Uber Eats"),
+        (r"\bmr\.?\s*d(?:\s+food)?\b|\bmrd(?:\s*food)?\b", "Mr D Food"),
         (r"\bbolt\s*food|\bboltfood", "Bolt Food"),
         (r"\border\s*in\b|\borderin\b", "OrderIn"),
         (r"\bdeliveroo\b", "Deliveroo"),
@@ -396,7 +400,7 @@ _PENALTY = re.compile(
 )
 # A fee on a payment or transfer, as opposed to a charge for holding the account.
 _PAYMENT_FEE = re.compile(
-    r"payment|faster|shap|\(fp\)|\bfp\b|transfer|\beft\b|immediate|withdraw|\batm\b|enquiry",
+    r"payment|faster|shap|\(fp\)|\bfp\b|transfer|\beft\b|immediate|withdraw|\batm\b|enquiry|cash\s*sent|cash\s*send",
     re.IGNORECASE,
 )
 _FOREIGN_CURRENCY = re.compile(r"\b(USD|EUR|GBP)\s?(\d+(?:\.\d+)?)", re.IGNORECASE)
@@ -464,9 +468,16 @@ def _clean_description(description: str) -> str:
     return re.sub(r"\s+", " ", text).strip(" -*")
 
 
+def unreadable_description(tx: FeatureTransaction) -> bool:
+    """The placeholder left when a cell had an amount but no narration."""
+    return (tx.description or "").strip().casefold() == "no description printed"
+
+
 def payee_name(tx: FeatureTransaction) -> str:
     """How the customer would name who was paid. Stable across a payee's own spellings."""
     description = tx.description or ""
+    if unreadable_description(tx):
+        return ""
     if service := delivery_service(description):
         return service
     # "Rent A Car" and rentals are hire companies, not a landlord.
@@ -490,12 +501,50 @@ def _amounts_equal(left: Decimal, right: Decimal) -> bool:
     return abs(left - right) <= Decimal("0.005")
 
 
+_CARD_PURCHASE = re.compile(
+    r"\b(?:online purchase|card purchase|recurring card purchase)\b",
+    re.IGNORECASE,
+)
+
+
+def _purchase_labelled_as_fee(tx: FeatureTransaction) -> bool:
+    """A card or online purchase whose class was set to a fee.
+
+    The fee column and a fee charged at the same merchant must not turn the
+    purchase itself into a bank fee. A real fee says so in the description.
+    """
+    description = tx.description or ""
+    return (
+        _klass(tx) == "bank_fee"
+        and _is_debit(tx)
+        and _CARD_PURCHASE.search(description) is not None
+        and re.search(r"\bfee\b", description, re.IGNORECASE) is None
+    )
+
+
 def _is_fee(tx: FeatureTransaction) -> bool:
-    return _klass(tx) == "bank_fee" and _is_debit(tx)
+    return _klass(tx) == "bank_fee" and _is_debit(tx) and not _purchase_labelled_as_fee(tx)
+
+
+_DEBIT_INTEREST = re.compile(r"\bint(?:erest)?\s+on\s+debit\b", re.IGNORECASE)
 
 
 def _is_interest(tx: FeatureTransaction) -> bool:
-    return _is_fee(tx) and "interest" in (tx.description or "").lower()
+    text = tx.description or ""
+    return _is_fee(tx) and ("interest" in text.lower() or _DEBIT_INTEREST.search(text) is not None)
+
+
+# Money the bank paid back against interest it had charged. The wording differs by bank
+# ("interest cashback", "interest rebate"); the shape is a credit that names both.
+_INTEREST_BACK = re.compile(
+    r"interest.{0,24}(?:cash\s*back|cashback|rebate|refund)"
+    r"|(?:cash\s*back|cashback|rebate).{0,24}interest",
+    re.IGNORECASE,
+)
+
+
+def _is_interest_rebate(tx: FeatureTransaction) -> bool:
+    return not _is_debit(tx) and _INTEREST_BACK.search(tx.description or "") is not None
 
 
 def _optional_charge_series(txs: list[FeatureTransaction]) -> dict[str, list[FeatureTransaction]]:
@@ -551,8 +600,10 @@ def _purchases(txs: list[FeatureTransaction]) -> list[FeatureTransaction]:
         and tx.transaction_date
         and (
             _klass(tx) in {"spending", "unknown"}
+            or _purchase_labelled_as_fee(tx)
             or (_klass(tx) == "person_to_person" and _RENT_WORDS.search(tx.description or ""))
         )
+        and not unreadable_description(tx)
     ]
 
 
@@ -584,7 +635,9 @@ class _Series:
 def _series_by_payee(txs: list[FeatureTransaction]) -> dict[str, _Series]:
     grouped: dict[str, list[FeatureTransaction]] = defaultdict(list)
     for tx in _purchases(txs):
-        grouped[payee_name(tx)].append(tx)
+        name = payee_name(tx)
+        if name:
+            grouped[name].append(tx)
     result = {}
     for name, charges in grouped.items():
         charges.sort(key=lambda tx: tx.transaction_date)
@@ -652,11 +705,18 @@ def _double_debit(series_map: dict[str, _Series]) -> list[ReviewFinding]:
             if rounded not in (2, 3) or abs(multiple - rounded) > Decimal("0.01"):
                 continue
             month = _month_key(charge.transaction_date)
-            earlier = [key for key in series.months if key < month]
+            # The ordinary amount has to have been charged in each earlier month.
+            # A shop that was merely visited in those months, at other prices, was not doubled.
+            regular_months = {
+                _month_key(tx.transaction_date)
+                for tx in series.charges
+                if tx.amount == regular and tx.transaction_date
+            }
+            earlier = [key for key in sorted(regular_months) if key < month]
             if len(earlier) < 3:
                 continue
             span = _consecutive(earlier)
-            if any(key not in earlier for key in span):
+            if any(key not in regular_months for key in span):
                 continue  # a month was missed: billed together, not a double debit
             if _consecutive([earlier[-1], month])[1:-1]:
                 continue
@@ -710,20 +770,78 @@ def _pair_rows(series: _Series, paired: dict[Decimal, dict[str, list[date]]]) ->
     return rows
 
 
+_EVERYDAY_REPEAT = frozenset(
+    {
+        "groceries",
+        "fuel",
+        "fast food",
+        "restaurants",
+        "takeaways",
+        "ride hailing",
+        "transport",
+        "airtime & data",
+        "airtime",
+        "cellphone",
+    }
+)
+
+
+_EVERYDAY_TEXT = re.compile(
+    r"\b(?:prepaid|airtime|electricity|data bundle)\b",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_a_ride(tx: FeatureTransaction) -> bool:
+    """A ride-hailing fare. The same fare twice is two trips, not a second subscription."""
+    raw = f"{tx.merchant_name or ''} {tx.description or ''}".upper()
+    compact = raw.replace(" ", "").replace("-", "").replace("*", "")
+    if "UBEREATS" in compact or "BOLT.EU/S/" in compact:
+        return False
+    tokens = raw.replace("-", " ").replace("*", " ").split()
+    return "UBER" in tokens or "BOLT" in tokens
+
+
+def _everyday_repeat(series: _Series) -> bool:
+    """Groceries, rides, fuel and airtime repeat the same small price on purpose."""
+    charges = series.charges
+    if not charges:
+        return False
+    ordinary = 0
+    for tx in charges:
+        category = (tx.categorisation.category_name or "").casefold()
+        if category in _EVERYDAY_REPEAT or _looks_like_a_ride(tx) or _EVERYDAY_TEXT.search(tx.description or ""):
+            ordinary += 1
+    return ordinary * 2 >= len(charges)
+
+
 def _paired_charges(series_map: dict[str, _Series], fee_rate_by_payee: dict[str, Decimal]) -> list[ReviewFinding]:
-    """The same amount charged twice within three days, month after month."""
+    """The same amount charged twice within a few days, month after month.
+
+    A shop visited twice in three days can be two ordinary trips. A subscription billed
+    twice in the same week, for several months, is a second account or device.
+    """
     findings = []
     for name, series in series_map.items():
+        subscription = any(
+            (tx.categorisation.category_name or "").casefold() == "subscriptions" for tx in series.charges
+        )
+        limit = 7 if subscription else 3
         by_amount_month: dict[tuple[Decimal, str], list[date]] = defaultdict(list)
         for tx in series.charges:
             by_amount_month[(tx.amount, _month_key(tx.transaction_date))].append(tx.transaction_date)
         paired: dict[Decimal, dict[str, list[date]]] = defaultdict(dict)
         for (amount, month), days in by_amount_month.items():
             days.sort()
-            if len(days) >= 2 and (days[-1] - days[0]).days <= 3:
+            # Exactly two. Three or more of the same price in a few days is repeat buying.
+            if len(days) == 2 and (days[-1] - days[0]).days <= limit:
                 paired[amount][month] = days
         paired = {amount: months for amount, months in paired.items() if len(months) >= 2}
         if not paired:
+            continue
+        # A shop, a ride, or airtime at the same price is an ordinary repeat, not a second account.
+        # A payee with other charges (Apple sells many things) can still be billed twice.
+        if _everyday_repeat(series):
             continue
         months = sorted({month for by_month in paired.values() for month in by_month})
         if len(months) < 2:
@@ -734,6 +852,8 @@ def _paired_charges(series_map: dict[str, _Series], fee_rate_by_payee: dict[str,
             for days in by_month.values():
                 extra += amount * (len(days) - 1)
         amounts = sorted(paired)
+        gaps = [(days[-1] - days[0]).days for by_month in paired.values() for days in by_month.values() if len(days) >= 2]
+        span_phrase = "within a week" if gaps and max(gaps) > 3 else "within 3 days"
         all_days = [day.day for by_month in paired.values() for days in by_month.values() for day in days]
         last_pair_day = max(day for by_month in paired.values() for days in by_month.values() for day in days)
         rate = fee_rate_by_payee.get(name)
@@ -761,7 +881,7 @@ def _paired_charges(series_map: dict[str, _Series], fee_rate_by_payee: dict[str,
                 confidence="medium-low",
                 confirmed=[
                     f"{window}, {money_list(amounts)} {'were each' if len(amounts) > 1 else 'was'} charged "
-                    f"**twice within 3 days** around the {spans}. That is {pair_count} pairs, with "
+                    f"**twice {span_phrase}** around the {spans}. That is {pair_count} pairs, with "
                     f"{money(extra)} in repeats{fee_text}.{tail}"
                 ],
                 cannot_see=[
@@ -864,6 +984,173 @@ def _price_changes(series_map: dict[str, _Series]) -> tuple[list[ReviewFinding],
     return rises, drops
 
 
+def _without_fees_credited_back(
+    fees: list[FeatureTransaction], txs: list[FeatureTransaction]
+) -> list[FeatureTransaction]:
+    """A fee the bank credited back the same day is not a cost."""
+    credits = [tx for tx in txs if _is_fee_reversal(tx)]
+    used: set[str] = set()
+    kept = []
+    for fee in fees:
+        match = next(
+            (
+                credit
+                for credit in credits
+                if credit.transaction_id not in used
+                and credit.transaction_date == fee.transaction_date
+                and credit.amount == fee.amount
+            ),
+            None,
+        )
+        if match is not None:
+            used.add(match.transaction_id)
+            continue
+        kept.append(fee)
+    return kept
+
+
+def _is_fee_reversal(tx: FeatureTransaction) -> bool:
+    if _is_debit(tx):
+        return False
+    text = (tx.description or "").lower()
+    if _klass(tx) == "bank_fee":
+        return True
+    return "reversal" in text or ("fee" in text and ("unpaid" in text or "correction" in text))
+
+
+def _is_unpaid_debit_order(tx: FeatureTransaction) -> bool:
+    lower = (tx.description or "").lower()
+    return "debit order" in lower and ("insufficient" in lower or "unpaid" in lower)
+
+
+def _account_charge_label(description: str) -> tuple[str, str]:
+    """Group the same kind of account charge. Everything else keeps its printed name."""
+    raw = description.strip()
+    lower = raw.lower()
+    if "sms notification" in lower or ("sms" in lower and "fee" in lower):
+        return "sms notification fees", "SMS notification fees"
+    if "debit order" in lower and ("insufficient" in lower or "unpaid" in lower):
+        return "unpaid debit order fees", "Unpaid debit order fees"
+    if "insufficient funds" in lower or "limit exceeded" in lower:
+        return "declined card fees", "Declined card fees"
+    if lower.startswith("fee:") or lower.startswith("fee refund:"):
+        if "cash sent" in lower or "cash send" in lower:
+            return "cash sent fees", "Cash sent fees"
+        if _CARD_PURCHASE.search(lower):
+            return "card purchase fees", "Card purchase fees"
+    if "prepaid" in lower and "fee" in lower:
+        return "prepaid purchase fees", "Prepaid purchase fees"
+    if "advance" in lower and "fee" in lower:
+        return "advance fees", "Advance fees"
+    if lower in {"fee", "fees"}:
+        return "service fees", "Service fees"
+    if "no funds" in lower or "item unpaid" in lower:
+        return "unpaid item fee", "Unpaid item fee"
+    if _messy_fee_text(raw):
+        named = _named_bank_charge(lower)
+        if named:
+            label = named[:1].upper() + named[1:]
+            return named, label
+    cleaned = raw.lstrip("#").strip()
+    return (cleaned or raw).lower(), cleaned or raw
+
+
+def _messy_fee_text(text: str) -> bool:
+    """A fee line the reader joined to a date, a hash mark, or the purchase it sat on."""
+    return "#" in text or "pymt" in text.lower() or bool(re.match(r"^[lI\d}]", text))
+
+
+def _named_bank_charge(text: str) -> str | None:
+    """A payment-fee line whose printed name would otherwise collapse to "Payment"."""
+    if "bundle" in text and "fee" in text:
+        return "payments bundle fee"
+    if "pymt" in text:
+        return "international payment fee"
+    if "no funds" in text or "item unpaid" in text:
+        return "unpaid item fee"
+    if "paypal" in text and "fee" in text:
+        return "PayPal withdrawal fee"
+    if "unsuccessful" in text or "declined" in text:
+        return "declined transaction fee"
+    if "balance" in text and ("enq" in text or "atm" in text):
+        return "balance enquiry fee"
+    if "atm" in text and "fee" in text:
+        return "ATM fee"
+    if "service fee" in text:
+        return "service fees"
+    return None
+
+
+def _payment_fee_kind(description: str) -> str:
+    """The payment the fee was charged for, so an ATM fee is never called PayShap."""
+    text = description.lower()
+    named = _named_bank_charge(text)
+    if named:
+        return named.removesuffix(" fee").removesuffix(" fees")
+    if "atm" in text or "cash withdrawal" in text:
+        return "ATM"
+    if "shap" in text:
+        return "PayShap"
+    if "cash sent" in text or "cash send" in text or "send money" in text:
+        return "Cash send"
+    if "immediate" in text:
+        return "Immediate payment"
+    if "capitec pay" in text:
+        return "Capitec Pay"
+    if "prepaid" in text:
+        return "Prepaid purchase"
+    return "Payment"
+
+
+def _paid_for(fee: FeatureTransaction, txs: list[FeatureTransaction]) -> FeatureTransaction | None:
+    """The debit this fee sits on.
+
+    Usually the previous payment that day. An ATM fee sits on the cash withdrawal,
+    even when a card purchase was posted closer to the fee.
+    """
+    try:
+        index = txs.index(fee)
+    except ValueError:
+        return None
+    earlier_debits = []
+    for earlier in reversed(txs[:index]):
+        if earlier.transaction_date != fee.transaction_date:
+            break
+        if _is_debit(earlier) and not _is_fee(earlier):
+            earlier_debits.append(earlier)
+    if not earlier_debits:
+        return None
+    if re.search(r"\batm\b|cash withdrawal", fee.description or "", re.IGNORECASE):
+        cash = next(
+            (
+                tx
+                for tx in earlier_debits
+                if re.search(r"\batm\b|\bcash\b", tx.description or "", re.IGNORECASE)
+            ),
+            None,
+        )
+        if cash is not None:
+            return cash
+    return earlier_debits[0]
+
+
+def _outsized_fee_note(fees: list[FeatureTransaction], txs: list[FeatureTransaction]) -> str:
+    """Name a fee that is large next to the payment it was charged on."""
+    notes = []
+    for fee in fees:
+        paid = _paid_for(fee, txs)
+        if paid is None or paid.amount <= 0:
+            continue
+        if fee.amount < Decimal("10"):
+            continue
+        if fee.amount < Decimal("20") and fee.amount < paid.amount * Decimal("0.15"):
+            continue
+        notes.append(f"{money(fee.amount)} on the {money(paid.amount)} payment")
+    if not notes:
+        return ""
+    return " (including " + _join(notes) + ")"
+
+
 def _fee_breakdown(
     txs: list[FeatureTransaction], month_count: int
 ) -> tuple[ReviewFinding | None, dict[str, Decimal]]:
@@ -873,6 +1160,7 @@ def _fee_breakdown(
     fees = [
         tx for tx in txs if _is_fee(tx) and not _is_interest(tx) and tx.transaction_id not in optional
     ]
+    fees = _without_fees_credited_back(fees, txs)
     if not fees:
         return None, {}
     total = sum((tx.amount for tx in fees), _ZERO)
@@ -938,14 +1226,19 @@ def _fee_breakdown(
                 half_points = (fee_total / charged * 100 / Decimal("0.5"))
                 rates[name] = half_points.quantize(Decimal(1), rounding=ROUND_HALF_UP) * Decimal("0.5")
     # Charges the bank makes for the account itself (monthly, facility, programme premium)
-    # are named as they are printed, not lumped in as payment fees.
-    upkeep = [tx for tx in other if not _PAYMENT_FEE.search(tx.description or "")]
+    # are named as they are printed, not lumped in as payment fees. An unpaid debit order
+    # is one of those, even though the word "eft" also appears on payment fees.
+    upkeep = [
+        tx
+        for tx in other
+        if _is_unpaid_debit_order(tx) or not _PAYMENT_FEE.search(tx.description or "")
+    ]
     if upkeep:
         by_name: dict[str, Decimal] = defaultdict(lambda: _ZERO)
         display: dict[str, str] = {}
         for tx in upkeep:
-            key = (tx.description or "").strip().lower()
-            display.setdefault(key, (tx.description or "").strip())
+            key, label = _account_charge_label(tx.description or "")
+            display.setdefault(key, label)
             by_name[key] += tx.amount
         ordered_upkeep = sorted(by_name.items(), key=lambda item: -item[1])
         parts.append(
@@ -955,35 +1248,27 @@ def _fee_breakdown(
         )
         other = [tx for tx in other if tx not in upkeep]
     if other:
-        names = " and ".join(
-            label
-            for label, token in (("Faster Payment", "faster payment"), ("PayShap", "shap"))
-            if any(token in tx.description.lower() for tx in other)
-        ) or "Payment"
-        extra = ""
-        biggest = max(other, key=lambda tx: tx.amount)
-        typical = Decimal(str(median(tx.amount for tx in other)))
-        if biggest.amount >= typical * 3:
-            ordered_all = list(txs)
-            index = ordered_all.index(biggest)
-            paid = ordered_all[index - 1] if index > 0 else None
-            if (
-                paid is not None
-                and _is_debit(paid)
-                and paid.transaction_date == biggest.transaction_date
-                and _klass(paid) == "person_to_person"
-            ):
-                label = re.sub(r"\s*\(FP\)\s*", "", paid.description, flags=re.IGNORECASE).strip()
-                extra = f' (including {money(biggest.amount)} on the {money(paid.amount)} "{label}" payment)'
-        parts.append(f"{names} fees {money(sum((tx.amount for tx in other), _ZERO))}{extra}.")
+        by_kind: dict[str, list[FeatureTransaction]] = defaultdict(list)
+        for tx in other:
+            by_kind[_payment_fee_kind(tx.description or "")].append(tx)
+        kind_bits = []
+        for kind, rows in sorted(by_kind.items(), key=lambda item: -sum(tx.amount for tx in item[1])):
+            kind_total = sum((tx.amount for tx in rows), _ZERO)
+            note = _outsized_fee_note(rows, txs)
+            label = kind[:1].upper() + kind[1:]
+            kind_bits.append(f"{label} fees {money(kind_total)}{note}")
+        parts.append(". ".join(kind_bits) + ".")
 
+    # One cycle date can cover a statement whose fees were charged across several months.
+    fee_months = len({_month_key(tx.transaction_date) for tx in fees if tx.transaction_date})
+    shown_months = fee_months if month_count == 1 and fee_months > 1 else month_count
     finding = ReviewFinding(
         key="bank_fees",
         group="review",
         leak_type="bank_fee_leak",
         title="Bank fees, itemised",
         display="table",
-        shows=f"{money(total)} over {month_count} months. " + " ".join(parts),
+        shows=f"{money(total)} over {shown_months} months. " + " ".join(parts),
         cannot_show="Whether a cheaper account tier suits you.",
         figures={"total": total, "service": sum((tx.amount for tx in service), _ZERO)},
         rows=[
@@ -1009,9 +1294,32 @@ def _implied_overdraft(
     interest = [tx for tx in txs if _is_interest(tx)]
     if not interest:
         return None
-    total = sum((tx.amount for tx in interest), _ZERO)
+    charged = sum((tx.amount for tx in interest), _ZERO)
+    rebates = [tx for tx in txs if _is_interest_rebate(tx)]
+    rebate_total = sum((tx.amount for tx in rebates), _ZERO)
+    total = max(charged - rebate_total, _ZERO)
+    # A few cents of interest after one overdrawn day is not a cost worth a finding.
+    if total < Decimal("1"):
+        return None
     monthly = (total / month_count).quantize(Decimal(1), rounding=ROUND_HALF_UP)
-    sentences = [f"{money(total)} over {month_count} months (about {money(monthly)}/month)."]
+    if rebate_total > 0:
+        sentences = [
+            f"{money(charged)} charged over {month_count} months, {money(rebate_total)} paid back, "
+            f"so the cost is {money(total)} (about {money(monthly)}/month)."
+        ]
+    else:
+        sentences = [f"{money(total)} over {month_count} months (about {money(monthly)}/month)."]
+    overdue = [
+        tx
+        for tx in txs
+        if not _is_debit(tx) and re.search(r"\boverdue\b", tx.description or "", re.IGNORECASE)
+    ]
+    if overdue:
+        when = _join(sorted({tx.transaction_date.strftime("%d %b") for tx in overdue}))
+        sentences.append(
+            f"A payment on {when} is labelled overdue. The statement does not show "
+            "how many days of interest that added."
+        )
     # A card statement prints a credit limit and no overdraft facility.
     is_card = ctx.credit_limit is not None and ctx.facility is None
     rates_by_month: dict[str, Decimal] = {}
@@ -1068,17 +1376,29 @@ def _implied_overdraft(
             if is_card
             else "Whether the cash you move around sits idle elsewhere."
         ),
-        figures={"total": total, "months": month_count},
-        rows=evidence_rows(interest, "interest"),
+        figures={"total": total, "charged": charged, "months": month_count},
+        rows=evidence_rows([*interest, *rebates], "interest"),
     )
+
+
+_SAVINGS_POCKET = re.compile(r"round[ -]?up|interest\s+sweep|\blive better\b", re.IGNORECASE)
+
+
+def _is_savings_pocket(tx: FeatureTransaction) -> bool:
+    """A round-up or savings-pocket sweep. The money is saved, not sent away and reversed."""
+    return _SAVINGS_POCKET.search(tx.description or "") is not None
 
 
 def _round_trips(txs: list[FeatureTransaction], ctx: StatementContext) -> ReviewFinding | None:
     """Money sent to the customer's own accounts that comes back within days."""
     out_by_month: dict[str, list[FeatureTransaction]] = defaultdict(list)
-    incoming = [tx for tx in txs if _klass(tx) == "internal_transfer" and not _is_debit(tx)]
+    incoming = [
+        tx
+        for tx in txs
+        if _klass(tx) == "internal_transfer" and not _is_debit(tx) and not _is_savings_pocket(tx)
+    ]
     for tx in txs:
-        if _klass(tx) == "internal_transfer" and _is_debit(tx):
+        if _klass(tx) == "internal_transfer" and _is_debit(tx) and not _is_savings_pocket(tx):
             out_by_month[_month_key(tx.transaction_date)].append(tx)
     trips, stayed = [], []
     for month, outs in sorted(out_by_month.items()):
@@ -1399,6 +1719,30 @@ def _insurers(series_map: dict[str, _Series]) -> ReviewFinding | None:
     )
 
 
+_FOREIGN_FEE_WORDS = re.compile(
+    r"cross.?border|international|intl|foreign|forex|currency", re.IGNORECASE
+)
+
+
+def _foreign_billing_parent(series: _Series, series_map: dict[str, _Series]) -> str | None:
+    """The payee a small foreign-transaction fee is charged alongside, or None.
+
+    A fee under R10 named for its kind, posting on the same days as another payee's charges
+    on two or more occasions, belongs to that payee.
+    """
+    if series.regular_amount >= Decimal("10") or not _FOREIGN_FEE_WORDS.search(series.name):
+        return None
+    fee_days = {tx.transaction_date for tx in series.charges}
+    best: tuple[int, str] | None = None
+    for name, other in series_map.items():
+        if other is series or _FOREIGN_FEE_WORDS.search(name):
+            continue
+        shared = len(fee_days & {tx.transaction_date for tx in other.charges})
+        if shared >= 2 and (best is None or shared > best[0]):
+            best = (shared, name)
+    return best[1] if best else None
+
+
 def _unknown_recurring(series_map: dict[str, _Series]) -> list[ReviewFinding]:
     findings = []
     for name, series in series_map.items():
@@ -1417,6 +1761,32 @@ def _unknown_recurring(series_map: dict[str, _Series]) -> list[ReviewFinding]:
         label = _statement_text(sample)
         names = [_month_name(key, full=False) for key in months]
         gap = f" Nothing in {_join([_month_name(key) for key in missing])}." if missing else ""
+        parent = _foreign_billing_parent(series, series_map)
+        if parent is not None:
+            # A small cross-border fee on the days another charge posts is that charge's
+            # foreign billing, not a merchant of its own.
+            findings.append(
+                ReviewFinding(
+                    key=f"unknown_recurring:{name}",
+                    group="review",
+                    leak_type="unknown_recurring_payment",
+                    title=f"Foreign-billing fee on {parent}",
+                    display="table",
+                    shows=(
+                        f"{money(series.regular_amount)} each time {parent} is charged, in "
+                        f"{_join(names)}: {money(series.regular_amount * len(series.charges))} in all."
+                    ),
+                    cannot_show=f"Whether {parent} offers billing in rand without the fee.",
+                    figures={
+                        "amount": series.regular_amount,
+                        "months": months,
+                        "label": label,
+                        "parent": parent,
+                    },
+                    rows=evidence_rows(series.charges, "fee"),
+                )
+            )
+            continue
         findings.append(
             ReviewFinding(
                 key=f"unknown_recurring:{name}",
@@ -1528,6 +1898,28 @@ _AIRTIME_RULES = frozenset(
 )
 
 
+# Borrowed airtime, however the bank prints it. Capitec says "Airtime Advance";
+# other networks say Xtratime, a data advance, or a recharge loan.
+_ADVANCE_MARK = re.compile(
+    r"airtime\s+advance|data\s+advance|xtratime|recharge\s+loan|airtime\s+loan|data\s+loan",
+    re.IGNORECASE,
+)
+
+
+def _is_airtime_advance_fee(tx: FeatureTransaction) -> bool:
+    text = (tx.description or "").lower()
+    if _ADVANCE_MARK.search(text) is None:
+        return False
+    return "fee" in text and "payment" not in text and "repay" not in text
+
+
+def _is_airtime_advance_payment(tx: FeatureTransaction) -> bool:
+    text = (tx.description or "").lower()
+    if _ADVANCE_MARK.search(text) is None:
+        return False
+    return "payment" in text or "repay" in text
+
+
 def _is_airtime_purchase(tx: FeatureTransaction) -> bool:
     """Airtime or data, by the words printed or by how the row was classified.
 
@@ -1542,14 +1934,21 @@ def _is_airtime_purchase(tx: FeatureTransaction) -> bool:
 
 
 def _airtime(txs: list[FeatureTransaction], series_map: dict[str, _Series]) -> ReviewFinding | None:
-    top_ups = [tx for tx in _purchases(txs) if _is_airtime_purchase(tx)]
+    top_ups = [
+        tx
+        for tx in _purchases(txs)
+        if _is_airtime_purchase(tx)
+        and not _is_airtime_advance_fee(tx)
+        and not _is_airtime_advance_payment(tx)
+    ]
     if not top_ups:
         return None
     contract = next(
         (s for name, s in series_map.items() if any(t in name.lower() for t in _TELECOMS) and _is_monthly(s)),
         None,
     )
-    listed = _join([f"{money(tx.amount)} ({_MONTH_ABBR[tx.transaction_date.month]})" for tx in top_ups])
+    total = sum((tx.amount for tx in top_ups), _ZERO)
+    amounts = [tx.amount for tx in top_ups]
     tail = f" on top of a {money(contract.regular_amount)}/month {contract.name} payment" if contract else ""
     return ReviewFinding(
         key="airtime",
@@ -1557,10 +1956,175 @@ def _airtime(txs: list[FeatureTransaction], series_map: dict[str, _Series]) -> R
         leak_type="airtime_data_leak",
         title="Airtime and data",
         display="item",
-        line=f"**Airtime and data:** {listed}{tail} (`airtime_data_leak`, low).",
-        figures={"total": sum((tx.amount for tx in top_ups), _ZERO)},
+        line=(
+            f"**Airtime and data:** {len(top_ups)} top-ups, {money(total)}, "
+            f"from {money(min(amounts))} to {money(max(amounts))}{tail} (`airtime_data_leak`, low)."
+        ),
+        figures={"total": total},
         rows=evidence_rows(top_ups, "top-up"),
     )
+
+
+def _airtime_advances(txs: list[FeatureTransaction]) -> ReviewFinding | None:
+    """Borrowed airtime: a fee now, the amount repaid a few days later."""
+    fees = [tx for tx in txs if _is_debit(tx) and _is_airtime_advance_fee(tx)]
+    repayments = [tx for tx in txs if _is_debit(tx) and _is_airtime_advance_payment(tx)]
+    if len(fees) < 2 and len(repayments) < 2:
+        return None
+    fee_total = sum((tx.amount for tx in fees), _ZERO)
+    repaid = sum((tx.amount for tx in repayments), _ZERO)
+    rate = ""
+    if fees and repayments and len({tx.amount for tx in fees}) == 1 and len({tx.amount for tx in repayments}) == 1:
+        rate = f" That is {money(fees[0].amount)} charged on each {money(repayments[0].amount)}."
+    return ReviewFinding(
+        key="airtime_advance",
+        group="review",
+        leak_type="airtime_data_leak",
+        title="Airtime advances",
+        display="table",
+        shows=(
+            f"{len(fees)} borrowed-airtime fees, {money(fee_total)}, "
+            f"and {len(repayments)} repayments, {money(repaid)}.{rate}"
+        ),
+        cannot_show="The airtime itself. The statement shows the fee and the repayment, not the bundle.",
+        figures={"fees": fee_total, "repaid": repaid, "total": fee_total},
+        rows=evidence_rows([*fees, *repayments], "advance"),
+    )
+
+
+# Names that do not say "trade" or "fx" but are brokers or crypto exchanges.
+# A name that is not here is still found when the payment itself looks like one:
+# a company reference, and a payee whose name says what it is. A person's name
+# and a shop the categoriser already knows are never treated as a broker.
+_TRADING_PLATFORMS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\bDERIV\b", re.IGNORECASE), "Deriv"),
+    (re.compile(r"\bIQ\s*OPTION\b", re.IGNORECASE), "IQ Option"),
+    (re.compile(r"\bOLYMP\s*TRADE\b", re.IGNORECASE), "Olymp Trade"),
+    (re.compile(r"\bEXNESS\b", re.IGNORECASE), "Exness"),
+    (re.compile(r"\bPLUS\s*500\b|\bPLUS500\b", re.IGNORECASE), "Plus500"),
+    (re.compile(r"\bQUOTEX\b", re.IGNORECASE), "Quotex"),
+    (re.compile(r"\bPOCKET\s*OPTION\b", re.IGNORECASE), "Pocket Option"),
+    (re.compile(r"\bBINARY\.?\s*COM\b", re.IGNORECASE), "Binary.com"),
+    (re.compile(r"\bLUNO\b", re.IGNORECASE), "Luno"),
+    (re.compile(r"\bVALR\b", re.IGNORECASE), "VALR"),
+    (re.compile(r"\beTORO\b", re.IGNORECASE), "eToro"),
+    (re.compile(r"\bAVATRADE\b", re.IGNORECASE), "AvaTrade"),
+    (re.compile(r"\bHOTFOREX\b|\bHFM\b", re.IGNORECASE), "HFM"),
+    (re.compile(r"\bBINANCE\b", re.IGNORECASE), "Binance"),
+    (re.compile(r"\bBYBIT\b", re.IGNORECASE), "Bybit"),
+    (re.compile(r"\bXM(?:\.COM|\s+GLOBAL|\s+TRADING)\b", re.IGNORECASE), "XM"),
+)
+# "Capitec Pay Payment: Zenfx (88342111)" — one brand token plus the bank's reference.
+# "Immediate Payment: Neo Capitec" is a person and does not match.
+_REFERENCED_PAYEE = re.compile(
+    r"(?:capitec pay|card purchase|online purchase)[^:\n]{0,48}:\s*"
+    r"([A-Za-z][A-Za-z0-9]{1,24})\s*\(\d{5,}\)",
+    re.IGNORECASE,
+)
+_PLATFORM_HINT = re.compile(
+    r"\b(?:trade|trader|trading|forex|broker|cfd|binary|option|crypto|invest)\b",
+    re.IGNORECASE,
+)
+_NOT_A_PLATFORM = frozenset({"payment", "pay", "transfer", "fee", "purchase", "card"})
+
+
+def _trading_name(description: str | None) -> str | None:
+    for pattern, name in _TRADING_PLATFORMS:
+        if pattern.search(description or ""):
+            return name
+    return None
+
+
+def _looks_like_platform_token(token: str) -> bool:
+    """A brand whose own name says it takes trading or crypto deposits.
+
+    "Zenfx" and "Hotforex" qualify. "Equifax" does not, and neither does a shop or a person.
+    """
+    lower = token.casefold()
+    if lower.endswith("fax"):
+        return False
+    return re.search(r"(?:fx|forex|trade|trader|broker|cfd|crypto|coin)$", lower) is not None
+
+
+def _platform_payee(description: str | None) -> tuple[str, bool] | None:
+    """(display name, listed). None for a person, a known shop, or an ordinary payment."""
+    known = _trading_name(description)
+    if known:
+        return known, True
+    match = _REFERENCED_PAYEE.search(description or "")
+    if match is None:
+        return None
+    token = match.group(1)
+    if token.casefold() in _NOT_A_PLATFORM:
+        return None
+    if not (_looks_like_platform_token(token) or _PLATFORM_HINT.search(description or "")):
+        return None
+    from categorisation.classifier import classify_transaction
+    from categorisation.normalize import normalize_for_matching
+    from categorisation.rules import recognised_merchant_label
+
+    if recognised_merchant_label(normalize_for_matching(token) or token.upper()):
+        return None
+    classified = classify_transaction(token, "debit")
+    if classified.transaction_class == "spending" and classified.category_name:
+        return None
+    return token[:1].upper() + token[1:], False
+
+
+def _names_payee(description: str | None, name: str) -> bool:
+    return (
+        re.search(rf"(?<![A-Za-z0-9]){re.escape(name)}(?![A-Za-z0-9])", description or "", re.IGNORECASE)
+        is not None
+    )
+
+
+def _trading(txs: list[FeatureTransaction]) -> list[ReviewFinding]:
+    """Money sent to a broker, including when the bank calls the payment a transfer to a person."""
+    by_name: dict[str, list[FeatureTransaction]] = defaultdict(list)
+    listed: set[str] = set()
+    for tx in txs:
+        if not _is_debit(tx) or _is_fee(tx):
+            continue
+        found = _platform_payee(tx.description)
+        if found is None:
+            continue
+        name, on_list = found
+        by_name[name].append(tx)
+        if on_list:
+            listed.add(name)
+    findings = []
+    for name, payments in sorted(by_name.items()):
+        # A listed broker is a pattern at the second payment. A name we have never
+        # listed needs a third, so two payments to an unknown shop are not a finding.
+        if len(payments) < (2 if name in listed else 3):
+            continue
+        total = sum((tx.amount for tx in payments), _ZERO)
+        fee_rows = [tx for tx in txs if _is_fee(tx) and _names_payee(tx.description, name)]
+        fee_total = sum((tx.amount for tx in fee_rows), _ZERO)
+        returned = sum(
+            (tx.amount for tx in txs if not _is_debit(tx) and _names_payee(tx.description, name)),
+            _ZERO,
+        )
+        fee_bit = f" Payment fees on them came to {money(fee_total)}." if fee_total else ""
+        back = (
+            f" {money(returned)} came back from {name} on this account."
+            if returned
+            else f" No payment from {name} came back into this account."
+        )
+        findings.append(
+            ReviewFinding(
+                key=f"trading:{slug(name)}",
+                group="review",
+                leak_type="irregular_transaction_leak",
+                title=f"Payments to {name}",
+                display="table",
+                shows=f"{len(payments)} payments, {money(total)}.{fee_bit}{back}",
+                cannot_show="What the payments bought, or a result that settled in another account.",
+                figures={"total": total, "fees": fee_total, "count": len(payments)},
+                rows=evidence_rows([*payments, *fee_rows], "payment"),
+            )
+        )
+    return findings
 
 
 def _escalation(txs: list[FeatureTransaction], ctx: StatementContext) -> ReviewFinding | None:
@@ -1881,6 +2445,12 @@ def build_statement_review(
     ``ask_questions=False`` when the answers could not be read: nothing is then asked.
     """
     from .statement_review_answers import apply_answers, choose_pending, open_questions
+    from .spending_habits import (
+        balance_findings,
+        frequent_small_purchases,
+        spending_habits,
+        unexplained_small_debits,
+    )
 
     ctx = context or StatementContext()
     # Every figure below is a magnitude; ``transaction_type`` carries the direction. Real
@@ -1919,13 +2489,21 @@ def build_statement_review(
         _insurers(series_map),
         *_optional_charges(txs),
         *_unknown_recurring(series_map),
+        *_trading(txs),
+        _airtime_advances(txs),
         _delivery_habit(txs),
+        *unexplained_small_debits(txs, month_count),
+        balance_findings(txs),
     ]
+    delivery = next((f for f in review_ordered if f and f.key == "food_delivery"), None)
     smaller = [
         _airtime(txs, series_map),
         _escalation(txs, ctx),
         _large_one_off(txs, series_map),
         *_repeat_payment(txs, series_map),
+        # Where the money goes: the level of each habit, apart from any growth finding.
+        *spending_habits(txs, month_count, delivery_raised=delivery is not None),
+        *frequent_small_purchases(txs, month_count),
     ]
     round_trip = next((f for f in review_ordered if f and f.key == "round_trip_transfers"), None)
     findings = [
@@ -1986,6 +2564,13 @@ def _reconcile(txs: list[FeatureTransaction], ctx: StatementContext) -> str | No
 def _fee_reconciliation(txs: list[FeatureTransaction], ctx: StatementContext) -> str | None:
     if not ctx.statement_fee_totals:
         return None
+    # One printed total belongs to the whole statement, not to the calendar month of its date.
+    if len(ctx.statement_fee_totals) == 1:
+        expected = next(iter(ctx.statement_fee_totals.values()))
+        charged = [tx for tx in txs if _is_fee(tx) and not _is_interest(tx)]
+        net = sum((tx.amount for tx in _without_fees_credited_back(charged, txs)), _ZERO)
+        if abs(net - expected) <= Decimal("0.005"):
+            return "Bank fees add up to the statement's own total to the cent."
     fees: dict[str, Decimal] = defaultdict(lambda: _ZERO)
     interest: dict[str, Decimal] = defaultdict(lambda: _ZERO)
     for tx in txs:

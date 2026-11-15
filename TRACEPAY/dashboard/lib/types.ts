@@ -68,6 +68,7 @@ export interface Statements {
 }
 
 export interface RecentPurchase {
+  id: string | null;
   when: string | null;
   user: string;
   product: string;
@@ -142,17 +143,44 @@ export interface Ai {
     daily_item_limit: number;
     items_used_current_window: number;
     users_with_usage: number;
-    top_users: { user: string; used: number; pct_of_limit: number }[];
+    window_started_at: string | null;
+    note: string;
+    top_users: { user: string; used: number; pct_of_limit: number; window_start: string | null }[];
   };
   prices_note: string;
 }
 
 export interface RecentSignup {
+  id: string;
   when: string;
   user: string;
   last_sign_in: string | null;
   statements: number;
   paying: boolean;
+}
+
+export interface AccountDetail {
+  id: string;
+  user: string;
+  created: string;
+  last_sign_in: string | null;
+  verified: boolean;
+  statements: {
+    total: number;
+    by_status: Record<string, number>;
+    transactions: number;
+    latest_status: string | null;
+    latest_at: string | null;
+    latest_error: string;
+  };
+  purchases: {
+    count: number;
+    succeeded: number;
+    spent_zar: number;
+    latest_product: string | null;
+    latest_status: string | null;
+  };
+  budget: { used: number; window_start: string | null } | null;
 }
 
 export interface Metrics {

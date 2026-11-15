@@ -4,14 +4,15 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app import superadmin_metrics
+from app import auth_service, superadmin_metrics
+from app.auth_errors import AuthError
 from app.config import settings
 from app.rate_limit import _hits
 from app.superadmin_metrics import Snapshot, build_metrics
 from app.superadmin_routes import router
 
 NOW = datetime(2026, 11, 14, 12, 0, tzinfo=timezone.utc)
-TOKEN = "t" * 40
+SESSION = "session-token"
 
 
 def _iso(delta: timedelta) -> str:
@@ -228,7 +229,28 @@ def test_ai_usage_is_grouped_by_feature_and_model_with_estimated_cost():
     assert {item["model"] for item in ai["by_model"]} == {"openai/gpt-4o-mini", "some/unpriced-model"}
     daily = {item["feature"]: item["values"] for item in ai["series"]["calls_by_feature"]}
     assert sum(daily["transaction_categorisation"]) == 2
-    assert ai["budget"]["top_users"] == [{"user": "al***@example.com", "used": 500, "pct_of_limit": 25.0}]
+    assert ai["budget"]["top_users"] == [{
+        "user": "al***@example.com",
+        "used": 500,
+        "pct_of_limit": 25.0,
+        "window_start": _iso(timedelta(hours=1)),
+    }]
+    assert ai["budget"]["window_started_at"] == _iso(timedelta(hours=1))
+    assert "not a count of model calls" in ai["budget"]["note"]
+
+
+def test_account_detail_stays_masked_and_summarises_that_user():
+    detail = superadmin_metrics.build_account(_snapshot(), "u1")
+    assert detail is not None
+    assert detail["user"] == "al***@example.com"
+    assert "alice@" not in detail["user"]
+    assert detail["statements"]["total"] == 1
+    assert detail["statements"]["latest_status"] == "processed"
+    assert detail["statements"]["transactions"] == 40
+    assert detail["purchases"]["succeeded"] == 1
+    assert detail["purchases"]["spent_zar"] == 49
+    assert detail["budget"]["used"] == 12
+    assert superadmin_metrics.build_account(_snapshot(), "missing") is None
 
 
 def test_price_overrides_replace_defaults():
@@ -356,10 +378,14 @@ def test_categorisation_records_failed_and_rejected_calls(monkeypatch):
     assert ai_usage.token_usage(recorded[-1]["payload"]) == (5, 1, 6)
 
 
+def _superadmin_user() -> dict:
+    return {"id": "admin-1", "app_metadata": {"role": "superadmin", "provider": "phone"}}
+
+
 @pytest.fixture
 def client(monkeypatch):
-    monkeypatch.setattr(settings, "superadmin_dashboard_token", TOKEN)
     monkeypatch.setattr(superadmin_metrics, "get_snapshot", lambda force=False: _snapshot())
+    monkeypatch.setattr("app.superadmin_routes.fetch_supabase_user", lambda token, timeout=10: _superadmin_user())
     _hits.clear()
     app = FastAPI()
     app.include_router(router)
@@ -370,21 +396,20 @@ def test_the_backend_no_longer_serves_a_page(client):
     assert client.get("/superadmin").status_code == 404
 
 
-def test_metrics_need_the_operator_token(client):
+def test_metrics_need_a_superadmin_session(client, monkeypatch):
     assert client.get("/superadmin/api/metrics").status_code == 401
-    assert client.get("/superadmin/api/metrics", headers={"X-Superadmin-Token": "wrong"}).status_code == 401
+    assert client.get("/superadmin/api/metrics", headers={"X-Superadmin-Token": "pasted-token"}).status_code == 401
+
+    def other_user(token: str, timeout: float = 10) -> dict:
+        return {"id": "user-1", "app_metadata": {"provider": "phone"}, "user_metadata": {"role": "superadmin"}}
+
+    monkeypatch.setattr("app.superadmin_routes.fetch_supabase_user", other_user)
+    response = client.get("/superadmin/api/metrics", headers={"Authorization": "Bearer someone-else"})
+    assert response.status_code == 401
 
 
-def test_metrics_refuse_when_token_is_missing_or_short(monkeypatch):
-    monkeypatch.setattr(settings, "superadmin_dashboard_token", "short")
-    app = FastAPI()
-    app.include_router(router)
-    response = TestClient(app).get("/superadmin/api/metrics", headers={"X-Superadmin-Token": "short"})
-    assert response.status_code == 503
-
-
-def test_metrics_return_payload_with_correct_token(client):
-    response = client.get("/superadmin/api/metrics?days=14", headers={"X-Superadmin-Token": TOKEN})
+def test_metrics_return_payload_for_superadmin_session(client):
+    response = client.get("/superadmin/api/metrics?days=14", headers={"Authorization": f"Bearer {SESSION}"})
     assert response.status_code == 200
     body = response.json()
     assert body["range_days"] == 14
@@ -394,5 +419,63 @@ def test_metrics_return_payload_with_correct_token(client):
 
 
 def test_days_out_of_range_are_rejected(client):
-    response = client.get("/superadmin/api/metrics?days=0", headers={"X-Superadmin-Token": TOKEN})
+    response = client.get("/superadmin/api/metrics?days=0", headers={"Authorization": f"Bearer {SESSION}"})
     assert response.status_code == 422
+
+
+def test_session_returns_access_token_for_superadmin(client, monkeypatch):
+    monkeypatch.setattr(auth_service, "open_superadmin_session", lambda phone, password: SESSION)
+    response = client.post(
+        "/superadmin/api/session",
+        json={"phone": "0820000001", "password": "correct-password"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"accessToken": SESSION}
+
+
+def test_session_rejects_wrong_password(client, monkeypatch):
+    def reject(phone: str, password: str) -> str:
+        raise AuthError(401, "That phone number or password is not correct.")
+
+    monkeypatch.setattr(auth_service, "open_superadmin_session", reject)
+    response = client.post(
+        "/superadmin/api/session",
+        json={"phone": "0820000001", "password": "wrong"},
+    )
+    assert response.status_code == 401
+    assert "password" in response.json()["detail"]
+
+
+def test_open_superadmin_session_ignores_user_metadata_role(monkeypatch):
+    monkeypatch.setattr(settings, "supabase_url", "https://example.supabase.co")
+    monkeypatch.setattr(settings, "supabase_service_role_key", "service-role-key-for-tests")
+    monkeypatch.setattr(settings, "supabase_anon_key", "anon-key-for-tests")
+    monkeypatch.setattr(settings, "supabase_key", "")
+
+    def grant(method: str, path: str, *, headers: dict, body: dict | None = None):
+        return 200, {
+            "access_token": "issued",
+            "user": {"app_metadata": {"provider": "phone"}, "user_metadata": {"role": "superadmin"}},
+        }
+
+    monkeypatch.setattr(auth_service, "_supabase", grant)
+    with pytest.raises(AuthError) as info:
+        auth_service.open_superadmin_session("0820000001", "correct-password")
+    assert info.value.status_code == 401
+
+
+def test_open_superadmin_session_returns_token_for_app_metadata_role(monkeypatch):
+    monkeypatch.setattr(settings, "supabase_url", "https://example.supabase.co")
+    monkeypatch.setattr(settings, "supabase_service_role_key", "service-role-key-for-tests")
+    monkeypatch.setattr(settings, "supabase_anon_key", "anon-key-for-tests")
+    monkeypatch.setattr(settings, "supabase_key", "")
+
+    def grant(method: str, path: str, *, headers: dict, body: dict | None = None):
+        assert body is not None and body["phone"] == "+27820000001"
+        return 200, {
+            "access_token": "issued",
+            "user": {"app_metadata": {"role": "superadmin", "provider": "phone"}},
+        }
+
+    monkeypatch.setattr(auth_service, "_supabase", grant)
+    assert auth_service.open_superadmin_session("082 000 0001", "correct-password") == "issued"

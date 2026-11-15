@@ -9,7 +9,8 @@
 import type { UpcomingPayment } from "../dashboard/upcoming-payments";
 import type { SpendingPatternInsight } from "../insights/spending-patterns";
 
-export const DEMO_MODE = true;
+/** Off: Home must show real empty states, never invented payments or insights. */
+export const DEMO_MODE = false;
 
 function isoInDays(days: number): string {
   const date = new Date();

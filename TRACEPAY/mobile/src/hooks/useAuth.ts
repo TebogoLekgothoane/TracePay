@@ -2,6 +2,8 @@ import { useCallback, useState } from "react";
 
 import { AuthError } from "../features/auth/auth.errors";
 import {
+  changePassword,
+  deleteCurrentUser,
   requestPasswordReset,
   resendPhoneOtp,
   resetPassword,
@@ -63,6 +65,17 @@ export function useAuth() {
     [run],
   );
 
+  const updateAccountPassword = useCallback(
+    (currentPassword: string, newPassword: string) =>
+      run(() => changePassword(currentPassword, newPassword)),
+    [run],
+  );
+
+  const deleteAccount = useCallback(
+    (password: string) => run(() => deleteCurrentUser(password)),
+    [run],
+  );
+
   return {
     submitting,
     error,
@@ -73,6 +86,8 @@ export function useAuth() {
     resendPhone,
     requestReset,
     updatePassword,
+    changePassword: updateAccountPassword,
+    deleteAccount,
   };
 }
 

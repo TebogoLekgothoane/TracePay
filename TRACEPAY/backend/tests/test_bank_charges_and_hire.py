@@ -205,7 +205,7 @@ def test_a_payment_fee_is_still_called_one() -> None:
 
     finding, _rates = _fee_breakdown([fee], 1)
 
-    assert finding is not None and "Payment fees" in finding.shows
+    assert finding is not None and "Immediate payment fees R12" in finding.shows
 
 
 def test_interest_posted_as_two_lines_is_one_charge_for_the_implied_balance() -> None:
@@ -222,6 +222,32 @@ def test_interest_posted_as_two_lines_is_one_charge_for_the_implied_balance() ->
     # The balance comes from the month's R158.66, about R12k, not from a R0.02 line (about R1).
     assert "R12–12k" in finding.shows
     assert "R0–" not in finding.shows
+
+
+def test_atm_fees_are_named_apart_from_payshap() -> None:
+    withdrawal = replace(
+        _categorise("ATM Cash Withdrawal Shop", "-37.04"),
+        transaction_id="withdrawal",
+        transaction_date=date(2026, 7, 13),
+    )
+    atm_fee = replace(
+        _categorise("Fee: ATM Cash Withdrawal Shop", "-70.00"),
+        transaction_id="atm-fee",
+        transaction_date=date(2026, 7, 13),
+    )
+    payshap = replace(
+        _categorise("Fee: Banking App External PayShap Payment: Tebogo", "-6.00"),
+        transaction_id="payshap",
+        transaction_date=date(2026, 7, 14),
+    )
+
+    finding, _rates = _fee_breakdown([withdrawal, atm_fee, payshap], 1)
+
+    assert finding is not None
+    assert "ATM fees R70" in finding.shows
+    assert "PayShap fees R6" in finding.shows
+    assert "PayShap fees R76" not in finding.shows
+    assert "R70 on the R37.04 payment" in finding.shows
 
 
 def test_car_hire_is_not_rent_but_a_landlord_still_is() -> None:

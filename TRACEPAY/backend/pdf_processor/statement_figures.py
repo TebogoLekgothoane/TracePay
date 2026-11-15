@@ -31,6 +31,17 @@ def _label(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip().casefold()
 
 
+def _label_and_inline(line: str) -> tuple[str, str | None]:
+    """The label, and a value printed after a colon on the same line."""
+    if ":" in line:
+        left, right = line.split(":", 1)
+        inline = right.strip()
+        label = _label(left).replace("*", "").strip()
+        if label and inline:
+            return label, inline
+    return _label(line).replace("*", "").strip(), None
+
+
 _AMOUNT_LABELS = {
     "facility": "facility",
     "facility limit": "facility",
@@ -82,8 +93,10 @@ def extract_printed_figures(text: str) -> PrintedFigures | None:
     fee_parts: list[Decimal] = []
     for index, line in enumerate(lines[:-1]):
         # Asterisks are footnote marks ("Credit Rate**", "Debit Rate*"), not part of the label.
-        label = _label(line).replace("*", "").strip()
-        following = lines[index + 1]
+        # A value may sit on the next line, or after a colon on this one
+        # ("Statement Date : 6 October 2026").
+        label, inline = _label_and_inline(line)
+        following = inline if inline is not None else lines[index + 1]
         if label == "statement date" and "statement_date" not in found and _DATE.match(following):
             parsed = parse_date(following)
             if parsed is not None:

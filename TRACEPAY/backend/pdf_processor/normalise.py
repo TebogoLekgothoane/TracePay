@@ -355,15 +355,42 @@ def _row_label(body: str) -> str:
 _CENT = Decimal("0.01")
 
 
+def _debits_are_signed(text: str) -> bool:
+    """Whether this statement prints a minus on its debits, read from the statement itself.
+
+    On a statement that does, an amount printed without a sign is a credit, whatever the
+    balance beside it seems to say: a balance that has lost its thousands digit can make a
+    R500 deposit look like a R500 withdrawal, and the sign is the printed fact that decides.
+    """
+    negative = unsigned = 0
+    for line in text.splitlines():
+        match = _TEXT_ROW_DATE.match(line.strip())
+        if not match:
+            continue
+        tokens = _standalone_money(_tidy_ocr_money(match.group(2)))
+        if len(tokens) < 2 or not _HAS_CENTS.search(tokens[-2][0].group(0).strip()):
+            continue
+        token = tokens[-2][0].group(0).strip()
+        if tokens[-2][1] and "-" in token[:4]:
+            negative += 1
+        elif not tokens[-2][1]:
+            unsigned += 1
+    return negative >= 3 and negative * 2 >= negative + unsigned
+
+
 def _chain_amount(
-    previous: Decimal | None, tokens: list[tuple[re.Match[str], bool]]
+    previous: Decimal | None,
+    tokens: list[tuple[re.Match[str], bool]],
+    *,
+    unsigned_is_credit: bool = False,
 ) -> tuple[re.Match[str], Decimal, Decimal] | None:
     """The movement and balance in a row's last two money tokens, when the balance proves it.
 
     The last column is the running balance and the one before it the movement. The movement
     counts only if the previous balance plus or minus it equals the printed balance, so a
     number that merely looks like an amount is never taken, and a credit printed without a
-    sign is still read as a credit.
+    sign is still read as a credit. Where the statement signs its debits, an unsigned amount
+    is never read as one.
     """
     if previous is None or len(tokens) < 2:
         return None
@@ -377,6 +404,8 @@ def _chain_amount(
     size = abs(amount)
     if abs(previous + size - balance) < _CENT and not (amount_signed and amount < 0):
         return amount_item, size, balance
+    if unsigned_is_credit and not amount_signed:
+        return None
     if abs(previous - size - balance) < _CENT and not (amount_signed and amount > 0):
         return amount_item, -size, balance
     return None
@@ -387,6 +416,20 @@ def _tidy_ocr_money(body: str) -> str:
     return re.sub(r"(\d),\s+(\d{2})\b", r"\1,\2", re.sub(r"-{2,}", "-", body))
 
 
+#: "077,34" is "2 077,34" with its thousands lost at the column's edge: never a balance.
+_LEADING_ZERO_GROUP = re.compile(r"^(?:R|ZAR)?\s*\(?[-+]?0\d")
+
+
+def _read_balance(tokens: list[tuple[re.Match[str], bool]]) -> Decimal | None:
+    """The last column as a balance, when it is printed whole: with cents and no lost digits."""
+    if not tokens:
+        return None
+    token = tokens[-1][0].group(0).strip()
+    if not _HAS_CENTS.search(token) or _LEADING_ZERO_GROUP.match(token):
+        return None
+    return parse_amount(token)
+
+
 _HAS_CENTS = re.compile(r"[.,]\d{2}$")
 
 
@@ -395,7 +438,10 @@ class _TextRecord:
     """One dated line: a transaction read as printed, a balance-only row, or a row held back."""
 
     kind: str  # "row", "balance" or "held"
+    # The balance after this row, proven by the chain from the row before.
     balance_after: Decimal | None = None
+    # The balance as printed, not yet proven. Proven when the rows around it add up to it.
+    read_balance: Decimal | None = None
     transaction: Transaction | None = None
     # For a held row: what is needed to build it once its direction is known.
     row_number: int = 0
@@ -404,6 +450,13 @@ class _TextRecord:
     description: str = ""
     amount: Decimal | None = None
     fixed_sign: bool = False
+    # A row another reading of the same pages produced. Kept only if the chain proves it.
+    candidate: Transaction | None = None
+    # The date printed on the row, when one was. A balance (carry) row has one too.
+    row_date: date | None = None
+    # An undated row: what the OCR left of its date column, and the date its neighbours give it.
+    undated_text: str | None = None
+    assigned_date: date | None = None
 
 
 def _text_transaction(
@@ -412,12 +465,14 @@ def _text_transaction(
     parsed_date: ParsedDate,
     description: str,
     amount: Decimal,
+    balance: Decimal | None = None,
 ) -> Transaction:
     return Transaction(
         date=parsed_date.value,
         description=description,
         amount=amount,
         type="credit" if amount > 0 else "debit",
+        balance=balance,
         source_row=row_number,
         confidence="low",
         date_text=date_match.group(1)[:40],
@@ -432,7 +487,10 @@ def _clean_description(body: str, end: int) -> str:
 
 
 def parse_text_rows(
-    text: str, *, period: tuple[date | None, date | None] | None = None
+    text: str,
+    *,
+    period: tuple[date | None, date | None] | None = None,
+    extra_rows: list[Transaction] | None = None,
 ) -> tuple[list[Transaction], int]:
     """Parse transaction lines from extracted statement text.
 
@@ -443,36 +501,47 @@ def parse_text_rows(
     records: list[_TextRecord] = []
     detected_rows = 0
     previous_balance: Decimal | None = None
+    unsigned_is_credit = _debits_are_signed(text)
     for row_number, line in enumerate(text.splitlines(), start=1):
         match = _TEXT_ROW_DATE.match(line.strip())
         if not match:
+            undated = _undated_row(row_number, line)
+            if undated is not None:
+                detected_rows += 1
+                records.append(undated)
             continue
         detected_rows += 1
         body = _tidy_ocr_money(match.group(2))
         tokens = _standalone_money(body)
         # A balance is trusted only if printed with cents: "181,7" is a clipped "181,73".
-        last = (
-            parse_amount(tokens[-1][0].group(0))
-            if tokens and _HAS_CENTS.search(tokens[-1][0].group(0).strip())
-            else None
-        )
+        last = _read_balance(tokens)
         if _NON_MOVEMENT_LABEL.match(_row_label(body)):
             if len(tokens) >= 2 and last is not None:
                 previous_balance = last
-                records.append(_TextRecord("balance", balance_after=last))
+                records.append(
+                    _TextRecord(
+                        "balance",
+                        balance_after=last,
+                        row_date=parse_statement_date(match.group(1), period=period).value,
+                    )
+                )
             continue
         parsed_date = parse_statement_date(match.group(1), period=period)
-        chained = _chain_amount(previous_balance, tokens)
+        chained = _chain_amount(previous_balance, tokens, unsigned_is_credit=unsigned_is_credit)
         if chained is not None:
             amount_match, amount, previous_balance = chained
             known_balance: Decimal | None = previous_balance
+            read_balance: Decimal | None = None
         else:
             signed = [item for item, is_signed in tokens if is_signed]
-            # The balance after this row is only known if the last column was read as a balance.
-            known_balance = last if len(tokens) >= 2 and not tokens[-1][1] else None
-            previous_balance = known_balance
+            # The last column may be this row's balance, but nothing has proved it: the next
+            # row's chain can. It is carried forward for that check only, never recorded as
+            # the row's balance, so an OCR-garbled figure is not written into the data.
+            known_balance = None
+            read_balance = last if len(tokens) >= 2 and not tokens[-1][1] else None
+            previous_balance = read_balance
             if len(signed) != 1:
-                held = _held_row(row_number, match, parsed_date, body, tokens)
+                held = _held_row(row_number, match, parsed_date, body, tokens, unsigned_is_credit)
                 if held is not None:
                     records.append(held)
                 continue
@@ -485,10 +554,70 @@ def parse_text_rows(
             _TextRecord(
                 "row",
                 balance_after=known_balance,
-                transaction=_text_transaction(row_number, match, parsed_date, description, amount),
+                read_balance=read_balance,
+                row_date=parsed_date.value,
+                transaction=_text_transaction(
+                    row_number, match, parsed_date, description, amount, balance=known_balance
+                ),
             )
         )
+    if extra_rows:
+        records = _with_candidates(records, extra_rows)
+    _assign_neighbour_dates(records)
     return _repair_dropped_day_digits(_recover_held_rows(records)), detected_rows
+
+
+#: What OCR leaves of a date column it half-read: "/05/2025", "9/05/202", "/202", or nothing.
+_DATE_FRAGMENT = re.compile(r"^[\d/\-]{0,10}\s*")
+
+
+def _undated_row(row_number: int, line: str) -> _TextRecord | None:
+    """A line with an amount and a balance but no readable date: held until its neighbours date it.
+
+    The row exists on the statement; only its date column was lost. It is kept only when the
+    balance chain proves the row and the rows before and after it share one date.
+    """
+    stripped = line.strip()
+    fragment = _DATE_FRAGMENT.match(stripped).group(0)
+    body = _tidy_ocr_money(stripped[len(fragment) :])
+    if not re.search(r"[A-Za-z]{3}", body):
+        return None
+    tokens = _standalone_money(body)
+    cents = [(item, signed) for item, signed in tokens if _HAS_CENTS.search(item.group(0).strip())]
+    if len(cents) < 2 or _read_balance(tokens) is None:
+        return None
+    item, signed = cents[-2]
+    amount = parse_amount(item.group(0))
+    description = _clean_description(body, item.start())
+    if amount is None or amount == 0 or not description or _NON_MOVEMENT_LABEL.match(_row_label(body)):
+        return None
+    if _NOTICE_LABEL.match(_row_label(body)):
+        return None
+    return _TextRecord(
+        "held",
+        row_number=row_number,
+        description=description,
+        amount=amount if signed else abs(amount),
+        fixed_sign=signed,
+        read_balance=_read_balance(tokens),
+        undated_text=fragment.strip() or None,
+    )
+
+
+def _assign_neighbour_dates(records: list[_TextRecord]) -> None:
+    """Give an undated row the date its neighbours share; leave it undated if they differ."""
+    dates = [record.row_date for record in records]
+    for index, record in enumerate(records):
+        if record.kind != "held" or record.row_number == 0 or record.date_match is not None:
+            continue
+        if record.candidate is not None:
+            continue
+        before = next((dates[j] for j in range(index - 1, -1, -1) if dates[j] is not None), None)
+        after = next((dates[j] for j in range(index + 1, len(records)) if dates[j] is not None), None)
+        # A provisional date so the row can be built; settled again once the day digits the
+        # OCR lost on its neighbours are restored (see _redate_neighbour_rows).
+        if before is not None and after is not None:
+            record.assigned_date = before
 
 
 def _held_row(
@@ -497,6 +626,7 @@ def _held_row(
     parsed_date: ParsedDate,
     body: str,
     tokens: list[tuple[re.Match[str], bool]],
+    unsigned_is_credit: bool = False,
 ) -> _TextRecord | None:
     """A rejected row worth a second look: one clear amount with cents, direction unknown."""
     if parsed_date.value is None:
@@ -510,15 +640,43 @@ def _held_row(
     description = _clean_description(body, item.start())
     if amount is None or amount == 0 or not description:
         return None
-    if signed:
+    if signed or unsigned_is_credit:
         return _TextRecord(
             "held", row_number=row_number, date_match=date_match, parsed_date=parsed_date,
-            description=description, amount=amount, fixed_sign=True,
+            description=description, amount=amount if signed else abs(amount), fixed_sign=True,
         )
     return _TextRecord(
         "held", row_number=row_number, date_match=date_match, parsed_date=parsed_date,
         description=description, amount=abs(amount),
     )
+
+
+def _with_candidates(records: list[_TextRecord], extra_rows: list[Transaction]) -> list[_TextRecord]:
+    """Seed rows from another reading of the pages as candidates, in date order.
+
+    A candidate matching a row already read (same date and amount) is not seeded: the
+    reading has it. The rest are placed before the first record dated after them and must
+    be proven by the balances around them, like any held row.
+    """
+    present = {(record.transaction.date, record.transaction.amount) for record in records if record.transaction}
+    seeded = list(records)
+    for candidate in sorted(extra_rows, key=lambda item: (item.date, item.source_row)):
+        if (candidate.date, candidate.amount) in present:
+            continue
+        present.add((candidate.date, candidate.amount))
+        position = len(seeded)
+        for index, record in enumerate(seeded):
+            dated = record.transaction.date if record.transaction else (
+                record.parsed_date.value if record.parsed_date else None
+            )
+            if dated is not None and dated > candidate.date:
+                position = index
+                break
+        seeded.insert(
+            position,
+            _TextRecord("held", amount=candidate.amount, fixed_sign=True, candidate=candidate),
+        )
+    return seeded
 
 
 def _recover_held_rows(records: list[_TextRecord]) -> list[Transaction]:
@@ -527,35 +685,62 @@ def _recover_held_rows(records: list[_TextRecord]) -> list[Transaction]:
     A held row sits between a row whose balance is trusted and a later row whose balance is
     trusted. What the later balance implies before that row, minus the earlier balance, is the
     net of everything in between. A held row is kept only if exactly one choice of direction
-    for the held rows in that stretch makes the net add up, so nothing is guessed.
+    for the held rows in that stretch makes the net add up, so nothing is guessed. A row whose
+    printed balance the chain did not confirm is read the same way: if the rows between the
+    last proven balance and its figure add up, the figure is proven and recorded; if not, the
+    row joins the stretch and its figure is set aside. A candidate from another reading is
+    kept only when the stretch it sits in is proven.
     """
     transactions: list[Transaction] = []
-    anchor: Decimal | None = None  # balance after the last trusted record
+    anchor: Decimal | None = None  # the last balance the chain proved (or a carry row printed)
     stretch: list[_TextRecord] = []
     for record in records:
-        if record.kind == "held" or (record.kind == "row" and record.balance_after is None):
+        end_balance = record.balance_after if record.balance_after is not None else record.read_balance
+        if record.kind == "held" or end_balance is None:
             stretch.append(record)
             continue
-        if record.kind == "row" and record.transaction is not None:
-            before = record.balance_after - record.transaction.amount
-        else:
-            before = record.balance_after
-        if stretch and anchor is not None and before is not None:
-            transactions.extend(_resolve_stretch(stretch, before - anchor))
-        else:
-            transactions.extend(item.transaction for item in stretch if item.transaction is not None)
+        before = end_balance - record.transaction.amount if record.transaction is not None else end_balance
+        resolved: list[Transaction] = []
+        proven = False
+        if anchor is not None:
+            resolved, proven = _resolve_stretch(stretch, before - anchor)
+        if not proven and record.balance_after is None:
+            # The figure is not borne out by the rows before it: set it aside, keep the row.
+            stretch.append(record)
+            continue
+        transactions.extend(resolved if anchor is not None else _unproven_rows(stretch))
+        if proven and record.balance_after is None and record.transaction is not None:
+            record.transaction = record.transaction.model_copy(update={"balance": end_balance})
+            record.balance_after = end_balance
         stretch = []
-        anchor = record.balance_after
+        anchor = end_balance
         if record.transaction is not None:
             transactions.append(record.transaction)
-    transactions.extend(item.transaction for item in stretch if item.transaction is not None)
+    transactions.extend(_unproven_rows(stretch))
     return transactions
 
 
+def _unproven_rows(stretch: list[_TextRecord]) -> list[Transaction]:
+    """What a stretch yields when nothing proves it: only the rows read outright.
+
+    A held row was held because its amount was not clear (two signed figures, or none); a
+    candidate came from another reading. Without the balances to prove them, either would
+    be a guess, so both are left out and reported as rows to check.
+    """
+    return [
+        item.transaction.model_copy(update={"balance": None})
+        for item in stretch
+        if item.transaction is not None
+    ]
+
+
 _MAX_HELD_IN_STRETCH = 8
+RECOVERED_FROM_SECOND_ENGINE = "row_recovered_from_second_ocr_engine"
+DATE_FROM_NEIGHBOURING_ROWS = "date_taken_from_neighbouring_rows"
 
 
-def _resolve_stretch(stretch: list[_TextRecord], net: Decimal) -> list[Transaction]:
+def _resolve_stretch(stretch: list[_TextRecord], net: Decimal) -> tuple[list[Transaction], bool]:
+    """The stretch's rows, and whether exactly one reading of them adds up to ``net``."""
     known = sum((item.transaction.amount for item in stretch if item.transaction is not None), Decimal(0))
     held = [item for item in stretch if item.transaction is None]
     fixed = sum((item.amount for item in held if item.fixed_sign and item.amount is not None), Decimal(0))
@@ -568,24 +753,43 @@ def _resolve_stretch(stretch: list[_TextRecord], net: Decimal) -> list[Transacti
             total = sum((sign * item.amount for sign, item in zip(signs, free)), Decimal(0))
             if abs(total - remaining) < _CENT:
                 choices.append(signs)
-    signs_by_row: dict[int, int] = {}
-    if len(choices) == 1:
-        signs_by_row = {id(item): sign for item, sign in zip(free, choices[0])}
-    elif not free and abs(remaining) < _CENT:
-        signs_by_row = {}
-    elif free:
-        # Not provable: keep only the held rows whose sign was printed.
-        free = []
+    if len(choices) != 1:
+        return _unproven_rows(stretch), False
+    signs_by_row = {id(item): sign for item, sign in zip(free, choices[0])}
     result: list[Transaction] = []
     for item in stretch:
         if item.transaction is not None:
             result.append(item.transaction)
+        elif item.candidate is not None:
+            result.append(
+                item.candidate.model_copy(
+                    update={"date_warnings": [*item.candidate.date_warnings, RECOVERED_FROM_SECOND_ENGINE]}
+                )
+            )
+        elif item.date_match is None and item.row_number:
+            # An undated row: proven by the chain, dated by its neighbours, or left out.
+            if item.assigned_date is not None and (item.fixed_sign or id(item) in signs_by_row):
+                amount = item.amount if item.fixed_sign else signs_by_row[id(item)] * item.amount
+                result.append(
+                    Transaction(
+                        date=item.assigned_date,
+                        description=item.description,
+                        amount=amount,
+                        type="credit" if amount > 0 else "debit",
+                        source_row=item.row_number,
+                        confidence="low",
+                        date_text=(item.undated_text or "")[:40] or None,
+                        date_confidence="medium",
+                        date_warnings=[DATE_FROM_NEIGHBOURING_ROWS],
+                    )
+                )
         elif item.fixed_sign or id(item) in signs_by_row:
             amount = item.amount if item.fixed_sign else signs_by_row[id(item)] * item.amount
             result.append(
                 _text_transaction(item.row_number, item.date_match, item.parsed_date, item.description, amount)
             )
-    return result
+    return result, True
+
 
 _NOTICE_LABEL = re.compile(r"^vat\b", re.IGNORECASE)
 _MAX_UNPARSED_ROWS = 200
@@ -600,8 +804,14 @@ def unparsed_text_rows(text: str, transactions: list[Transaction]) -> list[tuple
     accepted = {item.source_row for item in transactions}
     found: list[tuple[int, str]] = []
     for row_number, line in enumerate(text.splitlines(), start=1):
+        if row_number in accepted:
+            continue
         match = _TEXT_ROW_DATE.match(line.strip())
-        if not match or row_number in accepted:
+        if not match:
+            if _undated_row(row_number, line) is not None:
+                found.append((row_number, line.strip()[:200]))
+                if len(found) >= _MAX_UNPARSED_ROWS:
+                    break
             continue
         body = _tidy_ocr_money(match.group(2))
         label = _row_label(body)
@@ -629,6 +839,8 @@ def _repair_dropped_day_digits(rows: list[Transaction]) -> list[Transaction]:
     repaired = list(rows)
     lower = date.min
     for index, row in enumerate(repaired):
+        if DATE_FROM_NEIGHBOURING_ROWS in row.date_warnings:
+            continue  # dated from its neighbours: it follows them, it does not anchor them
         shortened = bool(row.date_text and _SINGLE_DIGIT_DAY.match(row.date_text))
         upper = _next_anchor_date(repaired, index)
         if shortened and (row.date < lower or row.date > upper):
@@ -646,7 +858,25 @@ def _repair_dropped_day_digits(rows: list[Transaction]) -> list[Transaction]:
                     }
                 )
         lower = max(lower, repaired[index].date)
-    return repaired
+    return _redate_neighbour_rows(repaired)
+
+
+def _redate_neighbour_rows(rows: list[Transaction]) -> list[Transaction]:
+    """Give each neighbour-dated row the date its (now repaired) neighbours share, or drop it."""
+    out: list[Transaction] = []
+    for index, row in enumerate(rows):
+        if DATE_FROM_NEIGHBOURING_ROWS not in row.date_warnings:
+            out.append(row)
+            continue
+        before = next((rows[j].date for j in range(index - 1, -1, -1) if _own_date(rows[j])), None)
+        after = next((rows[j].date for j in range(index + 1, len(rows)) if _own_date(rows[j])), None)
+        if before is not None and before == after:
+            out.append(row.model_copy(update={"date": before}))
+    return out
+
+
+def _own_date(row: Transaction) -> bool:
+    return DATE_FROM_NEIGHBOURING_ROWS not in row.date_warnings
 
 
 def _safe_day(base: date, day: int) -> date | None:
@@ -659,6 +889,8 @@ def _safe_day(base: date, day: int) -> date | None:
 def _next_anchor_date(rows: list[Transaction], index: int) -> date:
     """The date of the next row whose day has two digits, which the OCR did not shorten."""
     for later in rows[index + 1 :]:
+        if DATE_FROM_NEIGHBOURING_ROWS in later.date_warnings:
+            continue  # its date is provisional until the rows around it are settled
         if later.date_text and not _SINGLE_DIGIT_DAY.match(later.date_text):
             return later.date
     return date.max

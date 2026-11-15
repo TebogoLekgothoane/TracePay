@@ -20,6 +20,21 @@ export function emptyTotals(): TransactionTotals {
   return { ...EMPTY };
 }
 
+/** Spent / money-in for an already-filtered list of rows (e.g. a category or fee type). */
+export function summariseTransactionRows(
+  rows: readonly Pick<TotalsRow, "amount" | "type">[],
+): TransactionTotals {
+  const totals = emptyTotals();
+  for (const row of rows) {
+    const amount = Math.abs(Number(row.amount));
+    if (!Number.isFinite(amount)) continue;
+    if (row.type === "debit") totals.spent += amount;
+    else totals.income += amount;
+    totals.count += 1;
+  }
+  return totals;
+}
+
 /** Totals for every account and for all accounts together, keyed by account id. */
 export function summariseTotalsByAccount(rows: readonly TotalsRow[]): Record<string, TransactionTotals> {
   const result: Record<string, TransactionTotals> = { [ALL_ACCOUNTS_KEY]: emptyTotals() };

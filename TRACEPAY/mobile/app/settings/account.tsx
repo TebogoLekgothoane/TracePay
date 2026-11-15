@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useNavigation, usePreventRemove } from "expo-router";
-import { ChevronLeft, Lock } from "lucide-react-native";
+import { ChevronLeft, ChevronRight, Lock } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -261,6 +261,29 @@ export default function PersonalDetailsScreen() {
             >
               Save changes
             </Button>
+
+            <Text className="mb-3 mt-10 text-[13px] font-semibold uppercase tracking-[0.6px] text-muted-foreground">
+              Account ownership
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              className="flex-row items-center gap-3 rounded-3xl bg-card px-4 py-3.5 active:opacity-75"
+              onPress={() => router.push("/settings/delete-account")}
+            >
+              <View className="min-w-0 flex-1">
+                <Text className="text-[15px] font-semibold text-foreground">
+                  Delete account
+                </Text>
+                <Text className="mt-0.5 text-[13px] text-muted-foreground">
+                  Permanently delete your TracePay account and data
+                </Text>
+              </View>
+              <ChevronRight
+                color={palette.placeholder}
+                size={18}
+                strokeWidth={2}
+              />
+            </Pressable>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

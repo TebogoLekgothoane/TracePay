@@ -108,6 +108,11 @@ def render_statement_review(
         out += ["| Commitment | Latest amount |", "|---|---|"]
         out += [f"| {row.name} | {row.amount} |" for row in review.commitments]
         out.append("")
+    habits = [item for item in review.by_group("commitment") if item.display == "item"]
+    if habits:
+        out += ["Where the money goes (facts about the period, not leaks):"]
+        out += [f"- {finding.line}" for finding in habits]
+        out.append("")
     if review.context_notes:
         notes = [note[0].upper() + note[1:] if index else note for index, note in enumerate(review.context_notes)]
         out += ["Context to show, not a finding: " + " ".join(notes), ""]

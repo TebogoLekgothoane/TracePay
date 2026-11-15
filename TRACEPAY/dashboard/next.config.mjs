@@ -1,5 +1,5 @@
-// The browser only ever talks to this app. /api/metrics is proxied to the FastAPI backend, so the
-// backend needs no CORS settings and its address never reaches the browser.
+// The browser only ever talks to this app. Sign-in and metrics are proxied to the FastAPI backend,
+// so the backend needs no CORS settings and its address never reaches the browser.
 const backend = (process.env.BACKEND_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 
 /** @type {import('next').NextConfig} */
@@ -11,7 +11,11 @@ const nextConfig = {
     proxyTimeout: 120_000,
   },
   async rewrites() {
-    return [{ source: "/api/metrics", destination: `${backend}/superadmin/api/metrics` }];
+    return [
+      { source: "/api/metrics", destination: `${backend}/superadmin/api/metrics` },
+      { source: "/api/session", destination: `${backend}/superadmin/api/session` },
+      { source: "/api/accounts/:id", destination: `${backend}/superadmin/api/accounts/:id` },
+    ];
   },
   async headers() {
     return [

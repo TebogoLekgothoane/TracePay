@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from "expo-router";
+import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { ChevronLeft, ChevronRight, Lightbulb } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { Pressable, ScrollView, Text, View } from "react-native";
@@ -17,6 +17,7 @@ import {
   type Period,
 } from "../../../../src/features/insights/period";
 import { getLeakLineItem } from "../../../../src/features/leaks/leak-details";
+import { buildLeakTransactionsHref } from "../../../../src/features/leaks/leak-transaction-filters";
 import { COLORS, getImpactToneStyles } from "../../../../src/theme/colors";
 
 function first(value: string | string[] | undefined): string | undefined {
@@ -51,6 +52,12 @@ export default function LeakLineItemScreen() {
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === "dark" ? "dark" : "light";
   const palette = COLORS[scheme];
+
+  // Prefer real filtered transactions over the old mock fee/airtime rows.
+  const transactionsHref = buildLeakTransactionsHref(leakId, itemId);
+  if (transactionsHref) {
+    return <Redirect href={transactionsHref as never} />;
+  }
 
   const item = getLeakLineItem(leakId, itemId);
 

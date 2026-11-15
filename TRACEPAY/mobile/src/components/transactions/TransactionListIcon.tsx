@@ -22,43 +22,38 @@ import { BrandLogo } from "../ui/BrandLogo";
 type CategoryStyle = {
   Icon: LucideIcon;
   tint: string;
-  tintBg: string;
 };
 
 const CATEGORY_STYLES: Record<string, CategoryStyle> = {
-  groceries: { Icon: ShoppingCart, tint: "#16A34A", tintBg: "rgba(22, 163, 74, 0.16)" },
-  shopping: { Icon: ShoppingCart, tint: "#2563EB", tintBg: "rgba(37, 99, 235, 0.14)" },
-  transport: { Icon: Fuel, tint: "#2563EB", tintBg: "rgba(37, 99, 235, 0.14)" },
-  fuel: { Icon: Fuel, tint: "#2563EB", tintBg: "rgba(37, 99, 235, 0.14)" },
-  "airtime & data": { Icon: Smartphone, tint: "#CA8A04", tintBg: "rgba(250, 204, 21, 0.28)" },
-  airtime: { Icon: Smartphone, tint: "#CA8A04", tintBg: "rgba(250, 204, 21, 0.28)" },
-  subscriptions: { Icon: Wallet, tint: "#E50914", tintBg: "rgba(229, 9, 20, 0.14)" },
-  dining: { Icon: Utensils, tint: "#EA580C", tintBg: "rgba(234, 88, 12, 0.14)" },
-  food: { Icon: Utensils, tint: "#EA580C", tintBg: "rgba(234, 88, 12, 0.14)" },
+  groceries: { Icon: ShoppingCart, tint: "#16A34A" },
+  shopping: { Icon: ShoppingCart, tint: "#2563EB" },
+  transport: { Icon: Fuel, tint: "#2563EB" },
+  fuel: { Icon: Fuel, tint: "#2563EB" },
+  "airtime & data": { Icon: Smartphone, tint: "#CA8A04" },
+  airtime: { Icon: Smartphone, tint: "#CA8A04" },
+  subscriptions: { Icon: Wallet, tint: "#E50914" },
+  dining: { Icon: Utensils, tint: "#EA580C" },
+  food: { Icon: Utensils, tint: "#EA580C" },
 };
 
 const TRANSFER_OUT: CategoryStyle = {
   Icon: ArrowUpRight,
   tint: "#6D3FE0",
-  tintBg: "rgba(109, 63, 224, 0.14)",
 };
 
 const TRANSFER_IN: CategoryStyle = {
   Icon: ArrowDownLeft,
   tint: "#0D9488",
-  tintBg: "rgba(13, 148, 136, 0.14)",
 };
 
 const TRANSFER_BANK: CategoryStyle = {
   Icon: Building2,
   tint: "#6366F1",
-  tintBg: "rgba(99, 102, 241, 0.14)",
 };
 
 const DEFAULT_STYLE: CategoryStyle = {
   Icon: Wallet,
   tint: "#6D3FE0",
-  tintBg: "rgba(109, 63, 224, 0.14)",
 };
 
 function styleForTransaction(input: {
@@ -128,7 +123,7 @@ export function TransactionListIcon({
         name={merchantName?.trim() || description}
         logoDomain={resolution.domain}
         size={size}
-        fallbackColor={style.tintBg}
+        fallbackColor="transparent"
         shape="circle"
       />
     );
@@ -138,11 +133,7 @@ export function TransactionListIcon({
     return (
       <View
         className="items-center justify-center overflow-hidden rounded-full"
-        style={{
-          width: size,
-          height: size,
-          backgroundColor: style.tintBg,
-        }}
+        style={{ width: size, height: size }}
         accessibilityLabel={`${description} icon`}
       >
         <Text
@@ -161,11 +152,7 @@ export function TransactionListIcon({
   return (
     <View
       className="items-center justify-center overflow-hidden rounded-full"
-      style={{
-        width: size,
-        height: size,
-        backgroundColor: style.tintBg,
-      }}
+      style={{ width: size, height: size }}
       accessibilityLabel={`${description} icon`}
     >
       <style.Icon color={style.tint} size={iconSize} strokeWidth={2.2} />

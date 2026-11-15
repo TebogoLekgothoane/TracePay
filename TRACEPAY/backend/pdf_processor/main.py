@@ -5,6 +5,7 @@ from .extract import ExtractionError, extract_layers
 from .mirrored_sections import drop_mirrored_text, has_mirrored_sections, is_mirror_table
 from .models import ProcessingResult, StatementBalance, Transaction, UnparsedRow, ValidationResult
 from .normalise import (
+    RECOVERED_FROM_SECOND_ENGINE,
     normalize_row,
     parse_text_rows,
     split_same_row_fee,
@@ -26,8 +27,14 @@ from .tables import (
     merge_continuation_rows,
     table_headers,
 )
+from .description_recovery import recover_descriptions
 from .text_chain import text_chain_transactions
-from .validate import balance_chain_checks, reconcile_opening_closing, validate_transactions
+from .validate import (
+    balance_chain_checks,
+    drop_repeated_printed_rows,
+    reconcile_opening_closing,
+    validate_transactions,
+)
 from categorisation.ai_budget import consume_ai_budget
 from categorisation.service import CategorisableTransaction, categorise_batch
 
@@ -147,9 +154,21 @@ def process_pdf(
             raw = raw.model_copy(update={"rows_found": table_rows_detected})
         rows_rejected = max(raw.rows_found - len(transactions), 0)
         if not transactions:
-            transactions, detected_rows = parse_text_rows(text, period=header_period)
+            # Rows the other OCR engine read are offered as candidates: each is kept only
+            # where the printed balances prove the chosen reading missed it.
+            others = [
+                row
+                for alt in raw.ocr_alternative_texts
+                for row in parse_text_rows(alt, period=header_period)[0]
+            ]
+            transactions, detected_rows = parse_text_rows(
+                text, period=header_period, extra_rows=others or None
+            )
             text_rows_used = True
-            raw = raw.model_copy(update={"rows_found": detected_rows})
+            recovered = sum(RECOVERED_FROM_SECOND_ENGINE in item.date_warnings for item in transactions)
+            if recovered:
+                logger.info("pdf_ocr_rows_recovered_from_second_engine added=%s", recovered)
+            raw = raw.model_copy(update={"rows_found": max(detected_rows, len(transactions))})
             rows_rejected = max(detected_rows - len(transactions), 0)
 
     classical_validation = validate_transactions(
@@ -170,6 +189,7 @@ def process_pdf(
             "The PDF has insufficient readable content. OCR could not produce a reliable result.",
         )
 
+    transactions = recover_descriptions(content, transactions)
     logger.info(
         "[CATEGORISATION] invoked_after_extraction=true total_transactions=%s live_category_count=%s",
         len(transactions),
@@ -196,6 +216,11 @@ def process_pdf(
         _with_category(transaction, classifications[str(index)], catalog)
         for index, transaction in enumerate(transactions)
     ]
+    before = len(transactions)
+    transactions = drop_repeated_printed_rows(transactions)
+    dropped = before - len(transactions)
+    if dropped:
+        logger.info("pdf_repeated_printed_rows_dropped count=%s", dropped)
     balance_checks = balance_chain_checks(transactions)
     transactions = [
         item.model_copy(update={"balance_check": status})

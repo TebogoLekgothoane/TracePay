@@ -49,6 +49,27 @@ def balance_chain_checks(transactions: list[Transaction]) -> list[str]:
     return statuses
 
 
+def drop_repeated_printed_rows(transactions: list[Transaction]) -> list[Transaction]:
+    """Drop a second copy of a row the statement already printed.
+
+    The copy shares the date, amount, description and running balance. A real
+    second charge moves that balance, so it is kept. A summary page that repeats
+    the ledger does not.
+    """
+    seen: set[tuple] = set()
+    kept: list[Transaction] = []
+    for item in transactions:
+        if item.balance is None:
+            kept.append(item)
+            continue
+        key = (item.date, item.amount, item.description.casefold(), item.balance)
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(item)
+    return kept
+
+
 def reconcile_balances(transactions: list[Transaction]) -> str:
     checks = balance_chain_checks(transactions)
     if not any(status != "unchecked" for status in checks):

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { ChartCanvas } from "@/components/ChartCanvas";
 import { Chart, DataTable, Kpi, Panel, Row, SectionHead } from "@/components/ui";
 import {
@@ -13,7 +15,7 @@ import {
   waitlistChart,
 } from "@/lib/charts";
 import { capitalise, ms, num, pct, productName, usd, when, zar } from "@/lib/format";
-import type { Metrics } from "@/lib/types";
+import type { AccountDetail, Metrics } from "@/lib/types";
 
 type D = { d: Metrics };
 
@@ -23,7 +25,7 @@ export function Overview({ d }: D) {
   const s = d.sales;
   return (
     <section className="section">
-      <SectionHead title="Overview" note={`Last ${d.range_days} days · ${d.timezone}`} />
+      <SectionHead title="Overview" note={`Last ${d.range_days} days, ${d.timezone}. A line that says all time is not limited to that range.`} />
       <div className="kpis">
         <Kpi label="Verified users" value={num(k.registered_total)} sub={`${num(k.accounts_total)} accounts created, ${num(k.unverified_total)} never verified`} />
         <Kpi label="New accounts" value={num(k.new_in_range)} sub={`${num(r.new_verified_in_range)} verified, last ${d.range_days} days`} />
@@ -46,7 +48,7 @@ export function Registrations({ d }: D) {
     <section className="section">
       <SectionHead title="Registrations" note="Accounts created in the selected range" />
       <div className="grid">
-        <Panel span={8} title="Sign-ups per day" hint="New accounts">
+        <Panel span={8} title="Sign-ups per day" hint="Selected range">
           <Chart tall>
             <ChartCanvas data={d} build={signupsChart} label="Sign-ups per day" />
           </Chart>
@@ -79,7 +81,7 @@ export function Sales({ d }: D) {
         note="Gross, in rand: configured price per purchase, before app-store fees and VAT. Annual renewals are not counted."
       />
       <div className="grid">
-        <Panel span={8} title="Gross sales per day" hint="Bars show sales value (ZAR), the line shows the number of sales">
+        <Panel span={8} title="Gross sales per day" hint="Selected range. Bars are sales value in rand, the line is the number of sales">
           <Chart tall>
             <ChartCanvas data={d} build={revenueChart} label="Gross sales per day" />
           </Chart>
@@ -109,7 +111,7 @@ export function Statements({ d }: D) {
     <section className="section">
       <SectionHead title="Statements" note="Statement imports and their outcome" />
       <div className="grid">
-        <Panel span={8} title="Uploads per day" hint="Split by outcome">
+        <Panel span={8} title="Uploads per day" hint="Selected range, split by outcome">
           <Chart tall>
             <ChartCanvas data={d} build={statementsChart} label="Statement uploads per day" />
           </Chart>
@@ -125,6 +127,15 @@ export function Statements({ d }: D) {
             <Row label="Uploaded, never processed" value={num(st.uploaded_not_processed)} />
             <Row label="Transactions imported in range" value={num(st.transactions_imported_in_range)} />
             <Row label="Transactions stored, all time" value={num(st.transactions_total)} />
+          </div>
+        </Panel>
+        <Panel span={12} title="Statement failures" hint="Selected range. The most common reasons on finished imports.">
+          <div className="table-wrap">
+            <DataTable
+              empty="No failed statements in this range."
+              columns={[{ label: "Reason", wrap: true }, { label: "Count", num: true }]}
+              rows={st.failure_reasons.map((f) => [f.reason, num(f.count)])}
+            />
           </div>
         </Panel>
       </div>
@@ -148,15 +159,21 @@ export function AiUsage({ d }: D) {
         </div>
       )}
       <div className="kpis">
-        <Kpi label="AI calls" value={num(t.calls)} sub={`${num(t.items)} items sent`} />
+        <Kpi label="AI calls" value={num(t.calls)} sub={`${num(t.items)} items sent, selected range`} />
         <Kpi label="Tokens" value={num(t.tokens)} sub={`${num(t.tokens_in)} in, ${num(t.tokens_out)} out`} />
         <Kpi label="Estimated cost" value={usd(t.cost_usd)} sub={t.unpriced_tokens ? `${num(t.unpriced_tokens)} tokens unpriced` : "From list prices"} />
         <Kpi label="Successful calls" value={t.calls ? pct(successRate) : "—"} sub={`${num(t.failed + t.rejected)} failed or rejected`} />
-        <Kpi label="Average response" value={ms(t.avg_ms)} sub="Per call" />
-        <Kpi label="Daily budget in use" value={num(b.items_used_current_window)} sub={`${num(b.users_with_usage)} users, limit ${num(b.daily_item_limit)} each`} />
+        <Kpi label="Average response" value={ms(t.avg_ms)} sub="Per call, selected range" />
       </div>
+      {b.items_used_current_window > 0 && (
+        <div className="notice">
+          {b.note}
+          {b.window_started_at ? ` Oldest open window started ${when(b.window_started_at)}.` : ""}{" "}
+          {num(b.items_used_current_window)} reserved across {num(b.users_with_usage)} users, limit {num(b.daily_item_limit)} each.
+        </div>
+      )}
       <div className="grid" style={{ marginTop: 16 }}>
-        <Panel span={8} title="Calls per day" hint="Stacked by feature">
+        <Panel span={8} title="Calls per day" hint="Selected range, stacked by feature">
           <Chart tall>
             <ChartCanvas data={d} build={aiCallsChart} label="AI calls per day" />
           </Chart>
@@ -216,12 +233,17 @@ export function AiUsage({ d }: D) {
             />
           </div>
         </Panel>
-        <Panel span={6} title="Heaviest users" hint="Transactions sent to AI in each user's current 24-hour window">
+        <Panel span={6} title="Budget reservations" hint="Current 24-hour window. Not the calls in the selected range.">
           <div className="table-wrap">
             <DataTable
-              empty="No users have used AI in their current window."
-              columns={[{ label: "User" }, { label: "Items used", num: true }, { label: "Of daily limit", num: true }]}
-              rows={b.top_users.map((u) => [u.user, num(u.used), pct(u.pct_of_limit)])}
+              empty="No users have a reservation in their current window."
+              columns={[
+                { label: "User" },
+                { label: "Reserved", num: true },
+                { label: "Of daily limit", num: true },
+                { label: "Window started" },
+              ]}
+              rows={b.top_users.map((u) => [u.user, num(u.used), pct(u.pct_of_limit), when(u.window_start)])}
             />
           </div>
         </Panel>
@@ -233,7 +255,7 @@ export function AiUsage({ d }: D) {
 export function Conversion({ d }: D) {
   return (
     <section className="section">
-      <SectionHead title="Conversion and demand" note="Where users stop, and what they ask for" />
+      <SectionHead title="Conversion and demand" note="The funnel is all time. The waitlist chart follows the selected range." />
       <div className="grid">
         <Panel span={6} title="Activation funnel" hint="Distinct users reaching each step, all time">
           <Chart tall>
@@ -245,19 +267,10 @@ export function Conversion({ d }: D) {
             <ChartCanvas data={d} build={waitlistChart} label="Waitlist growth" />
           </Chart>
         </Panel>
-        <Panel span={6} title="Waitlist interests" hint="Self-reported, all time">
+        <Panel span={6} title="Waitlist interests" hint="All time">
           <Chart>
             <ChartCanvas data={d} build={interestsChart} label="Waitlist interests" />
           </Chart>
-        </Panel>
-        <Panel span={6} title="Statement failures" hint="Most common reasons in the selected range">
-          <div className="table-wrap">
-            <DataTable
-              empty="No failed statements in this range."
-              columns={[{ label: "Reason", wrap: true }, { label: "Count", num: true }]}
-              rows={d.statements.failure_reasons.map((f) => [f.reason, num(f.count)])}
-            />
-          </div>
         </Panel>
       </div>
     </section>
@@ -270,12 +283,63 @@ function statusClass(status: string): string {
   return "status";
 }
 
-export function Activity({ d }: D) {
+export function AccountPanel({
+  account,
+  loading,
+  error,
+  onClose,
+}: {
+  account: AccountDetail | null;
+  loading: boolean;
+  error: string;
+  onClose: () => void;
+}) {
+  const statements = account?.statements;
+  const purchases = account?.purchases;
+  return (
+    <Panel span={12} title={account?.user ?? "Account"} hint="All time. The contact shown here is masked.">
+      <div className="account-bar">
+        <button className="text-btn" type="button" onClick={onClose}>
+          Back to the list
+        </button>
+        {loading ? <span className="loading">Loading this account…</span> : null}
+      </div>
+      {error ? <div className="notice warning">{error}</div> : null}
+      {account && statements && purchases ? (
+        <div className="rows">
+          <Row label="Joined" value={when(account.created)} />
+          <Row label="Last sign-in" value={when(account.last_sign_in)} />
+          <Row label="Verified" value={account.verified ? "Yes" : "No"} />
+          <Row label="Statements" value={num(statements.total)} />
+          <Row label="Latest statement" value={statements.latest_status ? capitalise(statements.latest_status) : "—"} />
+          <Row label="Latest statement at" value={when(statements.latest_at)} />
+          <Row label="Transactions from processed statements" value={num(statements.transactions)} />
+          <Row label="Latest statement message" value={statements.latest_error || "—"} />
+          <Row label="Purchases" value={num(purchases.count)} />
+          <Row label="Paid purchases" value={num(purchases.succeeded)} />
+          <Row label="Spent" value={zar(purchases.spent_zar)} />
+          <Row label="Latest purchase" value={purchases.latest_product ? productName(purchases.latest_product) : "—"} />
+          <Row
+            label="Budget reserved"
+            value={account.budget ? `${num(account.budget.used)} since ${when(account.budget.window_start)}` : "None in the open window"}
+          />
+        </div>
+      ) : null}
+    </Panel>
+  );
+}
+
+export function Activity({
+  d,
+  onOpenAccount,
+  account,
+}: D & { onOpenAccount: (id: string) => void; account: ReactNode }) {
   return (
     <section className="section">
-      <SectionHead title="Recent activity" note="Latest 25 of each. Contact details are masked." />
+      <SectionHead title="Recent activity" note="Latest 25 of each. Select a row to open that account. Contact details are masked." />
       <div className="grid">
-        <Panel span={6} title="Purchases" hint="Every status">
+        {account}
+        <Panel span={6} title="Purchases" hint="Select a row to open the account.">
           <div className="table-wrap">
             <DataTable
               empty="No purchases yet."
@@ -286,6 +350,10 @@ export function Activity({ d }: D) {
                 { label: "Amount", num: true },
                 { label: "Status" },
               ]}
+              onRow={(index) => {
+                const id = d.sales.recent[index]?.id;
+                if (id) onOpenAccount(id);
+              }}
               rows={d.sales.recent.map((p) => [
                 when(p.when),
                 p.user,
@@ -298,7 +366,7 @@ export function Activity({ d }: D) {
             />
           </div>
         </Panel>
-        <Panel span={6} title="Sign-ups" hint="Newest accounts">
+        <Panel span={6} title="Sign-ups" hint="Newest accounts. Select a row to open the account.">
           <div className="table-wrap">
             <DataTable
               empty="No accounts yet."
@@ -309,6 +377,7 @@ export function Activity({ d }: D) {
                 { label: "Statements", num: true },
                 { label: "Paying" },
               ]}
+              onRow={(index) => onOpenAccount(d.recent_signups[index].id)}
               rows={d.recent_signups.map((u) => [
                 when(u.when),
                 u.user,

@@ -45,30 +45,37 @@ def preprocess_statement_image(image: Image.Image | np.ndarray) -> np.ndarray:
 
 
 def ocr_page_images(images: Sequence[Image.Image | np.ndarray]) -> OcrResult:
-    """Run PaddleOCR 3.x, then Tesseract only when Paddle fails or is low-confidence."""
-    if not images:
-        return OcrResult(text="", confidence=0.0, engine="none")
+    """The best reading of the pages: PaddleOCR when it is confident, else Tesseract."""
+    results = ocr_page_images_all(images)
+    return results[0] if results else OcrResult(text="", confidence=0.0, engine="none")
 
+
+def ocr_page_images_all(images: Sequence[Image.Image | np.ndarray]) -> list[OcrResult]:
+    """Every usable reading of the pages, best first.
+
+    Both engines are run: they misread different rows, and a row one of them lost can be
+    recovered from the other when the printed balances prove it (see
+    ``normalise.merge_proven_rows``). The first result is the one the text is taken from:
+    PaddleOCR when it is confident, otherwise whichever engine read with more confidence.
+    """
+    if not images:
+        return []
     prepared = _map_pages(preprocess_statement_image, images)
     paddle = _paddle_ocr(prepared)
-    if _usable(paddle) and paddle.confidence >= OCR_CONFIDENCE_MIN:
-        return paddle
-
-    logger.info(
-        "ocr_paddle_fallback_tesseract paddle_confidence=%s paddle_chars=%s",
-        round(paddle.confidence, 3),
-        len(" ".join(paddle.text.split())),
-    )
     tesseract = _tesseract_ocr(prepared)
-    if _usable(tesseract) and (
-        not _usable(paddle) or tesseract.confidence >= paddle.confidence
-    ):
-        return tesseract
-    if _usable(paddle):
-        return paddle
-    if _usable(tesseract):
-        return tesseract
-    return OcrResult(text="", confidence=0.0, engine="none")
+    usable = [result for result in (paddle, tesseract) if _usable(result)]
+    if not usable:
+        return []
+    if _usable(paddle) and paddle.confidence >= OCR_CONFIDENCE_MIN:
+        best = paddle
+    else:
+        logger.info(
+            "ocr_paddle_fallback_tesseract paddle_confidence=%s paddle_chars=%s",
+            round(paddle.confidence, 3),
+            len(" ".join(paddle.text.split())),
+        )
+        best = max(usable, key=lambda result: result.confidence)
+    return [best, *[result for result in usable if result is not best]]
 
 
 def _usable(result: OcrResult) -> bool:
@@ -308,6 +315,40 @@ def _map_pages(function, items: Sequence[Any]) -> list[Any]:
         return list(pool.map(function, items))
 
 
+#: Where the Windows installer puts tesseract.exe. It does not add itself to PATH.
+_TESSERACT_WINDOWS_DIRS = (
+    r"C:\Program Files\Tesseract-OCR",
+    r"C:\Program Files (x86)\Tesseract-OCR",
+    os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Tesseract-OCR"),
+)
+_TESSERACT_RESOLVED = False
+
+
+def _locate_tesseract() -> str | None:
+    """The tesseract binary: TESSERACT_CMD, then PATH, then the usual Windows install folders.
+
+    pytesseract only looks on PATH, so a Windows machine where the installer ran but PATH was
+    not updated reports Tesseract missing although it is there. Checked once per process.
+    """
+    global _TESSERACT_RESOLVED
+    import pytesseract
+    import shutil
+
+    if _TESSERACT_RESOLVED:
+        return pytesseract.pytesseract.tesseract_cmd
+    _TESSERACT_RESOLVED = True
+    configured = os.environ.get("TESSERACT_CMD", "").strip()
+    candidates = [configured] if configured else []
+    candidates.append(shutil.which("tesseract") or "")
+    candidates.extend(os.path.join(folder, "tesseract.exe") for folder in _TESSERACT_WINDOWS_DIRS if folder)
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate):
+            pytesseract.pytesseract.tesseract_cmd = candidate
+            logger.info("tesseract_binary path=%s", candidate)
+            return candidate
+    return None
+
+
 def _tesseract_page(image: np.ndarray) -> tuple[str, list[float]]:
     """One Tesseract pass per page: the lines and the word confidences come from the same read."""
     import pytesseract
@@ -331,9 +372,14 @@ def _tesseract_page(image: np.ndarray) -> tuple[str, list[float]]:
 
 def _tesseract_ocr(images: Sequence[np.ndarray]) -> OcrResult:
     try:
-        import pytesseract  # noqa: F401
+        binary = _locate_tesseract()
     except ImportError:
         logger.warning("tesseract_unavailable")
+        return OcrResult(text="", confidence=0.0, engine="none")
+    if binary is None:
+        logger.warning(
+            "tesseract_binary_not_found hint=install Tesseract or set TESSERACT_CMD to tesseract.exe"
+        )
         return OcrResult(text="", confidence=0.0, engine="none")
 
     def read(item: tuple[int, np.ndarray]) -> tuple[str, list[float]] | None:

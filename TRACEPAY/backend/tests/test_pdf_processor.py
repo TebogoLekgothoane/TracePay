@@ -331,7 +331,7 @@ def test_pymupdf_extracts_signed_text_rows_without_camelot(monkeypatch: pytest.M
         lambda _content: (_ for _ in ()).throw(AssertionError("Camelot should not run")),
     )
     monkeypatch.setattr(
-        "pdf_processor.extract.ocr_page_images",
+        "pdf_processor.extract.ocr_page_images_all",
         lambda _images: (_ for _ in ()).throw(AssertionError("OCR should not run")),
     )
     raw, text, tables = extract_layers(content)

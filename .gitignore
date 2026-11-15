@@ -14,3 +14,12 @@ TRACEPAY/mobile/.env.*
 TRACEPAY/backend/.env
 TRACEPAY/backend/.env.*
 .cursor/mcp.json
+
+# EAS Build on Windows only honors this root file, so nested ignores are repeated here.
+.venv
+.pytest_cache
+__pycache__
+*.pyc
+.next
+.expo
+TRACEPAY/backend/tests/fixtures/statement_review

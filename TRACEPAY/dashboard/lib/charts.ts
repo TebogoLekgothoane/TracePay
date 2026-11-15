@@ -4,6 +4,8 @@ import { capitalise, pct, productName, shortDate, zar } from "./format";
 import type { Metrics } from "./types";
 
 Chart.register(...registerables);
+Chart.defaults.font.size = 14;
+Chart.defaults.font.family = "Inter, ui-sans-serif, system-ui, sans-serif";
 
 // Chart.js configs mix bar, line and doughnut options in ways its generics make awkward.
 const asConfig = (config: unknown): ChartConfiguration => config as ChartConfiguration;

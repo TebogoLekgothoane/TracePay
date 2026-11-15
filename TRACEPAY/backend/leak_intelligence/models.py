@@ -467,6 +467,8 @@ class PassThroughEvent(BaseModel):
     fee_total: Decimal
     end_balance: Decimal
     transaction_ids: list[str] = Field(default_factory=list)
+    # Largest non-fee payments in the window, "Name R1,000", biggest first.
+    destinations: list[str] = Field(default_factory=list)
 
 
 class IrregularCandidate(BaseModel):

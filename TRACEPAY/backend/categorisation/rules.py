@@ -188,6 +188,7 @@ GAMBLING_GROUPS: MerchantGroups = (
     ("National Lottery", ("NATIONAL LOTTERY", "POWERBALL", "PICK 3", "LOTTO")),
     ("Bet365", ("BET365",)),
     ("Casino", ("CASINO",)),
+    ("Bingo", ("BINGO",)),
 )
 
 # Credit providers whose repayments leave the account on a schedule. Generic
@@ -252,7 +253,9 @@ _RECOGNISED_MERCHANT_GROUPS: MerchantGroups = (
     ("Dstv", ("DSTV",)),
     ("Showmax", ("SHOWMAX",)),
     ("CapCut", ("CAPCUT", "CAP CUT", "CAPCUT VIDEO", "GOOGLE CAPCUT")),
-    ("Google One", ("GOOGLE ONE",)),
+    ("Google One", ("GOOGLE ONE", "GOOGLE GOOGL")),
+    ("Crunchyroll", ("CRUNCHYROLL", "GOOGLE CRUNCH")),
+    ("Bolt.eu", ("BOLT.EU/S/",)),
     ("OpenArt", ("OPENART", "OPEN ART", "OPENART AI")),
     (
         "ChatGPT",
@@ -313,6 +316,12 @@ def recognised_merchant_label(normalized_text: str) -> str | None:
     """Return the canonical merchant label when an existing merchant phrase matches."""
     if not normalized_text:
         return None
+    # Google One's card line is often "GOOGLE G1" plus a product code ("G1SK00").
+    if re.search(r"GOOGLE\s+G1[A-Z0-9]", normalized_text):
+        return "Google One"
+    # The subscription path keeps a date after the slash ("BOLT.EU/S/260"). A ride is /O/.
+    if "BOLT.EU/S/" in normalized_text:
+        return "Bolt.eu"
     for pattern, label in _RECOGNISED_MERCHANT_PATTERNS:
         if pattern.search(normalized_text):
             return label
@@ -417,6 +426,24 @@ def is_purchase_reversal_description(description: str | None) -> bool:
     return _PURCHASE_REVERSAL(text, "")
 
 
+def _system_fee_line(description: str, kind: str) -> bool:
+    """A fee the statement names only by its shape: a hash line, an ATM fee, or the word itself."""
+    if kind == "credit":
+        return False
+    if description.strip() in {"FEE", "FEES"}:
+        return True
+    if "#" in description and re.search(r"\bFEE\b", description):
+        return True
+    return re.search(r"\bATM\b", description) is not None and re.search(r"\bFEE\b", description) is not None
+
+
+def _bolt_ride(description: str, kind: str) -> bool:
+    """Bolt trips, including BOLT.EU/O/. The /S/ path is a subscription, not a ride."""
+    if "BOLT.EU/S/" in description:
+        return False
+    return any_of(contains("BOLT"), contains_fragment("DLBOLT"))(description, kind)
+
+
 RULES: tuple[Rule, ...] = (
     Rule(
         PURCHASE_REVERSAL_RULE,
@@ -438,6 +465,7 @@ RULES: tuple[Rule, ...] = (
         "description:service-fee",
         "Bank Fees",
         0.95,
+        any_of(
         contains(
             "SMS NOTIFICATION FEE",
             "NOTIFICATION FEE",
@@ -516,6 +544,7 @@ RULES: tuple[Rule, ...] = (
             "CASH WITHDRAWAL FEE",
             "CASH WITHDRAWAL CHARGE",
             "CASH ADVANCE FEE",
+            "ADVANCE FEE",
             "CASH DEPOSIT FEE",
             "CASH HANDLING FEE",
             "CASHBACK FEE",
@@ -539,6 +568,21 @@ RULES: tuple[Rule, ...] = (
             "CREDIT CARD INTEREST",
             "INTEREST ON CREDIT CARD",
             "INTEREST DEBIT",
+            "INT ON DEBIT",
+            "SERVICE FEES",
+            "MONTHLY ACCOUNT FEE",
+            "PAYMENTS BUNDLE FEE",
+            "PYMT FEE",
+            "ITEM PAID NO FUNDS",
+            "PAID NO FUNDS",
+            "ITEM UNPAID",
+            "PAYPAL WITHDRAWAL FEE",
+            "PAYPAL FEE",
+            "DECLINED PURCH",
+            "DECLINED ATM",
+            "BALANCE ENQ",
+        ),
+        _system_fee_line,
         ),
         transaction_class="bank_fee",
     ),
@@ -626,12 +670,13 @@ RULES: tuple[Rule, ...] = (
         "Fast Food",
         0.95,
         any_of(
-            contains("UBER EATS", "MR D FOOD", "MRD FOOD", "MR D ", "MRD", "UBEREATS"),
+            contains("UBER EATS", "MR D FOOD", "MRD FOOD", "MR D", "MRD", "UBEREATS"),
             contains_fragment("DLUBER EATS", "DLUBEREATS"),
         ),
     ),
     Rule("merchant:uber", "Ride Hailing", 1.00, any_of(contains("UBER"), contains_fragment("DLUBER"))),
-    Rule("merchant:bolt", "Ride Hailing", 1.00, any_of(contains("BOLT"), contains_fragment("DLBOLT"))),
+    # "DL BOLT" and "BOLT.EU/O/" are rides. "BOLT.EU/S/" is the subscription path.
+    Rule("merchant:bolt", "Ride Hailing", 1.00, _bolt_ride),
     Rule("merchant:shell", "Fuel", 1.00, contains("SHELL")),
     Rule("merchant:engen", "Fuel", 1.00, contains("ENGEN")),
     # BP is also the bank's own prefix on credits (BP SALARY, BP INTEREST PAID, BP CLIENT PAYMENT),
@@ -720,6 +765,9 @@ RULES: tuple[Rule, ...] = (
             "APPLE COM BILL",
             "GOOGLE *SERVICES",
             "GOOGLE ONE",
+            "GOOGLE GOOGL",
+            "GOOGLE CRUNCH",
+            "CRUNCHYROLL",
             "CAPCUT",
             "OPENART",
             "ADOBE",
@@ -743,7 +791,8 @@ RULES: tuple[Rule, ...] = (
             "AT EPOS AT OPENAI",
             "RECURRING PAYMENT FROM OPENAI",
         ),
-            contains_fragment("SPOTIFYZA"),
+            contains_fragment("SPOTIFYZA", "BOLT.EU/S/"),
+            lambda description, kind: kind != "credit" and re.search(r"GOOGLE\s+G1[A-Z0-9]", description) is not None,
         ),
     ),
     # Health cover before insurers so "MOMENTUM HEALTH" is not read as life cover.

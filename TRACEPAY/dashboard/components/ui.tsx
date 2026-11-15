@@ -59,7 +59,17 @@ export interface Column {
 }
 
 /** A plain table. Each row is an array of cells, one per column. */
-export function DataTable({ columns, rows, empty }: { columns: Column[]; rows: ReactNode[][]; empty: string }) {
+export function DataTable({
+  columns,
+  rows,
+  empty,
+  onRow,
+}: {
+  columns: Column[];
+  rows: ReactNode[][];
+  empty: string;
+  onRow?: (index: number) => void;
+}) {
   if (!rows.length) return <div className="empty">{empty}</div>;
   return (
     <table>
@@ -74,7 +84,22 @@ export function DataTable({ columns, rows, empty }: { columns: Column[]; rows: R
       </thead>
       <tbody>
         {rows.map((cells, i) => (
-          <tr key={i}>
+          <tr
+            key={i}
+            className={onRow ? "clickable" : undefined}
+            tabIndex={onRow ? 0 : undefined}
+            onClick={onRow ? () => onRow(i) : undefined}
+            onKeyDown={
+              onRow
+                ? (event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onRow(i);
+                    }
+                  }
+                : undefined
+            }
+          >
             {cells.map((cell, j) => (
               <td key={j} className={columns[j].num ? "num" : columns[j].wrap ? "wrap-text" : undefined}>
                 {cell}
