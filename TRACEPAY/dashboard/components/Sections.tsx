@@ -11,6 +11,7 @@ import {
   productsChart,
   revenueChart,
   signupsChart,
+  smsChart,
   statementsChart,
   waitlistChart,
 } from "@/lib/charts";
@@ -35,6 +36,9 @@ export function Overview({ d }: D) {
         <Kpi label="Sales" value={num(k.sales_in_range)} sub={`Last ${d.range_days} days`} />
         <Kpi label="Gross sales" value={zar(k.revenue_range_zar)} sub={`${zar(s.revenue_all_zar)} all time`} />
         <Kpi label="Gross sales per user" value={zar(k.arpu_zar)} sub="All time, per verified user" />
+        <Kpi label="Net revenue" value={zar(k.net_revenue_range_zar)} sub="After VAT and store fees, selected range" />
+        <Kpi label="Variable costs" value={zar(k.variable_cost_range_zar)} sub={`AI and SMS, ${num(k.sms_sent_range)} SMS sent`} />
+        <Kpi label="Margin" value={zar(k.margin_range_zar)} sub="Net revenue less variable costs" />
         <Kpi label="Monitoring active" value={num(k.monitoring_live)} sub={`${num(s.monitoring_cancelling)} cancelling, ${zar(s.monitoring_value_zar)} annual value`} />
         <Kpi label="Waitlist" value={num(k.waitlist_total)} sub={`${num(d.waitlist.in_range)} joined in range`} />
       </div>
@@ -246,6 +250,78 @@ export function AiUsage({ d }: D) {
               rows={b.top_users.map((u) => [u.user, num(u.used), pct(u.pct_of_limit), when(u.window_start)])}
             />
           </div>
+        </Panel>
+      </div>
+    </section>
+  );
+}
+
+export function Costs({ d }: D) {
+  const { sms, margin: m, unit: u } = d.costs;
+  const a = m.assumptions;
+  const rand = (v: number | null) => (v === null ? "—" : zar(v));
+  return (
+    <section className="section">
+      <SectionHead
+        title="Costs and margin"
+        note="Estimates from the rates set on the server, for the selected range. Not a ledger: check against your BulkSMS and store statements."
+      />
+      {!sms.logging_ready && (
+        <div className="notice warning">
+          SMS is not being recorded yet. Apply migration 202611150003_sms_usage_events.sql to the database. Messages are
+          counted from that point on; earlier ones cannot be recovered.
+        </div>
+      )}
+      <div className="kpis">
+        <Kpi label="Net revenue" value={zar(m.net_revenue_zar)} sub={`${zar(m.gross_zar)} gross`} />
+        <Kpi label="Variable costs" value={zar(m.variable_cost_zar)} sub="AI and SMS" />
+        <Kpi label="Margin" value={zar(m.margin_zar)} sub={m.margin_pct === null ? "No sales in range" : `${pct(m.margin_pct)} of net revenue`} />
+        <Kpi label="SMS spend" value={zar(sms.cost_zar)} sub={`${num(sms.sent)} sent, ${num(sms.parts)} billed parts`} />
+        <Kpi label="SMS failures" value={sms.sent + sms.failed ? pct(sms.failure_rate * 100) : "—"} sub={`${num(sms.failed)} failed attempts`} />
+        {m.result_zar !== null && (
+          <Kpi label="After fixed costs" value={zar(m.result_zar)} sub={`${zar(m.fixed_cost_zar ?? 0)} fixed, prorated`} />
+        )}
+      </div>
+      <div className="grid" style={{ marginTop: 16 }}>
+        <Panel span={8} title="SMS per day" hint="Selected range. Failed attempts are not billed.">
+          <Chart tall>
+            <ChartCanvas data={d} build={smsChart} label="SMS per day" />
+          </Chart>
+        </Panel>
+        <Panel span={4} title="Where the money goes" hint="Selected range, rand">
+          <div className="rows">
+            <Row label="Gross sales" value={zar(m.gross_zar)} />
+            <Row label={`VAT (${a.vat_pct}%)`} value={`− ${zar(m.vat_zar)}`} />
+            <Row label={`Store fees (${a.store_fee_pct}%)`} value={`− ${zar(m.store_fees_zar)}`} />
+            <Row label={`RevenueCat (${a.revenuecat_fee_pct}%)`} value={`− ${zar(m.revenuecat_fees_zar)}`} />
+            <Row label="Net revenue" value={zar(m.net_revenue_zar)} />
+            <Row label={`AI (at R${a.usd_zar_rate} per USD)`} value={`− ${zar(m.ai_cost_zar)}`} />
+            <Row label={`SMS (R${a.sms_cost_zar_per_part} per part)`} value={`− ${zar(m.sms_cost_zar)}`} />
+            <Row label="Margin" value={zar(m.margin_zar)} />
+            {m.fixed_cost_zar !== null && <Row label="Fixed costs, prorated" value={`− ${zar(m.fixed_cost_zar)}`} />}
+          </div>
+          {m.ai_unpriced_tokens > 0 && (
+            <p className="hint">{num(m.ai_unpriced_tokens)} AI tokens have no price set, so AI cost is understated.</p>
+          )}
+          {m.fixed_cost_zar === null && (
+            <p className="hint">Set FIXED_MONTHLY_COST_ZAR on the server to include hosting and database costs.</p>
+          )}
+        </Panel>
+        <Panel span={12} title="Per customer and break-even" hint="Selected range. Each sale carries all variable cost in the range, so the break-even is cautious.">
+          <div className="rows">
+            <Row label="AI cost per processed statement" value={rand(u.ai_per_statement_zar)} />
+            <Row label="Variable cost per new verified user" value={rand(u.variable_per_new_user_zar)} />
+            <Row label="Net revenue per sale" value={rand(u.net_per_sale_zar)} />
+            <Row label="Contribution per sale" value={rand(u.contribution_per_sale_zar)} />
+            <Row label="Sales per month now" value={u.sales_per_month_now === null ? "—" : num(u.sales_per_month_now)} />
+            <Row
+              label="Sales per month to cover fixed costs"
+              value={u.break_even_sales_per_month === null ? "—" : num(u.break_even_sales_per_month)}
+            />
+          </div>
+          {u.break_even_sales_per_month === null && (
+            <p className="hint">Needs at least one sale in range and FIXED_MONTHLY_COST_ZAR set on the server.</p>
+          )}
         </Panel>
       </div>
     </section>

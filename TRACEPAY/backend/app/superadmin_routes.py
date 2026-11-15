@@ -68,6 +68,12 @@ async def dashboard_metrics(
         monitoring_price_cents=settings.monitoring_price_cents,
         ai_daily_item_limit=settings.ai_daily_item_limit,
         ai_price_overrides=settings.ai_model_prices_json,
+        sms_cost_zar_per_part=settings.sms_cost_zar_per_part,
+        usd_zar_rate=settings.usd_zar_rate,
+        vat_pct=settings.vat_pct,
+        store_fee_pct=settings.store_fee_pct,
+        revenuecat_fee_pct=settings.revenuecat_fee_pct,
+        fixed_monthly_cost_zar=settings.fixed_monthly_cost_zar,
     )
     return payload
 

@@ -27,6 +27,54 @@ export interface Kpis {
   monitoring_live: number;
   waitlist_total: number;
   failure_rate: number;
+  net_revenue_range_zar: number;
+  variable_cost_range_zar: number;
+  margin_range_zar: number;
+  sms_sent_range: number;
+}
+
+export interface Costs {
+  unit: {
+    ai_per_statement_zar: number | null;
+    variable_per_new_user_zar: number | null;
+    net_per_sale_zar: number | null;
+    contribution_per_sale_zar: number | null;
+    break_even_sales_per_month: number | null;
+    sales_per_month_now: number | null;
+  };
+  sms: {
+    logging_ready: boolean;
+    sent: number;
+    failed: number;
+    parts: number;
+    failure_rate: number;
+    cost_zar: number;
+    cost_per_part_zar: number;
+    series: { labels: string[]; sent: number[]; failed: number[] };
+  };
+  margin: {
+    gross_zar: number;
+    vat_zar: number;
+    store_fees_zar: number;
+    revenuecat_fees_zar: number;
+    net_revenue_zar: number;
+    ai_cost_zar: number;
+    ai_unpriced_tokens: number;
+    sms_cost_zar: number;
+    variable_cost_zar: number;
+    margin_zar: number;
+    margin_pct: number | null;
+    fixed_cost_zar: number | null;
+    result_zar: number | null;
+    assumptions: {
+      vat_pct: number;
+      store_fee_pct: number;
+      revenuecat_fee_pct: number;
+      usd_zar_rate: number;
+      sms_cost_zar_per_part: number;
+      fixed_monthly_cost_zar: number;
+    };
+  };
 }
 
 export interface Registrations {
@@ -199,5 +247,6 @@ export interface Metrics {
   sales: Sales;
   waitlist: Waitlist;
   ai: Ai;
+  costs: Costs;
   recent_signups: RecentSignup[];
 }

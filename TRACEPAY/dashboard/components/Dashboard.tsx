@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
-import { AccountPanel, Activity, AiUsage, Conversion, Overview, Registrations, Sales, Statements } from "@/components/Sections";
+import { AccountPanel, Activity, AiUsage, Conversion, Costs, Overview, Registrations, Sales, Statements } from "@/components/Sections";
 import { when } from "@/lib/format";
 import type { AccountDetail, Metrics } from "@/lib/types";
 
@@ -20,6 +20,7 @@ const TABS = [
   { id: "sales", label: "Sales" },
   { id: "statements", label: "Statements" },
   { id: "ai", label: "AI usage" },
+  { id: "costs", label: "Costs" },
   { id: "conversion", label: "Conversion" },
   { id: "activity", label: "Activity" },
 ] as const;
@@ -85,6 +86,8 @@ function SectionPanel({
       return <Statements d={data} />;
     case "ai":
       return <AiUsage d={data} />;
+    case "costs":
+      return <Costs d={data} />;
     case "conversion":
       return <Conversion d={data} />;
     case "activity":

@@ -8,6 +8,7 @@ from urllib.request import Request, urlopen
 
 from app.auth_errors import AuthError
 from app.config import settings
+from app.sms_usage import record_sms_usage
 
 logger = logging.getLogger("tracepay.auth")
 
@@ -42,13 +43,16 @@ def send_sms(to: str, body: str) -> None:
     try:
         with urlopen(request, timeout=TIMEOUT_SECONDS) as response:
             response.read()
+        record_sms_usage(outcome="sent", body=body)
         return
     except HTTPError as error:
+        record_sms_usage(outcome="failed", body=body)
         detail = error.read()[:300].decode("utf-8", errors="replace")
         reason = _bulksms_reason(detail)
         logger.error("auth_sms_rejected status=%s reason=%s", error.code, reason)
         raise _map_status(error.code, reason) from None
     except (URLError, TimeoutError, OSError) as error:
+        record_sms_usage(outcome="failed", body=body)
         logger.error("auth_sms_unreachable error_type=%s", type(error).__name__)
         raise AuthError(502, "Could not send the verification SMS. Please try again.") from None
 

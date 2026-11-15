@@ -60,6 +60,7 @@ MIGRATION_FOR_TABLE = {
     "waitlist_signups": "202611040001_waitlist_signups.sql",
     "ai_budget_usage": "202611140001_ai_daily_budget.sql",
     "ai_usage_events": "202611140002_ai_usage_events.sql",
+    "sms_usage_events": "202611150003_sms_usage_events.sql",
     "billing_purchases": "202610260001_billing_entitlements.sql",
     "monitoring_subscriptions": "202610260001_billing_entitlements.sql",
     "finding_answers": "202610270001_finding_answers.sql",
@@ -93,6 +94,7 @@ class Snapshot:
     waitlist: list[dict[str, Any]] = field(default_factory=list)
     budget_rows: list[dict[str, Any]] = field(default_factory=list)
     ai_events: list[dict[str, Any]] = field(default_factory=list)
+    sms_events: list[dict[str, Any]] = field(default_factory=list)
     transaction_count: int = 0
     truncated: list[str] = field(default_factory=list)
     missing_tables: list[str] = field(default_factory=list)
@@ -194,6 +196,7 @@ _TABLE_READS: dict[str, tuple[str, str]] = {
         "feature,provider,model,outcome,items,prompt_tokens,completion_tokens,total_tokens,duration_ms,created_at",
         "created_at.desc",
     ),
+    "sms_usage_events": ("outcome,parts,created_at", "created_at.desc"),
 }
 
 
@@ -243,6 +246,7 @@ def load_snapshot() -> Snapshot:
     snapshot.waitlist = results["waitlist_signups"]
     snapshot.budget_rows = results["ai_budget_usage"]
     snapshot.ai_events = results["ai_usage_events"]
+    snapshot.sms_events = results["sms_usage_events"]
     snapshot.loaded_at = datetime.now(timezone.utc)
     return snapshot
 
@@ -514,6 +518,120 @@ def _build_ai(
     }
 
 
+def _build_costs(
+    snapshot: Snapshot,
+    *,
+    in_range: Callable[[datetime | None], bool],
+    day_keys: list[Any],
+    labels: list[str],
+    days: int,
+    gross_cents: int,
+    ai_cost_usd: float,
+    ai_unpriced_tokens: int,
+    sms_cost_zar_per_part: float,
+    usd_zar_rate: float,
+    vat_pct: float,
+    store_fee_pct: float,
+    revenuecat_fee_pct: float,
+    fixed_monthly_cost_zar: float,
+    sales_count: int = 0,
+    processed_statements: int = 0,
+    new_verified_users: int = 0,
+) -> dict[str, Any]:
+    """SMS spend and the margin on this range's sales.
+
+    Net revenue = price / (1 + VAT), less the store fee and RevenueCat fee on that amount. Variable
+    cost = AI (USD converted) + SMS. Fixed cost is prorated from a monthly figure and only reported
+    when one is configured. Everything here is an estimate from configured rates, not a ledger.
+    """
+    events = [{**row, "_at": _stamp(row.get("created_at"))} for row in snapshot.sms_events]
+    window = [row for row in events if in_range(row["_at"])]
+    sent = [row for row in window if row.get("outcome") == "sent"]
+    failed = [row for row in window if row.get("outcome") == "failed"]
+
+    def parts(row: dict[str, Any]) -> int:
+        value = row.get("parts")
+        return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+
+    sent_parts = sum(parts(row) for row in sent)
+    sms_cost = round(sent_parts * sms_cost_zar_per_part, 2)
+    attempts = len(sent) + len(failed)
+
+    gross = gross_cents / 100
+    vat = gross - gross / (1 + vat_pct / 100)
+    ex_vat = gross - vat
+    store_fees = ex_vat * store_fee_pct / 100
+    revenuecat_fees = ex_vat * revenuecat_fee_pct / 100
+    net_revenue = ex_vat - store_fees - revenuecat_fees
+    ai_cost = ai_cost_usd * usd_zar_rate
+    variable_cost = ai_cost + sms_cost
+    margin = net_revenue - variable_cost
+    fixed_cost = fixed_monthly_cost_zar * 12 / 365 * days if fixed_monthly_cost_zar > 0 else 0.0
+
+    def per(total: float, count: int) -> float | None:
+        return round(total / count, 4) if count > 0 else None
+
+    # Break-even: each sale carries the range's whole variable cost (AI and SMS also serve users
+    # who have not paid yet), so this is a conservative contribution per sale.
+    net_per_sale = net_revenue / sales_count if sales_count else None
+    cost_per_sale = variable_cost / sales_count if sales_count else None
+    contribution = net_per_sale - cost_per_sale if net_per_sale is not None and cost_per_sale is not None else None
+    break_even_per_month = (
+        round(fixed_monthly_cost_zar / contribution, 1)
+        if fixed_monthly_cost_zar > 0 and contribution is not None and contribution > 0
+        else None
+    )
+    unit = {
+        "ai_per_statement_zar": per(ai_cost, processed_statements),
+        "variable_per_new_user_zar": per(variable_cost, new_verified_users),
+        "net_per_sale_zar": round(net_per_sale, 2) if net_per_sale is not None else None,
+        "contribution_per_sale_zar": round(contribution, 2) if contribution is not None else None,
+        "break_even_sales_per_month": break_even_per_month,
+        "sales_per_month_now": round(sales_count * 30 / days, 1) if days else None,
+    }
+
+    return {
+        "unit": unit,
+        "sms": {
+            "logging_ready": "sms_usage_events" not in snapshot.missing_tables,
+            "sent": len(sent),
+            "failed": len(failed),
+            "parts": sent_parts,
+            "failure_rate": round(len(failed) / attempts, 4) if attempts else 0.0,
+            "cost_zar": sms_cost,
+            "cost_per_part_zar": sms_cost_zar_per_part,
+            "series": {
+                "labels": labels,
+                "sent": _round(_bucket(sent, lambda r: r["_at"], day_keys)),
+                "failed": _round(_bucket(failed, lambda r: r["_at"], day_keys)),
+            },
+        },
+        "margin": {
+            "gross_zar": round(gross, 2),
+            "vat_zar": round(vat, 2),
+            "store_fees_zar": round(store_fees, 2),
+            "revenuecat_fees_zar": round(revenuecat_fees, 2),
+            "net_revenue_zar": round(net_revenue, 2),
+            "ai_cost_zar": round(ai_cost, 2),
+            "ai_unpriced_tokens": ai_unpriced_tokens,
+            "sms_cost_zar": sms_cost,
+            "variable_cost_zar": round(variable_cost, 2),
+            "margin_zar": round(margin, 2),
+            "margin_pct": round(100 * margin / net_revenue, 1) if net_revenue > 0 else None,
+            "fixed_cost_zar": round(fixed_cost, 2) if fixed_cost else None,
+            "result_zar": round(margin - fixed_cost, 2) if fixed_cost else None,
+            "assumptions": {
+                "vat_pct": vat_pct,
+                "store_fee_pct": store_fee_pct,
+                "revenuecat_fee_pct": revenuecat_fee_pct,
+                "usd_zar_rate": usd_zar_rate,
+                "sms_cost_zar_per_part": sms_cost_zar_per_part,
+                "fixed_monthly_cost_zar": fixed_monthly_cost_zar,
+            },
+        },
+    }
+
+
 def build_metrics(
     snapshot: Snapshot,
     *,
@@ -523,6 +641,12 @@ def build_metrics(
     monitoring_price_cents: int,
     ai_daily_item_limit: int = 2000,
     ai_price_overrides: str = "",
+    sms_cost_zar_per_part: float = 0.33,
+    usd_zar_rate: float = 16.5,
+    vat_pct: float = 15.0,
+    store_fee_pct: float = 15.0,
+    revenuecat_fee_pct: float = 1.0,
+    fixed_monthly_cost_zar: float = 0.0,
 ) -> dict[str, Any]:
     now = now.astimezone(timezone.utc)
     today = now.astimezone(SA_TZ).date()
@@ -761,6 +885,26 @@ def build_metrics(
         price_overrides=ai_price_overrides,
     )
 
+    costs = _build_costs(
+        snapshot,
+        in_range=in_range,
+        day_keys=day_keys,
+        labels=labels,
+        days=days,
+        gross_cents=revenue_range,
+        ai_cost_usd=ai["total"]["cost_usd"],
+        ai_unpriced_tokens=ai["total"]["unpriced_tokens"],
+        sms_cost_zar_per_part=sms_cost_zar_per_part,
+        usd_zar_rate=usd_zar_rate,
+        vat_pct=vat_pct,
+        store_fee_pct=store_fee_pct,
+        revenuecat_fee_pct=revenuecat_fee_pct,
+        fixed_monthly_cost_zar=fixed_monthly_cost_zar,
+        sales_count=len(succeeded_in_range),
+        processed_statements=len(processed_in_range),
+        new_verified_users=registrations["new_verified_in_range"],
+    )
+
     # --- Alerts ---
     alerts: list[dict[str, str]] = []
     if snapshot.stale:
@@ -819,6 +963,10 @@ def build_metrics(
         "monitoring_live": sales["monitoring_live"],
         "waitlist_total": waitlist_out["total"],
         "failure_rate": failure_rate,
+        "net_revenue_range_zar": costs["margin"]["net_revenue_zar"],
+        "variable_cost_range_zar": costs["margin"]["variable_cost_zar"],
+        "margin_range_zar": costs["margin"]["margin_zar"],
+        "sms_sent_range": costs["sms"]["sent"],
     }
 
     return {
@@ -837,5 +985,6 @@ def build_metrics(
         "sales": sales,
         "waitlist": waitlist_out,
         "ai": ai,
+        "costs": costs,
         "recent_signups": recent_signups,
     }

@@ -226,6 +226,14 @@ export const funnelChart: ChartBuilder = (d) => {
   });
 };
 
+export const smsChart: ChartBuilder = (d) => {
+  const { series } = d.costs.sms;
+  return lineSeries(series.labels, [
+    { label: "Sent", data: series.sent, color: css("--s1"), fill: false },
+    { label: "Failed", data: series.failed, color: css("--s3"), fill: false },
+  ]);
+};
+
 export const waitlistChart: ChartBuilder = (d) => {
   const { cumulative, series } = d.waitlist;
   return lineSeries(cumulative.labels, [

@@ -88,6 +88,15 @@ class Settings(BaseSettings):
     # Optional JSON of per-model prices for the dashboard's AI cost estimate, in USD per million
     # tokens as [input, output]. Example: {"openai/gpt-4o-mini": [0.15, 0.6]}.
     ai_model_prices_json: str = ""
+    # Dashboard cost model (rand). SMS: BulkSMS price per message part incl VAT. Store fee: Apple/Google
+    # cut (15% small-business programme, 30% otherwise). Fixed monthly cost (hosting, database) is
+    # optional; 0 hides the operating-result line.
+    sms_cost_zar_per_part: float = 0.33
+    usd_zar_rate: float = 16.5
+    vat_pct: float = 15.0
+    store_fee_pct: float = 15.0
+    revenuecat_fee_pct: float = 1.0
+    fixed_monthly_cost_zar: float = 0.0
 
     @field_validator("synthetic_intelligence_debug", mode="before")
     @classmethod
