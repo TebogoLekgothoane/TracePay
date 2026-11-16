@@ -145,6 +145,7 @@ export default function TransactionsScreen() {
     excludeCategories?: string | string[];
     q?: string | string[];
     label?: string | string[];
+    transactionClass?: string | string[];
     /** Exclusive fee/airtime bucket, e.g. `fees:monthly` — monthly ≠ service. */
     leakBucket?: string | string[];
   }>();
@@ -155,6 +156,7 @@ export default function TransactionsScreen() {
     return categoryFilter ? [categoryFilter] : [];
   }, [params.categories, categoryFilter]);
   const merchantFilter = firstParam(params.merchant);
+  const transactionClassFilter = firstParam(params.transactionClass);
   const excludeCategories = useMemo(
     () => splitPipeList(firstParam(params.excludeCategories)),
     [params.excludeCategories],
@@ -186,14 +188,23 @@ export default function TransactionsScreen() {
   } = useTransactions(selectedAccountId);
 
   const filteredTransactions = useMemo(() => {
-    const inCategoryScope = (name: string) => {
+    const inCategoryScope = (row: TransactionRow) => {
       if (categoriesFilter.length === 0) return true;
-      return categoriesFilter.some((item) => item.toLowerCase() === name.toLowerCase());
+      const categoryMatches = categoriesFilter.some(
+        (item) => item.toLowerCase() === categoryName(row).toLowerCase(),
+      );
+      return (
+        categoryMatches ||
+        Boolean(
+          transactionClassFilter &&
+            row.transaction_class?.toLowerCase() === transactionClassFilter.toLowerCase(),
+        )
+      );
     };
 
     const narrowed = transactions.filter((row) => {
       const name = categoryName(row);
-      if (!inCategoryScope(name)) return false;
+      if (!inCategoryScope(row)) return false;
       if (excludeCategories.length > 0) {
         const excluded = excludeCategories.some(
           (item) => item.toLowerCase() === name.toLowerCase(),
@@ -201,6 +212,12 @@ export default function TransactionsScreen() {
         if (excluded) return false;
       }
       if (merchantFilter && !matchesMerchant(row, merchantFilter)) {
+        return false;
+      }
+      if (
+        transactionClassFilter &&
+        row.transaction_class?.toLowerCase() !== transactionClassFilter.toLowerCase()
+      ) {
         return false;
       }
       // Exclusive buckets keep monthly account fees out of service fees (and so on).
@@ -220,11 +237,19 @@ export default function TransactionsScreen() {
       keywords.length > 0 &&
       categoriesFilter.length > 0
     ) {
-      return transactions.filter((row) => inCategoryScope(categoryName(row)));
+      return transactions.filter(inCategoryScope);
     }
 
     return narrowed;
-  }, [transactions, categoriesFilter, excludeCategories, merchantFilter, keywords, leakBucket]);
+  }, [
+    transactions,
+    categoriesFilter,
+    excludeCategories,
+    merchantFilter,
+    transactionClassFilter,
+    keywords,
+    leakBucket,
+  ]);
 
   const activeFilterLabel = customLabel
     ? customLabel

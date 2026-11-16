@@ -20,7 +20,6 @@ import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ForYouSection } from "../dashboard/ForYouSection";
 import { LockedLeakRow } from "./LockedLeakRow";
 import { PotentialLeakCard } from "./PotentialLeakCard";
 import { RecurringSubscriptionsSection } from "./RecurringSubscriptionsSection";
@@ -31,8 +30,6 @@ import { IconButton } from "../ui/IconButton";
 import { ChoiceMenu } from "../ui/ChoiceMenu";
 import { InfoSheet } from "../ui/Modal";
 import { SkeletonCard } from "../ui/SkeletonGroups";
-import { useForYouCards } from "../../features/for-you/for-you.preferences";
-import type { ForYouCard } from "../../features/for-you/for-you.types";
 import {
   CUSTOM_RANGES,
   formatRandAmount,
@@ -154,7 +151,6 @@ export function LeakCategoryScreen({
   const palette = COLORS[scheme];
   const detail = detailForCategory(categoryKey, debugCategory);
   const tone = getImpactToneStyles(scheme, detail?.impact ?? "high");
-  const { cards: forYouCards, ignore: ignoreForYouCard } = useForYouCards();
   const periodData = useCachedQuery(`leak-category:${categoryKey}:${period}:${customRange}`, () =>
     loadInsightsData(period, customRange),
   );
@@ -201,16 +197,6 @@ export function LeakCategoryScreen({
     if (debugCategory) return categoryTotal(debugCategory, result?.leaks ?? []).count;
     return categoryFindings.length;
   }, [categoryFindings.length, debugCategory, liveCategory, result?.leaks]);
-
-  const openForYouCard = useCallback((card: ForYouCard) => {
-    router.push(card.href as never);
-  }, []);
-  const dismissForYouCard = useCallback(
-    (cardId: string) => {
-      void ignoreForYouCard(cardId);
-    },
-    [ignoreForYouCard],
-  );
 
   const openGuide = useCallback(() => {
     const actionId = getPrimaryFixActionId(categoryKey);
@@ -428,8 +414,8 @@ export function LeakCategoryScreen({
                 Where it goes
               </Text>
               <Text className="mb-3 text-[13px] leading-5 text-muted-foreground">
-                From your statements this period. Monthly account fees and service fees are kept
-                separate.
+                From your statements this period. Each fee type is kept separate so you can see
+                what caused every charge.
               </Text>
               <View className="gap-2">
                 {whereItGoes.map((item) => {
@@ -501,16 +487,6 @@ export function LeakCategoryScreen({
                 }}
               />
               <RecurringSubscriptionsSection />
-            </View>
-          ) : null}
-
-          {categoryKey === "subs" && forYouCards.length > 0 ? (
-            <View className="mt-7">
-              <ForYouSection
-                cards={forYouCards}
-                onAction={openForYouCard}
-                onIgnore={dismissForYouCard}
-              />
             </View>
           ) : null}
         </View>

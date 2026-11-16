@@ -70,4 +70,44 @@ assert(byId.monthly === 364, `monthly 165+199 (got ${byId.monthly})`);
 assert(byId.service === 73.4, `service 25+48.40 (got ${byId.service})`);
 assert(byId.atm === 85, `atm 85 (got ${byId.atm})`);
 
+const capitecFees = [
+  row("International Online Purchase Insufficient Funds Fee: Canva", "151"),
+  row("Monthly Account Admin Fee", "82.50"),
+  row("Cash Sent Fee", "80"),
+  row("International Processing Fee", "72"),
+  row("Card Replacement Fee", "70"),
+  row("Eft Debit Order Insufficient Funds Fee", "60"),
+  row("Electricity Advance Fee", "18"),
+];
+const capitecRows = buildWhereItGoes("fees", capitecFees, range);
+const capitecById = Object.fromEntries(capitecRows.map((entry) => [entry.id, entry.amountValue]));
+assert(
+  capitecById["insufficient-funds"] === 211,
+  `decline fees include online purchases and debit orders (got ${capitecById["insufficient-funds"]})`,
+);
+assert(capitecById.monthly === 82.5, `monthly admin fee is separate (got ${capitecById.monthly})`);
+assert(capitecById["cash-sent"] === 80, `Cash Sent fees are separate (got ${capitecById["cash-sent"]})`);
+assert(capitecById.international === 72, `international processing is separate (got ${capitecById.international})`);
+assert(capitecById["card-replacement"] === 70, `card replacement is separate (got ${capitecById["card-replacement"]})`);
+assert(capitecById.advance === 18, `advance fees are separate (got ${capitecById.advance})`);
+
+const legacyBankCategoryRows = buildWhereItGoes(
+  "fees",
+  [
+    row("RETURNED ITEM FEE", "15", "Fees"),
+    row("FOREX FEE", "25", "Charges"),
+    row("SEND MONEY FEE", "10", "Bank charges"),
+  ],
+  range,
+);
+const legacyById = Object.fromEntries(
+  legacyBankCategoryRows.map((entry) => [entry.id, entry.amountValue]),
+);
+assert(
+  legacyById["insufficient-funds"] === 15,
+  `bank_fee class works when the bank calls its category Fees (got ${legacyById["insufficient-funds"]})`,
+);
+assert(legacyById.international === 25, `FOREX fee is international (got ${legacyById.international})`);
+assert(legacyById["cash-sent"] === 10, `Send Money fee is cash sending (got ${legacyById["cash-sent"]})`);
+
 console.log("leak-where-it-goes tests passed");

@@ -38,6 +38,13 @@ def _row(description: str, kind: str = "debit"):
         "ATM BALANCE ENQUIRY",
         "SMS ALERT FEE",
         "INTERNATIONAL TRANSACTION FEE",
+        "International Processing Fee",
+        "Cash Sent Fee",
+        "Send Money Fee",
+        "FOREX Fee",
+        "Rejected Item Fee",
+        "Dishonored Item Fee",
+        "Card Replacement Fee",
         "VAS FEE",
         "INTEREST ON OVERDRAFT",
     ],
@@ -193,6 +200,10 @@ def test_fee_subtypes_follow_the_new_wording() -> None:
     assert subtype("ATM BALANCE ENQUIRY") == "balance_enquiry"
     assert subtype("ADMIN FEE") == "account"
     assert subtype("MONTHLY MANAGEMENT FEE") == "account"
+    assert subtype("International Processing Fee") == "foreign"
+    assert subtype("Cash Sent Fee") == "cash_send"
+    assert subtype("FOREX Fee") == "foreign"
+    assert subtype("Send Money Fee") == "cash_send"
 
 
 def test_unnamed_debit_order_reaches_the_recurring_review() -> None:

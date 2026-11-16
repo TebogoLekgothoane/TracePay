@@ -8,8 +8,14 @@ import { useCachedQuery } from "../lib/query-cache";
 export function useDetectedSubscriptions() {
   const { data, loading, error, retry } = useCachedQuery(
     "detected-subscriptions",
-    async () => (await fetchDetectedSubscriptions()).subscriptions,
+    () => fetchDetectedSubscriptions(),
     { staleMs: 5 * 60_000 },
   );
-  return { subscriptions: data ?? [], loading, error, retry };
+  return {
+    subscriptions: data?.subscriptions ?? [],
+    possibleRecurringDigitalSpend: data?.possibleRecurringDigitalSpend ?? [],
+    loading,
+    error,
+    retry,
+  };
 }

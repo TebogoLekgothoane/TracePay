@@ -581,7 +581,18 @@ def _is_service_charge(tx: FeatureTransaction) -> bool:
 
 
 def _is_cross_border(tx: FeatureTransaction) -> bool:
-    return _is_fee(tx) and (tx.description or "").lower().startswith("cross-border")
+    text = (tx.description or "").lower()
+    return _is_fee(tx) and (
+        text.startswith("cross-border")
+        or "international processing fee" in text
+        or "international transaction fee" in text
+        or "international online purchase fee" in text
+        or "foreign transaction fee" in text
+        or "foreign currency fee" in text
+        or "currency conversion fee" in text
+        or "forex fee" in text
+        or "fx fee" in text
+    )
 
 
 _RENT_WORDS = re.compile(r"landlord|\brent\b", re.IGNORECASE)
@@ -1191,7 +1202,12 @@ def _fee_breakdown(
     if cross:
         by_source: dict[str, Decimal] = defaultdict(lambda: _ZERO)
         for tx in cross:
-            source = re.sub(r"^cross-border card fee\s*-\s*", "", tx.description, flags=re.IGNORECASE)
+            source = re.sub(
+                r"^(?:cross-border card fee\s*-\s*|international (?:processing|transaction) fee\s*[:\-]?\s*)",
+                "",
+                tx.description,
+                flags=re.IGNORECASE,
+            )
             source_name = payee_name(
                 FeatureTransaction(
                     transaction_id=tx.transaction_id,
@@ -1207,8 +1223,13 @@ def _fee_breakdown(
             by_source[source_name.split()[0]] += tx.amount
         ordered = sorted(by_source.items(), key=lambda item: -item[1])
         cross_total = sum(by_source.values(), _ZERO)
+        cross_label = (
+            "International processing fees"
+            if all("international" in (tx.description or "").lower() for tx in cross)
+            else "Cross-border fees"
+        )
         parts.append(
-            f"Cross-border fees {money(cross_total)} ("
+            f"{cross_label} {money(cross_total)} ("
             + ", ".join(f"{name} {money(amount)}" for name, amount in ordered)
             + ")."
         )

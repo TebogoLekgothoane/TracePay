@@ -40,10 +40,22 @@ export type DetectedSubscription = {
   source: "subscription_category" | "recurring_debit_order" | "streaming_overlap";
 };
 
+/** Digital spending worth reviewing, without claiming it is a subscription. */
+export type PossibleRecurringDigitalSpend = {
+  merchantKey: string;
+  displayName: string;
+  category: string;
+  transactionCount: number;
+  observedTotal: number;
+  firstObservedDate: string | null;
+  lastObservedDate: string | null;
+};
+
 export type SubscriptionsDebugResult = {
   transactionCount: number;
   periodStart: string | null;
   periodEnd: string | null;
   subscriptions: DetectedSubscription[];
+  possibleRecurringDigitalSpend: PossibleRecurringDigitalSpend[];
   monthlyTotal: number;
 };

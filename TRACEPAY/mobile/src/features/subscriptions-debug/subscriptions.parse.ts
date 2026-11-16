@@ -10,6 +10,7 @@ import {
 import type { LeakDetectionResult } from "../leak-intelligence/leak-intelligence.types";
 import type {
   DetectedSubscription,
+  PossibleRecurringDigitalSpend,
   SubscriptionRecurrenceStrength,
   SubscriptionsDebugResult,
 } from "./subscriptions.types";
@@ -50,12 +51,23 @@ export function parseFinancialFeaturesSubscriptions(
         return item ? [item] : [];
       }))
     .sort(compareSubscriptions);
+  const possibleRecurringDigitalSpend = merchants
+    .map(possibleDigitalSpendFromMerchant)
+    .filter((item): item is PossibleRecurringDigitalSpend => item !== null)
+    .filter(
+      (item) =>
+        !subscriptions.some(
+          (subscription) => subscription.merchantKey.toLowerCase() === item.merchantKey.toLowerCase(),
+        ),
+    )
+    .sort((left, right) => right.observedTotal - left.observedTotal);
 
   return {
     transactionCount: finiteInt(payload.transaction_count) ?? 0,
     periodStart: optionalDate(payload.date_start),
     periodEnd: optionalDate(payload.date_end),
     subscriptions,
+    possibleRecurringDigitalSpend,
     monthlyTotal: sumMonthly(subscriptions),
   };
 }
@@ -134,13 +146,44 @@ export function subscriptionsFromLeakDetections(
       return item ? [item] : [];
     })
     .sort(compareSubscriptions);
-
   return {
     transactionCount: result.transaction_count,
     periodStart: result.period_start,
     periodEnd: result.period_end,
     subscriptions,
+    possibleRecurringDigitalSpend: [],
     monthlyTotal: sumMonthly(subscriptions),
+  };
+}
+
+const DIGITAL_REVIEW_CATEGORIES = new Set([
+  "digital subscriptions",
+  "subscriptions",
+  "software/games",
+  "software & games",
+  "software",
+  "games",
+]);
+
+function possibleDigitalSpendFromMerchant(value: unknown): PossibleRecurringDigitalSpend | null {
+  if (!isRecord(value)) return null;
+  const merchantKey = stringValue(value.merchant_name);
+  if (!merchantKey || !isReliableMerchantName(merchantKey)) return null;
+  const categories = categoryCounts(value.merchant_category_transaction_count);
+  const category = Object.keys(categories).find((name) =>
+    DIGITAL_REVIEW_CATEGORIES.has(name.trim().toLowerCase()),
+  );
+  const transactionCount = finiteInt(value.merchant_transaction_count) ?? 0;
+  const observedTotal = finiteNumber(value.merchant_total_amount);
+  if (!category || transactionCount < 1 || observedTotal === null || observedTotal <= 0) return null;
+  return {
+    merchantKey,
+    displayName: titleCaseMerchant(merchantKey),
+    category,
+    transactionCount,
+    observedTotal,
+    firstObservedDate: optionalDate(value.merchant_first_transaction_date),
+    lastObservedDate: optionalDate(value.merchant_last_transaction_date),
   };
 }
 

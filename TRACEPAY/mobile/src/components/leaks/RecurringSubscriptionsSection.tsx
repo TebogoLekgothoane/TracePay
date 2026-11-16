@@ -7,9 +7,10 @@ import { Pressable, Text, View } from "react-native";
 import { chargesFromDetected, type RecurringCharge } from "../../features/leaks/recurring-charges.catalog";
 import { daysUntilLabel, listUpcomingCharges } from "../../features/leaks/recurring-upcoming";
 import { formatUpcomingDate } from "../../features/dashboard/upcoming-payments";
+import { resolveLogoDomainFromMerchantLabel } from "../../features/transactions/merchant-logos";
 import { useDetectedSubscriptions } from "../../hooks/useDetectedSubscriptions";
 import { COLORS } from "../../theme/colors";
-import { parseRandAmount } from "../../utils/currency";
+import { formatRandAmount, parseRandAmount } from "../../utils/currency";
 import { BrandLogo } from "../ui/BrandLogo";
 import { SegmentToggle } from "../ui/SegmentToggle";
 import { Skeleton } from "../ui/Skeleton";
@@ -31,6 +32,18 @@ function Logo({ charge, size }: { charge: RecurringCharge; size: number }) {
   );
 }
 
+function PossibleDigitalLogo({ name }: { name: string }) {
+  const logoDomain = resolveLogoDomainFromMerchantLabel(name);
+  if (logoDomain) {
+    return <BrandLogo name={name} logoDomain={logoDomain} size={40} shape="squircle" />;
+  }
+  return (
+    <View className="h-10 w-10 items-center justify-center rounded-xl bg-muted">
+      <Text className="text-[14px] font-bold text-foreground">{name.charAt(0)}</Text>
+    </View>
+  );
+}
+
 /**
  * The subscriptions TracePay found in the user's statements, with their logos, and the ones due
  * next. A subscription and a recurring charge are the same thing here: a payment that repeats.
@@ -39,7 +52,7 @@ export function RecurringSubscriptionsSection() {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const [tab, setTab] = useState<Tab>("Recurring Payments");
-  const { subscriptions, loading, error } = useDetectedSubscriptions();
+  const { subscriptions, possibleRecurringDigitalSpend, loading, error } = useDetectedSubscriptions();
 
   const charges = useMemo(
     () =>
@@ -65,7 +78,7 @@ export function RecurringSubscriptionsSection() {
           <Skeleton height={68} radius={16} />
           <Skeleton height={68} radius={16} />
         </View>
-      ) : charges.length === 0 ? (
+      ) : charges.length === 0 && possibleRecurringDigitalSpend.length === 0 ? (
         <View className="rounded-2xl bg-card px-4 py-5">
           <Text className="text-[14px] leading-5 text-muted-foreground">
             {error
@@ -100,6 +113,37 @@ export function RecurringSubscriptionsSection() {
               <ChevronRight color={palette.placeholder} size={16} strokeWidth={2} />
             </Pressable>
           ))}
+          {possibleRecurringDigitalSpend.length > 0 ? (
+            <View className="mt-4">
+              <Text className="text-[15px] font-bold text-foreground">
+                Possible recurring digital spending
+              </Text>
+              <Text className="mt-1 text-[12px] leading-4 text-muted-foreground">
+                These payments need review before we call them subscriptions.
+              </Text>
+              <View className="mt-2 gap-2">
+                {possibleRecurringDigitalSpend.map((item) => (
+                  <Pressable
+                    key={item.merchantKey}
+                    accessibilityRole="button"
+                    className="flex-row items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-75"
+                    onPress={() => router.push(`/transactions-list?merchant=${encodeURIComponent(item.merchantKey)}` as never)}
+                  >
+                    <PossibleDigitalLogo name={item.displayName} />
+                    <View className="min-w-0 flex-1">
+                      <Text className="text-[14px] font-semibold text-foreground" numberOfLines={1}>
+                        {item.displayName}
+                      </Text>
+                      <Text className="mt-0.5 text-[12px] text-muted-foreground" numberOfLines={1}>
+                        {item.transactionCount === 1 ? "Seen once" : `${item.transactionCount} payments`} · {item.category}
+                      </Text>
+                    </View>
+                    <Text className="text-[14px] font-bold text-foreground">{formatRandAmount(item.observedTotal)}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ) : null}
         </View>
       ) : (
         <View className="gap-2">

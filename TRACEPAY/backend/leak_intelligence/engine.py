@@ -1346,6 +1346,27 @@ def _fee_subtype(transaction: FeatureTransaction) -> str | None:
     ):
         return "insufficient_funds"
     if (
+        "INTERNATIONAL PROCESSING FEE" in description
+        or "INTERNATIONAL ONLINE PURCHASE FEE" in description
+        or "INTERNATIONAL TRANSACTION FEE" in description
+        or "FOREIGN TRANSACTION FEE" in description
+        or "FOREIGN CURRENCY FEE" in description
+        or "CURRENCY CONVERSION FEE" in description
+        or "FOREIGN EXCHANGE FEE" in description
+        or "FOREX FEE" in description
+        or "FX FEE" in description
+        or "EXCHANGE RATE FEE" in description
+    ):
+        return "foreign"
+    if (
+        "CASH SENT FEE" in description
+        or "CASH SEND FEE" in description
+        or "SEND MONEY FEE" in description
+        or "INSTANT MONEY FEE" in description
+        or "E-WALLET FEE" in description
+    ):
+        return "cash_send"
+    if (
         "ACCOUNT" in description
         or "ACC FEE" in description
         or "ADMIN FEE" in description
@@ -1358,13 +1379,6 @@ def _fee_subtype(transaction: FeatureTransaction) -> str | None:
         or "BANK CHARGE" in description
     ):
         return "account"
-    if (
-        "FOREIGN TRANSACTION FEE" in description
-        or "INTERNATIONAL TRANSACTION FEE" in description
-        or "CURRENCY CONVERSION FEE" in description
-        or "FOREIGN EXCHANGE FEE" in description
-    ):
-        return "foreign"
     if "TRANSACTION FEE" in description or "PAYMENT FEE" in description:
         return "transaction"
     return None
@@ -1375,12 +1389,40 @@ _SMALL_PAYMENT = Decimal("200")
 
 # (key, label, matcher on the upper-case description), first match wins.
 _FEE_SOURCES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("failed_debit_order", "Failed debit order fees", ("UNSUCCESSFUL",)),
-    ("declined_card", "Declined card payment fees", ("DECL POS", "DECLINED")),
+    (
+        "failed_debit_order",
+        "Failed debit order fees",
+        ("UNSUCCESSFUL", "DEBIT ORDER INSUFFICIENT FUNDS"),
+    ),
+    (
+        "declined_card",
+        "Declined card payment fees",
+        ("DECL POS", "DECLINED", "ONLINE PURCHASE INSUFFICIENT FUNDS", "CARD PURCHASE INSUFFICIENT FUNDS"),
+    ),
     ("payshap", "PayShap payment fees", ("PAYSHAP", "PAY SHAP")),
-    ("cash_send", "Cash Send fees", ("CASHSEND", "CASH SEND")),
+    (
+        "cash_send",
+        "Cash Send fees",
+        ("CASHSEND", "CASH SEND", "CASH SENT", "SEND MONEY", "INSTANT MONEY", "E-WALLET"),
+    ),
     ("airtime", "Airtime top-up fees", ("AIRTIME",)),
-    ("cross_border", "Cross-border card fees", ("CROSS-BORDER", "CROSS BORDER")),
+    (
+        "cross_border",
+        "International processing fees",
+        (
+            "CROSS-BORDER",
+            "CROSS BORDER",
+            "INTERNATIONAL PROCESSING",
+            "INTERNATIONAL ONLINE PURCHASE",
+            "FOREIGN TRANSACTION",
+            "FOREIGN CURRENCY",
+            "FOREX",
+            "FX FEE",
+            "EXCHANGE RATE",
+        ),
+    ),
+    ("card_replacement", "Card replacement fees", ("CARD REPLACEMENT", "REPLACEMENT CARD")),
+    ("advance", "Advance fees", ("ADVANCE FEE",)),
     ("faster_payment", "Faster Payment fees", ("FASTER PAYMENT",)),
     ("debit_interest", "Debit interest", ("INTEREST",)),
     ("account_fee", "Monthly account fee", ("MONTHLY", "SERVICE CHARGE", "ACC FEE", "ACCOUNT")),

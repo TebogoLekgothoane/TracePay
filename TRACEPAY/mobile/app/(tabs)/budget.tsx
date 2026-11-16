@@ -14,6 +14,7 @@ import { RankedBars, type RankedBarItem } from "../../src/components/charts/Rank
 import { TrendBars } from "../../src/components/charts/TrendBars";
 import { WeekdayBars } from "../../src/components/charts/WeekdayBars";
 import { formatRandWhole } from "../../src/components/charts/chart-utils";
+import { ForYouSection } from "../../src/components/dashboard/ForYouSection";
 import { SpendingRhythmCard } from "../../src/components/dashboard/SpendingRhythmCard";
 import { PeriodTabs } from "../../src/components/insights/PeriodTabs";
 import { TabScrollView } from "../../src/components/navigation/TabScrollView";
@@ -21,6 +22,7 @@ import { Button } from "../../src/components/ui/Button";
 import { ChoiceMenu } from "../../src/components/ui/ChoiceMenu";
 import { SegmentToggle } from "../../src/components/ui/SegmentToggle";
 import { SkeletonCard } from "../../src/components/ui/SkeletonGroups";
+import { useForYouCards } from "../../src/features/for-you/for-you.preferences";
 import { formatPercent } from "../../src/features/insights/category-breakdown";
 import {
   buildCashFlow,
@@ -82,6 +84,7 @@ export default function InsightsScreen() {
   const [trendIndex, setTrendIndex] = useState<number | null>(null);
   const [rhythmSpan, setRhythmSpan] = useState<RhythmSpan>("6 months");
   const rhythm = useSpendingRhythm(rhythmSpan);
+  const { cards: forYouCards, ignore: ignoreForYouCard } = useForYouCards();
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
 
@@ -389,6 +392,18 @@ export default function InsightsScreen() {
                     ))}
                   </View>
                 </Card>
+              ) : null}
+
+              {forYouCards.length > 0 ? (
+                <Animated.View className="mt-6" entering={FadeInDown.delay(140).duration(420)}>
+                  <ForYouSection
+                    cards={forYouCards}
+                    onAction={(card) => router.push(card.href as never)}
+                    onIgnore={(cardId) => {
+                      void ignoreForYouCard(cardId);
+                    }}
+                  />
+                </Animated.View>
               ) : null}
 
               {pace && pace.current.length > 1 ? (

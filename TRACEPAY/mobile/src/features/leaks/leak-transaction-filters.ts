@@ -9,6 +9,8 @@
 export type LeakTransactionFilter = {
   /** Exact category name(s). Match if the transaction is in any of them. */
   categories: string[];
+  /** Canonical backend class, used when a bank calls the category something else. */
+  transactionClass?: string;
   /** Optional description keywords (OR). Empty = whole category. */
   keywords: string[];
   /** Chip / title on the transactions screen. */
@@ -17,13 +19,33 @@ export type LeakTransactionFilter = {
 
 type ItemFilter = {
   categories: string[];
+  transactionClass?: string;
   keywords?: string[];
   label: string;
 };
 
 const FEES: Record<string, ItemFilter> = {
+  "insufficient-funds": {
+    categories: ["Bank fees"],
+    transactionClass: "bank_fee",
+    keywords: [
+      "INSUFFICIENT FUNDS",
+      "INSUFFICIENT FUND",
+      "NSF FEE",
+      "NSF CHARGE",
+      "DECLINED PURCHASE",
+      "DECLINED CARD",
+      "UNPAID ITEM",
+      "RETURNED ITEM",
+      "REJECTED ITEM",
+      "DISHONOURED",
+      "PAID NO FUNDS",
+    ],
+    label: "Insufficient-funds fees",
+  },
   monthly: {
     categories: ["Bank fees"],
+    transactionClass: "bank_fee",
     keywords: [
       "MONTHLY FEE",
       "MONTHLY ACCOUNT",
@@ -36,8 +58,52 @@ const FEES: Record<string, ItemFilter> = {
     ],
     label: "Monthly account fees",
   },
+  "cash-sent": {
+    categories: ["Bank fees"],
+    transactionClass: "bank_fee",
+    keywords: [
+      "CASH SENT FEE",
+      "CASH SEND FEE",
+      "CASHSEND FEE",
+      "SEND MONEY FEE",
+      "INSTANT MONEY FEE",
+      "E-WALLET FEE",
+    ],
+    label: "Cash Sent fees",
+  },
+  international: {
+    categories: ["Bank fees"],
+    transactionClass: "bank_fee",
+    keywords: [
+      "INTERNATIONAL PROCESSING FEE",
+      "INTERNATIONAL TRANSACTION FEE",
+      "INTERNATIONAL ONLINE PURCHASE FEE",
+      "CROSS-BORDER",
+      "CROSS BORDER",
+      "FOREIGN TRANSACTION FEE",
+      "FOREIGN CURRENCY",
+      "CURRENCY CONVERSION FEE",
+      "FOREX FEE",
+      "FX FEE",
+      "EXCHANGE RATE FEE",
+    ],
+    label: "International processing fees",
+  },
+  "card-replacement": {
+    categories: ["Bank fees"],
+    transactionClass: "bank_fee",
+    keywords: ["CARD REPLACEMENT", "REPLACEMENT CARD", "NEW CARD FEE"],
+    label: "Card replacement fees",
+  },
+  advance: {
+    categories: ["Bank fees"],
+    transactionClass: "bank_fee",
+    keywords: ["ADVANCE FEE", "CASH ADVANCE", "PREPAID ADVANCE"],
+    label: "Advance fees",
+  },
   service: {
     categories: ["Bank fees"],
+    transactionClass: "bank_fee",
     // Not monthly package fees — those are under `monthly`.
     keywords: [
       "SERVICE FEE",
@@ -48,11 +114,17 @@ const FEES: Record<string, ItemFilter> = {
       "PAYMENT FEE",
       "IMMEDIATE PAYMENT",
       "BANK CHARGE",
+      "EFT FEE",
+      "ONLINE BANKING FEE",
+      "CELLPHONE BANKING FEE",
+      "PAYSHAP FEE",
+      "FASTER PAYMENT FEE",
     ],
     label: "Service fees",
   },
   atm: {
     categories: ["Bank fees", "Cash Withdrawal"],
+    transactionClass: "bank_fee",
     keywords: [
       "ATM FEE",
       "ATM CHARGE",
@@ -65,11 +137,13 @@ const FEES: Record<string, ItemFilter> = {
   },
   sms: {
     categories: ["Bank fees"],
+    transactionClass: "bank_fee",
     keywords: ["SMS", "NOTIFICATION FEE", "ALERT FEE"],
     label: "SMS notifications",
   },
   other: {
     categories: ["Bank fees"],
+    transactionClass: "bank_fee",
     label: "Bank fees",
   },
 };
@@ -118,7 +192,7 @@ const BY_LEAK: Record<string, Record<string, ItemFilter>> = {
 
 /** Whole-leak fallback when a specific row has no map (still open real transactions). */
 const LEAK_DEFAULT: Record<string, ItemFilter> = {
-  fees: { categories: ["Bank fees"], label: "Bank fees" },
+  fees: { categories: ["Bank fees"], transactionClass: "bank_fee", label: "Bank fees" },
   airtime: { categories: ["Airtime & Data"], label: "Airtime & Data" },
   atm: { categories: ["Cash Withdrawal", "Bank fees"], label: "Cash withdrawals" },
 };
@@ -131,6 +205,7 @@ export function leakLineItemTransactionFilter(
   if (!mapped) return null;
   return {
     categories: mapped.categories,
+    transactionClass: mapped.transactionClass,
     keywords: mapped.keywords ?? [],
     label: mapped.label,
   };
@@ -143,6 +218,7 @@ export function buildLeakTransactionsHref(leakId: string, itemId: string): strin
   const params = new URLSearchParams();
   params.set("categories", filter.categories.join("|"));
   params.set("label", filter.label);
+  if (filter.transactionClass) params.set("transactionClass", filter.transactionClass);
   if (filter.keywords.length > 0) {
     params.set("q", filter.keywords.join("|"));
   }

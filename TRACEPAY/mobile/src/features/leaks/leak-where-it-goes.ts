@@ -50,6 +50,26 @@ type BucketDef = {
 /** First matching bucket wins — order matters for exclusive fee types. */
 const FEE_BUCKETS: readonly BucketDef[] = [
   {
+    id: "insufficient-funds",
+    title: "Insufficient-funds fees",
+    description: "Charges after declined payments",
+    icon: "help",
+    categories: ["Bank fees"],
+    keywords: [
+      "INSUFFICIENT FUNDS",
+      "INSUFFICIENT FUND",
+      "NSF FEE",
+      "NSF CHARGE",
+      "DECLINED PURCHASE",
+      "DECLINED CARD",
+      "UNPAID ITEM",
+      "RETURNED ITEM",
+      "REJECTED ITEM",
+      "DISHONOURED",
+      "PAID NO FUNDS",
+    ],
+  },
+  {
     id: "monthly",
     title: "Monthly account fee",
     description: "Recurring monthly package charge",
@@ -67,6 +87,57 @@ const FEE_BUCKETS: readonly BucketDef[] = [
     ],
   },
   {
+    id: "cash-sent",
+    title: "Cash Sent fees",
+    description: "Charges for sending cash",
+    icon: "card",
+    categories: ["Bank fees"],
+    keywords: [
+      "CASH SENT FEE",
+      "CASH SEND FEE",
+      "CASHSEND FEE",
+      "SEND MONEY FEE",
+      "INSTANT MONEY FEE",
+      "E-WALLET FEE",
+    ],
+  },
+  {
+    id: "international",
+    title: "International processing fees",
+    description: "Charges on overseas card payments",
+    icon: "card",
+    categories: ["Bank fees"],
+    keywords: [
+      "INTERNATIONAL PROCESSING FEE",
+      "INTERNATIONAL TRANSACTION FEE",
+      "INTERNATIONAL ONLINE PURCHASE FEE",
+      "CROSS-BORDER",
+      "CROSS BORDER",
+      "FOREIGN TRANSACTION FEE",
+      "FOREIGN CURRENCY",
+      "CURRENCY CONVERSION FEE",
+      "FOREX FEE",
+      "FX FEE",
+      "EXCHANGE RATE FEE",
+    ],
+  },
+  {
+    id: "card-replacement",
+    title: "Card replacement fee",
+    description: "One-off replacement card charge",
+    icon: "card",
+    categories: ["Bank fees"],
+    keywords: ["CARD REPLACEMENT", "REPLACEMENT CARD", "NEW CARD FEE"],
+  },
+  {
+    id: "advance",
+    title: "Advance fees",
+    description: "Charges for airtime or electricity advances",
+    icon: "layers",
+    categories: ["Bank fees"],
+    keywords: ["ADVANCE FEE", "CASH ADVANCE", "PREPAID ADVANCE"],
+  },
+  {
     id: "service",
     title: "Service fees",
     description: "Per-payment and admin charges",
@@ -81,6 +152,11 @@ const FEE_BUCKETS: readonly BucketDef[] = [
       "PAYMENT FEE",
       "IMMEDIATE PAYMENT",
       "BANK CHARGE",
+      "EFT FEE",
+      "ONLINE BANKING FEE",
+      "CELLPHONE BANKING FEE",
+      "PAYSHAP FEE",
+      "FASTER PAYMENT FEE",
     ],
   },
   {
@@ -183,7 +259,13 @@ function inRange(row: TransactionRow, range: Pick<PeriodRange, "startKey" | "end
 
 function matchesBucket(row: TransactionRow, bucket: BucketDef): boolean {
   const name = categoryName(row);
-  if (!bucket.categories.some((entry) => entry.toLowerCase() === name.toLowerCase())) {
+  const categoryMatches = bucket.categories.some(
+    (entry) => entry.toLowerCase() === name.toLowerCase(),
+  );
+  const bankFeeMatches = bucket.categories.some(
+    (entry) => entry.toLowerCase() === "bank fees",
+  ) && row.transaction_class === "bank_fee";
+  if (!categoryMatches && !bankFeeMatches) {
     return false;
   }
   if (bucket.keywords.length === 0) return true;
@@ -238,6 +320,7 @@ export function buildWhereItGoes(
         leakLineItemTransactionFilter(leakId, bucket.id) ??
         ({
           categories: bucket.categories,
+          transactionClass: leakId === "fees" ? "bank_fee" : undefined,
           keywords: bucket.keywords,
           label: bucket.title,
         } satisfies LeakTransactionFilter);
@@ -260,6 +343,9 @@ export function whereItGoesHref(leakId: string, row: WhereItGoesRow): string {
   const params = new URLSearchParams();
   params.set("categories", row.filter.categories.join("|"));
   params.set("label", row.filter.label);
+  if (row.filter.transactionClass) {
+    params.set("transactionClass", row.filter.transactionClass);
+  }
   params.set("leakBucket", `${leakId}:${row.id}`);
   if (row.filter.keywords.length > 0) {
     params.set("q", row.filter.keywords.join("|"));
