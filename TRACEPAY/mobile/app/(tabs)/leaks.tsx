@@ -34,6 +34,7 @@ import {
   type ReviewStatus,
 } from "../../src/features/leaks/potential-leaks";
 import { liveLeaksMonthlyTotal, listLivePotentialLeaks } from "../../src/features/leaks/potential-leaks.live";
+import { useDetectedSubscriptions } from "../../src/hooks/useDetectedSubscriptions";
 import { useLeakFindings } from "../../src/hooks/useLeakFindings";
 import { formatRandAmount } from "../../src/utils/currency";
 import { COLORS, TRACEPAY, withAlpha } from "../../src/theme/colors";
@@ -44,9 +45,10 @@ export default function LeaksScreen() {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const detections = useLeakFindings(true);
+  const { subscriptions } = useDetectedSubscriptions();
   const categories = useMemo(
-    () => buildLiveLeakCategories(detections.result),
-    [detections.result],
+    () => buildLiveLeakCategories(detections.result, subscriptions),
+    [detections.result, subscriptions],
   );
   const leaks = useMemo(() => listLivePotentialLeaks(detections.result), [detections.result]);
   const findingsTotal = useMemo(() => {

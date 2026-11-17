@@ -22,8 +22,9 @@ import { formatCents, formatWholeRand } from "../src/features/billing/billing.fo
 import { usePaymentFlow } from "../src/hooks/usePaymentFlow";
 import { useBilling } from "../src/features/billing/billing.store";
 import type { BillingProduct } from "../src/features/billing/billing.types";
-import { totalMonthlyLeaks } from "../src/features/leaks/leak-paywall";
-import { listPotentialLeaks } from "../src/features/leaks/potential-leaks";
+import { liveLeaksMonthlyTotal } from "../src/features/leaks/potential-leaks.live";
+import { useLeakFindings } from "../src/hooks/useLeakFindings";
+import { formatRandAmount } from "../src/utils/currency";
 import { getSupabase } from "../src/lib/supabase";
 import { isRevenueCatAvailable, loadStorePrices } from "../src/lib/revenuecat";
 import { COLORS, withAlpha } from "../src/theme/colors";
@@ -58,7 +59,11 @@ export default function UpgradeScreen() {
   const { colorScheme } = useColorScheme();
   const palette = COLORS[colorScheme === "dark" ? "dark" : "light"];
   const { products, entitlements, hydrated, error, refresh } = useBilling();
-  const total = useMemo(() => totalMonthlyLeaks(listPotentialLeaks()), []);
+  const detections = useLeakFindings(true);
+  const total = useMemo(
+    () => formatRandAmount(liveLeaksMonthlyTotal(detections.result)),
+    [detections.result],
+  );
   const params = useLocalSearchParams<{ product?: string }>();
   const unlocked = Boolean(entitlements?.fullAnalysis.unlocked);
   const [selected, setSelected] = useState<BillingProduct>(
